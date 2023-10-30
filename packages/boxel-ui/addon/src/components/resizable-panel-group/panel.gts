@@ -15,6 +15,7 @@ export type PanelContext = {
 interface Signature {
   Args: {
     defaultLength: string;
+    hideHandle: boolean;
     isLastPanel: (panelId: number) => boolean;
     length?: string;
     minLength?: string;
@@ -58,7 +59,7 @@ export default class Panel extends Component<Signature> {
       <div class='separator-{{@orientation}}' ...attributes>
         <button
           id={{this.resizeHandlerId}}
-          class='resize-handler {{@orientation}}'
+          class='resize-handler {{@orientation}} {{if @hideHandle "hidden"}}'
           aria-label={{this.resizeHandlerId}}
           {{on 'mousedown' @onResizeHandlerMouseDown}}
           {{on 'dblclick' @onResizeHandlerDblClick}}
@@ -68,8 +69,6 @@ export default class Panel extends Component<Signature> {
     <style>
       .boxel-panel {
         --resizable-panel-length: '300px;';
-
-        container-type: inline-size;
       }
 
       .boxel-panel.horizontal {
@@ -135,16 +134,8 @@ export default class Panel extends Component<Signature> {
         cursor: row-resize;
       }
 
-      @container (width <= 30px) {
-        .resize-handler.vertical {
-          visibility: hidden;
-        }
-      }
-
-      @container (height <= 30px) {
-        .resize-handler.horizontal {
-          visibility: hidden;
-        }
+      .resize-handler.hidden {
+        visibility: hidden;
       }
 
       .arrow {

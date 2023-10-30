@@ -415,7 +415,7 @@ module('Integration | realm', function (hooks) {
     ];
     await this.expectEvents(assert, realm, adapter, expected, async () => {
       {
-        let response = await realm.handle(
+        let response = realm.handle(
           new Request(testRealmURL, {
             method: 'POST',
             headers: {
@@ -438,8 +438,14 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
-        assert.strictEqual(response.status, 201, 'successful http status');
-        let json = await response.json();
+        await realm.flushOperations();
+
+        assert.strictEqual(
+          (await response).status,
+          201,
+          'successful http status',
+        );
+        let json = await (await response).json();
         if (isSingleCardDocument(json)) {
           assert.strictEqual(
             json.data.id,
@@ -491,7 +497,7 @@ module('Integration | realm', function (hooks) {
 
       // create second file
       {
-        let response = await realm.handle(
+        let response = realm.handle(
           new Request(testRealmURL, {
             method: 'POST',
             headers: {
@@ -514,8 +520,13 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
-        assert.strictEqual(response.status, 201, 'successful http status');
-        let json = await response.json();
+        await realm.flushOperations();
+        assert.strictEqual(
+          (await response).status,
+          201,
+          'successful http status',
+        );
+        let json = await (await response).json();
         if (isSingleCardDocument(json)) {
           assert.strictEqual(
             json.data.id,
@@ -730,7 +741,7 @@ module('Integration | realm', function (hooks) {
       adapter,
       expected,
       async () => {
-        return await realm.handle(
+        let response = realm.handle(
           new Request(`${testRealmURL}dir/card`, {
             method: 'PATCH',
             headers: {
@@ -756,6 +767,8 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
+        await realm.flushOperations();
+        return await response;
       },
     );
     assert.strictEqual(response.status, 200, 'successful http status');
@@ -2021,7 +2034,7 @@ module('Integration | realm', function (hooks) {
       adapter,
       expected,
       async () => {
-        return await realm.handle(
+        let response = realm.handle(
           new Request(`${testRealmURL}cards/2`, {
             method: 'DELETE',
             headers: {
@@ -2029,6 +2042,8 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
+        await realm.flushOperations();
+        return await response;
       },
     );
     assert.strictEqual(response.status, 204, 'status was 204');
@@ -2135,7 +2150,7 @@ module('Integration | realm', function (hooks) {
         adapter,
         expected,
         async () => {
-          return await realm.handle(
+          let response = realm.handle(
             new Request(`${testRealmURL}dir/person.gts`, {
               method: 'POST',
               headers: {
@@ -2144,6 +2159,8 @@ module('Integration | realm', function (hooks) {
               body: cardSrc,
             }),
           );
+          await realm.flushOperations();
+          return await response;
         },
       );
 
@@ -2197,16 +2214,17 @@ module('Integration | realm', function (hooks) {
       adapter,
       expected,
       async () => {
-        let response = await realm.handle(
+        let response = realm.handle(
           new Request(`${testRealmURL}person`, {
             headers: {
               Accept: 'application/vnd.card+source',
             },
           }),
         );
-        assert.strictEqual(response.status, 302, 'file exists');
+        await realm.flushOperations();
+        assert.strictEqual((await response).status, 302, 'file exists');
 
-        return await realm.handle(
+        response = realm.handle(
           new Request(`${testRealmURL}person`, {
             method: 'DELETE',
             headers: {
@@ -2214,6 +2232,8 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
+        await realm.flushOperations();
+        return await response;
       },
     );
     assert.strictEqual(response.status, 204, 'file is deleted');

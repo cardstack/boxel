@@ -185,6 +185,13 @@ const friendCardSource = `
   }
 `;
 
+const realmInfo = {
+  name: 'Test Workspace B',
+  backgroundURL:
+    'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+  iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+};
+
 module('Acceptance | code submode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -278,12 +285,7 @@ module('Acceptance | code submode tests', function (hooks) {
       'z18.json': '{}',
       'z19.json': '{}',
       'zzz/zzz/file.json': '{}',
-      '.realm.json': {
-        name: 'Test Workspace B',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
+      '.realm.json': realmInfo,
     });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -323,8 +325,11 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
-    await waitFor('[data-test-file]');
+    await waitFor('[data-test-realm-name]');
+    assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
+    assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
+    await waitFor('[data-test-file]');
     assert
       .dom('[data-test-directory="Person/"]')
       .exists('Person/ directory entry is rendered');
@@ -367,6 +372,9 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitFor('[data-test-realm-name]');
+    assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
+    assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
     await waitFor('[data-test-file="pet-person.gts"]');
 
@@ -402,6 +410,9 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitFor('[data-test-realm-name]');
+    assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
+    assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -412,6 +423,13 @@ module('Acceptance | code submode tests', function (hooks) {
       'keypress',
       'Enter',
     );
+    await waitFor('[data-test-realm-name="Test Workspace A"]');
+    assert
+      .dom(
+        '[data-test-realm-icon-url="https://i.postimg.cc/d0B9qMvy/icon.png"]',
+      )
+      .exists();
+    assert.dom('[data-test-realm-name]').hasText('In Test Workspace A');
 
     await waitFor('[data-test-file="mango.png"]');
     assert.dom('[data-test-file="mango.png"]').hasClass('selected');
@@ -438,8 +456,11 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-file]');
+    await waitFor('[data-test-realm-name]');
+    assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
+    assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
+    await waitFor('[data-test-file]');
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
   });
 
@@ -466,8 +487,11 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-file]');
+    await waitFor('[data-test-realm-name]');
+    assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
+    assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
+    await waitFor('[data-test-file]');
     let fileElement = find(`[data-test-file="${openFilename}"]`)!;
     assert.ok(
       await elementIsVisible(fileElement),
@@ -509,8 +533,11 @@ module('Acceptance | code submode tests', function (hooks) {
     );
 
     await click('[data-test-file-browser-toggle]');
-    await waitFor(`[data-test-file="${openFilename}"]`);
+    await waitFor('[data-test-realm-name]');
+    assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
+    assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
+    await waitFor(`[data-test-file="${openFilename}"]`);
     let fileElement = find(`[data-test-file="${openFilename}"]`)!;
 
     if (!fileElement) {
@@ -550,8 +577,11 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-file]');
+    await waitFor('[data-test-realm-name]');
+    assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
+    assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
+    await waitFor('[data-test-file]');
     let openFileSelector = `[data-test-file="${openFilename}"]`;
     let openFileElement = find(openFileSelector)!;
     assert.ok(

@@ -69,30 +69,47 @@ export class ModuleContentsResource extends Resource<Args> {
     // - includes card/field, either
     //   - an exported card/field
     //   - a card/field that was local but related to another card/field which was exported, e.g. inherited OR a field of the exported card/field
-    this._declarations = moduleSyntax.declarations.map((value: Declaration) => {
-      if (isPossibleCardOrFieldClass(value)) {
-        const cardOrField = exportedCardsOrFields.find(
-          (c) => c.name === value.localName,
-        );
-        if (cardOrField) {
-          return {
-            ...value,
-            cardOrField,
-            cardType: getCardType(this, () => cardOrField as typeof BaseDef),
-          } as CardOrField & Partial<PossibleCardOrFieldClass>;
-        } else {
-          if (localCardsOrFields.has(value)) {
-            let cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
-            return {
-              ...value,
-              cardOrField,
-              cardType: getCardType(this, () => cardOrField),
-            } as CardOrField & Partial<PossibleCardOrFieldClass>;
+    this._declarations = moduleSyntax.declarations.reduce(
+      (acc: ModuleDeclaration[], value: Declaration) => {
+        if (isPossibleCardOrFieldClass(value)) {
+          const cardOrField = exportedCardsOrFields.find(
+            (c) => c.name === value.localName,
+          );
+          if (cardOrField) {
+            return [
+              ...acc,
+              {
+                ...value,
+                cardOrField,
+                cardType: getCardType(
+                  this,
+                  () => cardOrField as typeof BaseDef,
+                ),
+              } as CardOrField & Partial<PossibleCardOrFieldClass>,
+            ];
+          } else {
+            if (localCardsOrFields.has(value)) {
+              let cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
+              return [
+                ...acc,
+                {
+                  ...value,
+                  cardOrField,
+                  cardType: getCardType(this, () => cardOrField),
+                } as CardOrField & Partial<PossibleCardOrFieldClass>,
+              ];
+            }
           }
         }
-      }
-      return value as BaseDeclaration;
-    });
+        if (value.exportedAs !== undefined) {
+          // some classes that look like cards may still be included,
+          // we should only non-card or fields which are exported
+          return [...acc, { ...value } as BaseDeclaration];
+        }
+        return acc;
+      },
+      [],
+    );
   }
 }
 
