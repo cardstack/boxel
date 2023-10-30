@@ -15,7 +15,7 @@ import get from 'lodash/get';
 import { dropTask, restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
@@ -557,23 +557,33 @@ export default class InteractSubmode extends Component<Signature> {
           </div>
         {{else}}
           {{#each this.stacks as |stack stackIndex|}}
-            <OperatorModeStack
-              data-test-operator-mode-stack={{stackIndex}}
-              class='operator-mode-stack'
-              @stackItems={{stack}}
-              @backgroundImageURL={{get
-                this.differingBackgroundImageURLs
-                stackIndex
-              }}
-              @stackIndex={{stackIndex}}
-              @publicAPI={{this.publicAPI this stackIndex}}
-              @close={{perform this.close}}
-              @edit={{this.edit}}
-              @onSelectedCards={{this.onSelectedCards}}
-              @save={{perform this.save}}
-              @delete={{perform this.delete}}
-              @setupStackItem={{this.setupStackItem}}
-            />
+            {{#let
+              (get this.differingBackgroundImageURLs stackIndex)
+              as |backgroundImageURL|
+            }}
+              <OperatorModeStack
+                data-test-operator-mode-stack={{stackIndex}}
+                class={{cn
+                  'operator-mode-stack'
+                  (if backgroundImageURL 'with-bg-image')
+                }}
+                style={{if
+                  backgroundImageURL
+                  (htmlSafe
+                    (concat 'background-image: url(' backgroundImageURL ')')
+                  )
+                }}
+                @stackItems={{stack}}
+                @stackIndex={{stackIndex}}
+                @publicAPI={{this.publicAPI this stackIndex}}
+                @close={{perform this.close}}
+                @edit={{this.edit}}
+                @onSelectedCards={{this.onSelectedCards}}
+                @save={{perform this.save}}
+                @delete={{perform this.delete}}
+                @setupStackItem={{this.setupStackItem}}
+              />
+            {{/let}}
           {{/each}}
 
           <CopyButton
