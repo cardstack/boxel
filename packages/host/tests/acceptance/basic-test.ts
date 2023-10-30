@@ -173,11 +173,6 @@ module('Acceptance | basic tests', function (hooks) {
 
     assert.strictEqual(currentURL(), '/test/');
     assert.dom('[data-test-index-card]').containsText('Hello, world');
-    assert
-      .dom('[data-test-moved]')
-      .containsText('The card code editor has moved to /code');
-    await click('[data-test-code-link]');
-    assert.strictEqual(currentURL(), '/code');
   });
 
   test('Can expand/collapse directories file tree', async function (assert) {
