@@ -14,6 +14,7 @@ import {
   IconLink,
   ThreeDotsHorizontal,
   Warning as WarningIcon,
+  IconPlus,
 } from '@cardstack/boxel-ui/icons';
 
 import { getPlural } from '@cardstack/runtime-common';
@@ -209,11 +210,33 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .add-field-button {
+        --icon-color: var(--boxel-highlight);
         background-color: transparent;
-        border: none;
         color: var(--boxel-highlight);
         font-size: var(--boxel-font-sm);
         font-weight: 600;
+        width: 100%;
+        height: 56px;
+        padding: var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
+        border: 1px solid var(--boxel-500);
+        margin: auto;
+        align-items: center;
+        justify-content: center;
+        display: flex;
+      }
+
+      .add-field-button > span {
+        margin-top: 1px;
+      }
+
+      .add-field-button > svg {
+        margin-right: var(--boxel-sp-xxxs);
+      }
+
+      .add-field-button:hover {
+        border: 1px solid var(--boxel-highlight);
+        background-color: var(--boxel-100);
       }
 
       .overriding-field {
@@ -407,7 +430,10 @@ export default class CardSchemaEditor extends Component<Signature> {
           data-test-add-field-button
           {{on 'click' this.toggleAddFieldModal}}
         >
-          + Add a field
+          <IconPlus width='20px' height='20px' role='presentation' />
+          <span>
+            Add a field
+          </span>
         </button>
 
         {{#if this.addFieldModalShown}}

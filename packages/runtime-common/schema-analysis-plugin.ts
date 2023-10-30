@@ -28,7 +28,7 @@ export type BaseDeclaration = {
 };
 
 export interface PossibleCardOrFieldClass extends BaseDeclaration {
-  super: ClassReference;
+  super?: ClassReference; // this is optional to allow to be inclusive of base def class
   possibleFields: Map<string, PossibleField>;
   path: NodePath<t.ClassDeclaration>;
 }
@@ -58,7 +58,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
         enter(path: NodePath<t.FunctionDeclaration>, state: State) {
           let localName = path.node.id ? path.node.id.name : undefined;
           if (t.isExportDeclaration(path.parentPath)) {
-            // exported functions
+            // == handle direct export ==
             state.opts.declarations.push({
               localName,
               exportedAs: getExportedAs(path, localName),
@@ -71,9 +71,24 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
       ClassDeclaration: {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
           let type = 'class' as 'class';
+          // == handle class that doesn't inherit from super ==
           if (!path.node.superClass) {
-            // any class which doesn't have a super class
             let localName = path.node.id ? path.node.id.name : undefined;
+            // == handle base def ==
+            if (isBaseDefClass(path)) {
+              let possibleCardOrField = {
+                localName,
+                path,
+                possibleFields: new Map(),
+                exportedAs: getExportedAs(path, localName),
+                type,
+              };
+              state.opts.possibleCardsOrFields.push(possibleCardOrField);
+              state.opts.declarations.push(possibleCardOrField);
+              return;
+            }
+
+            // == handle direct exports ==
             if (t.isExportDeclaration(path.parentPath)) {
               state.opts.declarations.push({
                 localName,
@@ -81,7 +96,10 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
                 path,
                 type,
               });
+              return;
             }
+
+            // == handle renamed exports ==
             let maybeExportSpecifierLocal = getExportSpecifierLocal(
               path,
               localName,
@@ -98,10 +116,11 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
           }
 
           let sc = path.get('superClass');
+          // == handle class that inherits from some super ==
           if (sc.isReferencedIdentifier()) {
             let classRef = makeClassReference(path.scope, sc.node.name, state);
             if (classRef) {
-              // card or field class which extends a card or field class
+              // == handle card or field ==
               state.insideCard = true;
               let localName = path.node.id ? path.node.id.name : undefined;
 
@@ -116,7 +135,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
               state.opts.possibleCardsOrFields.push(possibleCardOrField);
               state.opts.declarations.push(possibleCardOrField);
             } else {
-              // non-card or non-field class which extends some class
+              // == handle non-card or non-field ==
               if (t.isExportDeclaration(path.parentPath)) {
                 let localName = path.node.id ? path.node.id.name : undefined;
                 state.opts.declarations.push({
@@ -281,6 +300,31 @@ function getExportedAs(
   return;
 }
 
+function isBaseDefClass(path: NodePath<t.ClassDeclaration>): boolean {
+  let localName = path.node.id ? path.node.id.name : undefined;
+  if (localName === 'BaseDef' && hasComputedProperty(path, 'isBaseInstance')) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function hasComputedProperty(
+  path: NodePath<t.ClassDeclaration>,
+  propertyName: string,
+): boolean {
+  const classBody = path.node.body.body;
+  return (
+    classBody.some(
+      (property) =>
+        t.isClassProperty(property) &&
+        property.computed &&
+        t.isIdentifier(property.key) &&
+        property.key.name === propertyName,
+    ) || false
+  );
+}
+
 function makeClassReference(
   scope: Scope,
   name: string,
@@ -348,12 +392,13 @@ function getName(node: t.Identifier | t.StringLiteral) {
 export function isPossibleCardOrFieldClass(
   declaration: any,
 ): declaration is PossibleCardOrFieldClass {
+  let hasSuper = declaration.super;
+  let isBase = isBaseDefClass(declaration.path);
   return (
-    declaration &&
-    declaration.super &&
+    (isBase || hasSuper) &&
     typeof declaration.localName === 'string' &&
     declaration.possibleFields instanceof Map &&
-    declaration.path
+    t.isClassDeclaration(declaration.path)
   );
 }
 

@@ -150,6 +150,7 @@ export default class Modal extends Component<Signature> {
       :global(.boxel-modal__inner > *) {
         width: 100%;
         pointer-events: auto;
+        cursor: default;
       }
     </style>
   </template>
