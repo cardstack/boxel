@@ -69,7 +69,9 @@ interface Signature {
     declarations: ModuleDeclaration[];
     selectDeclaration: (dec: ModuleDeclaration) => void;
     openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
-    delete: () => void;
+    delete: (
+      card: CardDef | typeof CardDef | undefined,
+    ) => void | Promise<void>;
   };
 }
 

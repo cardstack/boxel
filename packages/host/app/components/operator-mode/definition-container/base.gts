@@ -14,7 +14,7 @@ import type { Icon } from '@cardstack/boxel-ui/icons';
 
 interface Action {
   label: string;
-  handler: () => void;
+  handler: (args: any) => void | Promise<void>; // TODO: narrow this for each type of module
   icon: Icon;
 }
 export interface BaseArgs {
