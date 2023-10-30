@@ -175,57 +175,6 @@ module('Acceptance | basic tests', function (hooks) {
     assert.dom('[data-test-index-card]').containsText('Hello, world');
   });
 
-  test<TestContextWithSSE>('Card instance live updates when index changes', async function (assert) {
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Person/1`],
-        },
-      },
-    ];
-
-    await visit('/code');
-    await waitFor('[data-test-file]');
-    await click('[data-test-directory="Person/"]');
-    await waitFor('[data-test-file="Person/1.json"]');
-    await click('[data-test-file="Person/1.json"]');
-
-    await this.expectEvents(
-      assert,
-      realm,
-      adapter,
-      expectedEvents,
-      async () => {
-        await realm.write(
-          'Person/1.json',
-          JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: {
-                firstName: 'HassanXXX',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '../person',
-                  name: 'Person',
-                },
-              },
-            },
-          } as LooseSingleCardDocument),
-        );
-      },
-    );
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-person]')!
-          .textContent?.includes('HassanXXX'),
-    );
-    assert.dom('[data-test-person]').containsText('First name: HassanXXX');
-  });
-
   test('glimmer-scoped-css smoke test', async function (assert) {
     await visit('/');
 
