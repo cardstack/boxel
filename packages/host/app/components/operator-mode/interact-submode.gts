@@ -4,7 +4,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -70,6 +70,44 @@ const stackItemScrollers = new WeakMap<
     scrollIntoView: (selector: string) => void;
   }
 >();
+
+interface NeighborStackTriggerButtonSignature {
+  Element: HTMLButtonElement;
+  Args: {
+    triggerSide: SearchSheetTrigger;
+    activeTrigger: SearchSheetTrigger;
+    onTrigger: (triggerSide: SearchSheetTrigger) => void;
+  };
+}
+
+class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSignature> {
+  get triggerSideClass() {
+    switch (this.args.triggerSide) {
+      case SearchSheetTrigger.DropCardToLeftNeighborStackButton:
+        return 'add-card-to-neighbor-stack--left';
+      case SearchSheetTrigger.DropCardToRightNeighborStackButton:
+        return 'add-card-to-neighbor-stack--right';
+      default:
+        return undefined;
+    }
+  }
+
+  <template>
+    <button
+      ...attributes
+      class={{cn
+        'add-card-to-neighbor-stack'
+        this.triggerSideClass
+        (if
+          (eq @activeTrigger @gtriggerSide) 'add-card-to-neighbor-stack--active'
+        )
+      }}
+      {{on 'click' (fn @onTrigger @triggerSide)}}
+    >
+      <Download width='25' height='25' />
+    </button>
+  </template>
+}
 
 interface Signature {
   Element: HTMLDivElement;
@@ -520,8 +558,8 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   @action private showSearchWithTrigger(
-    searchSheetTrigger: SearchSheetTrigger,
     openSearchCallback: () => void,
+    searchSheetTrigger: SearchSheetTrigger,
   ) {
     if (
       searchSheetTrigger ==
@@ -594,48 +632,16 @@ export default class InteractSubmode extends Component<Signature> {
         {{/if}}
 
         {{#if this.canCreateNeighborStack}}
-          <button
+          <NeighborStackTriggerButton
             data-test-add-card-left-stack
-            class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
-              {{if
-                (eq
-                  this.searchSheetTrigger
-                  "drop-card-to-left-neighbor-stack-button"
-                )
-                "add-card-to-neighbor-stack--active"
-              }}'
-            {{on
-              'click'
-              (fn
-                this.showSearchWithTrigger
-                SearchSheetTrigger.DropCardToLeftNeighborStackButton
-                openSearch
-              )
-            }}
-          >
-            <Download width='25' height='25' />
-          </button>
-          <button
+            @triggerSide={{SearchSheetTrigger.DropCardToLeftNeighborStackButton}}
+            @onTrigger={{fn this.showSearchWithTrigger openSearch}}
+          />
+          <NeighborStackTriggerButton
             data-test-add-card-right-stack
-            class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
-              {{if
-                (eq
-                  this.searchSheetTrigger
-                  "drop-card-to-right-neighbor-stack-button"
-                )
-                "add-card-to-neighbor-stack--active"
-              }}'
-            {{on
-              'click'
-              (fn
-                this.showSearchWithTrigger
-                SearchSheetTrigger.DropCardToRightNeighborStackButton
-                openSearch
-              )
-            }}
-          >
-            <Download width='25' height='25' />
-          </button>
+            @triggerSide={{SearchSheetTrigger.DropCardToRightNeighborStackButton}}
+            @onTrigger={{fn this.showSearchWithTrigger openSearch}}
+          />
         {{/if}}
         <DeleteModal @onCreate={{this.setupDeleteModal}} />
       </div>
