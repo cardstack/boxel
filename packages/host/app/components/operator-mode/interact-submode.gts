@@ -56,10 +56,13 @@ export interface StackItem {
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
 }
 
-enum SearchSheetTrigger {
-  DropCardToLeftNeighborStackButton = 'drop-card-to-left-neighbor-stack-button',
-  DropCardToRightNeighborStackButton = 'drop-card-to-right-neighbor-stack-button',
-}
+const SearchSheetTriggers = {
+  DropCardToLeftNeighborStackButton: 'drop-card-to-left-neighbor-stack-button',
+  DropCardToRightNeighborStackButton:
+    'drop-card-to-right-neighbor-stack-button',
+} as const;
+type Values<T> = T[keyof T];
+type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
 const clearSelections = new WeakMap<StackItem, () => void>();
@@ -75,7 +78,7 @@ interface NeighborStackTriggerButtonSignature {
   Element: HTMLButtonElement;
   Args: {
     triggerSide: SearchSheetTrigger;
-    activeTrigger: SearchSheetTrigger;
+    activeTrigger: SearchSheetTrigger | null;
     onTrigger: (triggerSide: SearchSheetTrigger) => void;
   };
 }
@@ -83,9 +86,9 @@ interface NeighborStackTriggerButtonSignature {
 class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSignature> {
   get triggerSideClass() {
     switch (this.args.triggerSide) {
-      case SearchSheetTrigger.DropCardToLeftNeighborStackButton:
+      case SearchSheetTriggers.DropCardToLeftNeighborStackButton:
         return 'add-card-to-neighbor-stack--left';
-      case SearchSheetTrigger.DropCardToRightNeighborStackButton:
+      case SearchSheetTriggers.DropCardToRightNeighborStackButton:
         return 'add-card-to-neighbor-stack--right';
       default:
         return undefined;
@@ -99,7 +102,7 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
         'add-card-to-neighbor-stack'
         this.triggerSideClass
         (if
-          (eq @activeTrigger @gtriggerSide) 'add-card-to-neighbor-stack--active'
+          (eq @activeTrigger @triggerSide) 'add-card-to-neighbor-stack--active'
         )
       }}
       {{on 'click' (fn @onTrigger @triggerSide)}}
@@ -491,7 +494,7 @@ export default class InteractSubmode extends Component<Signature> {
     // and the card will be added to stack with index 0. shiftStack executes this logic.
     if (
       searchSheetTrigger ===
-      SearchSheetTrigger.DropCardToLeftNeighborStackButton
+      SearchSheetTriggers.DropCardToLeftNeighborStackButton
     ) {
       for (
         let stackIndex = this.stacks.length - 1;
@@ -514,7 +517,7 @@ export default class InteractSubmode extends Component<Signature> {
       // In case the right button was clicked, the card will be added to stack with index 1.
     } else if (
       searchSheetTrigger ===
-      SearchSheetTrigger.DropCardToRightNeighborStackButton
+      SearchSheetTriggers.DropCardToRightNeighborStackButton
     ) {
       this.operatorModeStateService.addItemToStack({
         card,
@@ -563,9 +566,9 @@ export default class InteractSubmode extends Component<Signature> {
   ) {
     if (
       searchSheetTrigger ==
-        SearchSheetTrigger.DropCardToLeftNeighborStackButton ||
+        SearchSheetTriggers.DropCardToLeftNeighborStackButton ||
       searchSheetTrigger ==
-        SearchSheetTrigger.DropCardToRightNeighborStackButton
+        SearchSheetTriggers.DropCardToRightNeighborStackButton
     ) {
       this.searchSheetTrigger = searchSheetTrigger;
     }
@@ -634,12 +637,14 @@ export default class InteractSubmode extends Component<Signature> {
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             data-test-add-card-left-stack
-            @triggerSide={{SearchSheetTrigger.DropCardToLeftNeighborStackButton}}
+            @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
+            @activeTrigger={{this.searchSheetTrigger}}
             @onTrigger={{fn this.showSearchWithTrigger openSearch}}
           />
           <NeighborStackTriggerButton
             data-test-add-card-right-stack
-            @triggerSide={{SearchSheetTrigger.DropCardToRightNeighborStackButton}}
+            @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
+            @activeTrigger={{this.searchSheetTrigger}}
             @onTrigger={{fn this.showSearchWithTrigger openSearch}}
           />
         {{/if}}

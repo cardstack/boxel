@@ -14,10 +14,13 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import SubmodeSwitcher, { Submode } from '../submode-switcher';
+import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 import ChatSidebar from '../matrix/chat-sidebar';
 import CardCatalogModal from '../card-catalog/modal';
-import SearchSheet, { SearchSheetMode } from '../search-sheet';
+import SearchSheet, {
+  SearchSheetMode,
+  SearchSheetModes,
+} from '../search-sheet';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -37,7 +40,7 @@ interface Signature {
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private isChatVisible = false;
-  @tracked private searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
+  @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
 
   @service private declare operatorModeStateService: OperatorModeStateService;
 
@@ -63,10 +66,10 @@ export default class SubmodeLayout extends Component<Signature> {
 
   @action private updateSubmode(submode: Submode) {
     switch (submode) {
-      case Submode.Interact:
+      case Submodes.Interact:
         this.operatorModeStateService.updateCodePath(null);
         break;
-      case Submode.Code:
+      case Submodes.Code:
         let codePath = this.lastCardInRightMostStack
           ? new URL(this.lastCardInRightMostStack.id + '.json')
           : null;
@@ -85,17 +88,17 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action private closeSearchSheet() {
-    this.searchSheetMode = SearchSheetMode.Closed;
+    this.searchSheetMode = SearchSheetModes.Closed;
     this.args.onSearchSheetClosed?.();
   }
 
   @action private expandSearchToShowResults(_term: string) {
-    this.searchSheetMode = SearchSheetMode.SearchResults;
+    this.searchSheetMode = SearchSheetModes.SearchResults;
   }
 
   @action private openSearchSheetToPrompt() {
-    if (this.searchSheetMode == SearchSheetMode.Closed) {
-      this.searchSheetMode = SearchSheetMode.SearchPrompt;
+    if (this.searchSheetMode == SearchSheetModes.Closed) {
+      this.searchSheetMode = SearchSheetModes.SearchPrompt;
     }
 
     if (this.operatorModeStateService.recentCards.length === 0) {

@@ -24,7 +24,7 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { Submode } from '../submode-switcher';
+import { Submodes } from '../submode-switcher';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -128,7 +128,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   private get isCodeMode() {
-    return this.operatorModeStateService.state?.submode === Submode.Code;
+    return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
   <template>

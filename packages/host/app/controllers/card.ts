@@ -11,7 +11,7 @@ import stringify from 'safe-stable-stringify';
 
 import type { Query } from '@cardstack/runtime-common/query';
 
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { Model } from '@cardstack/host/routes/card';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -114,7 +114,7 @@ export default class CardController extends Controller {
             },
           ],
         ],
-        submode: Submode.Interact,
+        submode: Submodes.Interact,
       } as OperatorModeSerializedState)!;
     } else {
       this.operatorModeState = null;

@@ -6,26 +6,26 @@ import { tracked } from '@glimmer/tracking';
 
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import SearchSheet, { SearchSheetMode } from './index';
+import SearchSheet, { SearchSheetMode, SearchSheetModes } from './index';
 
-const validModes = Object.values(SearchSheetMode);
+const validModes = Object.values(SearchSheetModes);
 
 export default class SearchSheetUsage extends Component {
-  defaultMode: SearchSheetMode = SearchSheetMode.Closed;
-  @tracked mode: SearchSheetMode = SearchSheetMode.Closed;
+  defaultMode: SearchSheetMode = SearchSheetModes.Closed;
+  @tracked mode: SearchSheetMode = SearchSheetModes.Closed;
 
   @action onFocus() {
-    if (this.mode == SearchSheetMode.Closed) {
-      this.mode = SearchSheetMode.SearchPrompt;
+    if (this.mode == SearchSheetModes.Closed) {
+      this.mode = SearchSheetModes.SearchPrompt;
     }
   }
 
   @action onBlur() {
-    this.mode = SearchSheetMode.Closed;
+    this.mode = SearchSheetModes.Closed;
   }
 
   @action onCancel() {
-    this.mode = SearchSheetMode.Closed;
+    this.mode = SearchSheetModes.Closed;
   }
 
   @action onSearch(_term: string) {
