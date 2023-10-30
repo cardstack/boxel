@@ -158,8 +158,10 @@ module('Integration | search-index', function (hooks) {
             self: `${testRealmURL}Pet/mango`,
           },
           attributes: {
+            description: null,
             firstName: 'Mango',
             title: 'Mango',
+            thumbnailURL: null,
           },
           relationships: {
             owner: {
@@ -236,8 +238,10 @@ module('Integration | search-index', function (hooks) {
           self: `${testRealmURL}Pet/mango`,
         },
         attributes: {
+          description: null,
           firstName: 'Mango',
           title: 'Mango',
+          thumbnailURL: null,
         },
         relationships: {
           owner: {
@@ -313,8 +317,10 @@ module('Integration | search-index', function (hooks) {
           self: `${testRealmURL}Pet/mango`,
         },
         attributes: {
+          description: null,
           firstName: 'Mango',
           title: 'Mango',
+          thumbnailURL: null,
         },
         relationships: {
           owner: {
@@ -406,6 +412,9 @@ module('Integration | search-index', function (hooks) {
           },
           demo: {
             firstName: 'Mango',
+            title: null,
+            description: null,
+            thumbnailURL: null,
           },
         },
         meta: {
@@ -906,7 +915,13 @@ module('Integration | search-index', function (hooks) {
             title: 'Jackie',
             appointment: {
               title: 'Vet visit',
-              contact: { firstName: 'Burcu' },
+              description: null,
+              thumbnailURL: null,
+              contact: {
+                firstName: 'Burcu',
+                description: null,
+                thumbnailURL: null,
+              },
             },
             description: 'Dog',
             thumbnailURL: `./jackie.jpg`,
@@ -1086,7 +1101,6 @@ module('Integration | search-index', function (hooks) {
               description: `Chain 1`,
               thumbnailURL: `Ethereum Mainnet-icon.png`,
             },
-
             meta: {
               adoptsFrom: {
                 module: `http://localhost:4202/test/chain`,
@@ -1184,8 +1198,24 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
-  test('search doc only includes used fields', async function (assert) {
+  test(`search doc includes 'contains' and used 'linksTo' fields`, async function (assert) {
     let adapter = new TestRealmAdapter({
+      'Pet/mango.json': {
+        data: {
+          attributes: { firstName: 'Mango' },
+          relationships: {
+            owner: {
+              links: { self: `${testRealmURL}Person/hassan` },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
       'Person/hassan.json': {
         data: {
           id: `${testRealmURL}Person/hassan`,
@@ -1219,6 +1249,7 @@ module('Integration | search-index', function (hooks) {
         email: 'hassan@cardstack.com',
         posts: 100,
         title: 'Hassan Abdel-Rahman',
+        thumbnailURL: undefined,
       },
       `search doc does not include fullName field`,
     );
@@ -1388,7 +1419,12 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Pet/mango`,
           type: 'card',
           links: { self: `${testRealmURL}Pet/mango` },
-          attributes: { firstName: 'Mango', title: 'Mango' },
+          attributes: {
+            description: null,
+            firstName: 'Mango',
+            title: 'Mango',
+            thumbnailURL: null,
+          },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
@@ -1403,7 +1439,12 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Pet/vanGogh`,
           type: 'card',
           links: { self: `${testRealmURL}Pet/vanGogh` },
-          attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
+          attributes: {
+            description: null,
+            firstName: 'Van Gogh',
+            title: 'Van Gogh',
+            thumbnailURL: null,
+          },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
@@ -1429,15 +1470,19 @@ module('Integration | search-index', function (hooks) {
         pets: [
           {
             id: `${testRealmURL}Pet/mango`,
+            description: null,
             firstName: 'Mango',
             owner: null,
             title: 'Mango',
+            thumbnailURL: null,
           },
           {
             id: `${testRealmURL}Pet/vanGogh`,
+            description: null,
             firstName: 'Van Gogh',
             owner: null,
             title: 'Van Gogh',
+            thumbnailURL: null,
           },
         ],
         friend: null,
@@ -1654,7 +1699,12 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Pet/mango`,
           type: 'card',
           links: { self: `${testRealmURL}Pet/mango` },
-          attributes: { firstName: 'Mango', title: 'Mango' },
+          attributes: {
+            description: null,
+            firstName: 'Mango',
+            title: 'Mango',
+            thumbnailURL: null,
+          },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
@@ -1669,7 +1719,12 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Pet/vanGogh`,
           type: 'card',
           links: { self: `${testRealmURL}Pet/vanGogh` },
-          attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
+          attributes: {
+            description: null,
+            firstName: 'Van Gogh',
+            title: 'Van Gogh',
+            thumbnailURL: null,
+          },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
@@ -1703,15 +1758,19 @@ module('Integration | search-index', function (hooks) {
           pets: [
             {
               id: `${testRealmURL}Pet/mango`,
+              description: null,
               firstName: 'Mango',
               owner: null,
               title: 'Mango',
+              thumbnailURL: null,
             },
             {
               id: `${testRealmURL}Pet/vanGogh`,
+              description: null,
               firstName: 'Van Gogh',
               owner: null,
               title: 'Van Gogh',
+              thumbnailURL: null,
             },
           ],
           friend: null,
@@ -2124,6 +2183,7 @@ module('Integration | search-index', function (hooks) {
             id: `${testRealmURL}Friend/mango`,
           },
           description: 'Dog owner',
+          thumbnailURL: undefined,
         },
       });
     } else {
@@ -2291,6 +2351,8 @@ module('Integration | search-index', function (hooks) {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
+              description: undefined,
+              thumbnailURL: undefined,
             },
           ],
         },
@@ -2403,12 +2465,16 @@ module('Integration | search-index', function (hooks) {
             {
               id: hassanID,
               firstName: 'Hassan',
+              description: undefined,
+              thumbnailURL: undefined,
               friends: [
                 { id: mangoID },
                 {
                   id: vanGoghID,
                   firstName: 'Van Gogh',
                   friends: [{ id: hassanID }],
+                  description: undefined,
+                  thumbnailURL: undefined,
                 },
               ],
             },

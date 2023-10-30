@@ -2715,28 +2715,37 @@ export function getFields(
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
     let descs = Object.getOwnPropertyDescriptors(obj);
     let currentFields = flatMap(Object.keys(descs), (maybeFieldName) => {
-      if (maybeFieldName !== 'constructor') {
-        let maybeField = getField(
-          (isCardOrField(cardInstanceOrClass)
-            ? cardInstanceOrClass.constructor
-            : cardInstanceOrClass) as typeof BaseDef,
-          maybeFieldName,
-        );
+      if (maybeFieldName === 'constructor') {
+        return [];
+      }
+      let maybeField = getField(
+        (isCardOrField(cardInstanceOrClass)
+          ? cardInstanceOrClass.constructor
+          : cardInstanceOrClass) as typeof BaseDef,
+        maybeFieldName,
+      );
+      if (!maybeField) {
+        return [];
+      }
+
+      if (
+        !(primitive in maybeField.card) ||
+        maybeField.computeVia ||
+        !['contains', 'containsMany'].includes(maybeField.fieldType)
+      ) {
         if (
           opts?.usedFieldsOnly &&
           !usedFields.includes(maybeFieldName) &&
-          !maybeField?.isUsed
+          !maybeField.isUsed
         ) {
           return [];
         }
-        if (maybeField?.computeVia && !opts?.includeComputeds) {
+        if (maybeField.computeVia && !opts?.includeComputeds) {
           return [];
         }
-        if (maybeField) {
-          return [[maybeFieldName, maybeField]];
-        }
       }
-      return [];
+
+      return [[maybeFieldName, maybeField]];
     });
     fields = { ...fields, ...Object.fromEntries(currentFields) };
     obj = Reflect.getPrototypeOf(obj);
