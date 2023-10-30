@@ -233,13 +233,12 @@ export default class OperatorModeStateService extends Service {
   }
 
   get codePathRelativeToRealm() {
-    if (this.state.codePath && this.realmURL) {
-      let resolvedRealmURL = this.loaderService.loader.resolve(this.realmURL);
-      let resolvedRealmPath = new RealmPaths(resolvedRealmURL);
+    if (this.state.codePath && this.resolvedRealmURL) {
+      let realmPath = new RealmPaths(this.resolvedRealmURL);
 
-      if (resolvedRealmPath.inRealm(this.state.codePath)) {
+      if (realmPath.inRealm(this.state.codePath)) {
         try {
-          return resolvedRealmPath.local(this.state.codePath!);
+          return realmPath.local(this.state.codePath!);
         } catch (err: any) {
           if (err.status === 404) {
             return undefined;
@@ -516,6 +515,10 @@ export default class OperatorModeStateService extends Service {
     }
 
     return this.cardService.defaultURL;
+  }
+
+  get resolvedRealmURL() {
+    return this.loaderService.loader.resolve(this.realmURL);
   }
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
