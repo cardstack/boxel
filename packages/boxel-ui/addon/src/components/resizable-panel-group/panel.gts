@@ -36,7 +36,7 @@ export default class Panel extends Component<Signature> {
   <template>
     <div
       id={{this.id}}
-      class='boxel-panel-{{@orientation}}'
+      class='boxel-panel {{@orientation}}'
       style={{if
         (eq @orientation 'horizontal')
         (cssVars
@@ -67,8 +67,11 @@ export default class Panel extends Component<Signature> {
       </div>
     {{/unless}}
     <style>
-      .boxel-panel-horizontal {
-        --boxel-panel-width: '300px';
+      .boxel-panel {
+        --resizable-panel-length: '300px;';
+      }
+
+      .boxel-panel.horizontal {
         --boxel-panel-width: var(--resizable-panel-length);
         --boxel-panel-min-width: 'none';
 
@@ -76,8 +79,8 @@ export default class Panel extends Component<Signature> {
         min-width: var(--boxel-panel-min-width);
       }
 
-      .boxel-panel-vertical {
-        --boxel-panel-height: '300px';
+      .boxel-panel.vertical {
+        --boxel-panel-height: var(--resizable-panel-length);
         --boxel-panel-min-height: 'none';
 
         height: var(--boxel-panel-height);
@@ -111,6 +114,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler {
+        width: var(--boxel-panel-resize-handler-width);
+        height: var(--boxel-panel-resize-handler-height);
+
         border: none;
         border-radius: var(--boxel-border-radius-xl);
         padding: 0;
@@ -128,16 +134,10 @@ export default class Panel extends Component<Signature> {
 
       .resize-handler.horizontal {
         cursor: col-resize;
-
-        height: var(--boxel-panel-resize-handler-height);
-        width: var(--boxel-panel-resize-handler-width);
       }
 
       .resize-handler.vertical {
         cursor: row-resize;
-
-        width: var(--boxel-panel-resize-handler-width);
-        height: var(--boxel-panel-resize-handler-height);
       }
 
       .resize-handler.hidden {
