@@ -392,11 +392,10 @@ function getName(node: t.Identifier | t.StringLiteral) {
 export function isPossibleCardOrFieldClass(
   declaration: any,
 ): declaration is PossibleCardOrFieldClass {
-  let hasSuperOrisBase =
-    (declaration && isBaseDefClass(declaration.path)) ??
-    declaration.super !== undefined;
+  let hasSuper = declaration.super;
+  let isBase = isBaseDefClass(declaration.path);
   return (
-    hasSuperOrisBase && //doesn't check for super when it is the base class
+    (isBase || hasSuper) &&
     typeof declaration.localName === 'string' &&
     declaration.possibleFields instanceof Map &&
     t.isClassDeclaration(declaration.path)
