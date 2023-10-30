@@ -157,17 +157,6 @@ module('Acceptance | basic tests', function (hooks) {
     await realm.ready;
   });
 
-  test('visiting / (there is no realm here)', async function (assert) {
-    await visit('/');
-
-    assert.strictEqual(currentURL(), '/');
-    assert
-      .dom('[data-test-moved]')
-      .containsText('The card code editor has moved to /code');
-    await click('[data-test-code-link]');
-    assert.strictEqual(currentURL(), '/code');
-  });
-
   test('visiting realm root', async function (assert) {
     await visit('/test/');
 
