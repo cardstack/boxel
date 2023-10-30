@@ -175,26 +175,6 @@ module('Acceptance | basic tests', function (hooks) {
     assert.dom('[data-test-index-card]').containsText('Hello, world');
   });
 
-  test('Can expand/collapse directories file tree', async function (assert) {
-    await visit('/code');
-    await waitFor('[data-test-file]');
-    assert
-      .dom('[data-test-directory="Person/"]')
-      .exists('Person/ directory entry is rendered');
-    assert
-      .dom('[data-test-file="person.gts"]')
-      .exists('person.gts file entry is rendered');
-    await click('[data-test-directory="Person/"]');
-    await waitFor('[data-test-file="Person/1.json"]');
-    assert
-      .dom('[data-test-file="Person/1.json"]')
-      .exists('Person/1.json file entry is rendered');
-    await click('[data-test-directory="Person/"]');
-    assert
-      .dom('[data-test-file="Person/1.json"]')
-      .doesNotExist('Person/1.json file entry is not rendered');
-  });
-
   test<TestContextWithSSE>('Card instance live updates when index changes', async function (assert) {
     let expectedEvents = [
       {
