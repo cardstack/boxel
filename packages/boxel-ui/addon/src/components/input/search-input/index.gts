@@ -7,10 +7,14 @@ import BoxelInput from '../index.gts';
 import type { InputValidationState } from '../validation-state/index.gts';
 import BoxelInputValidationState from '../validation-state/index.gts';
 
-export enum SearchInputBottomTreatment {
-  Flat = 'flat',
-  Rounded = 'rounded',
-}
+export const SearchInputBottomTreatments = {
+  Flat: 'flat',
+  Rounded: 'rounded',
+} as const;
+type Values<T> = T[keyof T];
+export type SearchInputBottomTreatment = Values<
+  typeof SearchInputBottomTreatments
+>;
 
 interface Signature {
   Args: {

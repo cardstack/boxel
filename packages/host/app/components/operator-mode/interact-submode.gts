@@ -4,7 +4,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -15,7 +15,7 @@ import get from 'lodash/get';
 import { dropTask, restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
@@ -56,10 +56,13 @@ export interface StackItem {
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
 }
 
-enum SearchSheetTrigger {
-  DropCardToLeftNeighborStackButton = 'drop-card-to-left-neighbor-stack-button',
-  DropCardToRightNeighborStackButton = 'drop-card-to-right-neighbor-stack-button',
-}
+const SearchSheetTriggers = {
+  DropCardToLeftNeighborStackButton: 'drop-card-to-left-neighbor-stack-button',
+  DropCardToRightNeighborStackButton:
+    'drop-card-to-right-neighbor-stack-button',
+} as const;
+type Values<T> = T[keyof T];
+type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
 const clearSelections = new WeakMap<StackItem, () => void>();
@@ -70,6 +73,44 @@ const stackItemScrollers = new WeakMap<
     scrollIntoView: (selector: string) => void;
   }
 >();
+
+interface NeighborStackTriggerButtonSignature {
+  Element: HTMLButtonElement;
+  Args: {
+    triggerSide: SearchSheetTrigger;
+    activeTrigger: SearchSheetTrigger | null;
+    onTrigger: (triggerSide: SearchSheetTrigger) => void;
+  };
+}
+
+class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSignature> {
+  get triggerSideClass() {
+    switch (this.args.triggerSide) {
+      case SearchSheetTriggers.DropCardToLeftNeighborStackButton:
+        return 'add-card-to-neighbor-stack--left';
+      case SearchSheetTriggers.DropCardToRightNeighborStackButton:
+        return 'add-card-to-neighbor-stack--right';
+      default:
+        return undefined;
+    }
+  }
+
+  <template>
+    <button
+      ...attributes
+      class={{cn
+        'add-card-to-neighbor-stack'
+        this.triggerSideClass
+        (if
+          (eq @activeTrigger @triggerSide) 'add-card-to-neighbor-stack--active'
+        )
+      }}
+      {{on 'click' (fn @onTrigger @triggerSide)}}
+    >
+      <Download width='25' height='25' />
+    </button>
+  </template>
+}
 
 interface Signature {
   Element: HTMLDivElement;
@@ -453,7 +494,7 @@ export default class InteractSubmode extends Component<Signature> {
     // and the card will be added to stack with index 0. shiftStack executes this logic.
     if (
       searchSheetTrigger ===
-      SearchSheetTrigger.DropCardToLeftNeighborStackButton
+      SearchSheetTriggers.DropCardToLeftNeighborStackButton
     ) {
       for (
         let stackIndex = this.stacks.length - 1;
@@ -476,7 +517,7 @@ export default class InteractSubmode extends Component<Signature> {
       // In case the right button was clicked, the card will be added to stack with index 1.
     } else if (
       searchSheetTrigger ===
-      SearchSheetTrigger.DropCardToRightNeighborStackButton
+      SearchSheetTriggers.DropCardToRightNeighborStackButton
     ) {
       this.operatorModeStateService.addItemToStack({
         card,
@@ -520,14 +561,14 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   @action private showSearchWithTrigger(
-    searchSheetTrigger: SearchSheetTrigger,
     openSearchCallback: () => void,
+    searchSheetTrigger: SearchSheetTrigger,
   ) {
     if (
       searchSheetTrigger ==
-        SearchSheetTrigger.DropCardToLeftNeighborStackButton ||
+        SearchSheetTriggers.DropCardToLeftNeighborStackButton ||
       searchSheetTrigger ==
-        SearchSheetTrigger.DropCardToRightNeighborStackButton
+        SearchSheetTriggers.DropCardToRightNeighborStackButton
     ) {
       this.searchSheetTrigger = searchSheetTrigger;
     }
@@ -557,23 +598,33 @@ export default class InteractSubmode extends Component<Signature> {
           </div>
         {{else}}
           {{#each this.stacks as |stack stackIndex|}}
-            <OperatorModeStack
-              data-test-operator-mode-stack={{stackIndex}}
-              class='operator-mode-stack'
-              @stackItems={{stack}}
-              @backgroundImageURL={{get
-                this.differingBackgroundImageURLs
-                stackIndex
-              }}
-              @stackIndex={{stackIndex}}
-              @publicAPI={{this.publicAPI this stackIndex}}
-              @close={{perform this.close}}
-              @edit={{this.edit}}
-              @onSelectedCards={{this.onSelectedCards}}
-              @save={{perform this.save}}
-              @delete={{perform this.delete}}
-              @setupStackItem={{this.setupStackItem}}
-            />
+            {{#let
+              (get this.differingBackgroundImageURLs stackIndex)
+              as |backgroundImageURL|
+            }}
+              <OperatorModeStack
+                data-test-operator-mode-stack={{stackIndex}}
+                class={{cn
+                  'operator-mode-stack'
+                  (if backgroundImageURL 'with-bg-image')
+                }}
+                style={{if
+                  backgroundImageURL
+                  (htmlSafe
+                    (concat 'background-image: url(' backgroundImageURL ')')
+                  )
+                }}
+                @stackItems={{stack}}
+                @stackIndex={{stackIndex}}
+                @publicAPI={{this.publicAPI this stackIndex}}
+                @close={{perform this.close}}
+                @edit={{this.edit}}
+                @onSelectedCards={{this.onSelectedCards}}
+                @save={{perform this.save}}
+                @delete={{perform this.delete}}
+                @setupStackItem={{this.setupStackItem}}
+              />
+            {{/let}}
           {{/each}}
 
           <CopyButton
@@ -584,48 +635,18 @@ export default class InteractSubmode extends Component<Signature> {
         {{/if}}
 
         {{#if this.canCreateNeighborStack}}
-          <button
+          <NeighborStackTriggerButton
             data-test-add-card-left-stack
-            class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
-              {{if
-                (eq
-                  this.searchSheetTrigger
-                  "drop-card-to-left-neighbor-stack-button"
-                )
-                "add-card-to-neighbor-stack--active"
-              }}'
-            {{on
-              'click'
-              (fn
-                this.showSearchWithTrigger
-                SearchSheetTrigger.DropCardToLeftNeighborStackButton
-                openSearch
-              )
-            }}
-          >
-            <Download width='25' height='25' />
-          </button>
-          <button
+            @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
+            @activeTrigger={{this.searchSheetTrigger}}
+            @onTrigger={{fn this.showSearchWithTrigger openSearch}}
+          />
+          <NeighborStackTriggerButton
             data-test-add-card-right-stack
-            class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
-              {{if
-                (eq
-                  this.searchSheetTrigger
-                  "drop-card-to-right-neighbor-stack-button"
-                )
-                "add-card-to-neighbor-stack--active"
-              }}'
-            {{on
-              'click'
-              (fn
-                this.showSearchWithTrigger
-                SearchSheetTrigger.DropCardToRightNeighborStackButton
-                openSearch
-              )
-            }}
-          >
-            <Download width='25' height='25' />
-          </button>
+            @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
+            @activeTrigger={{this.searchSheetTrigger}}
+            @onTrigger={{fn this.showSearchWithTrigger openSearch}}
+          />
         {{/if}}
         <DeleteModal @onCreate={{this.setupDeleteModal}} />
       </div>

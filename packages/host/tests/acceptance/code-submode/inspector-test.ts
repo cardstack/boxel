@@ -12,7 +12,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
@@ -864,7 +864,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [[]],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
     let selected = 'AncestorCard2 card';
     await waitFor(`[data-test-definition-container]`);
@@ -890,7 +890,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [[]],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
     selected = 'default (DefaultAncestorCard) card';
     await waitFor(`[data-test-definition-container]`);
@@ -915,7 +915,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [[]],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
     selected = 'RenamedAncestorCard (AncestorCard) card';
     await waitFor(`[data-test-definition-container]`);
@@ -940,7 +940,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [[]],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
     selected = 'AncestorCard3 card';
     await click(`[data-test-definition-container]`);
@@ -965,7 +965,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [[]],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
     selected = 'ChildCard2 card';
     await waitFor(`[data-test-definition-container]`);
@@ -991,7 +991,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [[]],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
     selected = 'AncestorField1 field';
     await click(`[data-test-definition-container]`);
@@ -1002,7 +1002,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   test('After opening definition from card type and fields on RHS, "in-this-file" highlights selected definition', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
-      submode: Submode.Code,
+      submode: Submodes.Code,
       codePath: `${testRealmURL}imports.gts`,
     })!;
 
@@ -1036,7 +1036,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
 
     await waitFor('[data-test-boxel-selector-item-selected]');
@@ -1068,7 +1068,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
@@ -1101,7 +1101,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
@@ -1132,7 +1132,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
@@ -1165,7 +1165,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       fileView: 'inheritance',
       openDirs: {},
       stacks: [],
-      submode: Submode.Code,
+      submode: Submodes.Code,
     });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
