@@ -459,6 +459,7 @@ export default class CodeMode extends Component<Signature> {
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this.operatorModeStateService.updateLocalNameSelection(dec.localName);
+    this.monacoService.moveCursorByWord(dec.exportedAs ?? dec.localName ?? '');
   }
 
   @action
