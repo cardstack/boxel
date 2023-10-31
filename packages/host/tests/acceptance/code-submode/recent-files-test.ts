@@ -2,7 +2,6 @@ import {
   visit,
   click,
   waitFor,
-  waitUntil,
   fillIn,
   triggerKeyEvent,
 } from '@ember/test-helpers';
@@ -557,12 +556,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
     await waitFor('[data-test-file="field-component.gts"]');
     await click('[data-test-file="field-component.gts"]');
-    await waitUntil(
-      () =>
-        document
-          .querySelector(`[data-test-file="field-component.gts"]`)
-          ?.className.includes('selected'),
-    );
+    await waitFor('[data-test-file="field-component.gts"].selected');
     assert
       .dom('[data-test-recent-file]:nth-child(1)')
       .containsText('field-component.gts');
