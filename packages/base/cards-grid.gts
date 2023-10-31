@@ -36,7 +36,7 @@ class Isolated extends Component<typeof CardsGrid> {
               fieldName=undefined
             }}
             data-test-cards-grid-item={{card.id}}
-            {{! In order to support scrolling cards into view 
+            {{! In order to support scrolling cards into view
             we use a selector that is not pruned out in production builds }}
             data-cards-grid-item={{card.id}}
           >
@@ -170,15 +170,10 @@ class Isolated extends Component<typeof CardsGrid> {
       {
         filter: {
           not: {
-            any: [
-              { type: catalogEntryRef },
-              {
-                type: {
-                  module: `${baseRealm.url}cards-grid`,
-                  name: 'CardsGrid',
-                },
-              },
-            ],
+            type: {
+              module: `${baseRealm.url}cards-grid`,
+              name: 'CardsGrid',
+            },
           },
         },
         // sorting by title so that we can maintain stability in
@@ -237,11 +232,9 @@ class Isolated extends Component<typeof CardsGrid> {
     //if the user wants to view the card in isolated mode they can
     // just toggle the edit button. otherwise we'll pop 2 of the
     // same cards into the stack.
-    await this.args.context?.actions?.createCard?.(
-      card.ref,
-      new URL(card.id),
-      { realmURL: this.args.model[realmURL] }
-    );
+    await this.args.context?.actions?.createCard?.(card.ref, new URL(card.id), {
+      realmURL: this.args.model[realmURL],
+    });
   });
 }
 

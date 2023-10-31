@@ -24,11 +24,17 @@ export class Chain extends CardDef {
   @field name = contains(StringCard); // dropdown
   @field chainId = contains(NumberCard, {
     computeVia: function (this: Chain) {
+      if (!this.name) {
+        return;
+      }
       return CHAIN_IDS[this.name];
     },
   });
   @field blockExplorer = contains(StringCard, {
     computeVia: function (this: Chain) {
+      if (!this.name) {
+        return;
+      }
       return BLOCK_EXPLORER_URLS[CHAIN_IDS[this.name]];
     },
   });
