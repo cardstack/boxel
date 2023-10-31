@@ -1,4 +1,3 @@
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { task } from 'ember-concurrency';
@@ -10,7 +9,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import OperatorModeStackItem from './stack-item';
 
-import type { StackItem } from './container';
+import type { StackItem } from './interact-submode';
 
 interface Signature {
   Element: HTMLElement;
@@ -19,7 +18,6 @@ interface Signature {
     stackItems: StackItem[];
     stackIndex: number;
     publicAPI: Actions;
-    backgroundImageURL: string | undefined;
     close: (stackItem: StackItem) => void;
     edit: (stackItem: StackItem) => void;
     save: (stackItem: StackItem, dismiss: boolean) => void;
@@ -44,19 +42,8 @@ export default class OperatorModeStack extends Component<Signature> {
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });
 
-  get backgroundImageStyle() {
-    if (!this.args.backgroundImageURL) {
-      return false;
-    }
-    return htmlSafe(`background-image: url(${this.args.backgroundImageURL});`);
-  }
-
   <template>
-    <div
-      ...attributes
-      class={{if @backgroundImageURL 'with-bg-image'}}
-      style={{this.backgroundImageStyle}}
-    >
+    <div ...attributes>
       <div class='inner'>
         {{#each @stackItems as |item i|}}
           <OperatorModeStackItem

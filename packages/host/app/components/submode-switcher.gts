@@ -17,10 +17,12 @@ import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 
 import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers';
 
-export enum Submode {
-  Interact = 'interact',
-  Code = 'code',
-}
+export const Submodes = {
+  Interact: 'interact',
+  Code: 'code',
+} as const;
+type Values<T> = T[keyof T];
+export type Submode = Values<typeof Submodes>;
 
 interface Signature {
   Element: HTMLElement;
@@ -131,8 +133,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
   </template>
 
   submodeIcons = {
-    [Submode.Interact]: Eye,
-    [Submode.Code]: IconCode,
+    [Submodes.Interact]: Eye,
+    [Submodes.Code]: IconCode,
   };
   @tracked isExpanded = false;
 
@@ -147,7 +149,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
   }
 
   get buildMenuItems(): MenuItem[] {
-    return Object.values(Submode)
+    return Object.values(Submodes)
       .filter((submode) => submode !== this.args.submode)
       .map((submode) =>
         menuItemFunc(

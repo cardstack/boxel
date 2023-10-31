@@ -22,7 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -438,7 +438,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submode.Interact,
+        submode: Submodes.Interact,
         fileView: 'inheritance',
         openDirs: {},
         codeSelection: {},
@@ -606,6 +606,29 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Buttons to add a neighbor stack are gone
       assert.dom('[data-test-add-card-left-stack]').doesNotExist();
       assert.dom('[data-test-add-card-right-stack]').doesNotExist();
+
+      // Close the only card in the 1st stack
+      await click(
+        '[data-test-operator-mode-stack="0"] [data-test-close-button]',
+      );
+
+      // There is now only 1 stack and the buttons to add a neighbor stack are back
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-add-card-left-stack]').exists();
+      assert.dom('[data-test-add-card-right-stack]').exists();
+
+      // Replace the current stack by interacting with search prompt directly
+      // Click on search-input
+      await click('[data-test-search-input] input');
+
+      assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
+
+      await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
+
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+      // There is still only 1 stack
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
     });
 
     test('Clicking search panel (without left and right buttons activated) replaces open card on existing stack', async function (assert) {
@@ -783,7 +806,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submode.Interact,
+        submode: Submodes.Interact,
         fileView: 'inheritance',
         openDirs: {},
         codeSelection: {},

@@ -509,4 +509,71 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       .dom(`[data-test-recent-file]:first-child`)
       .containsText('person.gts');
   });
+
+  test('displays recent files in base realm', async function (assert) {
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([
+        ['https://cardstack.com/base/', 'code-ref.gts'],
+        ['https://cardstack.com/base/', 'catalog-entry.gts'],
+        'a-non-url-to-ignore',
+      ]),
+    );
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `http://localhost:4201/base/code-ref.gts`,
+      fileView: 'browser',
+      openDirs: {},
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+    await waitFor('[data-test-directory]');
+
+    assert.dom('[data-test-recent-file]').exists({ count: 2 });
+
+    assert
+      .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
+      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png')
+      .hasAttribute('alt', 'Icon for realm Base Workspace');
+
+    assert
+      .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
+      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
+
+    await waitFor('[data-test-file="field-component.gts"]');
+    await click('[data-test-file="field-component.gts"]');
+    await waitFor('[data-test-file="field-component.gts"].selected');
+    assert
+      .dom('[data-test-recent-file]:nth-child(1)')
+      .containsText('field-component.gts');
+    assert
+      .dom('[data-test-recent-file]:nth-child(2)')
+      .containsText('code-ref.gts');
+    assert
+      .dom('[data-test-recent-file]:nth-child(3)')
+      .containsText('catalog-entry.gts');
+
+    assert.deepEqual(
+      JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
+      [
+        ['https://cardstack.com/base/', 'field-component.gts'],
+        ['https://cardstack.com/base/', 'code-ref.gts'],
+        ['https://cardstack.com/base/', 'catalog-entry.gts'],
+      ],
+    );
+  });
 });

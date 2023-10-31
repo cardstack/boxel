@@ -5,12 +5,12 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import type { InputValidationState } from '../validation-state/index.gts';
-import SearchInput, { SearchInputBottomTreatment } from './index.gts';
+import SearchInput, { SearchInputBottomTreatments } from './index.gts';
 
-const validBottomTreatments = Object.values(SearchInputBottomTreatment);
+const validBottomTreatments = Object.values(SearchInputBottomTreatments);
 
 export default class SearchInputUsage extends Component {
-  defaultBottomTreatment = SearchInputBottomTreatment.Rounded;
+  defaultBottomTreatment = SearchInputBottomTreatments.Rounded;
   @tracked bottomTreatment = this.defaultBottomTreatment;
   @tracked value = '';
   @tracked errorMessage = '';
