@@ -16,6 +16,7 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import { file, isReady, FileResource } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -83,6 +84,7 @@ export default class OperatorModeStateService extends Service {
   private cachedRealmURL: URL | null = null;
 
   @service declare cardService: CardService;
+  @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
   @service declare recentFilesService: RecentFilesService;
   @service declare realmInfoService: RealmInfoService;
@@ -254,8 +256,8 @@ export default class OperatorModeStateService extends Service {
   }
 
   get codePathRelativeToRealm() {
-    if (this.state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(this.realmURL);
+    if (this.state.codePath && this.resolvedRealmURL) {
+      let realmPath = new RealmPaths(this.resolvedRealmURL);
 
       if (realmPath.inRealm(this.state.codePath)) {
         try {
@@ -536,6 +538,10 @@ export default class OperatorModeStateService extends Service {
     }
 
     return this.cardService.defaultURL;
+  }
+
+  get resolvedRealmURL() {
+    return this.loaderService.loader.resolve(this.realmURL);
   }
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
