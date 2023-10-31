@@ -221,16 +221,10 @@ export function getCodeRef(t: Type | FieldOfType): ResolvedCodeRef {
     codeRef = t.codeRef;
   }
   if (!isResolvedCodeRef(codeRef)) {
-    // handle base case
     if (codeRef.type === 'ancestorOf') {
-      if (
-        codeRef.card.module === 'https://cardstack.com/base/card-api' &&
-        codeRef.card.name === 'CardDef'
-      ) {
-        return {
-          module: codeRef.card.module,
-          name: 'BaseDef',
-        };
+      let parentCard = codeRef.card;
+      if (isResolvedCodeRef(parentCard)) {
+        return parentCard;
       }
     }
     throw new Error('codeRef is not resolved fully');
