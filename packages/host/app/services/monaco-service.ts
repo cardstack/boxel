@@ -133,23 +133,16 @@ export default class MonacoService extends Service {
     };
   }
 
-  moveCursorByWord(word: string): void {
-    let model = this.editor?.getModel();
-    if (!model || !this.editor) {
+  moveCursor(range: _MonacoSDK.Range): void {
+    if (!this.editor) {
       return;
     }
-    let matches = model.findMatches(word, false, false, true, null, true);
-    let result = matches.find(
-      (match) => match.matches && match.matches[0] === word,
-    );
-    if (result) {
-      this.editor.focus();
-      this.editor.setPosition({
-        lineNumber: result.range.startLineNumber,
-        column: result.range.startColumn,
-      });
-      this.editor.revealLine(result.range.startLineNumber);
-    }
+    this.editor.focus();
+    this.editor.setPosition({
+      lineNumber: range.startLineNumber,
+      column: range.startColumn,
+    });
+    this.editor.revealLine(range.startLineNumber);
   }
 
   getLineCursorOn(): string | null {

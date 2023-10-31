@@ -88,6 +88,8 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
 
+import { Range } from 'monaco-editor';
+
 interface Signature {
   Args: {
     saveSourceOnClose: (url: URL, content: string) => void;
@@ -475,7 +477,12 @@ export default class CodeSubmode extends Component<Signature> {
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this.operatorModeStateService.updateLocalNameSelection(dec.localName);
-    this.monacoService.moveCursorByWord(dec.exportedAs ?? dec.localName ?? '');
+
+    if (dec.path?.node.loc) {
+      let { start, end } = dec.path.node.loc;
+      let range = new Range(start.line, start.column, end.line, end.column);
+      this.monacoService.moveCursor(range);
+    }
   }
 
   @action
