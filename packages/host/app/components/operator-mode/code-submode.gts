@@ -98,29 +98,32 @@ const log = logger('component:code-submode');
 const { autoSaveDelayMs } = config;
 
 type PanelWidths = {
-  rightPanel: string;
-  codeEditorPanel: string;
-  leftPanel: string;
-  emptyCodeModePanel: string;
+  rightPanel: number;
+  codeEditorPanel: number;
+  leftPanel: number;
+  emptyCodeModePanel: number;
 };
 
 type PanelHeights = {
-  filePanel: string;
-  recentPanel: string;
+  filePanel: number;
+  recentPanel: number;
 };
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
 const defaultPanelWidths: PanelWidths = {
-  leftPanel: 'var(--operator-mode-left-column)',
-  codeEditorPanel: '48%',
-  rightPanel: '32%',
-  emptyCodeModePanel: '80%',
+  // 14rem as a fraction of the layout width
+  leftPanel:
+    (14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
+    (document.documentElement.clientWidth - 40 - 36),
+  codeEditorPanel: 0.48,
+  rightPanel: 0.32,
+  emptyCodeModePanel: 0.8,
 };
 
 const CodeModePanelHeights = 'code-mode-panel-heights';
 const defaultPanelHeights: PanelHeights = {
-  filePanel: '60%',
-  recentPanel: '40%',
+  filePanel: 0.6,
+  recentPanel: 0.4,
 };
 
 const cardEditorSaveTimes = new Map<string, number>();
@@ -169,12 +172,12 @@ export default class CodeSubmode extends Component<Signature> {
     this.panelWidths = localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
-      : defaultPanelWidths;
+      : {};
 
     this.panelHeights = localStorage.getItem(CodeModePanelHeights)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelHeights))
-      : defaultPanelHeights;
+      : {};
 
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
@@ -625,17 +628,17 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.leftPanel = listPanelContext[0]?.length;
-    this.panelWidths.codeEditorPanel = listPanelContext[1]?.length;
-    this.panelWidths.rightPanel = listPanelContext[2]?.length;
+    this.panelWidths.leftPanel = listPanelContext[0]?.lengthPx;
+    this.panelWidths.codeEditorPanel = listPanelContext[1]?.lengthPx;
+    this.panelWidths.rightPanel = listPanelContext[2]?.lengthPx;
 
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
   @action
   private onFilePanelContextChange(filePanelContext: PanelContext[]) {
-    this.panelHeights.filePanel = filePanelContext[0]?.length;
-    this.panelHeights.recentPanel = filePanelContext[1]?.length;
+    this.panelHeights.filePanel = filePanelContext[0]?.lengthPx;
+    this.panelHeights.recentPanel = filePanelContext[1]?.lengthPx;
 
     localStorage.setItem(
       CodeModePanelHeights,
@@ -754,8 +757,8 @@ export default class CodeSubmode extends Component<Signature> {
           as |ResizablePanel|
         >
           <ResizablePanel
-            @defaultLength={{defaultPanelWidths.leftPanel}}
-            @length='var(--operator-mode-left-column)'
+            @defaultLengthFraction={{defaultPanelWidths.leftPanel}}
+            @lengthPx={{this.panelWidths.leftPanel}}
           >
             <div class='column'>
               <ResizablePanelGroup
@@ -765,8 +768,8 @@ export default class CodeSubmode extends Component<Signature> {
                 as |VerticallyResizablePanel|
               >
                 <VerticallyResizablePanel
-                  @defaultLength={{defaultPanelHeights.filePanel}}
-                  @length={{this.panelHeights.filePanel}}
+                  @defaultLengthFraction={{defaultPanelHeights.filePanel}}
+                  @lengthPx={{this.panelHeights.filePanel}}
                 >
 
                   {{! Move each container and styles to separate component }}
@@ -832,9 +835,9 @@ export default class CodeSubmode extends Component<Signature> {
                   </div>
                 </VerticallyResizablePanel>
                 <VerticallyResizablePanel
-                  @defaultLength={{defaultPanelHeights.recentPanel}}
-                  @length={{this.panelHeights.recentPanel}}
-                  @minLength='100px'
+                  @defaultLengthFraction={{defaultPanelHeights.recentPanel}}
+                  @lengthPx={{this.panelHeights.recentPanel}}
+                  @minLengthPx={{100}}
                 >
                   <aside class='inner-container recent-files'>
                     <header
@@ -853,9 +856,9 @@ export default class CodeSubmode extends Component<Signature> {
           </ResizablePanel>
           {{#if this.codePath}}
             <ResizablePanel
-              @defaultLength={{defaultPanelWidths.codeEditorPanel}}
-              @length={{this.panelWidths.codeEditorPanel}}
-              @minLength='300px'
+              @defaultLengthFraction={{defaultPanelWidths.codeEditorPanel}}
+              @lengthPx={{this.panelWidths.codeEditorPanel}}
+              @minLengthPx={{300}}
             >
               <div class='inner-container'>
                 {{#if this.isReady}}
@@ -900,8 +903,8 @@ export default class CodeSubmode extends Component<Signature> {
               </div>
             </ResizablePanel>
             <ResizablePanel
-              @defaultLength={{defaultPanelWidths.rightPanel}}
-              @length={{this.panelWidths.rightPanel}}
+              @defaultLengthFraction={{defaultPanelWidths.rightPanel}}
+              @lengthPx={{this.panelWidths.rightPanel}}
             >
               <div class='inner-container'>
                 {{#if this.isLoading}}
@@ -935,8 +938,8 @@ export default class CodeSubmode extends Component<Signature> {
             </ResizablePanel>
           {{else}}
             <ResizablePanel
-              @defaultLength={{defaultPanelWidths.emptyCodeModePanel}}
-              @length={{this.panelWidths.emptyCodeModePanel}}
+              @defaultLengthFraction={{defaultPanelWidths.emptyCodeModePanel}}
+              @lengthPx={{this.panelWidths.emptyCodeModePanel}}
             >
               <div
                 class='inner-container inner-container--empty'
