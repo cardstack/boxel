@@ -99,10 +99,21 @@ export default class SubmodeSwitcher extends Component<Signature> {
         width: var(--submode-switcher-width);
         height: var(--submode-switcher-height);
         gap: var(--boxel-sp-sm);
+
+        transition:
+          border-bottom-right-radius var(--boxel-transition),
+          border-bottom-left-radius var(--boxel-transition);
       }
+
       .submode-switcher-dropdown-trigger[aria-expanded='true'] {
         border-bottom-right-radius: 0;
         border-bottom-left-radius: 0;
+
+        transition:
+          border-bottom-right-radius var(--boxel-transition)
+            var(--boxel-transition),
+          border-bottom-left-radius var(--boxel-transition)
+            var(--boxel-transition);
       }
       .arrow-icon {
         margin-left: auto;
