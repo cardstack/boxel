@@ -55,7 +55,10 @@ interface Signature {
     allowAddingFields: boolean;
     childFields: string[];
     parentFields: string[];
-    openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
+    openDefinition: (
+      moduleHref: string,
+      codeRef: ResolvedCodeRef | undefined,
+    ) => void;
   };
 }
 
@@ -293,7 +296,9 @@ export default class CardSchemaEditor extends Component<Signature> {
             </:trigger>
             <:content>
               {{@cardType.module}}
-              ({{codeRef.name}})
+              {{#if codeRef.name}}
+                ({{codeRef.name}})
+              {{/if}}
             </:content>
           </Tooltip>
           <div class='total-fields' data-test-total-fields>
@@ -395,7 +400,9 @@ export default class CardSchemaEditor extends Component<Signature> {
                         </:trigger>
                         <:content>
                           {{moduleUrl}}
-                          ({{codeRef.name}})
+                          {{#if codeRef.name}}
+                            ({{codeRef.name}})
+                          {{/if}}
                         </:content>
                       </Tooltip>
                       <DropdownButton

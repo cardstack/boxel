@@ -213,7 +213,7 @@ export function isFieldOfType(obj: any): obj is FieldOfType {
   return obj && 'card' in obj;
 }
 
-export function getCodeRef(t: Type | FieldOfType): ResolvedCodeRef {
+export function getCodeRef(t: Type | FieldOfType): ResolvedCodeRef | undefined {
   let codeRef: CodeRef;
   if (isFieldOfType(t)) {
     codeRef = isCodeRefType(t.card) ? t.card : t.card.codeRef;
@@ -221,13 +221,7 @@ export function getCodeRef(t: Type | FieldOfType): ResolvedCodeRef {
     codeRef = t.codeRef;
   }
   if (!isResolvedCodeRef(codeRef)) {
-    if (codeRef.type === 'ancestorOf') {
-      let parentCard = codeRef.card;
-      if (isResolvedCodeRef(parentCard)) {
-        return parentCard;
-      }
-    }
-    throw new Error('codeRef is not resolved fully');
+    return undefined;
   }
   return codeRef;
 }
