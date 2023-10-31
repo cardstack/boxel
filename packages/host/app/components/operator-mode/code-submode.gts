@@ -478,8 +478,10 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  openDefinition(moduleHref: string, codeRef: ResolvedCodeRef) {
-    this.operatorModeStateService.updateCodeRefSelection(codeRef);
+  openDefinition(moduleHref: string, codeRef: ResolvedCodeRef | undefined) {
+    if (codeRef) {
+      this.operatorModeStateService.updateCodeRefSelection(codeRef);
+    }
     this.operatorModeStateService.updateCodePath(new URL(moduleHref));
   }
 
