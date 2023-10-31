@@ -270,7 +270,7 @@ export default class CardSchemaEditor extends Component<Signature> {
     >
       {{#let (getCodeRef @cardType) as |codeRef|}}
         <div class='header'>
-          <Tooltip @placement='top'>
+          <Tooltip @placement='bottom'>
             <:trigger>
               <Pill
                 {{on 'click' (fn @openDefinition @cardType.module codeRef)}}
@@ -357,7 +357,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                           /></span></button>
 
                     {{else}}
-                      <Tooltip @placement='top'>
+                      <Tooltip @placement='bottom'>
                         <:trigger>
                           <Pill
                             {{on
