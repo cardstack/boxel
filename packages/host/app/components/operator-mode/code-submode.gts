@@ -203,7 +203,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   get fileViewTitle() {
-    return this.showBrowser ? 'File Browser' : 'Inheritance';
+    return this.isFileTreeShowing ? 'File Browser' : 'Inheritance';
   }
 
   private get realmURL() {
@@ -636,7 +636,7 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get showBrowser() {
+  private get isFileTreeShowing() {
     return this.fileView === 'browser' || this.emptyOrNotFound;
   }
 
@@ -756,7 +756,7 @@ export default class CodeSubmode extends Component<Signature> {
                   {{! Move each container and styles to separate component }}
                   <div
                     class='inner-container file-view
-                      {{if this.showBrowser "file-browser"}}'
+                      {{if this.isFileTreeShowing "file-browser"}}'
                   >
                     <header
                       class='file-view__header'
@@ -766,25 +766,29 @@ export default class CodeSubmode extends Component<Signature> {
                       <Button
                         @disabled={{this.emptyOrNotFound}}
                         @kind={{if
-                          (not this.showBrowser)
+                          (not this.isFileTreeShowing)
                           'primary-dark'
                           'secondary'
                         }}
                         @size='extra-small'
                         class={{cn
                           'file-view__header-btn'
-                          active=(not this.showBrowser)
+                          active=(not this.isFileTreeShowing)
                         }}
                         {{on 'click' (fn this.setFileView 'inheritance')}}
                         data-test-inheritance-toggle
                       >
                         Inspector</Button>
                       <Button
-                        @kind={{if this.showBrowser 'primary-dark' 'secondary'}}
+                        @kind={{if
+                          this.isFileTreeShowing
+                          'primary-dark'
+                          'secondary'
+                        }}
                         @size='extra-small'
                         class={{cn
                           'file-view__header-btn'
-                          active=this.showBrowser
+                          active=this.isFileTreeShowing
                         }}
                         {{on 'click' (fn this.setFileView 'browser')}}
                         data-test-file-browser-toggle
@@ -792,7 +796,7 @@ export default class CodeSubmode extends Component<Signature> {
                         File Tree</Button>
                     </header>
                     <section class='inner-container__content'>
-                      {{#if this.showBrowser}}
+                      {{#if this.isFileTreeShowing}}
                         <FileTree @realmURL={{this.realmURL}} />
                       {{else}}
                         {{#if this.isReady}}
