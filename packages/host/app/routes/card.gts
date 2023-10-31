@@ -85,7 +85,12 @@ export default class RenderCard extends Route<Model | null> {
 
       return model;
     } catch (e) {
-      (e as any).failureLoadingIndexCard = url.href === ownRealmURL;
+      (e as any).loadType = params.operatorModeEnabled
+        ? 'stack'
+        : url.href === ownRealmURL
+        ? 'index'
+        : 'card';
+      (e as any).operatorModeState = params.operatorModeState;
       throw e;
     }
   }

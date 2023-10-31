@@ -10,7 +10,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import OperatorModeStackItem from './stack-item';
 
-import type { StackItem } from './container';
+import type { StackItem } from './interact-submode';
 
 interface Signature {
   Element: HTMLElement;

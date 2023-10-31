@@ -186,15 +186,19 @@ export default class ResizablePanelGroup extends Component<Signature> {
       newSecondElLength = 0;
     }
 
-    let firstElMinLength = this.currentResizeHandler.firstEl
-      .computedStyleMap()
-      .get(this.cssMinLengthProperty) as { value: number };
-    let secondElMinLength = this.currentResizeHandler.secondEl
-      .computedStyleMap()
-      .get(this.cssMinLengthProperty) as { value: number };
+    let firstElMinLength = parseInt(
+      window
+        .getComputedStyle(this.currentResizeHandler.firstEl)
+        .getPropertyValue(this.cssMinLengthProperty),
+    );
+    let secondElMinLength = parseInt(
+      window
+        .getComputedStyle(this.currentResizeHandler.secondEl)
+        .getPropertyValue(this.cssMinLengthProperty),
+    );
     if (
-      (firstElMinLength && newFirstElLength < firstElMinLength.value) ||
-      (secondElMinLength && newSecondElLength < secondElMinLength.value)
+      (firstElMinLength && newFirstElLength < firstElMinLength) ||
+      (secondElMinLength && newSecondElLength < secondElMinLength)
     ) {
       return;
     }
