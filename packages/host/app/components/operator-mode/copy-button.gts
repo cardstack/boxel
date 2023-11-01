@@ -122,6 +122,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     let topMostStackItems = this.operatorModeStateService.topMostStackItems();
     let indexCardIndicies = topMostStackItems.reduce(
       (indexCards, item, index) => {
+        // TODO determine if card is index card locally in this module (perhaps CardResource comes with a compatible API)...
         if (this.cardService.isIndexCard(item.card)) {
           return [...indexCards, index];
         }
@@ -157,7 +158,9 @@ export default class OperatorModeContainer extends Component<Signature> {
         };
 
       case 2: {
-        if (topMostStackItems[LEFT].card.id === topMostStackItems[RIGHT].card.id) {
+        if (
+          topMostStackItems[LEFT].card.id === topMostStackItems[RIGHT].card.id
+        ) {
           // the source and destination cannot be the same
           return;
         }

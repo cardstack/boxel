@@ -76,6 +76,8 @@ import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import DetailPanel from './detail-panel';
 
+import { getCard } from '@cardstack/host/resources/card-resource';
+
 interface Signature {
   Args: {
     delete: (card: CardDef, afterDelete?: () => void) => void;
@@ -124,7 +126,6 @@ export default class CodeMode extends Component<Signature> {
 
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
-  @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
   private hasUnsavedSourceChanges = false;
@@ -135,6 +136,21 @@ export default class CodeMode extends Component<Signature> {
   // that realm assets don't produce a flicker when code patch changes and
   // the realm is the same
   private cachedRealmInfo: RealmInfo | null = null;
+  private cardResource = getCard(
+    this,
+    () => {
+      if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
+        return undefined;
+      }
+      // this includes all JSON files, but the card resource is smart enough
+      // to skip JSON that are not card instances
+      let url = this.codePath.href.replace(/\.json$/, '');
+      return url;
+    },
+    {
+      onCardInstanceChange: () => this.onCardLoaded,
+    },
+  );
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -164,6 +180,10 @@ export default class CodeMode extends Component<Signature> {
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
     this.loadMonaco.perform();
+  }
+
+  private get card() {
+    return this.cardResource.card;
   }
 
   private get realmInfo() {
@@ -336,72 +356,17 @@ export default class CodeMode extends Component<Signature> {
     return undefined;
   });
 
-  // We are actually loading cards using a side-effect of this cached getter
-  // instead of a resource because with a resource it becomes impossible
-  // to ignore our own auto-save echoes, since the act of auto-saving triggers
-  // the openFile resource to update which would otherwise trigger a card
-  // resource to update (and hence invalidate components can consume this card
-  // resource.) By using this side effect we can prevent invalidations when the
-  // card isn't actually different and we are just seeing SSE events in response
-  // to our own activity.
-  @cached
-  private get openFileCardJSON() {
-    this.cardError = undefined;
-    if (
-      this.currentOpenFile?.state === 'ready' &&
-      this.currentOpenFile.name.endsWith('.json')
-    ) {
-      let maybeCard: any;
-      try {
-        maybeCard = JSON.parse(this.currentOpenFile.content);
-      } catch (err: any) {
-        this.cardError = err;
-        return undefined;
-      }
-      if (isSingleCardDocument(maybeCard)) {
-        let url = new URL(this.currentOpenFile.url.replace(/\.json$/, ''));
-        // in order to not get trapped in a glimmer invalidation cycle we need to
-        // load the card in a different execution frame
-        this.loadLiveCard.perform(url);
-        return maybeCard;
-      }
+  private onCardLoaded = (
+    oldCard: CardDef | undefined,
+    newCard: CardDef | undefined,
+  ) => {
+    if (oldCard) {
+      this.cardResource.api.unsubscribeFromChanges(oldCard, this.onCardChange);
     }
-    // in order to not get trapped in a glimmer invalidation cycle we need to
-    // unload the card in a different execution frame
-    this.unloadCard.perform();
-    return undefined;
-  }
-
-  private loadLiveCard = restartableTask(async (url: URL) => {
-    let card = await this.cardService.loadModel(this, url);
-    if (!card) {
-      throw new Error(`bug: could not load card ${url.href}`);
+    if (newCard) {
+      this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
     }
-    if (card !== this.card) {
-      if (this.card) {
-        this.cardService.unsubscribe(this.card, this.onCardChange);
-      }
-      this.card = card;
-      this.cardService.subscribe(this.card, this.onCardChange);
-    }
-  });
-
-  private unloadCard = restartableTask(async () => {
-    await Promise.resolve();
-    if (this.card) {
-      this.cardService.unsubscribe(this.card, this.onCardChange);
-    }
-    this.card = undefined;
-    this.cardError = undefined;
-  });
-
-  private get cardIsLoaded() {
-    return (
-      isReady(this.currentOpenFile) &&
-      this.openFileCardJSON &&
-      this.card?.id === this.currentOpenFile.url.replace(/\.json$/, '')
-    );
-  }
+  };
 
   private get loadedCard() {
     if (!this.card) {
@@ -824,7 +789,7 @@ export default class CodeMode extends Component<Signature> {
           >
             <div class='inner-container'>
               {{#if this.isReady}}
-                {{#if this.cardIsLoaded}}
+                {{#if this.card}}
                   <CardPreviewPanel
                     @card={{this.loadedCard}}
                     @realmInfo={{this.realmInfo}}

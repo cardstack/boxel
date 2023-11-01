@@ -50,6 +50,8 @@ import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import FileTree from './file-tree';
 import Module from './module';
 
+import { getCard } from '@cardstack/host/resources/card-resource';
+
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const { ownRealmURL: ownRealmURLString } = ENV;
@@ -170,9 +172,11 @@ export default class Go extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare monacoService: MonacoService;
   @tracked jsonError: string | undefined;
-  @tracked card: CardDef | undefined;
+  // @tracked card: CardDef | undefined;
+  @tracked cardURL: URL | undefined;
   // note this is only subscribed to events from our own realm
   private subscription: { url: string; unsubscribe: () => void } | undefined;
+  private cardResource = getCard(this, () => this.cardURL?.href);
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -204,6 +208,10 @@ export default class Go extends Component<Signature> {
   @action
   contentChanged(content: string) {
     this.contentChangedTask.perform(content);
+  }
+
+  get card() {
+    return this.cardResource.card;
   }
 
   contentChangedTask = restartableTask(async (content: string) => {
@@ -346,7 +354,8 @@ export default class Go extends Component<Signature> {
 
   private loadCard = restartableTask(async (url: URL) => {
     await this.withTestWaiters(async () => {
-      this.card = await this.cardService.loadModel(this, url);
+      // this.card = await cardService.loadModel(this, url);
+      this.cardURL = url;
     });
   });
 
@@ -365,8 +374,9 @@ export default class Go extends Component<Signature> {
     }
   }
   @action
-  onSave(card: CardDef) {
-    this.card = card;
+  onSave(_card: CardDef) {
+    // this.card = card;
+    // no-op
   }
 
   get path() {

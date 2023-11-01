@@ -28,6 +28,7 @@ import {
   baseCardRef,
   chooseCard,
   type Actions,
+  type Loader,
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -64,8 +65,11 @@ import SubmodeSwitcher, { Submode } from '../submode-switcher';
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import OperatorModeStack from './stack';
+import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
+import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import type CardService from '../../services/card-service';
+import MessageService from '@cardstack/host/services/message-service';
 
 import type LoaderService from '../../services/loader-service';
 
@@ -89,14 +93,6 @@ interface Signature {
 
 export type Stack = StackItem[];
 
-export interface StackItem {
-  format: Format;
-  request?: Deferred<CardDef | undefined>;
-  stackIndex: number;
-  card: CardDef;
-  isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
-}
-
 enum SearchSheetTrigger {
   DropCardToLeftNeighborStackButton = 'drop-card-to-left-neighbor-stack-button',
   DropCardToRightNeighborStackButton = 'drop-card-to-right-neighbor-stack-button',
@@ -118,6 +114,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare recentFilesService: RecentFilesService;
+  @service declare messageService: MessageService;
 
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
@@ -147,18 +144,21 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   // public API
   @action
-  getLiveCard<T extends object>(
-    owner: T,
+  getCard(
     url: URL,
-    opts?: { cachedOnly?: true },
-  ): Promise<CardDef | undefined> {
-    return this.cardService.loadModel(owner, url, opts);
+    opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
+  ) {
+    return getCard(this, () => url.href, {
+      ...(opts?.isLive ? { isLive: () => opts.isLive! } : {}),
+      ...(opts?.cachedOnly ? { cachedOnly: () => opts.cachedOnly! } : {}),
+      ...(opts?.loader ? { loader: () => opts.loader! } : {}),
+    });
   }
 
   // public API
   @action
-  trackLiveCard<T extends object>(owner: T, card: CardDef) {
-    return this.cardService.trackLiveCard(owner, card);
+  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL) {
+    return trackCard(owner, card, realmURL);
   }
 
   // public API
@@ -254,11 +254,13 @@ export default class OperatorModeContainer extends Component<Signature> {
     format: Format,
     request?: Deferred<CardDef | undefined>,
   ) {
-    this.operatorModeStateService.replaceItemInStack(item, {
-      ...item,
-      request,
-      format,
-    });
+    this.operatorModeStateService.replaceItemInStack(
+      item,
+      item.clone({
+        request,
+        format,
+      }),
+    );
   }
 
   private close = task(async (item: StackItem) => {
@@ -285,10 +287,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         // if this is a newly created card from auto-save then we
         // need to replace the stack item to account for the new card's ID
         if (!item.card.id && updatedCard.id) {
-          this.operatorModeStateService.replaceItemInStack(item, {
-            ...item,
-            card: updatedCard,
-          });
+          await item.setCardURL(new URL(updatedCard.id));
         }
         return;
       }
@@ -299,12 +298,13 @@ export default class OperatorModeContainer extends Component<Signature> {
         if (!item.card.id && updatedCard.id) {
           this.operatorModeStateService.trimItemsFromStack(item);
         } else {
-          this.operatorModeStateService.replaceItemInStack(item, {
-            ...item,
-            card: updatedCard,
-            request,
-            format: 'isolated',
-          });
+          this.operatorModeStateService.replaceItemInStack(
+            item,
+            item.clone({
+              request,
+              format: 'isolated',
+            }),
+          );
         }
       }
     }
@@ -480,22 +480,27 @@ export default class OperatorModeContainer extends Component<Signature> {
           doc,
           relativeTo,
         );
-        let newItem: StackItem = {
+        let newItem = new StackItem({
+          owner: here,
           card: newCard,
           format: 'edit',
           request: new Deferred(),
           isLinkedCard: opts?.isLinkedCard,
           stackIndex,
-        };
+        });
+        await newItem.ready();
         here.addToStack(newItem);
         return await newItem.request?.promise;
       },
       viewCard: async (card: CardDef, format: Format = 'isolated') => {
-        here.addToStack({
+        let newItem = new StackItem({
+          owner: here,
           card,
           format,
           stackIndex,
         });
+        await newItem.ready();
+        here.addToStack(newItem);
       },
       createCardDirectly: async (
         doc: LooseSingleCardDocument,
@@ -506,12 +511,15 @@ export default class OperatorModeContainer extends Component<Signature> {
           doc,
           relativeTo ?? here.cardService.defaultURL,
         );
-        await here.cardService.saveModel(here, newCard);
-        let newItem: StackItem = {
+        let newItem = new StackItem({
+          owner: here,
           card: newCard,
           format: 'isolated',
           stackIndex,
-        };
+        });
+        await newItem.ready();
+        await here.cardService.saveModel(here, newCard);
+        await newItem.setCardURL(new URL(newCard.id));
         here.addToStack(newItem);
         return;
       },
@@ -543,11 +551,14 @@ export default class OperatorModeContainer extends Component<Signature> {
     });
 
     if (chosenCard) {
-      let newItem: StackItem = {
+      let newItem = new StackItem({
+        // assume the chosen card is new, and if it's not the StackItem will sort it out
+        owner: this,
         card: chosenCard,
         format: 'isolated',
         stackIndex: 0, // This is called when there are no cards in the stack left, so we can assume the stackIndex is 0
-      };
+      });
+      await newItem.ready();
       this.addToStack(newItem);
     }
   });
@@ -611,7 +622,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submode.Code;
   }
 
-  @action private onCardSelectFromSearch(card: CardDef) {
+  private onCardSelectFromSearch = restartableTask(async (card: CardDef) => {
     if (this.isCodeMode) {
       let codePath = new URL(card.id + '.json');
       this.operatorModeStateService.updateCodePath(codePath);
@@ -637,11 +648,13 @@ export default class OperatorModeContainer extends Component<Signature> {
         );
       }
 
-      let stackItem: StackItem = {
+      let stackItem = new StackItem({
+        owner: this,
         card,
         format: 'isolated',
         stackIndex: 0,
-      };
+      });
+      await stackItem.ready();
       this.operatorModeStateService.addItemToStack(stackItem);
 
       // In case the right button was clicked, the card will be added to stack with index 1.
@@ -649,11 +662,14 @@ export default class OperatorModeContainer extends Component<Signature> {
       searchSheetTrigger ===
       SearchSheetTrigger.DropCardToRightNeighborStackButton
     ) {
-      this.operatorModeStateService.addItemToStack({
+      let stackItem = new StackItem({
+        owner: this,
         card,
         format: 'isolated',
         stackIndex: this.stacks.length,
       });
+      await stackItem.ready();
+      this.operatorModeStateService.addItemToStack(stackItem);
     } else {
       // In case, that the search was accessed directly without clicking right and left buttons,
       // the rightmost stack will be REPLACED by the selection
@@ -662,21 +678,30 @@ export default class OperatorModeContainer extends Component<Signature> {
       let stack: Stack | undefined;
 
       if (numberOfStacks === 0) {
-        this.operatorModeStateService.addItemToStack({
+        let stackItem = new StackItem({
+          owner: this,
           format: 'isolated',
           stackIndex: 0,
           card,
         });
+        await stackItem.ready();
+        this.operatorModeStateService.addItemToStack(stackItem);
       } else {
         stack = this.operatorModeStateService.rightMostStack();
         if (stack) {
           let bottomMostItem = stack[0];
           if (bottomMostItem) {
-            this.operatorModeStateService.clearStackAndAdd(stackIndex, {
+            let stackItem = new StackItem({
+              owner: this,
               card,
               format: 'isolated',
               stackIndex,
             });
+            await stackItem.ready();
+            this.operatorModeStateService.clearStackAndAdd(
+              stackIndex,
+              stackItem,
+            );
           }
         }
       }
@@ -684,7 +709,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     // Close the search sheet
     this.onCancelSearchSheet();
-  }
+  });
 
   // This determines whether we show the left and right button that trigger the search sheet whose card selection will go to the left or right stack
   // (there is a single stack with at least one card in it)
@@ -870,7 +895,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         @onFocus={{this.onFocusSearchInput}}
         @onBlur={{this.onBlurSearchInput}}
         @onSearch={{this.onSearch}}
-        @onCardSelect={{this.onCardSelectFromSearch}}
+        @onCardSelect={{perform this.onCardSelectFromSearch}}
       />
     </Modal>
 

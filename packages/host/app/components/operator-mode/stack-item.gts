@@ -31,6 +31,7 @@ import {
   Header,
   IconButton,
   Tooltip,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { cn, eq, menuItem, optional } from '@cardstack/boxel-ui/helpers';
 
@@ -53,7 +54,7 @@ import type {
 import ElementTracker from '../../resources/element-tracker';
 import Preview from '../preview';
 
-import { type StackItem } from './container';
+import { type StackItem } from '@cardstack/host/lib/stack-item';
 
 import OperatorModeOverlays from './overlays';
 
@@ -119,6 +120,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    this.loadCard.perform();
     this.subscribeToCard.perform();
     this.subscribedCard = this.card;
     this.args.setupStackItem(
@@ -246,10 +248,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.item.card;
   }
 
+  private loadCard = restartableTask(async () => {
+    await this.args.item.ready();
+  });
+
   private subscribeToCard = task(async () => {
-    await this.cardService.ready;
+    await this.args.item.ready();
+    let api = this.args.item.api;
     registerDestructor(this, this.cleanup);
-    this.cardService.subscribe(this.subscribedCard, this.onCardChange);
+    api.subscribeToChanges(this.subscribedCard, this.onCardChange);
     this.refreshSaveMsg = setInterval(
       () => this.calculateLastSavedMsg(),
       10 * 1000,
@@ -257,7 +264,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   });
 
   private cleanup = () => {
-    this.cardService.unsubscribe(this.subscribedCard, this.onCardChange);
+    let api = this.args.item.api;
+    api.unsubscribeFromChanges(this.subscribedCard, this.onCardChange);
     clearInterval(this.refreshSaveMsg);
   };
 
@@ -487,20 +495,24 @@ export default class OperatorModeStackItem extends Component<Signature> {
             </div>
           </:detail>
         </Header>
-        <div class='content' {{ContentElement onSetup=this.setupContentEl}}>
-          <Preview
-            @card={{this.card}}
-            @format={{@item.format}}
-            @context={{this.context}}
-          />
-          <OperatorModeOverlays
-            @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
-            @publicAPI={{@publicAPI}}
-            @delete={{@delete}}
-            @toggleSelect={{this.toggleSelect}}
-            @selectedCards={{this.selectedCards}}
-          />
-        </div>
+        {{#if this.loadCard.isRunning}}
+          <LoadingIndicator />
+        {{else}}
+          <div class='content' {{ContentElement onSetup=this.setupContentEl}}>
+            <Preview
+              @card={{this.card}}
+              @format={{@item.format}}
+              @context={{this.context}}
+            />
+            <OperatorModeOverlays
+              @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+              @publicAPI={{@publicAPI}}
+              @delete={{@delete}}
+              @toggleSelect={{this.toggleSelect}}
+              @selectedCards={{this.selectedCards}}
+            />
+          </div>
+        {{/if}}
       </CardContainer>
     </div>
     <style>

@@ -1,4 +1,4 @@
-import { getOwner } from '@ember/application';
+import { getOwner } from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
@@ -59,15 +59,21 @@ Check console log for more details`,
   });
 }
 
-export function importResource(parent: object, url: () => string) {
+export function importResource(
+  parent: object,
+  url: () => string,
+  loader?: () => Loader,
+) {
   return ImportResource.from(parent, () => ({
     named: {
       url: url(),
-      loader: (
-        (getOwner(parent) as any).lookup(
-          'service:loader-service',
-        ) as LoaderService
-      ).loader,
+      loader: loader
+        ? loader()
+        : (
+            (getOwner(parent) as any).lookup(
+              'service:loader-service',
+            ) as LoaderService
+          ).loader,
     },
   })) as ImportResource;
 }
