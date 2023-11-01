@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { DropdownButton } from '@cardstack/boxel-ui/components';
+import { DropdownButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { gt, menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -55,7 +55,10 @@ interface Signature {
     allowAddingFields: boolean;
     childFields: string[];
     parentFields: string[];
-    openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
+    openDefinition: (
+      moduleHref: string,
+      codeRef: ResolvedCodeRef | undefined,
+    ) => void;
   };
 }
 
@@ -270,24 +273,34 @@ export default class CardSchemaEditor extends Component<Signature> {
     >
       {{#let (getCodeRef @cardType) as |codeRef|}}
         <div class='header'>
-          <Pill
-            {{on 'click' (fn @openDefinition @cardType.module codeRef)}}
-            data-test-card-schema-navigational-button
-          >
-            <:icon>
-              <RealmInfoProvider @fileURL={{@cardType.module}}>
-                <:ready as |realmInfo|>
-                  <RealmIcon
-                    @realmIconURL={{realmInfo.iconURL}}
-                    @realmName={{realmInfo.name}}
-                  />
-                </:ready>
-              </RealmInfoProvider>
-            </:icon>
-            <:default>
-              {{@cardType.displayName}}
-            </:default>
-          </Pill>
+          <Tooltip @placement='bottom'>
+            <:trigger>
+              <Pill
+                {{on 'click' (fn @openDefinition @cardType.module codeRef)}}
+                data-test-card-schema-navigational-button
+              >
+                <:icon>
+                  <RealmInfoProvider @fileURL={{@cardType.module}}>
+                    <:ready as |realmInfo|>
+                      <RealmIcon
+                        @realmIconURL={{realmInfo.iconURL}}
+                        @realmName={{realmInfo.name}}
+                      />
+                    </:ready>
+                  </RealmInfoProvider>
+                </:icon>
+                <:default>
+                  {{@cardType.displayName}}
+                </:default>
+              </Pill>
+            </:trigger>
+            <:content>
+              {{@cardType.module}}
+              {{#if codeRef.name}}
+                ({{codeRef.name}})
+              {{/if}}
+            </:content>
+          </Tooltip>
           <div class='total-fields' data-test-total-fields>
             {{#if (gt this.totalOwnFields 0)}}
               <span class='total-fields-value'>+ {{this.totalOwnFields}}</span>
@@ -349,36 +362,49 @@ export default class CardSchemaEditor extends Component<Signature> {
                           /></span></button>
 
                     {{else}}
-                      <Pill
-                        {{on 'click' (fn @openDefinition moduleUrl codeRef)}}
-                        data-test-card-schema-field-navigational-button
-                      >
-                        <:icon>
-                          {{#if (this.isLinkedField field)}}
-                            <span class='linked-icon' data-test-linked-icon>
-                              <IconLink width='16px' height='16px' />
-                            </span>
+                      <Tooltip @placement='bottom'>
+                        <:trigger>
+                          <Pill
+                            {{on
+                              'click'
+                              (fn @openDefinition moduleUrl codeRef)
+                            }}
+                            data-test-card-schema-field-navigational-button
+                          >
+                            <:icon>
+                              {{#if (this.isLinkedField field)}}
+                                <span class='linked-icon' data-test-linked-icon>
+                                  <IconLink width='16px' height='16px' />
+                                </span>
+                              {{/if}}
+                              <RealmInfoProvider @fileURL={{moduleUrl}}>
+                                <:ready as |realmInfo|>
+                                  <RealmIcon
+                                    @realmIconURL={{realmInfo.iconURL}}
+                                    @realmName={{realmInfo.name}}
+                                  />
+                                </:ready>
+                              </RealmInfoProvider>
+                            </:icon>
+                            <:default>
+                              {{#let
+                                (this.fieldCardDisplayName field.card)
+                                as |cardDisplayName|
+                              }}
+                                <span
+                                  data-test-card-display-name={{cardDisplayName}}
+                                >{{cardDisplayName}}</span>
+                              {{/let}}
+                            </:default>
+                          </Pill>
+                        </:trigger>
+                        <:content>
+                          {{moduleUrl}}
+                          {{#if codeRef.name}}
+                            ({{codeRef.name}})
                           {{/if}}
-                          <RealmInfoProvider @fileURL={{moduleUrl}}>
-                            <:ready as |realmInfo|>
-                              <RealmIcon
-                                @realmIconURL={{realmInfo.iconURL}}
-                                @realmName={{realmInfo.name}}
-                              />
-                            </:ready>
-                          </RealmInfoProvider>
-                        </:icon>
-                        <:default>
-                          {{#let
-                            (this.fieldCardDisplayName field.card)
-                            as |cardDisplayName|
-                          }}
-                            <span
-                              data-test-card-display-name={{cardDisplayName}}
-                            >{{cardDisplayName}}</span>
-                          {{/let}}
-                        </:default>
-                      </Pill>
+                        </:content>
+                      </Tooltip>
                       <DropdownButton
                         @icon={{ThreeDotsHorizontal}}
                         @label='field options'

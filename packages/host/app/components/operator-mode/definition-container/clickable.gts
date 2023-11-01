@@ -4,7 +4,10 @@ import Component from '@glimmer/component';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 export interface ClickableArgs {
-  openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
+  openDefinition: (
+    moduleHref: string,
+    codeRef: ResolvedCodeRef | undefined,
+  ) => void;
   moduleHref: string;
   codeRef?: ResolvedCodeRef;
 }

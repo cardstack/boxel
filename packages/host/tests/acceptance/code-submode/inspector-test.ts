@@ -585,10 +585,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       'ExportedClass class',
       'ExportedClassInheritLocalClass class',
       'exportedFunction function',
-      'LocalCard card', //TODO: CS-6009 will probably change this
+      'LocalCard card',
       'ExportedCard card',
       'ExportedCardInheritLocalCard card',
-      'LocalField field', //TODO: CS-6009 will probably change this
+      'LocalField field',
       'ExportedField field',
       'ExportedFieldInheritLocalField field',
       'default (DefaultClass) class',

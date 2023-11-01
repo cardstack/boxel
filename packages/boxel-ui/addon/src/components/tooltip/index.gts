@@ -46,7 +46,7 @@ export default class Tooltip extends Component<Signature> {
       </div>
       {{#if this.isHoverOnTrigger}}
         {{! @glint-ignore velcro.loop }}
-        <div class='tooltip' {{velcro.loop}}>
+        <div class='tooltip' {{velcro.loop}} data-test-tooltip-content>
           {{yield to='content'}}
         </div>
       {{/if}}
