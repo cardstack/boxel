@@ -174,7 +174,10 @@ export default class CodeSubmode extends Component<Signature> {
       if (this.codePath && this.hasUnsavedSourceChanges) {
         // we let the monaco changes win if there are unsaved changes both
         // monaco and the card preview (an arbitrary choice)
-        this.args.saveSourceOnClose(this.codePath, getMonacoContent());
+        let monacoContent = this.monacoService.getMonacoContent();
+        if (monacoContent) {
+          this.args.saveSourceOnClose(this.codePath, monacoContent);
+        }
       } else if (this.hasUnsavedCardChanges && this.card) {
         this.args.saveCardOnClose(this.card);
       }
@@ -1153,8 +1156,4 @@ export default class CodeSubmode extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-function getMonacoContent() {
-  return (window as any).monaco.editor.getModels()[0].getValue();
 }

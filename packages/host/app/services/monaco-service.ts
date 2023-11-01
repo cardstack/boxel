@@ -133,6 +133,14 @@ export default class MonacoService extends Service {
     };
   }
 
+  getMonacoContent() {
+    let model = this.editor?.getModel();
+    if (!model) {
+      return null;
+    }
+    return model.getValue();
+  }
+
   getLineCursorOn(): string | null {
     let model = this.editor?.getModel();
     if (!model || !this.editor) {
