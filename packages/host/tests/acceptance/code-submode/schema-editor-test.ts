@@ -547,9 +547,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
     );
 
-    // TODO: CS-6110
-    // await waitFor('[data-test-current-module-name="string.ts"]');
-    // assert.dom('[data-test-current-module-name]').hasText('string.ts');
+    await waitFor('[data-test-current-module-name="card-api.gts"]');
+    assert.dom('[data-test-current-module-name]').hasText('card-api.gts');
   });
 
   test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
