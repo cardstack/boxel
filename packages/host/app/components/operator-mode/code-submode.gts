@@ -6,9 +6,9 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
-//@ts-expect-error cached type not available yet
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
+//@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
 
 import {
@@ -432,6 +432,7 @@ export default class CodeSubmode extends Component<Signature> {
       let { start, end } = this.selectedDeclaration.path.node.loc;
       return new Range(start.line, start.column, end.line, end.column);
     }
+    return undefined;
   }
 
   private get declarations() {

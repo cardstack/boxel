@@ -77,7 +77,7 @@ export default class Monaco extends Modifier<Signature> {
       );
     }
     this.lastLanguage = language;
-    if (cursorPosition) {
+    if (this.editor && cursorPosition) {
       this.editor.focus();
       this.editor.setPosition({
         lineNumber: cursorPosition.startLineNumber,
