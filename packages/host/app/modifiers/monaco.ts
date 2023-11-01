@@ -12,6 +12,7 @@ interface Signature {
     Named: {
       content: string;
       contentChanged: (text: string) => void;
+      cursorPosition?: MonacoSDK.Range;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
       language?: string;
       monacoSDK: typeof MonacoSDK;
@@ -34,6 +35,7 @@ export default class Monaco extends Modifier<Signature> {
       content,
       language,
       contentChanged,
+      cursorPosition,
       onSetup,
       monacoSDK,
     }: Signature['Args']['Named'],
@@ -75,6 +77,14 @@ export default class Monaco extends Modifier<Signature> {
       );
     }
     this.lastLanguage = language;
+    if (cursorPosition) {
+      this.editor.focus();
+      this.editor.setPosition({
+        lineNumber: cursorPosition.startLineNumber,
+        column: cursorPosition.startColumn,
+      });
+      this.editor.revealLineInCenter(cursorPosition.startLineNumber);
+    }
   }
 
   private onContentChanged = restartableTask(

@@ -584,6 +584,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
+    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
       'AClassWithExportName (LocalClass) class',

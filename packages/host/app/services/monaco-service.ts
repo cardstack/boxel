@@ -133,18 +133,6 @@ export default class MonacoService extends Service {
     };
   }
 
-  moveCursor(range: _MonacoSDK.Range): void {
-    if (!this.editor) {
-      return;
-    }
-    this.editor.focus();
-    this.editor.setPosition({
-      lineNumber: range.startLineNumber,
-      column: range.startColumn,
-    });
-    this.editor.revealLine(range.startLineNumber);
-  }
-
   getLineCursorOn(): string | null {
     let model = this.editor?.getModel();
     if (!model || !this.editor) {

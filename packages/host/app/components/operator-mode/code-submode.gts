@@ -5,11 +5,11 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import Component from '@glimmer/component';
-//@ts-expect-error cached type not available yet
-import { cached, tracked } from '@glimmer/tracking';
 import { buildWaiter } from '@ember/test-waiters';
+//@ts-expect-error cached type not available yet
 import { isTesting } from '@embroider/macros';
+import Component from '@glimmer/component';
+import { cached, tracked } from '@glimmer/tracking';
 
 import {
   dropTask,
@@ -20,9 +20,8 @@ import {
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
+import { Range } from 'monaco-editor';
 import { TrackedObject } from 'tracked-built-ins';
-
-import { Deferred } from '@cardstack/runtime-common';
 
 import {
   Button,
@@ -33,6 +32,8 @@ import type { PanelContext } from '@cardstack/boxel-ui/components';
 
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
+
+import { Deferred } from '@cardstack/runtime-common';
 
 import {
   type RealmInfo,
@@ -87,8 +88,6 @@ import CardURLBar from './card-url-bar';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
-
-import { Range } from 'monaco-editor';
 
 interface Signature {
   Args: {
@@ -428,6 +427,13 @@ export default class CodeSubmode extends Component<Signature> {
     return this.card;
   }
 
+  private get monacoCursorPosition() {
+    if (this.selectedDeclaration?.path?.node.loc) {
+      let { start, end } = this.selectedDeclaration.path.node.loc;
+      return new Range(start.line, start.column, end.line, end.column);
+    }
+  }
+
   private get declarations() {
     return this.moduleContentsResource?.declarations || [];
   }
@@ -477,12 +483,6 @@ export default class CodeSubmode extends Component<Signature> {
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this.operatorModeStateService.updateLocalNameSelection(dec.localName);
-
-    if (dec.path?.node.loc) {
-      let { start, end } = dec.path.node.loc;
-      let range = new Range(start.line, start.column, end.line, end.column);
-      this.monacoService.moveCursor(range);
-    }
   }
 
   @action
@@ -859,6 +859,7 @@ export default class CodeSubmode extends Component<Signature> {
                         contentChanged=(perform this.contentChangedTask)
                         monacoSDK=this.monacoSDK
                         language=this.language
+                        cursorPosition=this.monacoCursorPosition
                       }}
                     ></div>
                   {{/if}}
