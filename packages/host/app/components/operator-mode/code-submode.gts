@@ -5,11 +5,11 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 //@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
 
 import {
   dropTask,
@@ -20,9 +20,8 @@ import {
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
+import { Range } from 'monaco-editor';
 import { TrackedObject } from 'tracked-built-ins';
-
-import { Deferred } from '@cardstack/runtime-common';
 
 import {
   Button,
@@ -33,6 +32,8 @@ import type { PanelContext } from '@cardstack/boxel-ui/components';
 
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
+
+import { Deferred } from '@cardstack/runtime-common';
 
 import {
   type RealmInfo,
@@ -173,7 +174,10 @@ export default class CodeSubmode extends Component<Signature> {
       if (this.codePath && this.hasUnsavedSourceChanges) {
         // we let the monaco changes win if there are unsaved changes both
         // monaco and the card preview (an arbitrary choice)
-        this.args.saveSourceOnClose(this.codePath, getMonacoContent());
+        let monacoContent = this.monacoService.getMonacoContent();
+        if (monacoContent) {
+          this.args.saveSourceOnClose(this.codePath, monacoContent);
+        }
       } else if (this.hasUnsavedCardChanges && this.card) {
         this.args.saveCardOnClose(this.card);
       }
@@ -424,6 +428,14 @@ export default class CodeSubmode extends Component<Signature> {
       throw new Error(`bug: card ${this.codePath} is not loaded`);
     }
     return this.card;
+  }
+
+  private get monacoCursorPosition() {
+    if (this.selectedDeclaration?.path?.node.loc) {
+      let { start, end } = this.selectedDeclaration.path.node.loc;
+      return new Range(start.line, start.column, end.line, end.column);
+    }
+    return undefined;
   }
 
   private get declarations() {
@@ -857,6 +869,7 @@ export default class CodeSubmode extends Component<Signature> {
                         contentChanged=(perform this.contentChangedTask)
                         monacoSDK=this.monacoSDK
                         language=this.language
+                        cursorPosition=this.monacoCursorPosition
                       }}
                     ></div>
                   {{/if}}
@@ -1149,8 +1162,4 @@ export default class CodeSubmode extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-function getMonacoContent() {
-  return (window as any).monaco.editor.getModels()[0].getValue();
 }

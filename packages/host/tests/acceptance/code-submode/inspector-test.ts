@@ -15,6 +15,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   TestRealm,
@@ -302,6 +303,7 @@ const importsSource = `
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
+  let monacoService: MonacoService;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -432,6 +434,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
+    monacoService = this.owner.lookup(
+      'service:monaco-service',
+    ) as MonacoService;
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
@@ -579,6 +584,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
+    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
       'AClassWithExportName (LocalClass) class',
@@ -626,6 +632,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       )
       .exists();
     assert.dom(`[data-test-total-fields]`).containsText('4 Fields');
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
 
     // clicking on a field
     elementName = 'ExportedField';
@@ -649,6 +656,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         `[data-test-card-schema="exported field"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
 
     // clicking on an exported function
     elementName = 'exportedFunction';
@@ -659,6 +667,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert.dom('[data-test-schema-editor-incompatible-item]').exists();
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
   });
 
   test<TestContextWithSSE>('Can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
