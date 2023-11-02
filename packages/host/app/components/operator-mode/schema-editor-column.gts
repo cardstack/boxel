@@ -31,7 +31,6 @@ import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 import {
   isCardOrFieldDeclaration,
   ModuleDeclaration,
-  ModuleContentsResource,
 } from '@cardstack/host/resources/module-contents';
 
 interface Signature {

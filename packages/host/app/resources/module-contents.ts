@@ -22,10 +22,7 @@ import {
 
 import { Ready as ReadyFile } from '@cardstack/host/resources/file';
 
-import {
-  importResource,
-  type ImportResource,
-} from '@cardstack/host/resources/import';
+import { importResource } from '@cardstack/host/resources/import';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -81,11 +78,10 @@ export class ModuleContentsResource extends Resource<Args> {
 
   private load = restartableTask(async (executableFile: ReadyFile) => {
     //==loading module
-    this.moduleResource = importResource(this, () => executableFile.url);
-    await this.moduleResource.loaded;
-    this._url = executableFile.url;
+    let moduleResource = importResource(this, () => executableFile.url);
+    await moduleResource.loaded;
     let exportedCardsOrFields = Object.values(
-      this.moduleResource?.module || {},
+      moduleResource?.module || {},
     ).filter(isBaseDef);
 
     //==building declaration structure
