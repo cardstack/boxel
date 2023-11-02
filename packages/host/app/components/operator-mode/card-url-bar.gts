@@ -23,7 +23,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 interface Signature {
   Element: HTMLElement;
   Args: {
-    // TODO consider refactoring so that the upstream component (code-mode.gts)
+    // TODO consider refactoring so that the upstream component (code-submode.gts)
     // doesn't manage the error state, and rather that moves into this component
     // as we have 4 params related to error state management that are passed into
     // this component. This might be a good code-mode.gts refactoring effort...

@@ -1832,6 +1832,7 @@ export class CardDef extends BaseDef {
   @field description = contains(StringField);
   @field thumbnailURL = contains(StringField); // TODO: this will probably be an image or image url field card when we have it
   static displayName = 'Card';
+  static isCardDef = true;
 
   static assignInitialFieldValue(
     instance: BaseDef,

@@ -261,18 +261,25 @@ export default class Panel extends Component<Signature> {
 
     let toward: string | null = null;
 
-    if (
-      (this.id === 1 && this.panelContext?.length !== '0px') ||
-      (this.id &&
-        this.args.isLastPanel(this.id + 1) &&
-        this.args.panelContext(this.id + 1)?.length === '0px')
-    ) {
-      toward = reverse ? 'end' : 'beginning';
-    } else if (
-      (this.id && this.args.isLastPanel(this.id + 1)) ||
-      (this.id === 1 && this.panelContext?.length === '0px')
-    ) {
-      toward = reverse ? 'beginning' : 'end';
+    let isFirstPanel = this.id === 1;
+    let isCollapsed = this.panelContext?.length === '0px';
+
+    let nextPanelIsLast = this.args.isLastPanel(this.id + 1);
+    let nextPanelIsCollapsed =
+      this.args.panelContext(this.id + 1)?.length === '0px';
+
+    if (isFirstPanel && !isCollapsed) {
+      if (nextPanelIsLast && nextPanelIsCollapsed) {
+        toward = reverse ? 'beginning' : 'end';
+      } else {
+        toward = reverse ? 'end' : 'beginning';
+      }
+    } else if (nextPanelIsLast || (isFirstPanel && isCollapsed)) {
+      if (nextPanelIsCollapsed) {
+        toward = 'beginning';
+      } else {
+        toward = reverse ? 'beginning' : 'end';
+      }
     }
 
     if (toward) {

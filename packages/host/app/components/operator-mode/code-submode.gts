@@ -5,13 +5,22 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 //@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
 
-import { task, restartableTask, timeout, all } from 'ember-concurrency';
+import {
+  dropTask,
+  task,
+  restartableTask,
+  timeout,
+  all,
+} from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
+import { Range } from 'monaco-editor';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {
@@ -23,6 +32,8 @@ import type { PanelContext } from '@cardstack/boxel-ui/components';
 
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
+
+import { Deferred } from '@cardstack/runtime-common';
 
 import {
   type RealmInfo,
@@ -74,16 +85,17 @@ import FileTree from '../editor/file-tree';
 import BinaryFileInfo from './binary-file-info';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
+import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
+import SubmodeLayout from './submode-layout';
 
 interface Signature {
   Args: {
-    delete: (card: CardDef, afterDelete?: () => void) => void;
     saveSourceOnClose: (url: URL, content: string) => void;
     saveCardOnClose: (card: CardDef) => void;
   };
 }
-const log = logger('component:code-mode');
+const log = logger('component:code-submode');
 const { autoSaveDelayMs } = config;
 
 type PanelWidths = {
@@ -114,7 +126,9 @@ const defaultPanelHeights: PanelHeights = {
 
 const cardEditorSaveTimes = new Map<string, number>();
 
-export default class CodeMode extends Component<Signature> {
+const waiter = buildWaiter('code-submode:waiter');
+
+export default class CodeSubmode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
@@ -127,14 +141,17 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
+
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
+
   // This is to cache realm info during reload after code path change so
   // that realm assets don't produce a flicker when code patch changes and
   // the realm is the same
   private cachedRealmInfo: RealmInfo | null = null;
+  private deleteModal: DeleteModal | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -157,7 +174,10 @@ export default class CodeMode extends Component<Signature> {
       if (this.codePath && this.hasUnsavedSourceChanges) {
         // we let the monaco changes win if there are unsaved changes both
         // monaco and the card preview (an arbitrary choice)
-        this.args.saveSourceOnClose(this.codePath, getMonacoContent());
+        let monacoContent = this.monacoService.getMonacoContent();
+        if (monacoContent) {
+          this.args.saveSourceOnClose(this.codePath, monacoContent);
+        }
       } else if (this.hasUnsavedCardChanges && this.card) {
         this.args.saveCardOnClose(this.card);
       }
@@ -187,7 +207,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   get fileViewTitle() {
-    return this.showBrowser ? 'File Browser' : 'Inheritance';
+    return this.isFileTreeShowing ? 'File Browser' : 'Inheritance';
   }
 
   private get realmURL() {
@@ -410,6 +430,14 @@ export default class CodeMode extends Component<Signature> {
     return this.card;
   }
 
+  private get monacoCursorPosition() {
+    if (this.selectedDeclaration?.path?.node.loc) {
+      let { start, end } = this.selectedDeclaration.path.node.loc;
+      return new Range(start.line, start.column, end.line, end.column);
+    }
+    return undefined;
+  }
+
   private get declarations() {
     return this.moduleContentsResource?.declarations || [];
   }
@@ -462,8 +490,10 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @action
-  openDefinition(moduleHref: string, codeRef: ResolvedCodeRef) {
-    this.operatorModeStateService.updateCodeRefSelection(codeRef);
+  openDefinition(moduleHref: string, codeRef: ResolvedCodeRef | undefined) {
+    if (codeRef) {
+      this.operatorModeStateService.updateCodeRefSelection(codeRef);
+    }
     this.operatorModeStateService.updateCodePath(new URL(moduleHref));
   }
 
@@ -620,26 +650,7 @@ export default class CodeMode extends Component<Signature> {
     );
   }
 
-  @action
-  private delete() {
-    if (this.card) {
-      this.args.delete(this.card, () => {
-        let recentFile = this.recentFilesService.recentFiles[0];
-
-        if (recentFile) {
-          let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
-
-          this.operatorModeStateService.updateCodePath(new URL(recentFileUrl));
-        } else {
-          this.operatorModeStateService.updateCodePath(null);
-        }
-      });
-    } else {
-      throw new Error(`TODO: non-card instance deletes are not yet supported`);
-    }
-  }
-
-  private get showBrowser() {
+  private get isFileTreeShowing() {
     return this.fileView === 'browser' || this.emptyOrNotFound;
   }
 
@@ -653,6 +664,68 @@ export default class CodeMode extends Component<Signature> {
     }
   }
 
+  // dropTask will ignore any subsequent delete requests until the one in progress is done
+  private delete = dropTask(async (card: CardDef) => {
+    if (!card.id) {
+      // the card isn't actually saved yet, so do nothing
+      return;
+    }
+    if (!this.card) {
+      throw new Error(`TODO: non-card instance deletes are not yet supported`);
+    }
+
+    if (!this.deleteModal) {
+      throw new Error(`bug: DeleteModal not instantiated`);
+    }
+    let deferred: Deferred<void>;
+    let isDeleteConfirmed = await this.deleteModal.confirmDelete(
+      card,
+      (d) => (deferred = d),
+    );
+    if (!isDeleteConfirmed) {
+      return;
+    }
+
+    await this.withTestWaiters(async () => {
+      await this.operatorModeStateService.deleteCard(card);
+      deferred!.fulfill();
+    });
+
+    let recentFile = this.recentFilesService.recentFiles[0];
+
+    if (recentFile) {
+      let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
+
+      this.operatorModeStateService.updateCodePath(new URL(recentFileUrl));
+    } else {
+      this.operatorModeStateService.updateCodePath(null);
+    }
+  });
+
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
+    }
+  }
+
+  private setupDeleteModal = (deleteModal: DeleteModal) => {
+    this.deleteModal = deleteModal;
+  };
+
+  @action private openSearchResultInEditor(card: CardDef) {
+    let codePath = new URL(card.id + '.json');
+    this.operatorModeStateService.updateCodePath(codePath);
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -663,225 +736,235 @@ export default class CodeMode extends Component<Signature> {
       @realmURL={{this.realmURL}}
       class='card-url-bar'
     />
-    <div
-      class='code-mode'
-      data-test-code-mode
-      data-test-save-idle={{and
-        this.contentChangedTask.isIdle
-        this.doWhenCardChanges.isIdle
-      }}
-    >
-      <ResizablePanelGroup
-        @orientation='horizontal'
-        @onListPanelContextChange={{this.onListPanelContextChange}}
-        class='columns'
-        as |ResizablePanel|
+    <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
+      <div
+        class='code-mode'
+        data-test-code-mode
+        data-test-save-idle={{and
+          this.contentChangedTask.isIdle
+          this.doWhenCardChanges.isIdle
+        }}
       >
-        <ResizablePanel
-          @defaultLength={{defaultPanelWidths.leftPanel}}
-          @length='var(--operator-mode-left-column)'
+        <ResizablePanelGroup
+          @orientation='horizontal'
+          @onListPanelContextChange={{this.onListPanelContextChange}}
+          class='columns'
+          as |ResizablePanel|
         >
-          <div class='column'>
-            <ResizablePanelGroup
-              @orientation='vertical'
-              @onListPanelContextChange={{this.onFilePanelContextChange}}
-              @reverseCollapse={{true}}
-              as |VerticallyResizablePanel|
-            >
-              <VerticallyResizablePanel
-                @defaultLength={{defaultPanelHeights.filePanel}}
-                @length={{this.panelHeights.filePanel}}
+          <ResizablePanel
+            @defaultLength={{defaultPanelWidths.leftPanel}}
+            @length='var(--operator-mode-left-column)'
+          >
+            <div class='column'>
+              <ResizablePanelGroup
+                @orientation='vertical'
+                @onListPanelContextChange={{this.onFilePanelContextChange}}
+                @reverseCollapse={{true}}
+                as |VerticallyResizablePanel|
               >
-
-                {{! Move each container and styles to separate component }}
-                <div
-                  class='inner-container file-view
-                    {{if this.showBrowser "file-browser"}}'
+                <VerticallyResizablePanel
+                  @defaultLength={{defaultPanelHeights.filePanel}}
+                  @length={{this.panelHeights.filePanel}}
                 >
-                  <header
-                    class='file-view__header'
-                    aria-label={{this.fileViewTitle}}
-                    data-test-file-view-header
+
+                  {{! Move each container and styles to separate component }}
+                  <div
+                    class='inner-container file-view
+                      {{if this.isFileTreeShowing "file-browser"}}'
                   >
-                    <Button
-                      @disabled={{this.emptyOrNotFound}}
-                      @kind={{if
-                        (not this.showBrowser)
-                        'primary-dark'
-                        'secondary'
-                      }}
-                      @size='extra-small'
-                      class={{cn
-                        'file-view__header-btn'
-                        active=(not this.showBrowser)
-                      }}
-                      {{on 'click' (fn this.setFileView 'inheritance')}}
-                      data-test-inheritance-toggle
+                    <header
+                      class='file-view__header'
+                      aria-label={{this.fileViewTitle}}
+                      data-test-file-view-header
                     >
-                      Inspector</Button>
-                    <Button
-                      @kind={{if this.showBrowser 'primary-dark' 'secondary'}}
-                      @size='extra-small'
-                      class={{cn
-                        'file-view__header-btn'
-                        active=this.showBrowser
-                      }}
-                      {{on 'click' (fn this.setFileView 'browser')}}
-                      data-test-file-browser-toggle
-                    >
-                      File Tree</Button>
-                  </header>
-                  <section class='inner-container__content'>
-                    {{#if this.showBrowser}}
-                      <FileTree @realmURL={{this.realmURL}} />
-                    {{else}}
-                      {{#if this.isReady}}
-                        <DetailPanel
-                          @cardInstance={{this.card}}
-                          @readyFile={{this.readyFile}}
-                          @realmInfo={{this.realmInfo}}
-                          @selectedDeclaration={{this.selectedDeclaration}}
-                          @declarations={{this.declarations}}
-                          @selectDeclaration={{this.selectDeclaration}}
-                          @delete={{this.delete}}
-                          @openDefinition={{this.openDefinition}}
-                          data-test-card-inheritance-panel
-                        />
+                      <Button
+                        @disabled={{this.emptyOrNotFound}}
+                        @kind={{if
+                          (not this.isFileTreeShowing)
+                          'primary-dark'
+                          'secondary'
+                        }}
+                        @size='extra-small'
+                        class={{cn
+                          'file-view__header-btn'
+                          active=(not this.isFileTreeShowing)
+                        }}
+                        {{on 'click' (fn this.setFileView 'inheritance')}}
+                        data-test-inheritance-toggle
+                      >
+                        Inspector</Button>
+                      <Button
+                        @kind={{if
+                          this.isFileTreeShowing
+                          'primary-dark'
+                          'secondary'
+                        }}
+                        @size='extra-small'
+                        class={{cn
+                          'file-view__header-btn'
+                          active=this.isFileTreeShowing
+                        }}
+                        {{on 'click' (fn this.setFileView 'browser')}}
+                        data-test-file-browser-toggle
+                      >
+                        File Tree</Button>
+                    </header>
+                    <section class='inner-container__content'>
+                      {{#if this.isFileTreeShowing}}
+                        <FileTree @realmURL={{this.realmURL}} />
+                      {{else}}
+                        {{#if this.isReady}}
+                          <DetailPanel
+                            @cardInstance={{this.card}}
+                            @readyFile={{this.readyFile}}
+                            @realmInfo={{this.realmInfo}}
+                            @selectedDeclaration={{this.selectedDeclaration}}
+                            @declarations={{this.declarations}}
+                            @selectDeclaration={{this.selectDeclaration}}
+                            @delete={{perform this.delete}}
+                            @openDefinition={{this.openDefinition}}
+                            data-test-card-inheritance-panel
+                          />
+                        {{/if}}
                       {{/if}}
-                    {{/if}}
-                  </section>
-                </div>
-              </VerticallyResizablePanel>
-              <VerticallyResizablePanel
-                @defaultLength={{defaultPanelHeights.recentPanel}}
-                @length={{this.panelHeights.recentPanel}}
-                @minLength='100px'
-              >
-                <aside class='inner-container recent-files'>
-                  <header
-                    class='inner-container__header'
-                    aria-label='Recent Files Header'
-                  >
-                    Recent Files
-                  </header>
-                  <section class='inner-container__content'>
-                    <RecentFiles />
-                  </section>
-                </aside>
-              </VerticallyResizablePanel>
-            </ResizablePanelGroup>
-          </div>
-        </ResizablePanel>
-        {{#if this.codePath}}
-          <ResizablePanel
-            @defaultLength={{defaultPanelWidths.codeEditorPanel}}
-            @length={{this.panelWidths.codeEditorPanel}}
-            @minLength='300px'
-          >
-            <div class='inner-container'>
-              {{#if this.isReady}}
-                {{#if this.readyFile.isBinary}}
-                  <BinaryFileInfo @readyFile={{this.readyFile}} />
-                {{else}}
-                  <div
-                    class='monaco-container'
-                    data-test-editor
-                    {{monacoModifier
-                      content=this.readyFile.content
-                      contentChanged=(perform this.contentChangedTask)
-                      monacoSDK=this.monacoSDK
-                      language=this.language
-                    }}
-                  ></div>
-                {{/if}}
-                <div class='save-indicator {{if this.isSaving "visible"}}'>
-                  {{#if this.isSaving}}
-                    <span class='saving-msg'>
-                      Now Saving
-                    </span>
-                    <span class='save-spinner'>
-                      <span class='save-spinner-inner'>
-                        <LoadingIndicator />
-                      </span>
-                    </span>
-                  {{else}}
-                    <span class='saved-msg'>
-                      Saved
-                    </span>
-                    <CheckMark width='27' height='27' />
-                  {{/if}}
-                </div>
-              {{else if this.isLoading}}
-                <div class='loading'>
-                  <LoadingIndicator />
-                </div>
-              {{/if}}
-            </div>
-          </ResizablePanel>
-          <ResizablePanel
-            @defaultLength={{defaultPanelWidths.rightPanel}}
-            @length={{this.panelWidths.rightPanel}}
-          >
-            <div class='inner-container'>
-              {{#if this.isReady}}
-                {{#if this.cardIsLoaded}}
-                  <CardPreviewPanel
-                    @card={{this.loadedCard}}
-                    @realmInfo={{this.realmInfo}}
-                    data-test-card-resource-loaded
-                  />
-                {{else if this.selectedCardOrField}}
-                  <SchemaEditorColumn
-                    @file={{this.readyFile}}
-                    @card={{this.selectedCardOrField.cardOrField}}
-                    @cardTypeResource={{this.selectedCardOrField.cardType}}
-                    @openDefinition={{this.openDefinition}}
-                  />
-                {{else if this.schemaEditorIncompatibleFile}}
-                  <div
-                    class='incompatible-schema-editor'
-                    data-test-schema-editor-incompatible-file
-                  >
-                    Schema Editor cannot be used with this file type.
+                    </section>
                   </div>
-                {{else if
-                  (and this.isValidSchemaFile this.schemaEditorIncompatibleItem)
-                }}
-                  <div
-                    class='incompatible-schema-editor'
-                    data-test-schema-editor-incompatible-item
-                  >
-                    Schema Editor cannot be used for selected
-                    {{this.selectedDeclaration.type}}
-                    "{{this.selectedDeclaration.localName}}".</div>
-                {{else if this.cardError}}
-                  {{this.cardError.message}}
-                {{/if}}
-              {{else if this.isLoading}}
-                <div class='loading'>
-                  <LoadingIndicator />
-                </div>
-              {{/if}}
+                </VerticallyResizablePanel>
+                <VerticallyResizablePanel
+                  @defaultLength={{defaultPanelHeights.recentPanel}}
+                  @length={{this.panelHeights.recentPanel}}
+                  @minLength='100px'
+                >
+                  <aside class='inner-container recent-files'>
+                    <header
+                      class='inner-container__header'
+                      aria-label='Recent Files Header'
+                    >
+                      Recent Files
+                    </header>
+                    <section class='inner-container__content'>
+                      <RecentFiles />
+                    </section>
+                  </aside>
+                </VerticallyResizablePanel>
+              </ResizablePanelGroup>
             </div>
           </ResizablePanel>
-        {{else}}
-          <ResizablePanel
-            @defaultLength={{defaultPanelWidths.emptyCodeModePanel}}
-            @length={{this.panelWidths.emptyCodeModePanel}}
-          >
-            <div
-              class='inner-container inner-container--empty'
-              data-test-empty-code-mode
+          {{#if this.codePath}}
+            <ResizablePanel
+              @defaultLength={{defaultPanelWidths.codeEditorPanel}}
+              @length={{this.panelWidths.codeEditorPanel}}
+              @minLength='300px'
             >
-              <File width='40' height='40' role='presentation' />
-              <h3 class='choose-file-prompt'>
-                Choose a file on the left to open it
-              </h3>
-            </div>
-          </ResizablePanel>
-        {{/if}}
-      </ResizablePanelGroup>
-    </div>
+              <div class='inner-container'>
+                {{#if this.isReady}}
+                  {{#if this.readyFile.isBinary}}
+                    <BinaryFileInfo @readyFile={{this.readyFile}} />
+                  {{else}}
+                    <div
+                      class='monaco-container'
+                      data-test-editor
+                      {{monacoModifier
+                        content=this.readyFile.content
+                        contentChanged=(perform this.contentChangedTask)
+                        monacoSDK=this.monacoSDK
+                        language=this.language
+                        cursorPosition=this.monacoCursorPosition
+                      }}
+                    ></div>
+                  {{/if}}
+                  <div class='save-indicator {{if this.isSaving "visible"}}'>
+                    {{#if this.isSaving}}
+                      <span class='saving-msg'>
+                        Now Saving
+                      </span>
+                      <span class='save-spinner'>
+                        <span class='save-spinner-inner'>
+                          <LoadingIndicator />
+                        </span>
+                      </span>
+                    {{else}}
+                      <span class='saved-msg'>
+                        Saved
+                      </span>
+                      <CheckMark width='27' height='27' />
+                    {{/if}}
+                  </div>
+                {{else if this.isLoading}}
+                  <div class='loading'>
+                    <LoadingIndicator />
+                  </div>
+                {{/if}}
+              </div>
+            </ResizablePanel>
+            <ResizablePanel
+              @defaultLength={{defaultPanelWidths.rightPanel}}
+              @length={{this.panelWidths.rightPanel}}
+            >
+              <div class='inner-container'>
+                {{#if this.isReady}}
+                  {{#if this.cardIsLoaded}}
+                    <CardPreviewPanel
+                      @card={{this.loadedCard}}
+                      @realmInfo={{this.realmInfo}}
+                      data-test-card-resource-loaded
+                    />
+                  {{else if this.selectedCardOrField}}
+                    <SchemaEditorColumn
+                      @file={{this.readyFile}}
+                      @card={{this.selectedCardOrField.cardOrField}}
+                      @cardTypeResource={{this.selectedCardOrField.cardType}}
+                      @openDefinition={{this.openDefinition}}
+                    />
+                  {{else if this.schemaEditorIncompatibleFile}}
+                    <div
+                      class='incompatible-schema-editor'
+                      data-test-schema-editor-incompatible-file
+                    >
+                      Schema Editor cannot be used with this file type.
+                    </div>
+                  {{else if
+                    (and
+                      this.isValidSchemaFile this.schemaEditorIncompatibleItem
+                    )
+                  }}
+                    <div
+                      class='incompatible-schema-editor'
+                      data-test-schema-editor-incompatible-item
+                    >
+                      Schema Editor cannot be used for selected
+                      {{this.selectedDeclaration.type}}
+                      "{{this.selectedDeclaration.localName}}".</div>
+                  {{else if this.cardError}}
+                    {{this.cardError.message}}
+                  {{/if}}
+                {{else if this.isLoading}}
+                  <div class='loading'>
+                    <LoadingIndicator />
+                  </div>
+                {{/if}}
+              </div>
+            </ResizablePanel>
+          {{else}}
+            <ResizablePanel
+              @defaultLength={{defaultPanelWidths.emptyCodeModePanel}}
+              @length={{this.panelWidths.emptyCodeModePanel}}
+            >
+              <div
+                class='inner-container inner-container--empty'
+                data-test-empty-code-mode
+              >
+                <File width='40' height='40' role='presentation' />
+                <h3 class='choose-file-prompt'>
+                  Choose a file on the left to open it
+                </h3>
+              </div>
+            </ResizablePanel>
+          {{/if}}
+        </ResizablePanelGroup>
+      </div>
+      <DeleteModal @onCreate={{this.setupDeleteModal}} />
+    </SubmodeLayout>
 
     <style>
       :global(:root) {
@@ -1079,8 +1162,4 @@ export default class CodeMode extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-function getMonacoContent() {
-  return (window as any).monaco.editor.getModels()[0].getValue();
 }
