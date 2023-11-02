@@ -574,6 +574,153 @@ module('module-syntax', function () {
     assert.strictEqual(field, undefined, 'field does not exist in syntax');
   });
 
+  test('can use remove & add a field to achieve edit in place', async function (assert) {
+    let src = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+        @field artistName = contains(StringCard);
+        @field streetName = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+    let fieldIndex = mod.removeField(
+      { type: 'exportedName', name: 'Person' },
+      'artistName',
+    );
+
+    mod.addField(
+      { type: 'exportedName', name: 'Person' },
+      'artistNames',
+      {
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
+      },
+      'containsMany',
+      undefined,
+      undefined,
+      undefined,
+      fieldIndex,
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { contains, field, CardDef, containsMany } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends CardDef {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+          @field artistNames = containsMany(StringCard);
+          @field streetName = contains(StringCard);
+        }
+      `,
+    );
+  });
+
+  test('can use remove & add a field to achieve edit in place - when field is at the beginning', async function (assert) {
+    let src = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+        @field artistName = contains(StringCard);
+        @field streetName = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+    let fieldIndex = mod.removeField(
+      { type: 'exportedName', name: 'Person' },
+      'firstName',
+    );
+
+    mod.addField(
+      { type: 'exportedName', name: 'Person' },
+      'firstNameAdjusted',
+      {
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
+      },
+      'contains',
+      undefined,
+      undefined,
+      undefined,
+      fieldIndex,
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends CardDef {
+          @field firstNameAdjusted = contains(StringCard);
+          @field lastName = contains(StringCard);
+          @field artistName = contains(StringCard);
+          @field streetName = contains(StringCard);
+        }
+      `,
+    );
+  });
+
+  test('can use remove & add a field to achieve edit in place - when field is at the end', async function (assert) {
+    let src = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+        @field artistName = contains(StringCard);
+        @field streetName = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+    let fieldIndex = mod.removeField(
+      { type: 'exportedName', name: 'Person' },
+      'streetName',
+    );
+
+    mod.addField(
+      { type: 'exportedName', name: 'Person' },
+      'streetNameAdjusted',
+      {
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
+      },
+      'contains',
+      undefined,
+      undefined,
+      undefined,
+      fieldIndex,
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends CardDef {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+          @field artistName = contains(StringCard);
+          @field streetNameAdjusted = contains(StringCard);
+        }
+      `,
+    );
+  });
+
   test('can remove the last field from a card', async function (assert) {
     let src = `
       import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
