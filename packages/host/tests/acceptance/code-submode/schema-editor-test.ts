@@ -552,7 +552,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
-    assert.expect(17);
+    assert.expect(18);
     let expectedEvents = [
       {
         type: 'index',
@@ -589,6 +589,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await click('[data-test-add-field-button]');
     assert.dom('[data-test-add-field-modal]').exists();
+
+    await waitFor('[data-test-selected-field-display-name]');
+    assert.dom('[data-test-selected-field-display-name]').hasText('String'); // String field selected by default
 
     await click('[data-test-choose-card-button]');
     await waitFor(
