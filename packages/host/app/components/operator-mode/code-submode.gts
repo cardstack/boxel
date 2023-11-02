@@ -58,8 +58,6 @@ import {
   type FileResource,
 } from '@cardstack/host/resources/file';
 
-import { importResource } from '@cardstack/host/resources/import';
-
 import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
