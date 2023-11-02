@@ -7,19 +7,19 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button, SearchInput } from '@cardstack/boxel-ui/components';
-import { IconPlus } from '@cardstack/boxel-ui/icons';
-
 import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers';
+import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   createNewCard,
   baseRealm,
+  isSingleCardDocument,
   type CodeRef,
   type CreateNewCard,
   Deferred,
@@ -228,6 +228,35 @@ export default class CardCatalogModal extends Component<Signature> {
       ).name ?? 'Card'
     );
   }
+  get searchKeyIsURL() {
+    try {
+      new URL(this.state.searchKey);
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  // FIXME copied from SearchSheet
+  getCard = restartableTask(async (cardURL: string) => {
+    let response = await this.loaderService.loader.fetch(cardURL, {
+      headers: {
+        Accept: 'application/vnd.card+json',
+      },
+    });
+
+    if (response.ok) {
+      let maybeCardDoc = await response.json();
+      if (isSingleCardDocument(maybeCardDoc)) {
+        let card = await this.cardService.createFromSerialized(
+          maybeCardDoc.data,
+          maybeCardDoc,
+          new URL(maybeCardDoc.data.id),
+        );
+        this.setSelectedCard(card);
+      }
+    }
+  });
 
   get availableRealms(): RealmCards[] {
     // returns all available realms and their cards that match a certain type criteria
@@ -370,23 +399,28 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state.searchKey && !this.state.selectedRealms.length) {
       return this.resetState();
     }
-    let results: RealmCards[] = [];
-    for (let { url, realmInfo, cards } of this.displayedRealms) {
-      let filteredCards = cards.filter((c) => {
-        return c.title
-          ?.trim()
-          .toLowerCase()
-          .includes(this.state.searchKey.trim().toLowerCase());
-      });
-      if (filteredCards.length) {
-        results.push({
-          url,
-          realmInfo,
-          cards: filteredCards,
+
+    if (this.searchKeyIsURL) {
+      this.getCard.perform(this.state.searchKey);
+    } else {
+      let results: RealmCards[] = [];
+      for (let { url, realmInfo, cards } of this.displayedRealms) {
+        let filteredCards = cards.filter((c) => {
+          return c.title
+            ?.trim()
+            .toLowerCase()
+            .includes(this.state.searchKey.trim().toLowerCase());
         });
+        if (filteredCards.length) {
+          results.push({
+            url,
+            realmInfo,
+            cards: filteredCards,
+          });
+        }
       }
+      this.state.searchResults = results;
     }
-    this.state.searchResults = results;
   }
 
   @action toggleSelect(card?: CardDef): void {

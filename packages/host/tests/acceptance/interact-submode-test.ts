@@ -360,13 +360,19 @@ module('Acceptance | interact submode tests', function (hooks) {
       await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
 
-      await waitFor('[data-test-url-field]');
-      await fillIn('[data-test-url-field] input', `${testRealmURL}index`);
+      await click('[data-test-search-input] input');
+      await fillIn('[data-test-search-input] input', `${testRealmURL}index`);
 
+      // Why is go button needed in this test when it auto-navigates IRL?
       await waitFor('[data-test-card-catalog-go-button][disabled]', {
         count: 0,
       });
       await click('[data-test-card-catalog-go-button]');
+
+      // Field being superseded
+      // await waitFor('[data-test-url-field]');
+      // await fillIn('[data-test-url-field] input', `${testRealmURL}index`);
+
       await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
 
       assert
