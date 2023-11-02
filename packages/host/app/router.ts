@@ -24,8 +24,5 @@ Router.map(function () {
 
   if (!path || hostsOwnAssets) {
     this.route('index-card', { path: '/' });
-    this.route('code');
-  } else {
-    this.route('code', { path: `${path}/code` });
   }
 });

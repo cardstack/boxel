@@ -22,7 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -438,7 +438,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submode.Interact,
+        submode: Submodes.Interact,
         fileView: 'inheritance',
         openDirs: {},
         codeSelection: {},
@@ -806,7 +806,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submode.Interact,
+        submode: Submodes.Interact,
         fileView: 'inheritance',
         openDirs: {},
         codeSelection: {},

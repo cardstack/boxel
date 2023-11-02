@@ -20,7 +20,7 @@ import {
   Button,
   Label,
   SearchInput,
-  SearchInputBottomTreatment,
+  SearchInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
 
 import {
@@ -45,13 +45,16 @@ import type LoaderService from '../../services/loader-service';
 
 const { otherRealmURLs } = ENV;
 
-export enum SearchSheetMode {
-  Closed = 'closed',
-  ChoosePrompt = 'choose-prompt',
-  ChooseResults = 'choose-results',
-  SearchPrompt = 'search-prompt',
-  SearchResults = 'search-results',
-}
+export const SearchSheetModes = {
+  Closed: 'closed',
+  ChoosePrompt: 'choose-prompt',
+  ChooseResults: 'choose-results',
+  SearchPrompt: 'search-prompt',
+  SearchResults: 'search-results',
+} as const;
+
+type Values<T> = T[keyof T];
+export type SearchSheetMode = Values<typeof SearchSheetModes>;
 
 interface Signature {
   Element: HTMLElement;
@@ -76,20 +79,20 @@ export default class SearchSheet extends Component<Signature> {
   @service declare loaderService: LoaderService;
 
   get inputBottomTreatment() {
-    return this.args.mode == SearchSheetMode.Closed
-      ? SearchInputBottomTreatment.Rounded
-      : SearchInputBottomTreatment.Flat;
+    return this.args.mode == SearchSheetModes.Closed
+      ? SearchInputBottomTreatments.Rounded
+      : SearchInputBottomTreatments.Flat;
   }
 
   get sheetSize() {
     switch (this.args.mode) {
-      case SearchSheetMode.Closed:
+      case SearchSheetModes.Closed:
         return 'closed';
-      case SearchSheetMode.ChoosePrompt:
-      case SearchSheetMode.SearchPrompt:
+      case SearchSheetModes.ChoosePrompt:
+      case SearchSheetModes.SearchPrompt:
         return 'prompt';
-      case SearchSheetMode.ChooseResults:
-      case SearchSheetMode.SearchResults:
+      case SearchSheetModes.ChooseResults:
+      case SearchSheetModes.SearchResults:
         return 'results';
     }
   }
@@ -104,8 +107,8 @@ export default class SearchSheet extends Component<Signature> {
   get placeholderText() {
     let mode = this.args.mode;
     if (
-      mode == SearchSheetMode.SearchPrompt ||
-      mode == SearchSheetMode.ChoosePrompt
+      mode == SearchSheetModes.SearchPrompt ||
+      mode == SearchSheetModes.ChoosePrompt
     ) {
       return 'Search for cards';
     }

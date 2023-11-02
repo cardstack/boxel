@@ -16,7 +16,7 @@ import stringify from 'safe-stable-stringify';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
@@ -386,7 +386,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           },
         ],
       ],
-      submode: Submode.Interact,
+      submode: Submodes.Interact,
     });
   });
 
@@ -438,7 +438,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submode.Code,
+        submode: Submodes.Code,
         codePath: `${testRealmURL}Pet/mango.json`,
         fileView: 'inheritance',
         openDirs: { [testRealmURL]: ['Pet/'] },
@@ -468,7 +468,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submode.Interact,
+        submode: Submodes.Interact,
         fileView: 'inheritance',
         openDirs: { [testRealmURL]: ['Pet/'] },
         codeSelection: {},
