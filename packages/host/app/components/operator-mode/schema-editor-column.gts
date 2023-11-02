@@ -13,25 +13,32 @@ import { TrackedObject } from 'tracked-built-ins';
 import { Accordion } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { getPlural, loadCard } from '@cardstack/runtime-common';
+import {
+  getPlural,
+  loadCard,
+  isCardDocumentString,
+} from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
-import { CardType, Type } from '@cardstack/host/resources/card-type';
+import { Type } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
-import { BaseDef } from 'https://cardstack.com/base/card-api';
+import {
+  isCardOrFieldDeclaration,
+  ModuleDeclaration,
+  ModuleContentsResource,
+} from '@cardstack/host/resources/module-contents';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     file: Ready;
-    cardTypeResource?: CardType;
-    card: typeof BaseDef;
+    selectedDeclaration: ModuleDeclaration | undefined;
     openDefinition: (
       moduleHref: string,
       codeRef: ResolvedCodeRef | undefined,
@@ -73,7 +80,12 @@ export default class SchemaEditorColumn extends Component<Signature> {
       load: async () => {
         state.isLoading = true;
         let fileUrl = this.args.file.url;
-        let { card, cardTypeResource } = this.args;
+        if (this.selectedCardOrField === undefined) {
+          state.value = [];
+          return;
+        }
+        let { cardOrField: card, cardType: cardTypeResource } =
+          this.selectedCardOrField;
 
         try {
           await cardTypeResource!.ready;
@@ -131,6 +143,34 @@ export default class SchemaEditorColumn extends Component<Signature> {
     return new ModuleSyntax(this.args.file.content);
   }
 
+  private get schemaEditorIncompatibleItem() {
+    if (!this.args.selectedDeclaration) {
+      return;
+    }
+    return !isCardOrFieldDeclaration(this.args.selectedDeclaration);
+  }
+
+  private get schemaEditorIncompatibleFile() {
+    return this.args.file.isBinary || this.isNonCardJson;
+  }
+
+  private get isNonCardJson() {
+    return (
+      this.args.file.name.endsWith('.json') &&
+      !isCardDocumentString(this.args.file.content)
+    );
+  }
+
+  private get selectedCardOrField() {
+    if (
+      this.args.selectedDeclaration !== undefined &&
+      isCardOrFieldDeclaration(this.args.selectedDeclaration)
+    ) {
+      return this.args.selectedDeclaration;
+    }
+    return;
+  }
+
   <template>
     <Accordion class='accordion' as |A|>
       <A.Item
@@ -150,13 +190,31 @@ export default class SchemaEditorColumn extends Component<Signature> {
           </div>
         </:title>
         <:content>
-          <CardAdoptionChain
-            class='accordion-content'
-            @file={{@file}}
-            @moduleSyntax={{this.moduleSyntax}}
-            @cardInheritanceChain={{this.cardInheritanceChain.value}}
-            @openDefinition={{@openDefinition}}
-          />
+
+          {{#if this.schemaEditorIncompatibleFile}}
+            <div
+              class='incompatible-schema-editor'
+              data-test-schema-editor-incompatible-file
+            >
+              Schema Editor cannot be used with this file type.
+            </div>
+          {{else if this.schemaEditorIncompatibleItem}}
+            <div
+              class='incompatible-schema-editor'
+              data-test-schema-editor-incompatible-item
+            >
+              Schema Editor cannot be used for selected
+              {{this.args.selectedDeclaration.type}}
+              "{{this.args.selectedDeclaration.localName}}".</div>
+          {{else}}
+            <CardAdoptionChain
+              class='accordion-content'
+              @file={{@file}}
+              @moduleSyntax={{this.moduleSyntax}}
+              @cardInheritanceChain={{this.cardInheritanceChain.value}}
+              @openDefinition={{@openDefinition}}
+            />
+          {{/if}}
         </:content>
       </A.Item>
     </Accordion>

@@ -39,7 +39,6 @@ import {
   type SingleCardDocument,
   RealmPaths,
   logger,
-  isCardDocumentString,
   isSingleCardDocument,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
@@ -216,24 +215,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isReady() {
     return this.maybeMonacoSDK && isReady(this.currentOpenFile);
-  }
-
-  private get schemaEditorIncompatibleFile() {
-    return this.readyFile.isBinary || this.isNonCardJson;
-  }
-
-  private get schemaEditorIncompatibleItem() {
-    if (!this.selectedDeclaration) {
-      return;
-    }
-    return !isCardOrFieldDeclaration(this.selectedDeclaration);
-  }
-
-  private get isNonCardJson() {
-    return (
-      this.readyFile.name.endsWith('.json') &&
-      !isCardDocumentString(this.readyFile.content)
-    );
   }
 
   private get emptyOrNotFound() {
@@ -440,16 +421,6 @@ export default class CodeSubmode extends Component<Signature> {
       // default to 1st selection
       return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
-  }
-
-  private get selectedCardOrField() {
-    if (
-      this.selectedDeclaration &&
-      isCardOrFieldDeclaration(this.selectedDeclaration)
-    ) {
-      return this.selectedDeclaration;
-    }
-    return;
   }
 
   @action
@@ -872,40 +843,19 @@ export default class CodeSubmode extends Component<Signature> {
                       @realmInfo={{this.realmInfo}}
                       data-test-card-resource-loaded
                     />
+                  {{else if this.cardError}}
+                    {{this.cardError.message}}
                   {{else}}
                     {{#if this.moduleContentsResource.isLoading}}
-                      <div
-                        class='incompatible-schema-editor'
-                        data-test-schema-editor-incompatible-file
-                      >
-                        <div class='loading'>
-                          <LoadingIndicator />
-                        </div>
+                      <div class='loading'>
+                        <LoadingIndicator />
                       </div>
-                    {{else if this.selectedCardOrField}}
+                    {{else}}
                       <SchemaEditorColumn
                         @file={{this.readyFile}}
-                        @card={{this.selectedCardOrField.cardOrField}}
-                        @cardTypeResource={{this.selectedCardOrField.cardType}}
+                        @selectedDeclaration={{this.selectedDeclaration}}
                         @openDefinition={{this.openDefinition}}
                       />
-                    {{else if this.schemaEditorIncompatibleFile}}
-                      <div
-                        class='incompatible-schema-editor'
-                        data-test-schema-editor-incompatible-file
-                      >
-                        Schema Editor cannot be used with this file type.
-                      </div>
-                    {{else if this.schemaEditorIncompatibleItem}}
-                      <div
-                        class='incompatible-schema-editor'
-                        data-test-schema-editor-incompatible-item
-                      >
-                        Schema Editor cannot be used for selected
-                        {{this.selectedDeclaration.type}}
-                        "{{this.selectedDeclaration.localName}}".</div>
-                    {{else if this.cardError}}
-                      {{this.cardError.message}}
                     {{/if}}
                   {{/if}}
                 {{else if this.isLoading}}

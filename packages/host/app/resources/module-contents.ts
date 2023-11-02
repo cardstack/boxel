@@ -1,3 +1,4 @@
+import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 
 import { Resource } from 'ember-resources';
@@ -55,8 +56,7 @@ interface Args {
 }
 
 export class ModuleContentsResource extends Resource<Args> {
-  private _declarations: ModuleDeclaration[] = [];
-  private _url: string | undefined;
+  @tracked private _declarations: ModuleDeclaration[] = [];
   private moduleResource: ImportResource | undefined;
 
   get isLoading() {
@@ -76,14 +76,11 @@ export class ModuleContentsResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { executableFile } = named;
-    if (this._url != executableFile.url) {
-      this.load.perform(executableFile);
-    }
+    this.load.perform(executableFile);
   }
 
   private load = restartableTask(async (executableFile: ReadyFile) => {
     //==loading module
-    //I think this swallows the reactivity of the import resource since we don't specify a loader here
     this.moduleResource = importResource(this, () => executableFile.url);
     await this.moduleResource.loaded;
     this._url = executableFile.url;
