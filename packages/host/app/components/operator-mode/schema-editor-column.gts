@@ -203,8 +203,8 @@ export default class SchemaEditorColumn extends Component<Signature> {
               data-test-schema-editor-incompatible-item
             >
               Schema Editor cannot be used for selected
-              {{this.args.selectedDeclaration.type}}
-              "{{this.args.selectedDeclaration.localName}}".</div>
+              {{@selectedDeclaration.type}}
+              "{{@selectedDeclaration.localName}}".</div>
           {{else}}
             <CardAdoptionChain
               class='accordion-content'
