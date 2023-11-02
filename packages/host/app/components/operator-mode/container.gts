@@ -30,7 +30,6 @@ import { Submodes } from '../submode-switcher';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import type MessageService from '@cardstack/host/services/message-service';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -43,7 +42,6 @@ interface Signature {
 export default class OperatorModeContainer extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare messageService: MessageService; // this is accessed from getCard
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);

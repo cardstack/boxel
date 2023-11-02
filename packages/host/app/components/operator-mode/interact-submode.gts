@@ -39,7 +39,6 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
-import type MessageService from '@cardstack/host/services/message-service';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -117,7 +116,6 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
-  @service private declare messageService: MessageService; // this is accessed from CardResources in StackItem
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
 
@@ -341,7 +339,8 @@ export default class InteractSubmode extends Component<Signature> {
     }
   });
 
-  private edit = restartableTask(async (item: StackItem) => {
+  @action
+  edit(item: StackItem) {
     this.operatorModeStateService.replaceItemInStack(
       item,
       item.clone({
@@ -349,7 +348,7 @@ export default class InteractSubmode extends Component<Signature> {
         format: 'edit',
       }),
     );
-  });
+  }
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
   private delete = dropTask(async (card: CardDef, afterDelete?: () => void) => {
@@ -641,7 +640,7 @@ export default class InteractSubmode extends Component<Signature> {
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @close={{perform this.close}}
-                @edit={{perform this.edit}}
+                @edit={{this.edit}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @save={{perform this.save}}
                 @delete={{perform this.delete}}
