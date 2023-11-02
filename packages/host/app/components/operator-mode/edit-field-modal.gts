@@ -397,11 +397,7 @@ export default class EditFieldModal extends Component<Signature> {
               class='change {{if this.fieldCard "pull-right"}}'
               data-test-choose-card-button
             >
-              {{#if this.fieldCard}}
-                Change
-              {{else}}
-                Select a field
-              {{/if}}
+              Change
             </button>
           </div>
         </FieldContainer>
