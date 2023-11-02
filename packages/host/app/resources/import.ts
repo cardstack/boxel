@@ -29,10 +29,6 @@ export class ImportResource extends Resource<Args> {
     return this.load.isRunning;
   }
 
-  get loaded() {
-    return this.#loaded;
-  }
-
   get cardsOrFieldsFromModule() {
     return Object.values(this.module || {}).filter(isBaseDef);
   }
