@@ -191,8 +191,6 @@ export default class EditFieldModal extends Component<Signature> {
         chosenCatalogEntry.ref.module,
         chosenCatalogEntry.id,
       );
-
-      debugger;
     }
   });
 
