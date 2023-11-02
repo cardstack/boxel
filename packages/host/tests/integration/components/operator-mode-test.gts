@@ -2191,11 +2191,14 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await focus(`[data-test-search-input] input`);
 
+    await click('[data-test-search-input] input');
     await fillIn(
-      `[data-test-url-field] input`,
-      `http://localhost:4202/test/mango`,
+      '[data-test-search-input] input',
+      'http://localhost:4202/test/mango',
     );
-    await click(`[data-test-go-button]`);
+
+    // It goes automatically, should it?
+    // await click(`[data-test-go-button]`);
     await waitFor(`[data-test-stack-card="http://localhost:4202/test/mango"]`);
     assert
       .dom(
