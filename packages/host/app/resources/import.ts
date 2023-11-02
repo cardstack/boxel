@@ -25,8 +25,8 @@ export class ImportResource extends Resource<Args> {
     this.#loaded = this.load.perform(url, loader);
   }
 
-  get isLoading() {
-    return this.load.isRunning;
+  get loaded() {
+    return this.#loaded;
   }
 
   get cardsOrFieldsFromModule() {
