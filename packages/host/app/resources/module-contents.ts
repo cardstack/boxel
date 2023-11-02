@@ -1,4 +1,3 @@
-import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 
 import { Resource } from 'ember-resources';
