@@ -323,27 +323,15 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @use private moduleContentsResource = resource(() => {
-    if (isReady(this.currentOpenFile) && this.importedModule?.module) {
+    if (isReady(this.currentOpenFile)) {
       let f: Ready = this.currentOpenFile;
       if (hasExecutableExtension(f.url)) {
         return moduleContentsResource(this, () => ({
-          file: f,
-          exportedCardsOrFields:
-            this.importedModule?.cardsOrFieldsFromModule || [],
+          executableFile: f,
         }));
       }
     }
     return;
-  });
-
-  @use private importedModule = resource(() => {
-    if (isReady(this.currentOpenFile)) {
-      let f: Ready = this.currentOpenFile;
-      if (hasExecutableExtension(f.url)) {
-        return importResource(this, () => f.url);
-      }
-    }
-    return undefined;
   });
 
   // We are actually loading cards using a side-effect of this cached getter
@@ -887,7 +875,7 @@ export default class CodeSubmode extends Component<Signature> {
                       data-test-card-resource-loaded
                     />
                   {{else}}
-                    {{#if this.importedModule.isLoading}}
+                    {{#if this.moduleContentsResource.isLoading}}
                       <div
                         class='incompatible-schema-editor'
                         data-test-schema-editor-incompatible-file

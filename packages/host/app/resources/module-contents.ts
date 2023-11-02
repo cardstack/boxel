@@ -1,8 +1,9 @@
 import { tracked } from '@glimmer/tracking';
+import { restartableTask } from 'ember-concurrency';
 
 import { Resource } from 'ember-resources';
 
-import { getAncestor, getField } from '@cardstack/runtime-common';
+import { getAncestor, getField, isBaseDef } from '@cardstack/runtime-common';
 
 import {
   ModuleSyntax,
@@ -19,6 +20,11 @@ import {
 } from '@cardstack/host/resources/card-type';
 
 import { Ready as ReadyFile } from '@cardstack/host/resources/file';
+
+import {
+  importResource,
+  type ImportResource,
+} from '@cardstack/host/resources/import';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -46,29 +52,58 @@ export function isCardOrFieldDeclaration(
 }
 
 interface Args {
-  named: { file: ReadyFile; exportedCardsOrFields: (typeof BaseDef)[] };
+  named: { executableFile: ReadyFile };
 }
 
 export class ModuleContentsResource extends Resource<Args> {
-  @tracked private _declarations: ModuleDeclaration[] = [];
+  private _declarations: ModuleDeclaration[] = [];
+  private _url: string | undefined;
+  private moduleResource: ImportResource | undefined;
+
+  get isLoading() {
+    return this.load.isRunning;
+  }
 
   get declarations() {
     return this._declarations;
   }
 
-  modify(_positional: never[], named: Args['named']) {
-    let { file, exportedCardsOrFields } = named;
-    let moduleSyntax = new ModuleSyntax(file.content);
-    let localCardsOrFields = collectLocalCardsOrFields(
-      moduleSyntax,
-      exportedCardsOrFields,
+  get hasSomeCardOrField() {
+    return (
+      !this.load.isRunning &&
+      this.declarations.some((d) => isCardOrFieldDeclaration(d))
     );
+  }
 
+  modify(_positional: never[], named: Args['named']) {
+    let { executableFile } = named;
+    if (this._url != executableFile.url) {
+      this.load.perform(executableFile);
+    }
+  }
+
+  private load = restartableTask(async (executableFile: ReadyFile) => {
+    //==loading module
+    //I think this swallows the reactivity of the import resource since we don't specify a loader here
+    this.moduleResource = importResource(this, () => executableFile.url);
+    await this.moduleResource.loaded;
+    this._url = executableFile.url;
+    let exportedCardsOrFields = Object.values(
+      this.moduleResource?.module || {},
+    ).filter(isBaseDef);
+
+    //==building declaration structure
     // This loop
     // - adds card type (not necessarily loaded)
     // - includes card/field, either
     //   - an exported card/field
     //   - a card/field that was local but related to another card/field which was exported, e.g. inherited OR a field of the exported card/field
+    let moduleSyntax = new ModuleSyntax(executableFile.content);
+    let localCardsOrFields = collectLocalCardsOrFields(
+      moduleSyntax,
+      exportedCardsOrFields,
+    );
+
     this._declarations = moduleSyntax.declarations.reduce(
       (acc: ModuleDeclaration[], value: Declaration) => {
         if (isPossibleCardOrFieldClass(value)) {
@@ -110,7 +145,7 @@ export class ModuleContentsResource extends Resource<Args> {
       },
       [],
     );
-  }
+  });
 }
 
 export function moduleContentsResource(
