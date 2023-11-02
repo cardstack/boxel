@@ -409,86 +409,49 @@ export default class CardSchemaEditor extends Component<Signature> {
                           {{/if}}
                         </:content>
                       </Tooltip>
-                      <DropdownButton
-                        @icon={{ThreeDotsHorizontal}}
-                        @label='field options'
-                        @contentClass='context-menu'
-                        class='context-menu-trigger'
-                        data-test-schema-editor-field-contextual-button
-                        as |dd|
-                      >
-                        <div class='warning-box'>
-                          <p class='warning'>
-                            These actions will break compatibility with existing
-                            card instances.
-                          </p>
-                          <span class='warning-icon'>
-                            <WarningIcon
-                              width='20px'
-                              height='20px'
-                              role='presentation'
-                            />
-                          </span>
-                        </div>
-                        <dd.Menu
-                          class='context-menu-list'
-                          @items={{array
-                            (menuItem
-                              'Edit Field Settings'
-                              (fn this.toggleEditFieldModal field)
-                            )
-                            (menuDivider)
-                            (menuItem
-                              'Remove Field'
-                              (fn this.toggleRemoveFieldModalShown field)
-                              dangerous=true
-                            )
-                          }}
-                        />
-                      </DropdownButton>
+
+                      {{#if @allowFieldManipulation}}
+                        <DropdownButton
+                          @icon={{ThreeDotsHorizontal}}
+                          @label='field options'
+                          @contentClass='context-menu'
+                          class='context-menu-trigger'
+                          data-test-schema-editor-field-contextual-button
+                          as |dd|
+                        >
+                          <div class='warning-box'>
+                            <p class='warning'>
+                              These actions will break compatibility with
+                              existing card instances.
+                            </p>
+                            <span class='warning-icon'>
+                              <WarningIcon
+                                width='20px'
+                                height='20px'
+                                role='presentation'
+                              />
+                            </span>
+                          </div>
+                          <dd.Menu
+                            class='context-menu-list'
+                            @items={{array
+                              (menuItem
+                                'Edit Field Settings'
+                                (fn this.toggleEditFieldModal field)
+                              )
+                              (menuDivider)
+                              (menuItem
+                                'Remove Field'
+                                (fn this.toggleRemoveFieldModalShown field)
+                                dangerous=true
+                              )
+                            }}
+                          />
+                        </DropdownButton>
+                      {{/if}}
                     {{/if}}
                   {{/let}}
                 {{/let}}
-
-                {{#if @allowFieldManipulation}}
-                  <DropdownButton
-                    @icon={{ThreeDotsHorizontal}}
-                    @label='field options'
-                    @contentClass='context-menu'
-                    class='context-menu-trigger'
-                    data-test-schema-editor-field-contextual-button
-                    as |dd|
-                  >
-                    <div class='warning-box'>
-                      <p class='warning'>
-                        These actions will break compatibility with existing
-                        card instances.
-                      </p>
-                      <span class='warning-icon'>
-                        <WarningIcon
-                          width='20px'
-                          height='20px'
-                          role='presentation'
-                        />
-                      </span>
-                    </div>
-                    <dd.Menu
-                      class='context-menu-list'
-                      @items={{array
-                        (menuItem
-                          'Edit Field Settings'
-                          (fn this.toggleEditFieldModal field)
-                        )
-                        (menuDivider)
-                        (menuItem
-                          'Remove Field'
-                          (fn this.toggleRemoveFieldModalShown field)
-                          dangerous=true
-                        )
-                      }}
-                    />
-                  </DropdownButton>
-                {{/if}}
               </div>
             </div>
           {{/if}}
