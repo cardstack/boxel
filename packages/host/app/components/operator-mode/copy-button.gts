@@ -114,6 +114,9 @@ export default class OperatorModeContainer extends Component<Signature> {
     let topMostStackItems = this.operatorModeStateService.topMostStackItems();
     let indexCardIndicies = topMostStackItems.reduce(
       (indexCards, item, index) => {
+        if (!item?.card) {
+          return indexCards;
+        }
         let realmURL = item.card[item.api.realmURL];
         if (!realmURL) {
           throw new Error(

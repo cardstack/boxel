@@ -72,7 +72,7 @@ export class StackItem {
 
   get url() {
     return (
-      this.cardResource?.url ??
+      (this.cardResource?.url ? new URL(this.cardResource.url) : undefined) ??
       (this.newCard?.id ? new URL(this.newCard.id) : undefined)
     );
   }

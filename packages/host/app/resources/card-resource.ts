@@ -29,6 +29,11 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 
+interface CardError {
+  id: string;
+  error: Error;
+}
+
 interface Args {
   named: {
     // using string type here so that URL's that have the same href but are
@@ -67,6 +72,7 @@ const realmSubscriptions: Map<
 export class CardResource extends Resource<Args> {
   url: string | undefined;
   @tracked loaded: Promise<void> | undefined;
+  @tracked cardError: CardError | undefined;
   @tracked private _card: CardDef | undefined;
   @tracked private _api: typeof CardAPI | undefined;
   @tracked private staleCard: CardDef | undefined;
@@ -160,11 +166,14 @@ export class CardResource extends Resource<Args> {
       return;
     }
 
-    let card: CardDef | undefined;
-    try {
-      card = await this.getCard(url);
-    } catch (e: any) {
-      console.warn(`cannot load card ${url}`, e);
+    let card = await this.getCard(url);
+    if (!card) {
+      if (this.cardError) {
+        console.warn(
+          `cannot load card ${this.cardError.id}`,
+          this.cardError.error,
+        );
+      }
       this.clearCardInstance();
       return;
     }
@@ -225,25 +234,33 @@ export class CardResource extends Resource<Args> {
     });
   }
 
-  private async getCard(url: URL): Promise<CardDef> {
+  private async getCard(url: URL): Promise<CardDef | undefined> {
     if (typeof url === 'string') {
       url = new URL(url);
     }
-
-    let json = await this.cardService.fetchJSON(url, undefined, this.loader);
-    if (!isSingleCardDocument(json)) {
-      throw new Error(
-        `bug: server returned a non card document for ${url}:
+    this.cardError = undefined;
+    try {
+      let json = await this.cardService.fetchJSON(url, undefined, this.loader);
+      if (!isSingleCardDocument(json)) {
+        throw new Error(
+          `bug: server returned a non card document for ${url}:
         ${JSON.stringify(json, null, 2)}`,
+        );
+      }
+      let card = await this.cardService.createFromSerialized(
+        json.data,
+        json,
+        url,
+        this.loader,
       );
+      return card;
+    } catch (error: any) {
+      this.cardError = {
+        id: url.href,
+        error,
+      };
+      return;
     }
-    let card = await this.cardService.createFromSerialized(
-      json.data,
-      json,
-      url,
-      this.loader,
-    );
-    return card;
   }
 
   private reload = task(async (card: CardDef) => {

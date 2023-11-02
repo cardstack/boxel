@@ -3,10 +3,8 @@ import {
   containsMany,
   field,
   Component,
-  // CardDef,
   primitive,
   useIndexBasedKey,
-  // createFromSerialized,
   FieldDef,
 } from './card-api';
 import StringField from './string';
@@ -17,21 +15,12 @@ import { BoxelMessage } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
-// import { restartableTask } from 'ember-concurrency';
-// import { tracked } from '@glimmer/tracking';
 import {
   Loader,
-  // SupportedMimeType,
-  // Deferred,
-  // isMatrixCardError,
   getCard,
   type LooseSingleCardDocument,
-  // type SingleCardDocument,
   type CodeRef,
-  // type MatrixCardError,
 } from '@cardstack/runtime-common';
-
-// const attachedCards = new Map<string, CardResourceLike>();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -188,18 +177,14 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       {{! template-lint-disable no-triple-curlies }}
       {{{@model.formattedMessage}}}
 
-      {{#if this.attachedCardResource.card}}
-        {{!--
-        {{#if this.cardError}}
-          <div data-test-card-error class='error'>
-            Error: cannot render card
-            {{this.cardError.id}}:
-            {{this.cardError.error.message}}
-          </div>
-        {{else}}
-        --}}
+      {{#if this.attachedCardResource.cardError}}
+        <div data-test-card-error class='error'>
+          Error: cannot render card
+          {{this.attachedCardResource.cardError.id}}:
+          {{this.attachedCardResource.cardError.error.message}}
+        </div>
+      {{else if this.attachedCardResource.card}}
         <this.cardComponent />
-        {{!-- {{/if}} --}}
       {{/if}}
     </BoxelMessage>
 
@@ -211,15 +196,9 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
     </style>
   </template>
 
-  // @tracked attachedCard: CardDef | MatrixCardError | undefined;
   attachedCardResource = this.args.model.attachedCardId
     ? getCard(new URL(this.args.model.attachedCardId))
     : undefined;
-
-  // constructor(owner: unknown, args: any) {
-  //   super(owner, args);
-  //   this.loadAttachedCard.perform();
-  // }
 
   get timestamp() {
     if (!this.args.model.created) {
@@ -235,68 +214,6 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
     }
     return card.constructor.getComponent(card, 'isolated');
   }
-
-  // get cardError() {
-  //   if (isMatrixCardError(this.attachedCard)) {
-  //     return this.attachedCard;
-  //   }
-  //   return;
-  // }
-
-  // loadAttachedCard = restartableTask(async () => {
-  //   if (!this.args.model.attachedCardId) {
-  //     return;
-  //   }
-  //   let cardResource = getCard(new URL(this.args.model.attachedCardId));
-  //   await cardResource.loaded;
-  //   this.attachedCard = cardResource.card;
-  // let cardResource = attachedCards.get(this.args.model.attachedCardId);
-  // if (cardResource) {
-  //   await cardResource.loaded;
-  //   this.attachedCard = cardResource.card;
-  //   return;
-  // }
-  // // let deferred = new Deferred<CardDef | undefined>();
-  // let card
-  // attachedCards.set(this.args.model.attachedCardId, getCard(new URL(this.args.model.attachedCardId)));
-  // await this.
-  // let cardOrError: CardDef | MatrixCardError;
-  // let doc: SingleCardDocument | undefined;
-  // try {
-  //   let response = await fetch(this.args.model.attachedCardId, {
-  //     headers: { Accept: SupportedMimeType.CardJson },
-  //   });
-  //   if (!response.ok) {
-  //     throw new Error(
-  //       `status: ${response.status} -
-  //     ${response.statusText}. ${await response.text()}`,
-  //     );
-  //   }
-  //   doc = await response.json();
-  //   if (!doc) {
-  //     throw new Error(
-  //       `No document exists for ${this.args.model.attachedCardId}`,
-  //     );
-  //   }
-  //   let loader = Loader.getLoaderFor(createFromSerialized);
-  //   if (!loader) {
-  //     throw new Error('Could not obtain a loader');
-  //   }
-  //   cardOrError = await createFromSerialized<typeof CardDef>(
-  //     doc.data,
-  //     doc,
-  //     new URL(doc.data.id),
-  //     loader,
-  //   );
-  // } catch (error: any) {
-  //   cardOrError = {
-  //     id: this.args.model.attachedCardId,
-  //     error,
-  //   } as MatrixCardError;
-  // }
-  // this.attachedCard = cardOrError;
-  // deferred.fulfill(cardOrError);
-  // });
 }
 
 type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];

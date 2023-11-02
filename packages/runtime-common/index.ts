@@ -178,6 +178,7 @@ export interface CardSearch {
   ): {
     card: CardDef | undefined;
     loaded: Promise<void> | undefined;
+    cardError?: undefined | { id: string; error: Error };
   };
   trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL): CardDef;
   getLiveCards(

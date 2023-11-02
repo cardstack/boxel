@@ -890,8 +890,8 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-error]');
     assert
       .dom('[data-test-card-error]')
-      .includesText(
-        'Error: cannot render card http://this-is-not-a-real-card.com: status: 500 - Failed to fetch.',
+      .containsText(
+        'Error: cannot render card http://this-is-not-a-real-card.com/: status: 500 - Failed to fetch.',
       );
   });
 

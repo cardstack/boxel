@@ -1,4 +1,4 @@
-import { click } from '@ember/test-helpers';
+import { click, waitFor } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 import percySnapshot from '@percy/ember';
@@ -72,6 +72,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       await operatorModeStateService.restore({
         stacks: [[{ id: cardURL, format }]],
       });
+      await waitFor('[data-test-stack-item-content]');
     };
   });
 

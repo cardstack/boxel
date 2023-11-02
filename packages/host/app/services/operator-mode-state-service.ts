@@ -375,9 +375,9 @@ export default class OperatorModeStateService extends Service {
         if (item.format !== 'isolated' && item.format !== 'edit') {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
-        if (item.card.id) {
+        if (item.url) {
           serializedStack.push({
-            id: item.card.id,
+            id: item.url.href,
             format: item.format,
           });
         }
