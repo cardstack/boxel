@@ -78,7 +78,7 @@ export default class EditFieldModal extends Component<Signature> {
 
     // This component has 2 flows - adding a new field, and editing an existing field. When adding a new field, this.args.field will be undefined and when editing, it will be present
     if (this.args.field) {
-      this.setInitialvaluesForExistingField.perform();
+      this.setInitialValuesForExistingField.perform();
     }
   }
 
@@ -107,7 +107,7 @@ export default class EditFieldModal extends Component<Signature> {
     this.cardinality = id;
   }
 
-  private setInitialvaluesForExistingField = restartableTask(async () => {
+  private setInitialValuesForExistingField = restartableTask(async () => {
     if (!this.args.field) {
       throw new Error('bug: cannot set initial values without a field');
     }
