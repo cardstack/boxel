@@ -142,14 +142,14 @@ export default class SchemaEditorColumn extends Component<Signature> {
     return new ModuleSyntax(this.args.file.content);
   }
 
-  private get schemaEditorIncompatibleItem() {
+  private get isSelectedItemIncompatibleWithSchemaEditor() {
     if (!this.args.selectedDeclaration) {
       return;
     }
     return !isCardOrFieldDeclaration(this.args.selectedDeclaration);
   }
 
-  private get schemaEditorIncompatibleFile() {
+  private get isFileIncompatibleWithSchemaEditor() {
     return this.args.file.isBinary || this.isNonCardJson;
   }
 
@@ -190,14 +190,14 @@ export default class SchemaEditorColumn extends Component<Signature> {
         </:title>
         <:content>
 
-          {{#if this.schemaEditorIncompatibleFile}}
+          {{#if this.isFileIncompatibleWithSchemaEditor}}
             <div
               class='incompatible-schema-editor'
               data-test-schema-editor-incompatible-file
             >
               Schema Editor cannot be used with this file type.
             </div>
-          {{else if this.schemaEditorIncompatibleItem}}
+          {{else if this.isSelectedItemIncompatibleWithSchemaEditor}}
             <div
               class='incompatible-schema-editor'
               data-test-schema-editor-incompatible-item
