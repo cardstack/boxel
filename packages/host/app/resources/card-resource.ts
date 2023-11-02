@@ -105,8 +105,6 @@ export class CardResource extends Resource<Args> {
       this.loaded = this.loadLiveModel.perform(new URL(this.url));
     } else if (this.url) {
       this.loaded = this.loadStaticModel.perform(new URL(this.url));
-    } else if (!this.url) {
-      this.clearCardInstance();
     }
 
     registerDestructor(this, () => {

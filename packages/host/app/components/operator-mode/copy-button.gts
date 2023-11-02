@@ -120,8 +120,7 @@ export default class OperatorModeContainer extends Component<Signature> {
             `could not determine realm URL for card ${item.card.id}`,
           );
         }
-        // TODO confirm that we don't have trailing slash issue...
-        if (item.card.id === realmURL.href) {
+        if (item.card.id === `${realmURL.href}index`) {
           return [...indexCards, index];
         }
         return indexCards;
