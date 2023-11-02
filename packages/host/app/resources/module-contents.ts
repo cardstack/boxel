@@ -57,8 +57,7 @@ interface Args {
 }
 
 export class ModuleContentsResource extends Resource<Args> {
-  @tracked private _declarations: ModuleDeclaration[] = [];
-  private moduleResource: ImportResource | undefined;
+  @tracked _declarations: ModuleDeclaration[] = [];
 
   get isLoading() {
     return this.load.isRunning;
