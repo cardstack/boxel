@@ -221,13 +221,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get schemaEditorIncompatibleFile() {
-    return (
-      this.readyFile.isBinary || this.isNonCardJson || !this.isValidSchemaFile
-    );
-  }
-
-  private get isValidSchemaFile() {
-    return this.declarations.some((d) => isCardOrFieldDeclaration(d));
+    return this.readyFile.isBinary || this.isNonCardJson;
   }
 
   private get schemaEditorIncompatibleItem() {
@@ -892,34 +886,41 @@ export default class CodeSubmode extends Component<Signature> {
                       @realmInfo={{this.realmInfo}}
                       data-test-card-resource-loaded
                     />
-                  {{else if this.selectedCardOrField}}
-                    <SchemaEditorColumn
-                      @file={{this.readyFile}}
-                      @card={{this.selectedCardOrField.cardOrField}}
-                      @cardTypeResource={{this.selectedCardOrField.cardType}}
-                      @openDefinition={{this.openDefinition}}
-                    />
-                  {{else if this.schemaEditorIncompatibleFile}}
-                    <div
-                      class='incompatible-schema-editor'
-                      data-test-schema-editor-incompatible-file
-                    >
-                      Schema Editor cannot be used with this file type.
-                    </div>
-                  {{else if
-                    (and
-                      this.isValidSchemaFile this.schemaEditorIncompatibleItem
-                    )
-                  }}
-                    <div
-                      class='incompatible-schema-editor'
-                      data-test-schema-editor-incompatible-item
-                    >
-                      Schema Editor cannot be used for selected
-                      {{this.selectedDeclaration.type}}
-                      "{{this.selectedDeclaration.localName}}".</div>
-                  {{else if this.cardError}}
-                    {{this.cardError.message}}
+                  {{else}}
+                    {{#if this.importedModule.isLoading}}
+                      <div
+                        class='incompatible-schema-editor'
+                        data-test-schema-editor-incompatible-file
+                      >
+                        <div class='loading'>
+                          <LoadingIndicator />
+                        </div>
+                      </div>
+                    {{else if this.selectedCardOrField}}
+                      <SchemaEditorColumn
+                        @file={{this.readyFile}}
+                        @card={{this.selectedCardOrField.cardOrField}}
+                        @cardTypeResource={{this.selectedCardOrField.cardType}}
+                        @openDefinition={{this.openDefinition}}
+                      />
+                    {{else if this.schemaEditorIncompatibleFile}}
+                      <div
+                        class='incompatible-schema-editor'
+                        data-test-schema-editor-incompatible-file
+                      >
+                        Schema Editor cannot be used with this file type.
+                      </div>
+                    {{else if this.schemaEditorIncompatibleItem}}
+                      <div
+                        class='incompatible-schema-editor'
+                        data-test-schema-editor-incompatible-item
+                      >
+                        Schema Editor cannot be used for selected
+                        {{this.selectedDeclaration.type}}
+                        "{{this.selectedDeclaration.localName}}".</div>
+                    {{else if this.cardError}}
+                      {{this.cardError.message}}
+                    {{/if}}
                   {{/if}}
                 {{else if this.isLoading}}
                   <div class='loading'>
