@@ -31,7 +31,7 @@ The `EmergencyContactField` field definition contains one primitive field (`name
 
 When an instance of `EmergencyContactField` is rendered in `edit` format, primitive and compound fields contained in a `FieldDef` appear _vertically_ by default, where the field label appears above its input in the UI. The fields are editable.
 
-<img width="600" alt="field-def-contains-field-def" src="./card-field-relationships-assets/example-1b.png">
+<img width="600" alt="field-def-contains-field-def" src="./card-field-relationships-assets/example-1.png">
 
 ## 2- Primitive and compound field (singular) contained in CardDef (`contains`)
 
