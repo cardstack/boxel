@@ -300,7 +300,7 @@ export interface Actions {
     format?: Format,
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
     fieldName?: string,
-  ) => void;
+  ) => Promise<void>;
   createCardDirectly: (
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined,

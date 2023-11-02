@@ -46,7 +46,7 @@ export class StackItem {
     } = args;
     if (!card && !cardResource) {
       throw new Error(
-        `Cannot create a StackItem without a 'newCard' or a 'cardResource'`,
+        `Cannot create a StackItem without a 'card' or a 'cardResource'`,
       );
     }
     if (cardResource) {
@@ -101,10 +101,7 @@ export class StackItem {
   }
 
   async ready() {
-    return await Promise.all([
-      this.cardResource?.loaded,
-      this.newCardApiPromise,
-    ]);
+    await Promise.all([this.cardResource?.loaded, this.newCardApiPromise]);
   }
 
   async setCardURL(url: URL, loader?: Loader) {

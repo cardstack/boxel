@@ -13,19 +13,20 @@ import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { file, isReady, FileResource } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { type Stack } from '../components/operator-mode/container';
+import { type Stack } from '../components/operator-mode/interact-submode';
 
 import type CardService from '../services/card-service';
 
@@ -73,7 +74,7 @@ interface OpenFileSubscriber {
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
-    submode: Submode.Interact,
+    submode: Submodes.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
     codeSelection: new TrackedObject({}),
@@ -83,6 +84,7 @@ export default class OperatorModeStateService extends Service {
   private cachedRealmURL: URL | null = null;
 
   @service declare cardService: CardService;
+  @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
   @service declare recentFilesService: RecentFilesService;
   @service declare realmInfoService: RealmInfoService;
@@ -118,6 +120,29 @@ export default class OperatorModeStateService extends Service {
       }
     }
   });
+
+  async deleteCard(card: CardDef) {
+    // remove all stack items for the deleted card
+    let items: StackItem[] = [];
+    for (let stack of this.state.stacks || []) {
+      items.push(
+        ...(stack.filter((i) => i.card.id === card.id) as StackItem[]),
+      );
+    }
+    for (let item of items) {
+      this.trimItemsFromStack(item);
+    }
+    this.removeRecentCard(card.id);
+
+    let cardRealmUrl = await this.cardService.getRealmURL(card);
+
+    if (cardRealmUrl) {
+      let realmPaths = new RealmPaths(cardRealmUrl);
+      let cardPath = realmPaths.local(`${card.id}.json`);
+      this.recentFilesService.removeRecentFile(cardPath);
+    }
+    await this.cardService.deleteCard(card);
+  }
 
   trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
@@ -235,8 +260,8 @@ export default class OperatorModeStateService extends Service {
   }
 
   get codePathRelativeToRealm() {
-    if (this.state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(this.realmURL);
+    if (this.state.codePath && this.resolvedRealmURL) {
+      let realmPath = new RealmPaths(this.resolvedRealmURL);
 
       if (realmPath.inRealm(this.state.codePath)) {
         try {
@@ -380,7 +405,7 @@ export default class OperatorModeStateService extends Service {
 
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
-      submode: rawState.submode ?? Submode.Interact,
+      submode: rawState.submode ?? Submodes.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inheritance',
       openDirs,
@@ -516,6 +541,10 @@ export default class OperatorModeStateService extends Service {
     }
 
     return this.cardService.defaultURL;
+  }
+
+  get resolvedRealmURL() {
+    return this.loaderService.loader.resolve(this.realmURL);
   }
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {

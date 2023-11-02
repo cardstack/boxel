@@ -12,7 +12,7 @@ import stringify from 'safe-stable-stringify';
 import type { Loader } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 import { Model } from '@cardstack/host/routes/card';
 
@@ -119,7 +119,7 @@ export default class CardController extends Controller {
             },
           ],
         ],
-        submode: Submode.Interact,
+        submode: Submodes.Interact,
       } as OperatorModeSerializedState)!;
     } else {
       this.operatorModeState = null;

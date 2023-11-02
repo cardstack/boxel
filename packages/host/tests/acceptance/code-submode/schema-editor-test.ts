@@ -1,4 +1,10 @@
-import { visit, click, waitFor, fillIn } from '@ember/test-helpers';
+import {
+  visit,
+  click,
+  waitFor,
+  fillIn,
+  triggerEvent,
+} from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
@@ -180,6 +186,29 @@ const friendCardSource = `
   }
 `;
 
+const ambiguousDisplayNamesCardSource = `
+  import {
+    CardDef,
+    field,
+    linksTo,
+    Component,
+  } from 'https://cardstack.com/base/card-api';
+
+  export class Editor extends CardDef {
+    static displayName = 'Author Bio';
+  }
+
+  export class Author extends CardDef {
+    static displayName = 'Author Bio';
+  }
+
+  export class BlogPost extends CardDef {
+    static displayName = 'Blog Post';
+    @field authorBio = linksTo(Author);
+    @field editorBio = linksTo(Editor);
+  }
+`;
+
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -220,6 +249,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       'friend.gts': friendCardSource,
       'employee.gts': employeeCardSource,
       'in-this-file.gts': inThisFileSource,
+      'ambiguous-display-names.gts': ambiguousDisplayNamesCardSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -517,13 +547,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
     );
 
-    // TODO: CS-6110
-    // await waitFor('[data-test-current-module-name="string.ts"]');
-    // assert.dom('[data-test-current-module-name]').hasText('string.ts');
+    await waitFor('[data-test-current-module-name="card-api.gts"]');
+    assert.dom('[data-test-current-module-name]').hasText('card-api.gts');
   });
 
   test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
-    assert.expect(16);
+    assert.expect(17);
     let expectedEvents = [
       {
         type: 'index',
@@ -595,6 +624,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Field names must start with a lowercase letter');
+    await fillIn('[data-test-field-name-input]', 'birth-date');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .hasText(
+        'Field names can only contain letters, numbers, and underscores',
+      );
 
     await fillIn('[data-test-field-name-input]', 'firstName');
     await click('[data-test-save-field-button]');
@@ -797,5 +832,150 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         `[data-test-card-schema="Person"] [data-test-field-name="firstName"]`,
       )
       .doesNotExist();
+  });
+
+  test('editing a field from schema editor', async function (assert) {
+    assert.expect(2);
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-schema]');
+
+    // Let's edit a "linksToMany" Friend field, named friends
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-field-types]`,
+      )
+      .hasText('Link, Collection');
+
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-schema-editor-field-contextual-button]',
+    );
+    await click('[data-test-boxel-menu-item-text="Edit Field Settings"]');
+
+    // Edit the field to be a "contains" BigInteger field, named friendCount
+    await click('[data-test-choose-card-button]');
+    await waitFor(
+      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+    );
+    await click(
+      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+    await fillIn('[data-test-field-name-input]', 'friendCount');
+    await click('[data-test-boxel-radio-option-id="one"]');
+
+    await click('[data-test-save-field-button]');
+
+    await waitFor(
+      '[data-test-card-schema="Person"] [data-test-field-name="friendCount"] [data-test-card-display-name="BigInteger"]',
+    );
+
+    assert.ok(
+      getMonacoContent().includes('friendCount = contains(BigIntegerCard)'),
+    );
+  });
+
+  test('tooltip is displayed when hovering over a pill', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}ambiguous-display-names.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor(`[data-test-boxel-selector-item-text="BlogPost"]`);
+    await click(`[data-test-boxel-selector-item-text="BlogPost"]`);
+
+    // hover over card type pill
+    await waitFor(
+      '[data-test-card-schema="Blog Post"] [data-test-card-schema-navigational-button]',
+    );
+    await triggerEvent(
+      '[data-test-card-schema="Blog Post"] [data-test-card-schema-navigational-button]',
+      'mouseenter',
+    );
+
+    await waitFor(
+      '[data-test-card-schema="Blog Post"] [data-test-tooltip-content]',
+    );
+    assert
+      .dom('[data-test-card-schema="Blog Post"] [data-test-tooltip-content]')
+      .hasText('http://test-realm/test/ambiguous-display-names (BlogPost)');
+    await triggerEvent(
+      '[data-test-card-schema="Blog Post"] [data-test-card-schema-navigational-button]',
+      'mouseleave',
+    );
+    // hover over card type pill (Base)
+    await waitFor(
+      '[data-test-card-schema="Base"] [data-test-card-schema-navigational-button]',
+    );
+    await triggerEvent(
+      '[data-test-card-schema="Base"] [data-test-card-schema-navigational-button]',
+      'mouseenter',
+    );
+    await waitFor('[data-test-card-schema="Base"] [data-test-tooltip-content]');
+    assert
+      .dom('[data-test-card-schema="Base"] [data-test-tooltip-content]')
+      .hasText('https://cardstack.com/base/card-api');
+
+    await triggerEvent(
+      '[data-test-card-schema="Base"] [data-test-card-schema-navigational-button]',
+      'mouseleave',
+    );
+
+    // hover over authorBio and editorBio -- tooltip should be different altho they have same display names
+    await waitFor(
+      '[data-test-card-schema="Blog Post"] [data-test-field-name="authorBio"] [data-test-card-display-name="Author Bio"]',
+    );
+    await triggerEvent(
+      '[data-test-card-schema="Blog Post"] [data-test-field-name="authorBio"] [data-test-card-display-name="Author Bio"]',
+      'mouseenter',
+    );
+    await waitFor(
+      '[data-test-card-schema="Blog Post"] [data-test-field-name="authorBio"] [data-test-tooltip-content]',
+    );
+    assert
+      .dom(
+        '[data-test-card-schema="Blog Post"] [data-test-field-name="authorBio"] [data-test-tooltip-content]',
+      )
+      .hasText('http://test-realm/test/ambiguous-display-names (Author)'); //shows Author
+    await triggerEvent(
+      '[data-test-card-schema="Blog Post"] [data-test-field-name="authorBio"] [data-test-card-display-name="Author Bio"]',
+      'mouseleave',
+    );
+
+    await waitFor(
+      '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-card-display-name="Author Bio"]',
+    );
+    await triggerEvent(
+      '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-card-display-name="Author Bio"]',
+      'mouseenter',
+    );
+    await waitFor(
+      '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-tooltip-content]',
+    );
+    assert
+      .dom(
+        '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-tooltip-content]',
+      )
+      .hasText('http://test-realm/test/ambiguous-display-names (Editor)'); //shows Editor
+    await triggerEvent(
+      '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-card-display-name="Author Bio"]',
+      'mouseleave',
+    );
   });
 });

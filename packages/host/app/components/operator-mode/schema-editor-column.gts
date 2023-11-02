@@ -32,7 +32,10 @@ interface Signature {
     file: Ready;
     cardTypeResource?: CardType;
     card: typeof BaseDef;
-    openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
+    openDefinition: (
+      moduleHref: string,
+      codeRef: ResolvedCodeRef | undefined,
+    ) => void;
   };
 }
 

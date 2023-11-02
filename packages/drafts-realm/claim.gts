@@ -305,9 +305,12 @@ class Embedded extends Component<typeof Claim> {
   }
   @action openCard(card: Partial<Claim> | undefined) {
     if (card) {
-      this.args.context?.actions?.viewCard(card as CardDef);
+      this.doOpen.perform(card);
     }
   }
+  doOpen = restartableTask(async (card: CardDef) => {
+    await this.args.context?.actions?.viewCard(card as CardDef);
+  });
 
   <template>
     <GridContainer>

@@ -2337,9 +2337,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
     ).map(async ([fieldName, value]) => {
       let field = getField(card, fieldName);
       if (!field) {
-        throw new Error(
-          `could not find field '${fieldName}' in card '${card.name}'`,
-        );
+        // This happens when the instance has a field that is not in the definition. It can happen when
+        // instance or definition is updated and the other is not. In this case we will just ignore the
+        // mismatch and try to serialize it anyway so that the client can see still see the instance data
+        // and have a chance to fix it so that it adheres to the definiton
+        return [];
       }
       let relativeToVal = instance[relativeTo];
       return [

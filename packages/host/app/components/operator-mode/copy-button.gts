@@ -11,7 +11,7 @@ import { eq, gt, and } from '@cardstack/boxel-ui/helpers';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { StackItem } from './container';
+import type { StackItem } from './interact-submode';
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';

@@ -44,7 +44,7 @@ export default class RecentFilesService extends Service {
   }
 
   addRecentFileUrl(url: string) {
-    let realmURL = this.operatorModeStateService.realmURL;
+    let realmURL = this.operatorModeStateService.resolvedRealmURL;
 
     if (realmURL) {
       let realmPaths = new RealmPaths(new URL(realmURL));
