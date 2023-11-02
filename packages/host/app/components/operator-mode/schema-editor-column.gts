@@ -248,6 +248,20 @@ export default class SchemaEditorColumn extends Component<Signature> {
       .total-fields-label {
         font: var(--boxel-font-sm);
       }
+
+      .incompatible-schema-editor {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: center;
+        justify-content: center;
+        text-align: center;
+        height: 100%;
+        background-color: var(--boxel-200);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        padding: var(--boxel-sp-xl);
+      }
     </style>
   </template>
 }
