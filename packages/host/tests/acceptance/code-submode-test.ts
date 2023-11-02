@@ -491,8 +491,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
-
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
+    assert.dom('[data-test-card-preview-error]').exists();
   });
 
   test('empty state displays default realm info', async function (assert) {
@@ -720,21 +719,6 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-schema-editor-incompatible-item]')
       .hasText('Schema Editor cannot be used for selected class "Isolated".');
-
-    operatorModeStateParam = stringify({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}noop.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
-
-    await waitFor('[data-test-loading-indicator]', { count: 0 });
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
   });
 
   test('Clicking card in search panel opens card JSON in editor', async function (assert) {

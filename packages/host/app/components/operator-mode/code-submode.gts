@@ -861,7 +861,12 @@ export default class CodeSubmode extends Component<Signature> {
                       data-test-card-resource-loaded
                     />
                   {{else if this.cardError}}
-                    {{this.cardError.message}}
+                    <div
+                      class='card-preview-error'
+                      data-test-card-preview-error
+                    >
+                      {{this.cardError.message}}
+                    </div>
                   {{else}}
                     {{#if this.moduleContentsResource.isLoading}}
                       <div class='loading'>
@@ -1084,7 +1089,7 @@ export default class CodeSubmode extends Component<Signature> {
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
       }
-      .incompatible-schema-editor {
+      .card-preview-error {
         display: flex;
         flex-wrap: wrap;
         align-content: center;
