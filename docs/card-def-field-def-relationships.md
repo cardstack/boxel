@@ -1,6 +1,6 @@
 # CardDef and FieldDef Relationships
 
-A **primitive** field is a field that not have any fields of its own. The `StringField`, `NumberField`, or `BooleanField` classes provided by the `card-api` are examples of primitive fields.
+A **primitive** field is a field that does not have any fields of its own. The `StringField`, `NumberField`, or `BooleanField` classes provided by the `card-api` are examples of primitive fields.
 
 A **compound** field (also called a **composite** field) is a field that has other fields. An example is an `author` field with `firstName` and `lastName` fields.
 
