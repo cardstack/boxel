@@ -152,4 +152,8 @@ export default class MonacoService extends Service {
       ? model.getLineContent(currentPosition.lineNumber)
       : null;
   }
+
+  updateCursorPosition(position: _MonacoSDK.Position) {
+    this.editor?.setPosition(position);
+  }
 }

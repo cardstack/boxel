@@ -20,7 +20,7 @@ import {
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-import { Range } from 'monaco-editor';
+import { Position } from 'monaco-editor';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {
@@ -141,6 +141,7 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
+  @tracked private monacoCursorPosition: Position | undefined;
 
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
@@ -430,12 +431,37 @@ export default class CodeSubmode extends Component<Signature> {
     return this.card;
   }
 
-  private get monacoCursorPosition() {
+  private get getMonacoCursorPosition() {
+    if (this.monacoCursorPosition) {
+      return this.monacoCursorPosition;
+    }
     if (this.selectedDeclaration?.path?.node.loc) {
-      let { start, end } = this.selectedDeclaration.path.node.loc;
-      return new Range(start.line, start.column, end.line, end.column);
+      let { start } = this.selectedDeclaration.path.node.loc;
+      return new Position(start.line, 0);
     }
     return undefined;
+  }
+
+  @action
+  private onMonacoCursorPositionChange(position: Position) {
+    this.monacoCursorPosition = position;
+    this.selectDeclarationByMonacoCursorPosition(this.monacoCursorPosition);
+  }
+
+  @action
+  private updateMonacoCursorPositionByDeclaration(
+    declaration: ModuleDeclaration,
+  ) {
+    if (declaration.path?.node.loc) {
+      let { start, end } = declaration.path?.node.loc;
+      if (
+        this.monacoCursorPosition &&
+        (this.monacoCursorPosition.lineNumber < start.line ||
+          this.monacoCursorPosition.lineNumber > end.line)
+      ) {
+        this.monacoCursorPosition = new Position(start.line, start.column);
+      }
+    }
   }
 
   private get declarations() {
@@ -485,8 +511,31 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
+  private selectDeclarationByMonacoCursorPosition(position: Position) {
+    let declarationCursorOn = this.declarations.find(
+      (declaration: ModuleDeclaration) => {
+        if (declaration.path?.node.loc) {
+          let { start, end } = declaration.path?.node.loc;
+          return (
+            position.lineNumber >= start.line && position.lineNumber <= end.line
+          );
+        }
+        return false;
+      },
+    );
+
+    if (
+      declarationCursorOn &&
+      declarationCursorOn !== this.selectedDeclaration
+    ) {
+      this.selectDeclaration(declarationCursorOn);
+    }
+  }
+
+  @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this.operatorModeStateService.updateLocalNameSelection(dec.localName);
+    this.updateMonacoCursorPositionByDeclaration(dec);
   }
 
   @action
@@ -869,7 +918,8 @@ export default class CodeSubmode extends Component<Signature> {
                         contentChanged=(perform this.contentChangedTask)
                         monacoSDK=this.monacoSDK
                         language=this.language
-                        cursorPosition=this.monacoCursorPosition
+                        cursorPosition=this.getMonacoCursorPosition
+                        onCursorPositionChange=this.onMonacoCursorPositionChange
                       }}
                     ></div>
                   {{/if}}
