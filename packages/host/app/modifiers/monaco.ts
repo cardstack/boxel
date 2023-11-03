@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import { action } from '@ember/object';
 import { isTesting } from '@embroider/macros';
 
 import { restartableTask, timeout } from 'ember-concurrency';
@@ -6,8 +7,6 @@ import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 
 import * as MonacoSDK from 'monaco-editor';
-
-import { action } from '@ember/object';
 
 interface Signature {
   Args: {
@@ -104,7 +103,7 @@ export default class Monaco extends Modifier<Signature> {
   private onCursorChanged = restartableTask(
     async (cursorPositionChange: (position: MonacoSDK.Position) => void) => {
       // This function has to be async to avoid this error:
-      // Attempted to update `monacoCursorPosition` on `CodeSubmode`, 
+      // Attempted to update `monacoCursorPosition` on `CodeSubmode`,
       // but it had already been used previously in the same computation
       await timeout(100);
       let cursorPosition = this.editor?.getPosition();

@@ -10,6 +10,7 @@ import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
@@ -31,8 +32,6 @@ import {
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
 } from '../helpers';
-
-import * as MonacoSDK from 'monaco-editor';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -857,23 +856,35 @@ module('Acceptance | code submode tests', function (hooks) {
       .hasText(elementName);
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
-    
+
     elementName = 'ExportedFieldInheritLocalField';
     let position = new MonacoSDK.Position(45, 0);
     monacoService.updateCursorPosition(position);
-    await waitFor(`[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(`${elementName} field`);
+    await waitFor(
+      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
 
     elementName = 'LocalField';
     position = new MonacoSDK.Position(38, 0);
     monacoService.updateCursorPosition(position);
-    await waitFor(`[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(`${elementName} field`);
+    await waitFor(
+      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
 
     elementName = 'ExportedCard';
     position = new MonacoSDK.Position(31, 0);
     monacoService.updateCursorPosition(position);
-    await waitFor(`[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(`${elementName} card`);
+    await waitFor(
+      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
   });
 });
