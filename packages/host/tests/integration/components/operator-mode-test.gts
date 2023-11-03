@@ -1824,17 +1824,20 @@ module('Integration | operator-mode', function (hooks) {
       .doesNotExist('invalid state is not shown');
 
     await fillIn(
-      `[data-test-url-search] input`,
+      `[data-test-search-input] input`,
       `https://cardstack.com/base/not-a-card`,
     );
     await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
     assert
       .dom(`[data-test-boxel-input-error-message]`)
       .containsText('Not a valid Card URL');
+
     await fillIn(
-      `[data-test-url-search] input`,
+      `[data-test-search-input] input`,
       `https://cardstack.com/base/types/room-objective`,
     );
+
+    // FIXME this fails but even when I try it in the old search field the error doesn’t disappear…??? so confused
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist('invalid state is not shown');

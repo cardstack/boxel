@@ -98,6 +98,9 @@ export default class CardCatalogModal extends Component<Signature> {
             @value={{this.state.searchKey}}
             @onInput={{this.setSearchKey}}
             @onKeyPress={{this.onSearchFieldKeypress}}
+            @hasValidation={{true}}
+            @state={{this.cardURLFieldState}}
+            @errorMessage={{this.cardURLErrorMessage}}
             @placeholder='Search for a card'
             data-test-search-field
           />
@@ -210,6 +213,8 @@ export default class CardCatalogModal extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 
+  @tracked hasCardURLError = false;
+
   constructor(owner: Owner, args: {}) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CARD_CHOOSER = this;
@@ -239,24 +244,41 @@ export default class CardCatalogModal extends Component<Signature> {
 
   // FIXME copied from SearchSheet
   getCard = restartableTask(async (cardURL: string) => {
-    let response = await this.loaderService.loader.fetch(cardURL, {
-      headers: {
-        Accept: 'application/vnd.card+json',
-      },
-    });
+    if (this.searchKeyIsURL) {
+      this.hasCardURLError = false;
+      let response = await this.loaderService.loader.fetch(cardURL, {
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+      });
 
-    if (response.ok) {
-      let maybeCardDoc = await response.json();
-      if (isSingleCardDocument(maybeCardDoc)) {
-        let card = await this.cardService.createFromSerialized(
-          maybeCardDoc.data,
-          maybeCardDoc,
-          new URL(maybeCardDoc.data.id),
-        );
-        this.setSelectedCard(card);
+      if (response.ok) {
+        let maybeCardDoc = await response.json();
+        if (isSingleCardDocument(maybeCardDoc)) {
+          let card = await this.cardService.createFromSerialized(
+            maybeCardDoc.data,
+            maybeCardDoc,
+            new URL(maybeCardDoc.data.id),
+          );
+          this.setSelectedCard(card);
+        }
       }
+
+      this.hasCardURLError = true;
     }
   });
+
+  get displayErrorState() {
+    return this.hasCardURLError;
+  }
+
+  get cardURLErrorMessage() {
+    return this.displayErrorState ? 'Not a valid Card URL' : undefined;
+  }
+
+  get cardURLFieldState(): InputValidationState {
+    return this.displayErrorState ? 'invalid' : 'initial';
+  }
 
   get availableRealms(): RealmCards[] {
     // returns all available realms and their cards that match a certain type criteria
