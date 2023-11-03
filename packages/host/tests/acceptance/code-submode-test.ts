@@ -461,7 +461,11 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
 
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
+    assert
+      .dom('[data-test-rhs-incompatible-message]')
+      .hasText(
+        'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
+      );
   });
 
   test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
@@ -491,7 +495,11 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
-    assert.dom('[data-test-card-preview-error]').exists();
+    assert
+      .dom('[data-test-rhs-incompatible-message]')
+      .hasText(
+        'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
+      );
   });
 
   test('empty state displays default realm info', async function (assert) {
@@ -588,8 +596,11 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-binary-info] [data-test-last-modified]')
       .containsText('Last modified');
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
-
+    assert
+      .dom('[data-test-rhs-incompatible-message]')
+      .hasText(
+        'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
+      );
     await percySnapshot(assert);
   });
 
@@ -703,9 +714,9 @@ module('Acceptance | code submode tests', function (hooks) {
       )
       .hasText('isHourly function');
     assert
-      .dom('[data-test-schema-editor-incompatible-item]')
+      .dom('[data-test-rhs-incompatible-message]')
       .hasText(
-        'Schema Editor cannot be used for selected function "isHourly".',
+        'No tools are available for the selected item: function "isHourly". Select a card or field definition in the inspector.',
       );
 
     await click('[data-test-boxel-selector-item-text="Isolated"]');
@@ -717,8 +728,25 @@ module('Acceptance | code submode tests', function (hooks) {
       )
       .hasText('Isolated class');
     assert
-      .dom('[data-test-schema-editor-incompatible-item]')
-      .hasText('Schema Editor cannot be used for selected class "Isolated".');
+      .dom('[data-test-rhs-incompatible-message]')
+      .hasText(
+        'No tools are available for the selected item: class "Isolated". Select a card or field definition in the inspector.',
+      );
+
+    operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}noop.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-loading-indicator]', { count: 0 });
+    assert.dom('[data-test-rhs-incompatible-message]').exists();
   });
 
   test('Clicking card in search panel opens card JSON in editor', async function (assert) {
