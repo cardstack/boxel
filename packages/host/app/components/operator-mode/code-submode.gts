@@ -216,7 +216,8 @@ export default class CodeSubmode extends Component<Signature> {
     return (
       this.loadMonaco.isRunning ||
       this.currentOpenFile?.state === 'loading' ||
-      this.moduleContentsResource?.isLoading
+      this.moduleContentsResource?.isLoading ||
+      this.saveFileSerializedCard.isRunning
     );
   }
 
@@ -231,14 +232,6 @@ export default class CodeSubmode extends Component<Signature> {
   private get isModule() {
     return (
       hasExecutableExtension(this.readyFile.name) && !this.isIncompatibleFile
-    );
-  }
-
-  private get isIncompatibleModule() {
-    return (
-      !this.hasCardDefOrFieldDef ||
-      (this.hasCardDefOrFieldDef &&
-        this.isSelectedItemIncompatibleWithSchemaEditor)
     );
   }
 
@@ -264,25 +257,27 @@ export default class CodeSubmode extends Component<Signature> {
     return !this.codePath || this.currentOpenFile?.state === 'not-found';
   }
 
-  private get incompatibleModuleMessage() {
-    if (!this.hasCardDefOrFieldDef) {
-      return 'No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.';
-    } else if (
-      this.hasCardDefOrFieldDef &&
-      this.isSelectedItemIncompatibleWithSchemaEditor
-    ) {
-      return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}. Select a card or field definition in the inspector.`;
-    } else {
-      return this.defaultIncompatibleMessage;
+  private get rhsIncompatibleMessage() {
+    // If file is incompatible
+    if (this.isIncompatibleFile) {
+      return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
     }
-  }
 
-  private get incompatibleFileMessage() {
-    return 'No tools are available to be used with this file type. Choose a file representing a card instance or module.';
-  }
+    // If the module is incompatible
+    if (this.isModule) {
+      if (!this.hasCardDefOrFieldDef) {
+        return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
+      } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
+        return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}. Select a card or field definition in the inspector.`;
+      }
+    }
 
-  private get defaultIncompatibleMessage() {
-    return "No tools are available to inspect this file or it's contents.";
+    // If we rhs doesn't handle any case
+    if (!this.cardIsLoaded && !this.selectedCardOrField) {
+      return "No tools are available to inspect this file or it's contents.";
+    }
+
+    return null;
   }
 
   private loadMonaco = task(async () => {
@@ -928,12 +923,12 @@ export default class CodeSubmode extends Component<Signature> {
                     <LoadingIndicator />
                   </div>
                 {{else if this.isReady}}
-                  {{#if this.isIncompatibleFile}}
+                  {{#if this.rhsIncompatibleMessage}}
                     <div
                       class='incompatible-schema-editor'
                       data-test-schema-editor-incompatible-file
                     >
-                      {{this.incompatibleFileMessage}}
+                      {{this.rhsIncompatibleMessage}}
                     </div>
                   {{else if this.cardIsLoaded}}
                     <CardPreviewPanel
@@ -941,31 +936,14 @@ export default class CodeSubmode extends Component<Signature> {
                       @realmInfo={{this.realmInfo}}
                       data-test-card-resource-loaded
                     />
-                  {{else if this.isModule}}
-                    {{#if this.isIncompatibleModule}}
-                      <div
-                        class='incompatible-schema-editor'
-                        data-test-schema-editor-incompatible-file
-                      >
-                        {{this.incompatibleModuleMessage}}
-                      </div>
-                    {{else if this.selectedCardOrField}}
-                      <SchemaEditorColumn
-                        @file={{this.readyFile}}
-                        @card={{this.selectedCardOrField.cardOrField}}
-                        @cardTypeResource={{this.selectedCardOrField.cardType}}
-                        @openDefinition={{this.openDefinition}}
-                      />
-                    {{/if}}
-                  {{else}}
-                    <div
-                      class='incompatible-schema-editor'
-                      data-test-schema-editor-incompatible-file
-                    >
-                      {{this.defaultIncompatibleMessage}}
-                    </div>
+                  {{else if this.selectedCardOrField}}
+                    <SchemaEditorColumn
+                      @file={{this.readyFile}}
+                      @card={{this.selectedCardOrField.cardOrField}}
+                      @cardTypeResource={{this.selectedCardOrField.cardType}}
+                      @openDefinition={{this.openDefinition}}
+                    />
                   {{/if}}
-
                 {{/if}}
               </div>
             </ResizablePanel>
