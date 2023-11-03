@@ -267,7 +267,7 @@ export default class CodeSubmode extends Component<Signature> {
       if (!this.hasCardDefOrFieldDef) {
         return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
       } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
-        return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}. Select a card or field definition in the inspector.`;
+        return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
       }
     }
 
@@ -927,8 +927,8 @@ export default class CodeSubmode extends Component<Signature> {
                 {{else if this.isReady}}
                   {{#if this.rhsIncompatibleMessage}}
                     <div
-                      class='incompatible-schema-editor'
-                      data-test-schema-editor-incompatible-file
+                      class='rhs-incompatible'
+                      data-test-rhs-incompatible-message
                     >
                       {{this.rhsIncompatibleMessage}}
                     </div>
@@ -1151,7 +1151,7 @@ export default class CodeSubmode extends Component<Signature> {
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
       }
-      .incompatible-schema-editor {
+      .rhs-incompatible {
         display: flex;
         flex-wrap: wrap;
         align-content: center;

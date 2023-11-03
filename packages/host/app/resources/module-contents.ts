@@ -64,13 +64,6 @@ export class ModuleContentsResource extends Resource<Args> {
     return this._declarations;
   }
 
-  get hasSomeCardOrField() {
-    return (
-      !this.load.isRunning &&
-      this.declarations.some((d) => isCardOrFieldDeclaration(d))
-    );
-  }
-
   modify(_positional: never[], named: Args['named']) {
     let { executableFile } = named;
     this.load.perform(executableFile);
