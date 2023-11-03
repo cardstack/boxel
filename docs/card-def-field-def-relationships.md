@@ -63,7 +63,7 @@ class EmergencyContactField extends FieldDef {
 }
 ```
 
-When an `EmergencyContactField` FieldDef instance is rendered in `edit` format, the primitive `containsMany` field is read-only.
+When an `EmergencyContactField` FieldDef instance is rendered in `edit` format, the primitive `containsMany` field (`alternativeEmails`) is read-only.
 
 <img width="600" alt="field-def-contains-containsMany-primitive-field-def" src="./card-field-relationships-assets/example-3-primitive-containsMany.png">
 
@@ -92,7 +92,7 @@ class EmergencyContactField extends FieldDef {
 }
 ```
 
-When an `EmergencyContactField` instance is rendered in `edit` format, the compound `containsMany` field is read-only, and it renders in `atom` format. We must either provide a `title` field or a custom `atom` layout. This is because the `atom` format, by default, renders the `title` field, unless there is a custom `atom` template available.
+When an `EmergencyContactField` instance is rendered in `edit` format, the compound `containsMany` field (`alternativePhoneNumbers`) is read-only, and it renders in `atom` format. `alternativePhoneNumbers` contains many `PhoneField`, so we must either provide a `title` field or a custom `atom` layout in the `PhoneField` field definition. This is because the `atom` format, by default, renders the `title` field, unless there is a custom `atom` template provided.
 
 <img width="500" alt="field-def-contains-containsMany-compound-field-def" src="./card-field-relationships-assets/example-4-compound-containsMany.png">
 
