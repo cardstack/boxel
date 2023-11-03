@@ -77,9 +77,8 @@ export default class EditFieldModal extends Component<Signature> {
     super(owner, args);
 
     // This component has 2 flows - adding a new field, and editing an existing field. When adding a new field, this.args.field will be undefined and when editing, it will be present
-    if (this.args.field) {
-      this.setInitialValuesForExistingField.perform();
-    }
+
+    this.setInitialValues.perform();
   }
 
   get isNewField(): boolean {
@@ -107,21 +106,40 @@ export default class EditFieldModal extends Component<Signature> {
     this.cardinality = id;
   }
 
-  private setInitialValuesForExistingField = restartableTask(async () => {
-    if (!this.args.field) {
-      throw new Error('bug: cannot set initial values without a field');
+  private setInitialValues = restartableTask(async () => {
+    let field = this.args.field;
+
+    // When adding a new field, we want to default to the base string card
+    if (!field) {
+      let ref = {
+        module: 'https://cardstack.com/base/string', // This seems fundamental enough to be hardcoded
+        name: 'default',
+      };
+      this.isFieldDef = true;
+
+      try {
+        this.fieldCard = await loadCard(ref, {
+          loader: this.loaderService.loader,
+        });
+      } catch (error) {
+        console.error("Couldn't load default string card (from base realm)");
+        throw error;
+      }
+
+      this.fieldModuleURL = new URL(ref.module);
+      this.cardURL = new URL(ref.module);
+      this.fieldRef = ref;
+      return;
     }
 
-    this.fieldName = this.args.field.name;
-    this.cardinality = ['containsMany', 'linksToMany'].includes(
-      this.args.field.type,
-    )
+    this.fieldName = field.name;
+    this.cardinality = ['containsMany', 'linksToMany'].includes(field.type)
       ? 'many'
       : 'one';
 
     let ref: { module: string; name: string };
 
-    let fieldCardType = this.args.field.card;
+    let fieldCardType = field.card;
     let isCardType = 'codeRef' in fieldCardType; // To see whether we are dealing with Type or CodeRefType
 
     if (isCardType) {
@@ -143,7 +161,7 @@ export default class EditFieldModal extends Component<Signature> {
     // which dictates the field type. But at this point where we are editing an existing field, we don't have the catalog entry available, so we need to determine isFieldDef
     // from the field's type
     this.isFieldDef =
-      this.determineFieldOrCardFromFieldType(this.args.field.type) === 'field';
+      this.determineFieldOrCardFromFieldType(field.type) === 'field';
   });
 
   private chooseCardTask = restartableTask(async () => {
@@ -377,11 +395,7 @@ export default class EditFieldModal extends Component<Signature> {
               class='change {{if this.fieldCard "pull-right"}}'
               data-test-choose-card-button
             >
-              {{#if this.fieldCard}}
-                Change
-              {{else}}
-                Select a field
-              {{/if}}
+              Change
             </button>
           </div>
         </FieldContainer>
