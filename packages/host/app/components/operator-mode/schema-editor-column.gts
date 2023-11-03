@@ -13,31 +13,25 @@ import { TrackedObject } from 'tracked-built-ins';
 import { Accordion } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import {
-  getPlural,
-  loadCard,
-  isCardDocumentString,
-} from '@cardstack/runtime-common';
+import { getPlural, loadCard } from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
-import { Type } from '@cardstack/host/resources/card-type';
+import { CardType, Type } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
-import {
-  isCardOrFieldDeclaration,
-  ModuleDeclaration,
-} from '@cardstack/host/resources/module-contents';
+import { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     file: Ready;
-    selectedDeclaration: ModuleDeclaration | undefined;
+    cardTypeResource?: CardType;
+    card: typeof BaseDef;
     openDefinition: (
       moduleHref: string,
       codeRef: ResolvedCodeRef | undefined,
@@ -79,12 +73,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
       load: async () => {
         state.isLoading = true;
         let fileUrl = this.args.file.url;
-        if (this.selectedCardOrField === undefined) {
-          state.value = [];
-          return;
-        }
-        let { cardOrField: card, cardType: cardTypeResource } =
-          this.selectedCardOrField;
+        let { card, cardTypeResource } = this.args;
 
         try {
           await cardTypeResource!.ready;
@@ -142,34 +131,6 @@ export default class SchemaEditorColumn extends Component<Signature> {
     return new ModuleSyntax(this.args.file.content);
   }
 
-  private get isSelectedItemIncompatibleWithSchemaEditor() {
-    if (!this.args.selectedDeclaration) {
-      return;
-    }
-    return !isCardOrFieldDeclaration(this.args.selectedDeclaration);
-  }
-
-  private get isFileIncompatibleWithSchemaEditor() {
-    return this.args.file.isBinary || this.isNonCardJson;
-  }
-
-  private get isNonCardJson() {
-    return (
-      this.args.file.name.endsWith('.json') &&
-      !isCardDocumentString(this.args.file.content)
-    );
-  }
-
-  private get selectedCardOrField() {
-    if (
-      this.args.selectedDeclaration !== undefined &&
-      isCardOrFieldDeclaration(this.args.selectedDeclaration)
-    ) {
-      return this.args.selectedDeclaration;
-    }
-    return;
-  }
-
   <template>
     <Accordion class='accordion' as |A|>
       <A.Item
@@ -189,31 +150,13 @@ export default class SchemaEditorColumn extends Component<Signature> {
           </div>
         </:title>
         <:content>
-
-          {{#if this.isFileIncompatibleWithSchemaEditor}}
-            <div
-              class='incompatible-schema-editor'
-              data-test-schema-editor-incompatible-file
-            >
-              Schema Editor cannot be used with this file type.
-            </div>
-          {{else if this.isSelectedItemIncompatibleWithSchemaEditor}}
-            <div
-              class='incompatible-schema-editor'
-              data-test-schema-editor-incompatible-item
-            >
-              Schema Editor cannot be used for selected
-              {{@selectedDeclaration.type}}
-              "{{@selectedDeclaration.localName}}".</div>
-          {{else}}
-            <CardAdoptionChain
-              class='accordion-content'
-              @file={{@file}}
-              @moduleSyntax={{this.moduleSyntax}}
-              @cardInheritanceChain={{this.cardInheritanceChain.value}}
-              @openDefinition={{@openDefinition}}
-            />
-          {{/if}}
+          <CardAdoptionChain
+            class='accordion-content'
+            @file={{@file}}
+            @moduleSyntax={{this.moduleSyntax}}
+            @cardInheritanceChain={{this.cardInheritanceChain.value}}
+            @openDefinition={{@openDefinition}}
+          />
         </:content>
       </A.Item>
     </Accordion>
@@ -247,20 +190,6 @@ export default class SchemaEditorColumn extends Component<Signature> {
 
       .total-fields-label {
         font: var(--boxel-font-sm);
-      }
-
-      .incompatible-schema-editor {
-        display: flex;
-        flex-wrap: wrap;
-        align-content: center;
-        justify-content: center;
-        text-align: center;
-        height: 100%;
-        background-color: var(--boxel-200);
-        font: var(--boxel-font-sm);
-        color: var(--boxel-450);
-        font-weight: 500;
-        padding: var(--boxel-sp-xl);
       }
     </style>
   </template>

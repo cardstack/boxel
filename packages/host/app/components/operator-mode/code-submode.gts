@@ -40,6 +40,7 @@ import {
   type SingleCardDocument,
   RealmPaths,
   logger,
+  isCardDocumentString,
   isSingleCardDocument,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
@@ -213,7 +214,9 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isLoading() {
     return (
-      this.loadMonaco.isRunning || this.currentOpenFile?.state === 'loading'
+      this.loadMonaco.isRunning ||
+      this.currentOpenFile?.state === 'loading' ||
+      this.moduleContentsResource?.isLoading
     );
   }
 
@@ -221,8 +224,65 @@ export default class CodeSubmode extends Component<Signature> {
     return this.maybeMonacoSDK && isReady(this.currentOpenFile);
   }
 
+  private get isIncompatibleFile() {
+    return this.readyFile.isBinary || this.isNonCardJson;
+  }
+
+  private get isModule() {
+    return (
+      hasExecutableExtension(this.readyFile.name) && !this.isIncompatibleFile
+    );
+  }
+
+  private get isIncompatibleModule() {
+    return (
+      !this.hasCardDefOrFieldDef ||
+      (this.hasCardDefOrFieldDef &&
+        this.isSelectedItemIncompatibleWithSchemaEditor)
+    );
+  }
+
+  private get hasCardDefOrFieldDef() {
+    return this.declarations.some((d) => isCardOrFieldDeclaration(d));
+  }
+
+  private get isSelectedItemIncompatibleWithSchemaEditor() {
+    if (!this.selectedDeclaration) {
+      return;
+    }
+    return !isCardOrFieldDeclaration(this.selectedDeclaration);
+  }
+
+  private get isNonCardJson() {
+    return (
+      this.readyFile.name.endsWith('.json') &&
+      !isCardDocumentString(this.readyFile.content)
+    );
+  }
+
   private get emptyOrNotFound() {
     return !this.codePath || this.currentOpenFile?.state === 'not-found';
+  }
+
+  private get incompatibleModuleMessage() {
+    if (!this.hasCardDefOrFieldDef) {
+      return 'No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.';
+    } else if (
+      this.hasCardDefOrFieldDef &&
+      this.isSelectedItemIncompatibleWithSchemaEditor
+    ) {
+      return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}. Select a card or field definition in the inspector.`;
+    } else {
+      return this.defaultIncompatibleMessage;
+    }
+  }
+
+  private get incompatibleFileMessage() {
+    return 'No tools are available to be used with this file type. Choose a file representing a card instance or module.';
+  }
+
+  private get defaultIncompatibleMessage() {
+    return "No tools are available to inspect this file or it's contents.";
   }
 
   private loadMonaco = task(async () => {
@@ -433,6 +493,16 @@ export default class CodeSubmode extends Component<Signature> {
       // default to 1st selection
       return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
+  }
+
+  private get selectedCardOrField() {
+    if (
+      this.selectedDeclaration !== undefined &&
+      isCardOrFieldDeclaration(this.selectedDeclaration)
+    ) {
+      return this.selectedDeclaration;
+    }
+    return;
   }
 
   @action
@@ -853,37 +923,49 @@ export default class CodeSubmode extends Component<Signature> {
               @length={{this.panelWidths.rightPanel}}
             >
               <div class='inner-container'>
-                {{#if this.isReady}}
-                  {{#if this.cardIsLoaded}}
+                {{#if this.isLoading}}
+                  <div class='loading'>
+                    <LoadingIndicator />
+                  </div>
+                {{else if this.isReady}}
+                  {{#if this.isIncompatibleFile}}
+                    <div
+                      class='incompatible-schema-editor'
+                      data-test-schema-editor-incompatible-file
+                    >
+                      {{this.incompatibleFileMessage}}
+                    </div>
+                  {{else if this.cardIsLoaded}}
                     <CardPreviewPanel
                       @card={{this.loadedCard}}
                       @realmInfo={{this.realmInfo}}
                       data-test-card-resource-loaded
                     />
-                  {{else if this.cardError}}
-                    <div
-                      class='card-preview-error'
-                      data-test-card-preview-error
-                    >
-                      {{this.cardError.message}}
-                    </div>
-                  {{else}}
-                    {{#if this.moduleContentsResource.isLoading}}
-                      <div class='loading'>
-                        <LoadingIndicator />
+                  {{else if this.isModule}}
+                    {{#if this.isIncompatibleModule}}
+                      <div
+                        class='incompatible-schema-editor'
+                        data-test-schema-editor-incompatible-file
+                      >
+                        {{this.incompatibleModuleMessage}}
                       </div>
-                    {{else}}
+                    {{else if this.selectedCardOrField}}
                       <SchemaEditorColumn
                         @file={{this.readyFile}}
-                        @selectedDeclaration={{this.selectedDeclaration}}
+                        @card={{this.selectedCardOrField.cardOrField}}
+                        @cardTypeResource={{this.selectedCardOrField.cardType}}
                         @openDefinition={{this.openDefinition}}
                       />
                     {{/if}}
+                  {{else}}
+                    <div
+                      class='incompatible-schema-editor'
+                      data-test-schema-editor-incompatible-file
+                    >
+                      {{this.defaultIncompatibleMessage}}
+                    </div>
                   {{/if}}
-                {{else if this.isLoading}}
-                  <div class='loading'>
-                    <LoadingIndicator />
-                  </div>
+
                 {{/if}}
               </div>
             </ResizablePanel>
@@ -1089,7 +1171,7 @@ export default class CodeSubmode extends Component<Signature> {
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
       }
-      .card-preview-error {
+      .incompatible-schema-editor {
         display: flex;
         flex-wrap: wrap;
         align-content: center;
