@@ -272,7 +272,7 @@ export default class CodeSubmode extends Component<Signature> {
     }
 
     // If we rhs doesn't handle any case
-    if (!this.cardIsLoaded && !this.selectedCardOrField) {
+    if (!this.cardJsonLoaded && !this.selectedCardOrField) {
       return "No tools are available to inspect this file or it's contents.";
     }
 
@@ -430,10 +430,13 @@ export default class CodeSubmode extends Component<Signature> {
     this.cardError = undefined;
   });
 
+  private get cardJsonLoaded() {
+    return isReady(this.currentOpenFile) && this.openFileCardJSON;
+  }
+
   private get cardIsLoaded() {
     return (
-      isReady(this.currentOpenFile) &&
-      this.openFileCardJSON &&
+      this.cardJsonLoaded &&
       this.card?.id === this.currentOpenFile.url.replace(/\.json$/, '')
     );
   }
