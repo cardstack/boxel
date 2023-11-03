@@ -276,6 +276,14 @@ export default class CodeSubmode extends Component<Signature> {
       return "No tools are available to inspect this file or it's contents.";
     }
 
+    // TODO: handle card preview errors (when json is valid but card returns error)
+    // This code is never reached but is temporarily placed here to please linting
+    // - a card runtime error will crash entire app
+    // - a json error will be caught by incompatibleFile
+    if (this.cardError) {
+      return `card preview error ${this.cardError.message}`;
+    }
+
     return null;
   }
 
@@ -436,7 +444,8 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get cardIsLoaded() {
     return (
-      this.cardJsonLoaded &&
+      isReady(this.currentOpenFile) &&
+      this.openFileCardJSON &&
       this.card?.id === this.currentOpenFile.url.replace(/\.json$/, '')
     );
   }
