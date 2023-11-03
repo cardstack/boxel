@@ -216,8 +216,7 @@ export default class CodeSubmode extends Component<Signature> {
     return (
       this.loadMonaco.isRunning ||
       this.currentOpenFile?.state === 'loading' ||
-      this.moduleContentsResource?.isLoading ||
-      this.saveFileSerializedCard.isRunning
+      this.moduleContentsResource?.isLoading
     );
   }
 
