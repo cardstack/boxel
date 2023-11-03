@@ -271,7 +271,7 @@ export default class CodeSubmode extends Component<Signature> {
       }
     }
 
-    // If we rhs doesn't handle any case
+    // If rhs doesn't handle any case
     if (!this.cardJsonLoaded && !this.selectedCardOrField) {
       return "No tools are available to inspect this file or it's contents.";
     }
