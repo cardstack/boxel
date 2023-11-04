@@ -936,7 +936,7 @@ export default class CodeSubmode extends Component<Signature> {
                 {{else if this.isReady}}
                   {{#if this.fileIncompatibilityMessage}}
                     <div
-                      class='file-incopmatible'
+                      class='file-incompatible-message'
                       data-test-file-incompatibility-message
                     >
                       {{this.fileIncompatibilityMessage}}
@@ -1160,7 +1160,7 @@ export default class CodeSubmode extends Component<Signature> {
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
       }
-      .file-incompatible {
+      .file-incompatible-message {
         display: flex;
         flex-wrap: wrap;
         align-content: center;
