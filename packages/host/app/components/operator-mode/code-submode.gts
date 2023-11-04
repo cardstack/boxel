@@ -59,8 +59,6 @@ import {
   type FileResource,
 } from '@cardstack/host/resources/file';
 
-import { importResource } from '@cardstack/host/resources/import';
-
 import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
@@ -216,7 +214,9 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isLoading() {
     return (
-      this.loadMonaco.isRunning || this.currentOpenFile?.state === 'loading'
+      this.loadMonaco.isRunning ||
+      this.currentOpenFile?.state === 'loading' ||
+      this.moduleContentsResource?.isLoading
     );
   }
 
@@ -224,17 +224,21 @@ export default class CodeSubmode extends Component<Signature> {
     return this.maybeMonacoSDK && isReady(this.currentOpenFile);
   }
 
-  private get schemaEditorIncompatibleFile() {
+  private get isIncompatibleFile() {
+    return this.readyFile.isBinary || this.isNonCardJson;
+  }
+
+  private get isModule() {
     return (
-      this.readyFile.isBinary || this.isNonCardJson || !this.isValidSchemaFile
+      hasExecutableExtension(this.readyFile.name) && !this.isIncompatibleFile
     );
   }
 
-  private get isValidSchemaFile() {
+  private get hasCardDefOrFieldDef() {
     return this.declarations.some((d) => isCardOrFieldDeclaration(d));
   }
 
-  private get schemaEditorIncompatibleItem() {
+  private get isSelectedItemIncompatibleWithSchemaEditor() {
     if (!this.selectedDeclaration) {
       return;
     }
@@ -250,6 +254,37 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get emptyOrNotFound() {
     return !this.codePath || this.currentOpenFile?.state === 'not-found';
+  }
+
+  private get fileIncompatibilityMessage() {
+    // If file is incompatible
+    if (this.isIncompatibleFile) {
+      return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
+    }
+
+    // If the module is incompatible
+    if (this.isModule) {
+      if (!this.hasCardDefOrFieldDef) {
+        return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
+      } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
+        return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
+      }
+    }
+
+    // If rhs doesn't handle any case but we can't capture the error
+    if (!this.cardJsonLoaded && !this.selectedCardOrField) {
+      return "No tools are available to inspect this file or it's contents.";
+    }
+
+    // TODO: handle card preview errors (when json is valid but card returns error)
+    // This code is never reached but is temporarily placed here to please linting
+    // - a card runtime error will crash entire app
+    // - a json error will be caught by incompatibleFile
+    if (this.cardError) {
+      return `card preview error ${this.cardError.message}`;
+    }
+
+    return null;
   }
 
   private loadMonaco = task(async () => {
@@ -333,27 +368,15 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @use private moduleContentsResource = resource(() => {
-    if (isReady(this.currentOpenFile) && this.importedModule?.module) {
+    if (isReady(this.currentOpenFile)) {
       let f: Ready = this.currentOpenFile;
       if (hasExecutableExtension(f.url)) {
         return moduleContentsResource(this, () => ({
-          file: f,
-          exportedCardsOrFields:
-            this.importedModule?.cardsOrFieldsFromModule || [],
+          executableFile: f,
         }));
       }
     }
     return;
-  });
-
-  @use private importedModule = resource(() => {
-    if (isReady(this.currentOpenFile)) {
-      let f: Ready = this.currentOpenFile;
-      if (hasExecutableExtension(f.url)) {
-        return importResource(this, () => f.url);
-      }
-    }
-    return undefined;
   });
 
   // We are actually loading cards using a side-effect of this cached getter
@@ -414,6 +437,10 @@ export default class CodeSubmode extends Component<Signature> {
     this.card = undefined;
     this.cardError = undefined;
   });
+
+  private get cardJsonLoaded() {
+    return isReady(this.currentOpenFile) && this.openFileCardJSON;
+  }
 
   private get cardIsLoaded() {
     return (
@@ -476,7 +503,7 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get selectedCardOrField() {
     if (
-      this.selectedDeclaration &&
+      this.selectedDeclaration !== undefined &&
       isCardOrFieldDeclaration(this.selectedDeclaration)
     ) {
       return this.selectedDeclaration;
@@ -902,8 +929,19 @@ export default class CodeSubmode extends Component<Signature> {
               @length={{this.panelWidths.rightPanel}}
             >
               <div class='inner-container'>
-                {{#if this.isReady}}
-                  {{#if this.cardIsLoaded}}
+                {{#if this.isLoading}}
+                  <div class='loading'>
+                    <LoadingIndicator />
+                  </div>
+                {{else if this.isReady}}
+                  {{#if this.fileIncompatibilityMessage}}
+                    <div
+                      class='file-incompatible-message'
+                      data-test-file-incompatibility-message
+                    >
+                      {{this.fileIncompatibilityMessage}}
+                    </div>
+                  {{else if this.cardIsLoaded}}
                     <CardPreviewPanel
                       @card={{this.loadedCard}}
                       @realmInfo={{this.realmInfo}}
@@ -916,32 +954,7 @@ export default class CodeSubmode extends Component<Signature> {
                       @cardTypeResource={{this.selectedCardOrField.cardType}}
                       @openDefinition={{this.openDefinition}}
                     />
-                  {{else if this.schemaEditorIncompatibleFile}}
-                    <div
-                      class='incompatible-schema-editor'
-                      data-test-schema-editor-incompatible-file
-                    >
-                      Schema Editor cannot be used with this file type.
-                    </div>
-                  {{else if
-                    (and
-                      this.isValidSchemaFile this.schemaEditorIncompatibleItem
-                    )
-                  }}
-                    <div
-                      class='incompatible-schema-editor'
-                      data-test-schema-editor-incompatible-item
-                    >
-                      Schema Editor cannot be used for selected
-                      {{this.selectedDeclaration.type}}
-                      "{{this.selectedDeclaration.localName}}".</div>
-                  {{else if this.cardError}}
-                    {{this.cardError.message}}
                   {{/if}}
-                {{else if this.isLoading}}
-                  <div class='loading'>
-                    <LoadingIndicator />
-                  </div>
                 {{/if}}
               </div>
             </ResizablePanel>
@@ -1147,7 +1160,7 @@ export default class CodeSubmode extends Component<Signature> {
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
       }
-      .incompatible-schema-editor {
+      .file-incompatible-message {
         display: flex;
         flex-wrap: wrap;
         align-content: center;

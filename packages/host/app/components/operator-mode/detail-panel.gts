@@ -122,7 +122,7 @@ export default class DetailPanel extends Component<Signature> {
 
   get isCardInstance() {
     return (
-      this.isJSON &&
+      this.args.readyFile.url.endsWith('.json') &&
       isCardDocumentString(this.args.readyFile.content) &&
       this.args.cardInstance !== undefined
     );
@@ -136,8 +136,11 @@ export default class DetailPanel extends Component<Signature> {
     return this.args.readyFile.isBinary;
   }
 
-  get isJSON() {
-    return this.args.readyFile.url.endsWith('.json');
+  private get isNonCardJson() {
+    return (
+      this.args.readyFile.url.endsWith('.json') &&
+      !isCardDocumentString(this.args.readyFile.content)
+    );
   }
 
   get isField() {
@@ -353,7 +356,7 @@ export default class DetailPanel extends Component<Signature> {
             {{/if}}
           </div>
         {{else}}
-          {{#if (or this.isBinary this.isJSON)}}
+          {{#if (or this.isBinary this.isNonCardJson)}}
             <div class='details-panel'>
               <header class='panel-header' aria-label='Details Panel Header'>
                 Details

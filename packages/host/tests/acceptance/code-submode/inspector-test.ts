@@ -666,7 +666,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} function`);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
-    assert.dom('[data-test-schema-editor-incompatible-item]').exists();
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
+      );
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
   });
 
