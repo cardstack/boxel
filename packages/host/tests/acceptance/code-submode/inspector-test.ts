@@ -667,7 +667,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert
-      .dom('[data-test-rhs-incompatible-message]')
+      .dom('[data-test-file-incompatibility-message]')
       .hasText(
         'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
       );

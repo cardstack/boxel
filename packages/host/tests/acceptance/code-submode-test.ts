@@ -462,7 +462,7 @@ module('Acceptance | code submode tests', function (hooks) {
       .hasText('in Test Workspace B');
 
     assert
-      .dom('[data-test-rhs-incompatible-message]')
+      .dom('[data-test-file-incompatibility-message]')
       .hasText(
         'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
       );
@@ -496,7 +496,7 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
     assert
-      .dom('[data-test-rhs-incompatible-message]')
+      .dom('[data-test-file-incompatibility-message]')
       .hasText(
         'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
       );
@@ -597,7 +597,7 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-binary-info] [data-test-last-modified]')
       .containsText('Last modified');
     assert
-      .dom('[data-test-rhs-incompatible-message]')
+      .dom('[data-test-file-incompatibility-message]')
       .hasText(
         'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
       );
@@ -714,7 +714,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )
       .hasText('isHourly function');
     assert
-      .dom('[data-test-rhs-incompatible-message]')
+      .dom('[data-test-file-incompatibility-message]')
       .hasText(
         'No tools are available for the selected item: function "isHourly". Select a card or field definition in the inspector.',
       );
@@ -728,7 +728,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )
       .hasText('Isolated class');
     assert
-      .dom('[data-test-rhs-incompatible-message]')
+      .dom('[data-test-file-incompatibility-message]')
       .hasText(
         'No tools are available for the selected item: class "Isolated". Select a card or field definition in the inspector.',
       );
@@ -746,7 +746,7 @@ module('Acceptance | code submode tests', function (hooks) {
     );
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
-    assert.dom('[data-test-rhs-incompatible-message]').exists();
+    assert.dom('[data-test-file-incompatibility-message]').exists();
   });
 
   test('Clicking card in search panel opens card JSON in editor', async function (assert) {

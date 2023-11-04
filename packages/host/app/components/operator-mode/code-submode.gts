@@ -256,7 +256,7 @@ export default class CodeSubmode extends Component<Signature> {
     return !this.codePath || this.currentOpenFile?.state === 'not-found';
   }
 
-  private get rhsIncompatibleMessage() {
+  private get fileIncompatibilityMessage() {
     // If file is incompatible
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
@@ -934,12 +934,12 @@ export default class CodeSubmode extends Component<Signature> {
                     <LoadingIndicator />
                   </div>
                 {{else if this.isReady}}
-                  {{#if this.rhsIncompatibleMessage}}
+                  {{#if this.fileIncompatibilityMessage}}
                     <div
-                      class='rhs-incompatible'
-                      data-test-rhs-incompatible-message
+                      class='file-incopmatible'
+                      data-test-file-incompatibility-message
                     >
-                      {{this.rhsIncompatibleMessage}}
+                      {{this.fileIncompatibilityMessage}}
                     </div>
                   {{else if this.cardIsLoaded}}
                     <CardPreviewPanel
@@ -1160,7 +1160,7 @@ export default class CodeSubmode extends Component<Signature> {
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
       }
-      .rhs-incompatible {
+      .file-incompatible {
         display: flex;
         flex-wrap: wrap;
         align-content: center;
