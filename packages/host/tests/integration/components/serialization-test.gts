@@ -115,6 +115,45 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('can deserialize a card where the card instance has fields that are not found in the definition', async function (assert) {
+    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
+    let { default: NumberField } = number;
+
+    class Item extends CardDef {
+      @field priceRenamed = contains(NumberField); // Simulating the scenario where someone renamed the price field to priceRenamed and did not also update the field in the instance data
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <@fields.priceRenamed />
+        </template>
+      };
+    }
+    await shimModule(`${realmURL}test-cards`, { Item }, loader);
+
+    // initialize card data as serialized to force us to deserialize instead of using cached data
+    let resource = {
+      attributes: {
+        price: 100,
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Item',
+        },
+      },
+    };
+
+    let post = await createFromSerialized(
+      resource,
+      { data: resource },
+      undefined,
+      loader,
+    ); // Deserializing should be fault tolerant and not throw an error if the instance data does not match the card definition
+
+    let root = await renderCard(loader, post, 'isolated');
+
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), '');
+  });
+
   test('can deserialize a card that has an ID', async function (assert) {
     let { field, contains, CardDef, createFromSerialized, isSaved } = cardApi;
     let { default: StringField } = string;
