@@ -18,7 +18,7 @@ import {
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import { IconLink, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
-import { RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import Preview from '@cardstack/host/components/preview';

@@ -21,7 +21,6 @@ import {
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
 import { Range } from 'monaco-editor';
-import { TrackedObject } from 'tracked-built-ins';
 
 import {
   Button,
