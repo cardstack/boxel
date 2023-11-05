@@ -35,7 +35,6 @@ import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 import { Deferred } from '@cardstack/runtime-common';
 
 import {
-  type RealmInfo,
   type SingleCardDocument,
   RealmPaths,
   logger,
