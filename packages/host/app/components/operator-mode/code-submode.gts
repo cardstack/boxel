@@ -184,10 +184,6 @@ export default class CodeSubmode extends Component<Signature> {
     this.loadMonaco.perform();
   }
 
-  private get realmInfo() {
-    return this.realmInfoResource.value;
-  }
-
   private get backgroundURL() {
     return this.realmInfo?.backgroundURL;
   }
@@ -318,50 +314,6 @@ export default class CodeSubmode extends Component<Signature> {
   @action private dismissURLError() {
     this.userHasDismissedURLError = true;
   }
-
-  @use private realmInfoResource = resource(() => {
-    if (!this.realmURL) {
-      return new TrackedObject({
-        error: null,
-        isLoading: false,
-        value: this.cachedRealmInfo,
-        load: () => Promise<void>,
-      });
-    }
-
-    const state: {
-      isLoading: boolean;
-      value: RealmInfo | null;
-      error: Error | undefined;
-      load: () => Promise<void>;
-    } = new TrackedObject({
-      isLoading: true,
-      value: this.cachedRealmInfo,
-      error: undefined,
-      load: async () => {
-        state.isLoading = true;
-
-        try {
-          let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-            new URL(this.realmURL),
-          );
-
-          if (realmInfo) {
-            this.cachedRealmInfo = realmInfo;
-          }
-
-          state.value = realmInfo;
-        } catch (error: any) {
-          state.error = error;
-        } finally {
-          state.isLoading = false;
-        }
-      },
-    });
-
-    state.load();
-    return state;
-  });
 
   private get currentOpenFile() {
     return this.operatorModeStateService.openFile.current;
@@ -844,7 +796,6 @@ export default class CodeSubmode extends Component<Signature> {
                           <DetailPanel
                             @cardInstance={{this.card}}
                             @readyFile={{this.readyFile}}
-                            @realmInfo={{this.realmInfo}}
                             @selectedDeclaration={{this.selectedDeclaration}}
                             @declarations={{this.declarations}}
                             @selectDeclaration={{this.selectDeclaration}}
@@ -944,7 +895,7 @@ export default class CodeSubmode extends Component<Signature> {
                   {{else if this.cardIsLoaded}}
                     <CardPreviewPanel
                       @card={{this.loadedCard}}
-                      @realmInfo={{this.realmInfo}}
+                      @realmURL={{this.realmURL}}
                       data-test-card-resource-loaded
                     />
                   {{else if this.selectedCardOrField}}

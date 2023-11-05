@@ -22,6 +22,7 @@ import { RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import Preview from '@cardstack/host/components/preview';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -29,7 +30,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     card: CardDef;
-    realmInfo: RealmInfo | null;
+    realmURL: URL;
   };
   Blocks: {};
 }
@@ -52,13 +53,15 @@ export default class CardPreviewPanel extends Component<Signature> {
       ...attributes
     >
       <div class='header-icon'>
-        {{#if @realmInfo}}
-          <RealmIcon
-            @realmIconURL={{@realmInfo.iconURL}}
-            @realmName={{@realmInfo.name}}
-            class='icon'
-          />
-        {{/if}}
+        <RealmInfoProvider @realmURL={{@realmURL}}>
+          <:ready as |realmInfo|>
+            <RealmIcon
+              @realmIconURL={{realmInfo.iconURL}}
+              @realmName={{realmInfo.name}}
+              class='icon'
+            />
+          </:ready>
+        </RealmInfoProvider>
       </div>
       <div class='header-title'>
         {{cardTypeDisplayName @card}}
