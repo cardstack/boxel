@@ -11,6 +11,10 @@ import {
 
 import cssVar from '../../helpers/css-var.ts';
 import BoxelInput from './index.gts';
+import { InputBottomTreatments, InputTypes } from './index.gts';
+
+const validTypes = Object.values(InputTypes);
+const validBottomTreatments = Object.values(InputBottomTreatments);
 
 export default class InputUsage extends Component {
   @tracked id = 'sample-input';
@@ -19,9 +23,16 @@ export default class InputUsage extends Component {
   @tracked required = false;
   @tracked optional = false;
   @tracked invalid = false;
-  @tracked multiline = false;
+  @tracked placeholder = '';
   @tracked errorMessage = '';
   @tracked helperText = '';
+  @tracked variant = 'default';
+
+  defaultType = InputTypes.Text;
+  @tracked type = this.defaultType;
+
+  defaultBottomTreatment = InputBottomTreatments.Rounded;
+  @tracked bottomTreatment = this.defaultBottomTreatment;
 
   @cssVariable({ cssClassName: 'boxel-input' })
   declare boxelInputHeight: CSSVariableInfo;
@@ -64,7 +75,9 @@ export default class InputUsage extends Component {
           @required={{this.required}}
           @optional={{this.optional}}
           @invalid={{this.invalid}}
-          @multiline={{this.multiline}}
+          @type={{this.type}}
+          @placeholder={{this.placeholder}}
+          @bottomTreatment={{this.bottomTreatment}}
           @errorMessage={{this.errorMessage}}
           @helperText={{this.helperText}}
           style={{cssVar boxel-input-height=this.boxelInputHeight.value}}
@@ -105,10 +118,13 @@ export default class InputUsage extends Component {
           @value={{this.invalid}}
           @onInput={{fn (mut this.invalid)}}
         />
-        <Args.Bool
-          @name='multiline'
-          @value={{this.multiline}}
-          @onInput={{fn (mut this.multiline)}}
+        <Args.String
+          @name='type'
+          @description='textarea or search'
+          @options={{validTypes}}
+          @defaultValue={{this.defaultType}}
+          @onInput={{fn (mut this.type)}}
+          @value={{this.type}}
         />
         <Args.String
           @name='errorMessage'
@@ -120,6 +136,21 @@ export default class InputUsage extends Component {
           @name='helperText'
           @value={{this.helperText}}
           @onInput={{fn (mut this.helperText)}}
+        />
+        <Args.String
+          @name='placeholder'
+          @description='Placeholder text'
+          @onInput={{fn (mut this.placeholder)}}
+          @value={{this.placeholder}}
+          @defaultValue='Search'
+        />
+        <Args.String
+          @name='bottomTreatment'
+          @description='The visual shape of the bottom of the input'
+          @onInput={{fn (mut this.bottomTreatment)}}
+          @options={{validBottomTreatments}}
+          @value={{this.bottomTreatment}}
+          @defaultValue={{this.defaultBottomTreatment}}
         />
         <Args.Action
           @name='onInput'
@@ -150,7 +181,7 @@ export default class InputUsage extends Component {
         <BoxelInput
           @id='multilineExample'
           @value=''
-          @multiline={{true}}
+          @type='textarea'
           rows='10'
           cols='20'
         />

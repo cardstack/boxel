@@ -7,16 +7,34 @@ import cn from '../../helpers/cn.ts';
 import element from '../../helpers/element.ts';
 import optional from '../../helpers/optional.ts';
 import pick from '../../helpers/pick.ts';
+import { eq } from '../../helpers/truth-helpers.ts';
 import { and, bool, not } from '../../helpers/truth-helpers.ts';
+import IconSearch from '../../icons/icon-search.gts';
+
+type Values<T> = T[keyof T];
+
+export const InputTypes = {
+  Search: 'search',
+  Text: 'text',
+  Textarea: 'textarea',
+};
+
+export type InputType = Values<typeof InputTypes>;
+
+export const InputBottomTreatments = {
+  Flat: 'flat',
+  Rounded: 'rounded',
+} as const;
+export type InputBottomTreatment = Values<typeof InputBottomTreatments>;
 
 export interface Signature {
   Args: {
+    bottomTreatment?: InputBottomTreatment;
     disabled?: boolean;
     errorMessage?: string;
     helperText?: string;
     id?: string;
     invalid?: boolean;
-    multiline?: boolean;
     onBlur?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
@@ -24,7 +42,9 @@ export interface Signature {
     optional?: boolean;
     placeholder?: string;
     required?: boolean;
+    type?: InputType;
     value: string | number | null | undefined;
+    variant?: 'large' | 'default';
   };
   Element: HTMLInputElement | HTMLTextAreaElement;
 }
@@ -35,57 +55,85 @@ export default class BoxelInput extends Component<Signature> {
     return this.args.id || this.helperId;
   }
 
+  get isMultiline() {
+    return this.args.type === 'textarea';
+  }
+
+  get isSearch() {
+    return this.args.type === 'search';
+  }
+
   <template>
-    {{#if (and (not @required) @optional)}}
-      <div class='optional'>Optional</div>
-    {{/if}}
-    {{#let (and @invalid (bool @errorMessage)) as |shouldShowErrorMessage|}}
-      {{#let (element (if @multiline 'textarea' 'input')) as |InputTag|}}
-        <InputTag
-          class={{cn 'boxel-input' invalid=@invalid}}
-          id={{this.id}}
-          value={{@value}}
-          placeholder={{@placeholder}}
-          required={{@required}}
-          disabled={{@disabled}}
-          aria-describedby={{if
-            @helperText
-            (concat 'helper-text-' this.helperId)
-            false
-          }}
-          aria-invalid={{if @invalid 'true'}}
-          aria-errormessage={{if
-            shouldShowErrorMessage
-            (concat 'error-message-' this.helperId)
-            false
-          }}
-          data-test-boxel-input
-          data-test-boxel-input-id={{@id}}
-          {{on 'input' (pick 'target.value' (optional @onInput))}}
-          {{on 'blur' (optional @onBlur)}}
-          {{on 'keypress' (optional @onKeyPress)}}
-          {{on 'focus' (optional @onFocus)}}
-          ...attributes
-        />
-        {{#if shouldShowErrorMessage}}
-          <div
-            id={{concat 'error-message-' this.helperId}}
-            class='error-message'
-            aria-live='polite'
-            data-test-boxel-input-error-message
-          >{{@errorMessage}}</div>
-        {{/if}}
-        {{#if @helperText}}
-          <div
-            id={{concat 'helper-text-' this.helperId}}
-            class='helper-text'
-            data-test-boxel-input-helper-text
-          >{{@helperText}}</div>
-        {{/if}}
+    <div class='input-container'>
+      {{#if (and (not @required) @optional)}}
+        <div class='optional'>Optional</div>
+      {{/if}}
+      {{#if this.isSearch}}
+        <div class='search-icon-container'>
+          <IconSearch class='search-icon' width='20' height='20' />
+        </div>
+      {{/if}}
+      {{#let (and @invalid (bool @errorMessage)) as |shouldShowErrorMessage|}}
+        {{#let
+          (element (if this.isMultiline 'textarea' 'input'))
+          as |InputTag|
+        }}
+
+          <InputTag
+            class={{cn
+              'boxel-input'
+              invalid=@invalid
+              search=this.isSearch
+              boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
+            }}
+            id={{this.id}}
+            value={{@value}}
+            placeholder={{@placeholder}}
+            required={{@required}}
+            disabled={{@disabled}}
+            aria-describedby={{if
+              @helperText
+              (concat 'helper-text-' this.helperId)
+              false
+            }}
+            aria-invalid={{if @invalid 'true'}}
+            aria-errormessage={{if
+              shouldShowErrorMessage
+              (concat 'error-message-' this.helperId)
+              false
+            }}
+            data-test-boxel-input
+            data-test-boxel-input-id={{@id}}
+            {{on 'input' (pick 'target.value' (optional @onInput))}}
+            {{on 'blur' (optional @onBlur)}}
+            {{on 'keypress' (optional @onKeyPress)}}
+            {{on 'focus' (optional @onFocus)}}
+            ...attributes
+          />
+          {{#if shouldShowErrorMessage}}
+            <div
+              id={{concat 'error-message-' this.helperId}}
+              class='error-message'
+              aria-live='polite'
+              data-test-boxel-input-error-message
+            >{{@errorMessage}}</div>
+          {{/if}}
+          {{#if @helperText}}
+            <div
+              id={{concat 'helper-text-' this.helperId}}
+              class='helper-text'
+              data-test-boxel-input-helper-text
+            >{{@helperText}}</div>
+          {{/if}}
+        {{/let}}
       {{/let}}
-    {{/let}}
+    </div>
     <style>
       @layer {
+        .input-container {
+          position: relative;
+        }
+
         .boxel-input {
           --boxel-input-height: var(--boxel-form-control-height);
 
@@ -128,6 +176,33 @@ export default class BoxelInput extends Component<Signature> {
 
         .invalid:hover:not(:disabled) {
           border-color: var(--boxel-error-100);
+        }
+
+        .search {
+          --boxel-form-control-border-color: var(--boxel-dark);
+          --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
+
+          background-color: var(--boxel-dark);
+          color: var(--boxel-light);
+          padding-left: var(--boxel-sp-xl);
+        }
+
+        .boxel-input--bottom-flat {
+          --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
+            var(--boxel-border-radius-xl) 0 0;
+        }
+
+        .search-icon-container {
+          --icon-color: var(--boxel-highlight);
+
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: var(--boxel-sp-xs);
+          height: 100%;
+          display: flex;
+          justify-content: center;
+          align-items: center;
         }
 
         .optional {
