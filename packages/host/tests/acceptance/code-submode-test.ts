@@ -2,6 +2,7 @@ import {
   visit,
   click,
   waitFor,
+  find,
   fillIn,
   triggerKeyEvent,
 } from '@ember/test-helpers';
@@ -10,7 +11,6 @@ import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
@@ -856,35 +856,37 @@ module('Acceptance | code submode tests', function (hooks) {
       .hasText(elementName);
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
-
-    elementName = 'ExportedFieldInheritLocalField';
-    let position = new MonacoSDK.Position(45, 0);
-    monacoService.updateCursorPosition(position);
+    
+    const editor = find('.monaco-editor');
+    await triggerKeyEvent(editor!, 'keydown', 'ArrowDown');
+    elementName = 'ExportedClass';
     await waitFor(
       `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
     );
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} field`);
-
-    elementName = 'LocalField';
-    position = new MonacoSDK.Position(38, 0);
-    monacoService.updateCursorPosition(position);
-    await waitFor(
-      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
-    );
-    assert
-      .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} field`);
-
-    elementName = 'ExportedCard';
-    position = new MonacoSDK.Position(31, 0);
-    monacoService.updateCursorPosition(position);
+      .hasText(`${elementName} class`);
+    
+    for(let i = 1; i <= 9; i++) {
+      await triggerKeyEvent(editor!, 'keydown', 'ArrowDown');
+    }
+    elementName = 'LocalCard';
     await waitFor(
       `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
     );
     assert
       .dom('[data-test-boxel-selector-item-selected]')
       .hasText(`${elementName} card`);
+    
+    for(let i = 1; i <= 16; i++) {
+      await triggerKeyEvent(editor!, 'keydown', 'ArrowDown');
+    }
+    elementName = 'ExportedField';
+    await waitFor(
+      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
   });
 });

@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import { action } from '@ember/object';
 import { isTesting } from '@embroider/macros';
 
 import { restartableTask, timeout } from 'ember-concurrency';
@@ -29,6 +28,7 @@ export default class Monaco extends Modifier<Signature> {
   private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
+  private lastCursorPosition: MonacoSDK.Position | undefined;
 
   modify(
     element: HTMLElement,
@@ -70,11 +70,6 @@ export default class Monaco extends Modifier<Signature> {
       this.editor = monacoSDK.editor.create(element, editorOptions);
 
       onSetup?.(this.editor);
-      if (onCursorPositionChange) {
-        this.editor.onDidChangeCursorPosition((_event) => {
-          this.onCursorChanged.perform(onCursorPositionChange);
-        });
-      }
 
       registerDestructor(this, () => this.editor!.dispose());
 
@@ -83,6 +78,11 @@ export default class Monaco extends Modifier<Signature> {
       this.model.onDidChangeContent(() =>
         this.onContentChanged.perform(contentChanged),
       );
+      if (onCursorPositionChange) {
+        this.editor.onDidChangeCursorSelection((event) => {
+          this.onCursorChanged.perform(onCursorPositionChange, event);
+        })
+      }
     }
     this.lastLanguage = language;
     if (cursorPosition) {
@@ -92,7 +92,7 @@ export default class Monaco extends Modifier<Signature> {
 
   private onContentChanged = restartableTask(
     async (contentChanged: (text: string) => void) => {
-      timeout(DEBOUNCE_MS);
+      await timeout(DEBOUNCE_MS);
       if (this.model) {
         this.lastContent = this.model.getValue();
         contentChanged(this.lastContent);
@@ -101,32 +101,32 @@ export default class Monaco extends Modifier<Signature> {
   );
 
   private onCursorChanged = restartableTask(
-    async (cursorPositionChange: (position: MonacoSDK.Position) => void) => {
-      // This function has to be async to avoid this error:
-      // Attempted to update `monacoCursorPosition` on `CodeSubmode`,
-      // but it had already been used previously in the same computation
-      await timeout(100);
-      let cursorPosition = this.editor?.getPosition();
-      if (cursorPosition) {
-        cursorPositionChange(cursorPosition);
+    async (cursorPositionChange: (position: MonacoSDK.Position) => void, event: MonacoSDK.editor.ICursorSelectionChangedEvent) => {
+      if (this.editor && (event.source !== 'api' && event.source !== 'model') && 
+          (event.selection.startLineNumber ===  event.selection.endLineNumber &&
+            event.selection.startColumn === event.selection.endColumn)) {
+        // This function has to be async to avoid this error:
+        // Attempted to update `monacoCursorPosition` on `CodeSubmode`,
+        // but it had already been used previously in the same computation
+        await timeout(100);
+        let position = this.editor.getPosition();
+        if (position) {
+          this.lastCursorPosition = position;
+          cursorPositionChange(position);
+        }
       }
     },
   );
 
-  @action
-  private changeCursorPosition(cursorPosition: MonacoSDK.Position) {
-    let currentCursorPosition = this.editor?.getPosition();
+  changeCursorPosition = (cursorPosition: MonacoSDK.Position) => {
     if (
       !this.editor ||
-      currentCursorPosition?.lineNumber === cursorPosition.lineNumber
+      (this.lastCursorPosition && this.lastCursorPosition.equals(cursorPosition))
     ) {
       return;
     }
     this.editor.focus();
-    this.editor.setPosition({
-      lineNumber: cursorPosition.lineNumber,
-      column: cursorPosition.column,
-    });
+    this.editor.setPosition(cursorPosition);
     this.editor.revealLineInCenter(cursorPosition.lineNumber);
   }
 }
