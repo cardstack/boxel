@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn, array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -26,13 +26,11 @@ import {
   Button,
   LoadingIndicator,
   ResizablePanelGroup,
-  BoxelDropdown,
-  Menu,
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
 
-import { cn, and, not, menuItem } from '@cardstack/boxel-ui/helpers';
-import { CheckMark, File, IconPlus } from '@cardstack/boxel-ui/icons';
+import { cn, and, not } from '@cardstack/boxel-ui/helpers';
+import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import { Deferred } from '@cardstack/runtime-common';
 
@@ -87,6 +85,7 @@ import CardURLBar from './card-url-bar';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
+import NewFileButton from './new-file-button';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -675,10 +674,6 @@ export default class CodeSubmode extends Component<Signature> {
     this.operatorModeStateService.updateCodePath(codePath);
   }
 
-  @action private toggleNewInstanceModal() {
-    // TODO
-  }
-
   <template>
     <RealmInfoProvider @realmURL={{this.realmURL}}>
       <:ready as |realmInfo|>
@@ -697,37 +692,7 @@ export default class CodeSubmode extends Component<Signature> {
         @realmURL={{this.realmURL}}
         class='card-url-bar'
       />
-      <BoxelDropdown>
-        <:trigger as |bindings|>
-          <Button
-            {{bindings}}
-            @kind='primary'
-            @size='small'
-            class='new-file-button'
-            data-test-new-file-button
-          >
-            <IconPlus
-              @width='var(--boxel-icon-sm)'
-              @height='var(--boxel-icon-sm)'
-              stroke='var(--boxel-light)'
-              stroke-width='1px'
-              alt='Add'
-              class='new-file-button-icon'
-            />
-            New File
-          </Button>
-        </:trigger>
-        <:content as |dd|>
-          <Menu
-            @items={{array
-              (menuItem
-                'Card Instance' this.toggleNewInstanceModal disabled=true
-              )
-            }}
-            @closeMenu={{dd.close}}
-          />
-        </:content>
-      </BoxelDropdown>
+      <NewFileButton />
     </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
       <div
@@ -1079,17 +1044,6 @@ export default class CodeSubmode extends Component<Signature> {
 
       .card-url-bar {
         height: var(--submode-switcher-height);
-      }
-      .new-file-button {
-        --boxel-button-text-color: var(--boxel-light);
-        height: var(--submode-switcher-height);
-        width: 7.5rem;
-        margin-left: var(--boxel-sp);
-      }
-      .new-file-button-icon {
-        --icon-color: var(--boxel-light);
-        flex-shrink: 0;
-        margin-right: var(--boxel-sp-5xs);
       }
 
       .monaco-container {
