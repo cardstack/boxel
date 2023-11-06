@@ -80,7 +80,17 @@ export default class Monaco extends Modifier<Signature> {
       );
       if (onCursorPositionChange) {
         this.editor.onDidChangeCursorSelection((event) => {
-          this.onCursorChanged.perform(onCursorPositionChange, event);
+          if (
+            this.editor &&
+            event.source !== 'model' &&
+            event.selection.startLineNumber === event.selection.endLineNumber &&
+            event.selection.startColumn === event.selection.endColumn
+          ) {
+            let position = this.editor.getPosition();
+            if (position) {
+              onCursorPositionChange(position);
+            }
+          }
         });
       }
     }
@@ -96,29 +106,6 @@ export default class Monaco extends Modifier<Signature> {
       if (this.model) {
         this.lastContent = this.model.getValue();
         contentChanged(this.lastContent);
-      }
-    },
-  );
-
-  private onCursorChanged = restartableTask(
-    async (
-      cursorPositionChange: (position: MonacoSDK.Position) => void,
-      event: MonacoSDK.editor.ICursorSelectionChangedEvent,
-    ) => {
-      // This function has to be async to avoid this error:
-      // Attempted to update `monacoCursorPosition` on `CodeSubmode`,
-      // but it had already been used previously in the same computation
-      await timeout(100);
-      if (
-        this.editor &&
-        event.source !== 'model' &&
-        event.selection.startLineNumber === event.selection.endLineNumber &&
-        event.selection.startColumn === event.selection.endColumn
-      ) {
-        let position = this.editor.getPosition();
-        if (position) {
-          cursorPositionChange(position);
-        }
       }
     },
   );

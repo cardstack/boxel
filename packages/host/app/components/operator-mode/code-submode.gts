@@ -413,11 +413,6 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private onMonacoCursorPositionChange(position: Position) {
-    this.selectDeclarationByMonacoCursorPosition(position);
-  }
-
-  @action
   private updateMonacoCursorPositionByDeclaration(
     declaration: ModuleDeclaration,
   ) {
@@ -897,7 +892,7 @@ export default class CodeSubmode extends Component<Signature> {
                         monacoSDK=this.monacoSDK
                         language=this.language
                         initializeCursorPosition=this.initializeMonacoCursorPosition
-                        onCursorPositionChange=this.onMonacoCursorPositionChange
+                        onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
                       }}
                     ></div>
                   {{/if}}
