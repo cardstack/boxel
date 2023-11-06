@@ -42,12 +42,12 @@ export default class Monaco extends Modifier<Signature> {
       monacoSDK,
     }: Signature['Args']['Named'],
   ) {
-    if (this.model) {
+    if (this.editor && this.model) {
       if (language && language !== this.lastLanguage) {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
 
-      if (content !== this.lastContent) {
+      if (content !== this.lastContent && !this.editor.hasTextFocus()) {
         this.model.setValue(content);
       }
     } else {
