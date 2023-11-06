@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn } from '@ember/helper';
+import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -27,11 +27,13 @@ import {
   Button,
   LoadingIndicator,
   ResizablePanelGroup,
+  BoxelDropdown,
+  Menu,
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
 
-import { cn, and, not } from '@cardstack/boxel-ui/helpers';
-import { CheckMark, File } from '@cardstack/boxel-ui/icons';
+import { cn, and, not, menuItem } from '@cardstack/boxel-ui/helpers';
+import { CheckMark, File, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import { Deferred } from '@cardstack/runtime-common';
 
@@ -728,14 +730,43 @@ export default class CodeSubmode extends Component<Signature> {
 
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
-    <CardURLBar
-      @loadFileError={{this.loadFileError}}
-      @resetLoadFileError={{this.resetLoadFileError}}
-      @userHasDismissedError={{this.userHasDismissedURLError}}
-      @dismissURLError={{this.dismissURLError}}
-      @realmURL={{this.realmURL}}
-      class='card-url-bar'
-    />
+    <div class='code-mode-top-bar'>
+      <CardURLBar
+        @loadFileError={{this.loadFileError}}
+        @resetLoadFileError={{this.resetLoadFileError}}
+        @userHasDismissedError={{this.userHasDismissedURLError}}
+        @dismissURLError={{this.dismissURLError}}
+        @realmURL={{this.realmURL}}
+        class='card-url-bar'
+      />
+      <BoxelDropdown>
+        <:trigger as |bindings|>
+          <Button
+            {{bindings}}
+            @kind='primary'
+            @size='small'
+            class='add-new-button'
+            data-test-add-new-button
+          >
+            <IconPlus
+              @width='var(--boxel-icon-sm)'
+              @height='var(--boxel-icon-sm)'
+              stroke='var(--boxel-light)'
+              stroke-width='1px'
+              role='presentation'
+              class='add-new-button-icon'
+            />
+            New File
+          </Button>
+        </:trigger>
+        <:content as |dd|>
+          <Menu
+            @items={{array (menuItem 'Card Definition' disabled=true)}}
+            @closeMenu={{dd.close}}
+          />
+        </:content>
+      </BoxelDropdown>
+    </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
       <div
         class='code-mode'
@@ -1085,17 +1116,33 @@ export default class CodeSubmode extends Component<Signature> {
         background: var(--boxel-light);
       }
 
-      .card-url-bar {
-        position: absolute;
-        top: var(--boxel-sp);
-        left: calc(var(--submode-switcher-width) + (var(--boxel-sp) * 2));
-
-        --card-url-bar-width: calc(
-          100% - (var(--submode-switcher-width) + (var(--boxel-sp) * 3))
+      .code-mode-top-bar {
+        --code-mode-top-bar-padding-left: calc(
+          var(--submode-switcher-width) + (var(--boxel-sp) * 2)
         );
-        height: var(--submode-switcher-height);
 
+        position: absolute;
+        top: 0;
+        right: 0;
+        padding: var(--boxel-sp) var(--boxel-sp) 0
+          var(--code-mode-top-bar-padding-left);
+        display: flex;
         z-index: 2;
+      }
+
+      .card-url-bar {
+        height: var(--submode-switcher-height);
+      }
+      .add-new-button {
+        --boxel-button-text-color: var(--boxel-light);
+        height: var(--submode-switcher-height);
+        width: 7.5rem;
+        margin-left: var(--boxel-sp);
+      }
+      .add-new-button-icon {
+        --icon-color: var(--boxel-light);
+        flex-shrink: 0;
+        margin-right: var(--boxel-sp-5xs);
       }
 
       .monaco-container {
