@@ -481,6 +481,34 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
   });
 
+  test('when selecting card definition from a card instance in code mode, the right hand panel changes from card preview to schema mode', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-code-mode-card-preview-body]');
+    assert
+      .dom('[data-test-code-mode-card-preview-body]')
+      .containsText('Hassan');
+    await waitFor(
+      `button[data-test-definition-container="${testRealmURL}person"]`,
+    );
+    await click(
+      `button[data-test-definition-container="${testRealmURL}person"]`,
+    );
+    await waitFor('[data-test-card-schema]');
+    assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    assert.dom('[data-test-total-fields]').containsText('8 Fields');
+  });
+
   test('shows displayName of CardResource when field refers to itself', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],

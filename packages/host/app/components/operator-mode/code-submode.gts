@@ -203,7 +203,13 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get card() {
-    return this.cardResource.card;
+    if (
+      this.cardResource.card &&
+      this.codePath?.href.replace(/\.json$/, '') === this.cardResource.url
+    ) {
+      return this.cardResource.card;
+    }
+    return undefined;
   }
 
   private get realmInfo() {
