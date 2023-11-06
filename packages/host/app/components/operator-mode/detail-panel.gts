@@ -15,8 +15,6 @@ import {
 
 import { or, and } from '@cardstack/boxel-ui/helpers';
 
-import { type RealmInfo } from '@cardstack/runtime-common';
-
 import {
   hasExecutableExtension,
   getPlural,
@@ -63,7 +61,6 @@ import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    realmInfo: RealmInfo | null;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
     selectedDeclaration?: ModuleDeclaration;

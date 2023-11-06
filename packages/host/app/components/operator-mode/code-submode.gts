@@ -21,7 +21,6 @@ import {
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
 import { Range } from 'monaco-editor';
-import { TrackedObject } from 'tracked-built-ins';
 
 import {
   Button,
@@ -36,7 +35,6 @@ import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 import { Deferred } from '@cardstack/runtime-common';
 
 import {
-  type RealmInfo,
   type SingleCardDocument,
   RealmPaths,
   logger,
@@ -49,6 +47,7 @@ import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -145,10 +144,6 @@ export default class CodeSubmode extends Component<Signature> {
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
 
-  // This is to cache realm info during reload after code path change so
-  // that realm assets don't produce a flicker when code patch changes and
-  // the realm is the same
-  private cachedRealmInfo: RealmInfo | null = null;
   private deleteModal: DeleteModal | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -183,17 +178,11 @@ export default class CodeSubmode extends Component<Signature> {
     });
     this.loadMonaco.perform();
   }
-
-  private get realmInfo() {
-    return this.realmInfoResource.value;
-  }
-
-  private get backgroundURL() {
-    return this.realmInfo?.backgroundURL;
-  }
-
-  private get backgroundURLStyle() {
-    return htmlSafe(`background-image: url(${this.backgroundURL});`);
+  private backgroundURLStyle(backgroundURL: string | null) {
+    let possibleStyle = backgroundURL
+      ? `background-image: url(${backgroundURL});`
+      : '';
+    return htmlSafe(possibleStyle);
   }
 
   @action setFileView(view: FileView) {
@@ -318,50 +307,6 @@ export default class CodeSubmode extends Component<Signature> {
   @action private dismissURLError() {
     this.userHasDismissedURLError = true;
   }
-
-  @use private realmInfoResource = resource(() => {
-    if (!this.realmURL) {
-      return new TrackedObject({
-        error: null,
-        isLoading: false,
-        value: this.cachedRealmInfo,
-        load: () => Promise<void>,
-      });
-    }
-
-    const state: {
-      isLoading: boolean;
-      value: RealmInfo | null;
-      error: Error | undefined;
-      load: () => Promise<void>;
-    } = new TrackedObject({
-      isLoading: true,
-      value: this.cachedRealmInfo,
-      error: undefined,
-      load: async () => {
-        state.isLoading = true;
-
-        try {
-          let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-            new URL(this.realmURL),
-          );
-
-          if (realmInfo) {
-            this.cachedRealmInfo = realmInfo;
-          }
-
-          state.value = realmInfo;
-        } catch (error: any) {
-          state.error = error;
-        } finally {
-          state.isLoading = false;
-        }
-      },
-    });
-
-    state.load();
-    return state;
-  });
 
   private get currentOpenFile() {
     return this.operatorModeStateService.openFile.current;
@@ -754,7 +699,14 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   <template>
-    <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
+    <RealmInfoProvider @realmURL={{this.realmURL}}>
+      <:ready as |realmInfo|>
+        <div
+          class='code-mode-background'
+          style={{this.backgroundURLStyle realmInfo.backgroundURL}}
+        ></div>
+      </:ready>
+    </RealmInfoProvider>
     <CardURLBar
       @loadFileError={{this.loadFileError}}
       @resetLoadFileError={{this.resetLoadFileError}}
@@ -844,7 +796,6 @@ export default class CodeSubmode extends Component<Signature> {
                           <DetailPanel
                             @cardInstance={{this.card}}
                             @readyFile={{this.readyFile}}
-                            @realmInfo={{this.realmInfo}}
                             @selectedDeclaration={{this.selectedDeclaration}}
                             @declarations={{this.declarations}}
                             @selectDeclaration={{this.selectDeclaration}}
@@ -944,7 +895,7 @@ export default class CodeSubmode extends Component<Signature> {
                   {{else if this.cardIsLoaded}}
                     <CardPreviewPanel
                       @card={{this.loadedCard}}
-                      @realmInfo={{this.realmInfo}}
+                      @realmURL={{this.realmURL}}
                       data-test-card-resource-loaded
                     />
                   {{else if this.selectedCardOrField}}
