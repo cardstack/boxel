@@ -675,6 +675,10 @@ export default class CodeSubmode extends Component<Signature> {
     this.operatorModeStateService.updateCodePath(codePath);
   }
 
+  @action private toggleNewInstanceModal() {
+    // TODO
+  }
+
   <template>
     <RealmInfoProvider @realmURL={{this.realmURL}}>
       <:ready as |realmInfo|>
@@ -699,23 +703,27 @@ export default class CodeSubmode extends Component<Signature> {
             {{bindings}}
             @kind='primary'
             @size='small'
-            class='add-new-button'
-            data-test-add-new-button
+            class='new-file-button'
+            data-test-new-file-button
           >
             <IconPlus
               @width='var(--boxel-icon-sm)'
               @height='var(--boxel-icon-sm)'
               stroke='var(--boxel-light)'
               stroke-width='1px'
-              role='presentation'
-              class='add-new-button-icon'
+              alt='Add'
+              class='new-file-button-icon'
             />
             New File
           </Button>
         </:trigger>
         <:content as |dd|>
           <Menu
-            @items={{array (menuItem 'Card Definition' disabled=true)}}
+            @items={{array
+              (menuItem
+                'Card Instance' this.toggleNewInstanceModal disabled=true
+              )
+            }}
             @closeMenu={{dd.close}}
           />
         </:content>
@@ -1072,13 +1080,13 @@ export default class CodeSubmode extends Component<Signature> {
       .card-url-bar {
         height: var(--submode-switcher-height);
       }
-      .add-new-button {
+      .new-file-button {
         --boxel-button-text-color: var(--boxel-light);
         height: var(--submode-switcher-height);
         width: 7.5rem;
         margin-left: var(--boxel-sp);
       }
-      .add-new-button-icon {
+      .new-file-button-icon {
         --icon-color: var(--boxel-light);
         flex-shrink: 0;
         margin-right: var(--boxel-sp-5xs);
