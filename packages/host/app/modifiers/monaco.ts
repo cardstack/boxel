@@ -111,7 +111,6 @@ export default class Monaco extends Modifier<Signature> {
       await timeout(100);
       if (
         this.editor &&
-        event.source !== 'api' &&
         event.source !== 'model' &&
         event.selection.startLineNumber === event.selection.endLineNumber &&
         event.selection.startColumn === event.selection.endColumn
