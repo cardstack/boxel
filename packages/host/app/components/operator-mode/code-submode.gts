@@ -21,7 +21,6 @@ import {
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
 import { Range } from 'monaco-editor';
-import { TrackedObject } from 'tracked-built-ins';
 
 import {
   Button,
@@ -36,7 +35,6 @@ import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 import { Deferred } from '@cardstack/runtime-common';
 
 import {
-  type RealmInfo,
   type SingleCardDocument,
   RealmPaths,
   logger,
@@ -49,6 +47,7 @@ import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -58,8 +57,6 @@ import {
   type Ready,
   type FileResource,
 } from '@cardstack/host/resources/file';
-
-import { importResource } from '@cardstack/host/resources/import';
 
 import {
   moduleContentsResource,
@@ -148,10 +145,6 @@ export default class CodeSubmode extends Component<Signature> {
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
 
-  // This is to cache realm info during reload after code path change so
-  // that realm assets don't produce a flicker when code patch changes and
-  // the realm is the same
-  private cachedRealmInfo: RealmInfo | null = null;
   private deleteModal: DeleteModal | undefined;
   private cardResource = getCard(
     this,
@@ -212,16 +205,11 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
-  private get realmInfo() {
-    return this.realmInfoResource.value;
-  }
-
-  private get backgroundURL() {
-    return this.realmInfo?.backgroundURL;
-  }
-
-  private get backgroundURLStyle() {
-    return htmlSafe(`background-image: url(${this.backgroundURL});`);
+  private backgroundURLStyle(backgroundURL: string | null) {
+    let possibleStyle = backgroundURL
+      ? `background-image: url(${backgroundURL});`
+      : '';
+    return htmlSafe(possibleStyle);
   }
 
   @action setFileView(view: FileView) {
@@ -242,7 +230,9 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isLoading() {
     return (
-      this.loadMonaco.isRunning || this.currentOpenFile?.state === 'loading'
+      this.loadMonaco.isRunning ||
+      this.currentOpenFile?.state === 'loading' ||
+      this.moduleContentsResource?.isLoading
     );
   }
 
@@ -250,17 +240,21 @@ export default class CodeSubmode extends Component<Signature> {
     return this.maybeMonacoSDK && isReady(this.currentOpenFile);
   }
 
-  private get schemaEditorIncompatibleFile() {
+  private get isIncompatibleFile() {
+    return this.readyFile.isBinary || this.isNonCardJson;
+  }
+
+  private get isModule() {
     return (
-      this.readyFile.isBinary || this.isNonCardJson || !this.isValidSchemaFile
+      hasExecutableExtension(this.readyFile.name) && !this.isIncompatibleFile
     );
   }
 
-  private get isValidSchemaFile() {
+  private get hasCardDefOrFieldDef() {
     return this.declarations.some((d) => isCardOrFieldDeclaration(d));
   }
 
-  private get schemaEditorIncompatibleItem() {
+  private get isSelectedItemIncompatibleWithSchemaEditor() {
     if (!this.selectedDeclaration) {
       return;
     }
@@ -276,6 +270,37 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get emptyOrNotFound() {
     return !this.codePath || this.currentOpenFile?.state === 'not-found';
+  }
+
+  private get fileIncompatibilityMessage() {
+    // If file is incompatible
+    if (this.isIncompatibleFile) {
+      return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
+    }
+
+    // If the module is incompatible
+    if (this.isModule) {
+      if (!this.hasCardDefOrFieldDef) {
+        return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
+      } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
+        return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
+      }
+    }
+
+    // If rhs doesn't handle any case but we can't capture the error
+    if (!this.card && !this.selectedCardOrField) {
+      return "No tools are available to inspect this file or it's contents.";
+    }
+
+    // TODO: handle card preview errors (when json is valid but card returns error)
+    // This code is never reached but is temporarily placed here to please linting
+    // - a card runtime error will crash entire app
+    // - a json error will be caught by incompatibleFile
+    if (this.cardError) {
+      return `card preview error ${this.cardError.message}`;
+    }
+
+    return null;
   }
 
   private loadMonaco = task(async () => {
@@ -310,76 +335,20 @@ export default class CodeSubmode extends Component<Signature> {
     this.userHasDismissedURLError = true;
   }
 
-  @use private realmInfoResource = resource(() => {
-    if (!this.realmURL) {
-      return new TrackedObject({
-        error: null,
-        isLoading: false,
-        value: this.cachedRealmInfo,
-        load: () => Promise<void>,
-      });
-    }
-
-    const state: {
-      isLoading: boolean;
-      value: RealmInfo | null;
-      error: Error | undefined;
-      load: () => Promise<void>;
-    } = new TrackedObject({
-      isLoading: true,
-      value: this.cachedRealmInfo,
-      error: undefined,
-      load: async () => {
-        state.isLoading = true;
-
-        try {
-          let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-            new URL(this.realmURL),
-          );
-
-          if (realmInfo) {
-            this.cachedRealmInfo = realmInfo;
-          }
-
-          state.value = realmInfo;
-        } catch (error: any) {
-          state.error = error;
-        } finally {
-          state.isLoading = false;
-        }
-      },
-    });
-
-    state.load();
-    return state;
-  });
-
   private get currentOpenFile() {
     return this.operatorModeStateService.openFile.current;
   }
 
   @use private moduleContentsResource = resource(() => {
-    if (isReady(this.currentOpenFile) && this.importedModule?.module) {
+    if (isReady(this.currentOpenFile)) {
       let f: Ready = this.currentOpenFile;
       if (hasExecutableExtension(f.url)) {
         return moduleContentsResource(this, () => ({
-          file: f,
-          exportedCardsOrFields:
-            this.importedModule?.cardsOrFieldsFromModule || [],
+          executableFile: f,
         }));
       }
     }
     return;
-  });
-
-  @use private importedModule = resource(() => {
-    if (isReady(this.currentOpenFile)) {
-      let f: Ready = this.currentOpenFile;
-      if (hasExecutableExtension(f.url)) {
-        return importResource(this, () => f.url);
-      }
-    }
-    return undefined;
   });
 
   private onCardLoaded = (
@@ -447,7 +416,7 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get selectedCardOrField() {
     if (
-      this.selectedDeclaration &&
+      this.selectedDeclaration !== undefined &&
       isCardOrFieldDeclaration(this.selectedDeclaration)
     ) {
       return this.selectedDeclaration;
@@ -698,7 +667,14 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   <template>
-    <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
+    <RealmInfoProvider @realmURL={{this.realmURL}}>
+      <:ready as |realmInfo|>
+        <div
+          class='code-mode-background'
+          style={{this.backgroundURLStyle realmInfo.backgroundURL}}
+        ></div>
+      </:ready>
+    </RealmInfoProvider>
     <CardURLBar
       @loadFileError={{this.loadFileError}}
       @resetLoadFileError={{this.resetLoadFileError}}
@@ -788,7 +764,6 @@ export default class CodeSubmode extends Component<Signature> {
                           <DetailPanel
                             @cardInstance={{this.card}}
                             @readyFile={{this.readyFile}}
-                            @realmInfo={{this.realmInfo}}
                             @selectedDeclaration={{this.selectedDeclaration}}
                             @declarations={{this.declarations}}
                             @selectDeclaration={{this.selectDeclaration}}
@@ -873,11 +848,22 @@ export default class CodeSubmode extends Component<Signature> {
               @length={{this.panelWidths.rightPanel}}
             >
               <div class='inner-container'>
-                {{#if this.isReady}}
-                  {{#if this.card}}
+                {{#if this.isLoading}}
+                  <div class='loading'>
+                    <LoadingIndicator />
+                  </div>
+                {{else if this.isReady}}
+                  {{#if this.fileIncompatibilityMessage}}
+                    <div
+                      class='file-incompatible-message'
+                      data-test-file-incompatibility-message
+                    >
+                      {{this.fileIncompatibilityMessage}}
+                    </div>
+                  {{else if this.card}}
                     <CardPreviewPanel
                       @card={{this.loadedCard}}
-                      @realmInfo={{this.realmInfo}}
+                      @realmURL={{this.realmURL}}
                       data-test-card-resource-loaded
                     />
                   {{else if this.selectedCardOrField}}
@@ -887,32 +873,7 @@ export default class CodeSubmode extends Component<Signature> {
                       @cardTypeResource={{this.selectedCardOrField.cardType}}
                       @openDefinition={{this.openDefinition}}
                     />
-                  {{else if this.schemaEditorIncompatibleFile}}
-                    <div
-                      class='incompatible-schema-editor'
-                      data-test-schema-editor-incompatible-file
-                    >
-                      Schema Editor cannot be used with this file type.
-                    </div>
-                  {{else if
-                    (and
-                      this.isValidSchemaFile this.schemaEditorIncompatibleItem
-                    )
-                  }}
-                    <div
-                      class='incompatible-schema-editor'
-                      data-test-schema-editor-incompatible-item
-                    >
-                      Schema Editor cannot be used for selected
-                      {{this.selectedDeclaration.type}}
-                      "{{this.selectedDeclaration.localName}}".</div>
-                  {{else if this.cardError}}
-                    {{this.cardError.message}}
                   {{/if}}
-                {{else if this.isLoading}}
-                  <div class='loading'>
-                    <LoadingIndicator />
-                  </div>
                 {{/if}}
               </div>
             </ResizablePanel>
@@ -1118,7 +1079,7 @@ export default class CodeSubmode extends Component<Signature> {
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
       }
-      .incompatible-schema-editor {
+      .file-incompatible-message {
         display: flex;
         flex-wrap: wrap;
         align-content: center;
