@@ -531,7 +531,8 @@ export default class CodeSubmode extends Component<Signature> {
       throw new Error('File is not ready to be written to');
     }
 
-    return file.write(content);
+    // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
+    return file.write(content, true);
   }
 
   private safeJSONParse(content: string) {
