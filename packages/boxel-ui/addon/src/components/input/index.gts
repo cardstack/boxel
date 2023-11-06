@@ -44,7 +44,7 @@ export interface Signature {
     required?: boolean;
     type?: InputType;
     value: string | number | null | undefined;
-    variant?: 'large' | 'default';
+    variant?: 'large' | 'default'; // FIXME ignored for now
   };
   Element: HTMLInputElement | HTMLTextAreaElement;
 }
