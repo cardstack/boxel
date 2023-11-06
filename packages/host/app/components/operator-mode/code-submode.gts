@@ -121,9 +121,11 @@ const defaultPanelWidths: PanelWidths = {
 };
 
 const CodeModePanelHeights = 'code-mode-panel-heights';
+const ApproximateRecentPanelDefaultFraction =
+  (50 + 43 * 3.5) / (document.documentElement.clientHeight - 430); // room for about 3.5 recent files
 const defaultPanelHeights: PanelHeights = {
-  filePanel: 0.6,
-  recentPanel: 0.4,
+  filePanel: 1 - ApproximateRecentPanelDefaultFraction,
+  recentPanel: ApproximateRecentPanelDefaultFraction,
 };
 
 const cardEditorSaveTimes = new Map<string, number>();
