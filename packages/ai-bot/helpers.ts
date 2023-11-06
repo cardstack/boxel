@@ -24,11 +24,7 @@ type TextMessage = {
   complete: boolean;
 };
 
-type Break = {
-  type: 'break';
-};
-
-export type Message = CommandMessage | TextMessage | Break;
+export type Message = CommandMessage | TextMessage;
 
 export function constructHistory(history: IRoomEvent[]) {
   /**
@@ -232,6 +228,13 @@ export async function* processStream(stream: AsyncGenerator<string>) {
     }
     // Checkpoint before we start processing the next token
     tokenStream.checkpoint();
+  }
+  if (currentMessage) {
+    yield {
+      type: 'text',
+      content: currentMessage,
+      complete: true,
+    };
   }
 }
 

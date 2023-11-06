@@ -38,6 +38,7 @@ module('processStream', () => {
     const expectedResult = [
       { type: 'text', content: 'Hello', complete: false },
       { type: 'text', content: 'Hello World', complete: false },
+      { type: 'text', content: 'Hello World', complete: true },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
@@ -48,7 +49,8 @@ module('processStream', () => {
       { type: 'text', content: 'Hello', complete: false },
       { type: 'text', content: 'Hello ', complete: false },
       { type: 'text', content: 'Hello  ', complete: false },
-      { type: 'text', content: 'Hello  World', complete: false }, // Note preserving the two whitespace characters
+      { type: 'text', content: 'Hello  World', complete: false },
+      { type: 'text', content: 'Hello  World', complete: true }, // Note preserving the two whitespace characters
     ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
@@ -72,6 +74,7 @@ module('processStream', () => {
       { type: 'text', content: 'there', complete: false },
       { type: 'text', content: 'there ', complete: false },
       { type: 'text', content: 'there World', complete: false },
+      { type: 'text', content: 'there World', complete: true },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
