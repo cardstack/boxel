@@ -27,8 +27,10 @@ import {
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
+  setupOnSave,
   getMonacoContent,
   type TestContextWithSSE,
+  type TestContextWithSave,
 } from '../../helpers';
 
 const indexCardSource = `
@@ -230,6 +232,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   }
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
+  setupOnSave(hooks);
   setupServerSentEvents(hooks);
   setupWindowMock(hooks);
 
@@ -806,7 +809,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     );
   });
 
-  test('deleting a field from schema editor', async function (assert) {
+  test<TestContextWithSave>('deleting a field from schema editor', async function (assert) {
+    assert.expect(7);
     let operatorModeStateParam = stringify({
       stacks: [],
       submode: 'code',
@@ -833,6 +837,15 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       getMonacoContent().includes('firstName = contains(StringCard)'),
     );
 
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.false(
+        content.includes('firstName = contains(StringCard)'),
+        'firstName field removed from saved module',
+      );
+    });
     await click('[data-test-boxel-menu-item-text="Remove Field"]');
 
     assert.dom('[data-test-remove-field-modal]').exists();
@@ -853,10 +866,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
       .containsText('+ 4 Fields'); // One field less
-
-    assert.false(
-      getMonacoContent().includes('firstName = contains(StringCard)'),
-    );
 
     assert
       .dom(
