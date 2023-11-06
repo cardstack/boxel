@@ -16,7 +16,6 @@ import {
   constructHistory,
   extractContentFromStream,
   processStream,
-  ParsingMode,
   getModifyPrompt,
   cleanContent,
 } from './helpers';
@@ -99,7 +98,7 @@ async function sendStream(
   for await (const message of processStream(extractContentFromStream(stream))) {
     // If we've not got a current message to edit and we're processing text
     // rather than structured data, start a new message to update.
-    if (message.type == ParsingMode.Text) {
+    if (message.type == 'text') {
       // remove general cruft
       let cleanedContent = cleanContent(message.content!);
       // If we're left with nothing after cleaning, don't send anything
@@ -118,8 +117,9 @@ async function sendStream(
           append_to = initialMessage.event_id;
         }
 
-        if (unsent > 20) {
+        if (unsent > 20 || message.complete) {
           await sendMessage(client, room, cleanedContent, append_to);
+          lastUnsentMessage = undefined;
           unsent = 0;
         } else {
           lastUnsentMessage = message;
@@ -127,14 +127,7 @@ async function sendStream(
         }
       }
     } else {
-      if (lastUnsentMessage && lastUnsentMessage.content) {
-        let cleanedContent = cleanContent(lastUnsentMessage.content);
-        if (cleanedContent) {
-          await sendMessage(client, room, cleanedContent, append_to);
-        }
-        lastUnsentMessage = undefined;
-      }
-      if (message.type == ParsingMode.Command) {
+      if (message.type == 'command') {
         await sendOption(client, room, message.content);
       }
       unsent = 0;

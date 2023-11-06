@@ -13,25 +13,19 @@ type ChatCompletion = {
   }>;
 };
 
-export enum ParsingMode {
-  Text,
-  Command,
-  Break,
-}
-
 type CommandMessage = {
-  type: ParsingMode.Command;
+  type: 'command';
   content: any;
 };
 
 type TextMessage = {
-  type: ParsingMode.Text;
+  type: 'text';
   content: string;
+  complete: boolean;
 };
 
 type Break = {
-  type: ParsingMode.Break;
-  content: null;
+  type: 'break';
 };
 
 export type Message = CommandMessage | TextMessage | Break;
@@ -176,8 +170,14 @@ export async function* processStream(stream: AsyncGenerator<string>) {
     // Optimistically start parsing it, and if we hit an error
     // then roll back to the last checkpoint
     if (part == '{') {
+      // If we were processing text and now are probably looking at
+      // JSON, yield the text we've seen so far, marked as "complete"
       if (currentMessage) {
-        yield { type: ParsingMode.Break, content: null };
+        yield {
+          type: 'text',
+          content: currentMessage,
+          complete: true,
+        };
       }
       let commands: string[] = [];
       const pipeline = chain([
@@ -217,7 +217,7 @@ export async function* processStream(stream: AsyncGenerator<string>) {
         // we've found.
         for (let command of commands) {
           yield {
-            type: ParsingMode.Command,
+            type: 'command',
             content: command,
           };
         }
@@ -225,8 +225,9 @@ export async function* processStream(stream: AsyncGenerator<string>) {
     } else {
       currentMessage += part;
       yield {
-        type: ParsingMode.Text,
+        type: 'text',
         content: currentMessage,
+        complete: false,
       };
     }
     // Checkpoint before we start processing the next token

@@ -1,10 +1,5 @@
 import { module, test, assert } from 'qunit';
-import {
-  processStream,
-  ParsingMode,
-  Message,
-  extractContentFromStream,
-} from '../helpers';
+import { processStream, Message, extractContentFromStream } from '../helpers';
 
 async function* streamGenerator(stream: string[]) {
   for (const chunk of stream) {
@@ -28,7 +23,7 @@ async function streamToArray(stream: AsyncIterable<string>) {
 
 async function assertProcessedStreamContains(
   stream: string[],
-  expected: { type: ParsingMode; content: string | null }[],
+  expected: Message[],
 ) {
   const result = [];
   for await (const chunk of processStream(streamGenerator(stream))) {
@@ -41,8 +36,8 @@ module('processStream', () => {
   test('should build up a stream where there is only text', async () => {
     const stream = ['Hello', ' World'];
     const expectedResult = [
-      { type: ParsingMode.Text, content: 'Hello' },
-      { type: ParsingMode.Text, content: 'Hello World' },
+      { type: 'text', content: 'Hello', complete: false },
+      { type: 'text', content: 'Hello World', complete: false },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
@@ -50,10 +45,10 @@ module('processStream', () => {
   test('should preserve multiple whitespace', async () => {
     const stream = ['Hello', ' ', ' ', 'World'];
     const expectedResult = [
-      { type: ParsingMode.Text, content: 'Hello' },
-      { type: ParsingMode.Text, content: 'Hello ' },
-      { type: ParsingMode.Text, content: 'Hello  ' },
-      { type: ParsingMode.Text, content: 'Hello  World' }, // Note preserving the two whitespace characters
+      { type: 'text', content: 'Hello', complete: false },
+      { type: 'text', content: 'Hello ', complete: false },
+      { type: 'text', content: 'Hello  ', complete: false },
+      { type: 'text', content: 'Hello  World', complete: false }, // Note preserving the two whitespace characters
     ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
@@ -71,12 +66,12 @@ module('processStream', () => {
       'World',
     ];
     const expectedResult: Message[] = [
-      { type: ParsingMode.Text, content: 'Hello' },
-      { type: ParsingMode.Break, content: null },
-      { type: ParsingMode.Command, content: { some: 'thing' } },
-      { type: ParsingMode.Text, content: 'there' },
-      { type: ParsingMode.Text, content: 'there ' },
-      { type: ParsingMode.Text, content: 'there World' },
+      { type: 'text', content: 'Hello', complete: false },
+      { type: 'text', content: 'Hello', complete: true },
+      { type: 'command', content: { some: 'thing' } },
+      { type: 'text', content: 'there', complete: false },
+      { type: 'text', content: 'there ', complete: false },
+      { type: 'text', content: 'there World', complete: false },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
@@ -85,14 +80,16 @@ module('processStream', () => {
   test('should correctly process a stream containing only structured data', async () => {
     const stream = ['{', '"some"', ':', '"thing"', '}'];
     const expectedResult: Message[] = [
-      { type: ParsingMode.Command, content: { some: 'thing' } },
+      { type: 'command', content: { some: 'thing' } },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
 
   test('should correctly handle a stream containing an empty string', async () => {
     const stream = [''];
-    const expectedResult: Message[] = [{ type: ParsingMode.Text, content: '' }];
+    const expectedResult: Message[] = [
+      { type: 'text', content: '', complete: false },
+    ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
 
@@ -112,12 +109,12 @@ module('processStream', () => {
       '}',
     ];
     const expectedResult: Message[] = [
-      { type: ParsingMode.Text, content: 'Option 1' },
-      { type: ParsingMode.Break, content: null },
-      { type: ParsingMode.Command, content: { some: 'thing' } },
-      { type: ParsingMode.Text, content: 'Option 2' },
-      { type: ParsingMode.Break, content: null },
-      { type: ParsingMode.Command, content: { some: 'thing else' } },
+      { type: 'text', content: 'Option 1', complete: false },
+      { type: 'text', content: 'Option 1', complete: true },
+      { type: 'command', content: { some: 'thing' } },
+      { type: 'text', content: 'Option 2', complete: false },
+      { type: 'text', content: 'Option 2', complete: true },
+      { type: 'command', content: { some: 'thing else' } },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
@@ -176,40 +173,52 @@ module('processStream', () => {
     ];
     const expectedResult: Message[] = [
       {
-        type: ParsingMode.Text,
+        type: 'text',
         content: 'Certainly',
+        complete: false,
       },
       {
-        type: ParsingMode.Text,
+        type: 'text',
         content: 'Certainly:',
+        complete: false,
       },
       {
-        type: ParsingMode.Text,
+        type: 'text',
         content: 'Certainly:\n\n',
+        complete: false,
       },
       {
-        type: ParsingMode.Text,
+        type: 'text',
         content: 'Certainly:\n\nOption',
+        complete: false,
       },
       {
-        type: ParsingMode.Text,
+        type: 'text',
         content: 'Certainly:\n\nOption ',
+        complete: false,
       },
       {
-        type: ParsingMode.Text,
+        type: 'text',
         content: 'Certainly:\n\nOption 1',
+        complete: false,
       },
       {
-        type: ParsingMode.Text,
+        type: 'text',
         content: 'Certainly:\n\nOption 1:',
+        complete: false,
       },
       {
-        type: ParsingMode.Text,
+        type: 'text',
         content: 'Certainly:\n\nOption 1:\n',
+        complete: false,
       },
-      { type: ParsingMode.Break, content: null },
       {
-        type: ParsingMode.Command,
+        type: 'text',
+        content: 'Certainly:\n\nOption 1:\n',
+        complete: true,
+      },
+      {
+        type: 'command',
         content: {
           id: 'http://localhost:4201/drafts/Pet/2',
           patch: { firstName: 'ModifiedName' },
