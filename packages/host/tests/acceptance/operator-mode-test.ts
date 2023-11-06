@@ -16,7 +16,7 @@ import stringify from 'safe-stable-stringify';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
@@ -167,6 +167,47 @@ module('Acceptance | operator mode tests', function (hooks) {
           }
         }
       `,
+      'boom-field.gts': `
+        import {
+          FieldDef,
+          Component,
+          primitive,
+          deserialize,
+          BaseDefConstructor,
+          BaseInstanceType,
+        } from 'https://cardstack.com/base/card-api';
+
+        export class BoomField extends FieldDef {
+          static [primitive]: string;
+          static async [deserialize]<T extends BaseDefConstructor>(
+            this: T,
+            value: any,
+          ): Promise<BaseInstanceType<T>> {
+            throw new Error('Boom!');
+          }
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              {{@model}}
+            </template>
+          };
+        }
+      `,
+      'boom-person.gts': `
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        import { BoomField } from "./boom-field";
+
+        export class BoomPerson extends CardDef {
+          static displayName = 'Boom Person';
+          @field firstName = contains(StringCard);
+          @field boom = contains(BoomField);
+          @field title = contains(StringCard, {
+            computeVia: function (this: BoomPerson) {
+              return this.firstName;
+            },
+          });
+        }
+      `,
       'README.txt': `Hello World`,
       'person-entry.json': {
         data: {
@@ -242,6 +283,19 @@ module('Acceptance | operator mode tests', function (hooks) {
           },
         },
       },
+      'boom.json': {
+        data: {
+          attributes: {
+            firstName: 'Boom!',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './boom-person',
+              name: 'BoomPerson',
+            },
+          },
+        },
+      },
       'grid.json': {
         data: {
           type: 'card',
@@ -307,6 +361,20 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`)
+      .exists();
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`)
+      .exists();
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`)
+      .exists();
+    // this asserts that cards that throw errors during search
+    // query deserialization (boom.json) are handled gracefully
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}boom"]`)
+      .doesNotExist('card with deserialization errors is skipped');
     await percySnapshot(assert);
 
     assert.operatorModeParametersMatch(currentURL(), {
@@ -318,7 +386,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           },
         ],
       ],
-      submode: Submode.Interact,
+      submode: Submodes.Interact,
     });
   });
 
@@ -370,10 +438,11 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submode.Code,
+        submode: Submodes.Code,
         codePath: `${testRealmURL}Pet/mango.json`,
         fileView: 'inheritance',
         openDirs: { [testRealmURL]: ['Pet/'] },
+        codeSelection: {},
       });
 
       // Toggle back to interactive mode
@@ -399,9 +468,10 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submode.Interact,
+        submode: Submodes.Interact,
         fileView: 'inheritance',
         openDirs: { [testRealmURL]: ['Pet/'] },
+        codeSelection: {},
       });
     });
   });

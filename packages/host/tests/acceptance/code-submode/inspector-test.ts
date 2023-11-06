@@ -1,4 +1,4 @@
-import { visit, click, waitFor } from '@ember/test-helpers';
+import { visit, click, waitFor, currentURL } from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
@@ -12,7 +12,10 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import { Submodes } from '@cardstack/host/components/submode-switcher';
+
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   TestRealm,
@@ -168,6 +171,10 @@ const inThisFileSource = `
     static displayName = 'exported field extends local field';
   }
 
+  class LocalCardWithoutExportRelationship extends CardDef {
+    static displayName = 'local card but without export relationship';
+  }
+
   export default class DefaultClass {}
 `;
 
@@ -202,9 +209,101 @@ const friendCardSource = `
   }
 `;
 
+const exportsSource = `
+  import {
+    contains,
+    field,
+    CardDef,
+    FieldDef
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  export class AncestorCard1 extends CardDef {
+    static displayName = 'AncestorCard1';
+    @field name = contains(StringCard);
+  }
+
+  export class AncestorCard2 extends CardDef {
+    static displayName = 'AncestorCard2';
+    @field name = contains(StringCard);
+  }
+
+  export class AncestorCard3 extends CardDef {
+    static displayName = 'AncestorCard3';
+    @field name = contains(StringCard);
+  }
+
+  export class AncestorField1 extends FieldDef {
+    static displayName = 'AncestorField1';
+    @field name = contains(StringCard);
+  }
+`;
+const specialExportsSource = `
+  import {
+    contains,
+    field,
+    CardDef
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  class AncestorCard extends CardDef {
+    static displayName = 'Ancestor';
+    @field name = contains(StringCard);
+  }
+
+  export default class DefaultAncestorCard extends CardDef {
+    static displayName = 'DefaultAncestor';
+    @field name = contains(StringCard);
+  }
+
+  export { AncestorCard as RenamedAncestorCard}
+`;
+
+const importsSource = `
+  import { AncestorCard2, AncestorField1 } from './exports';
+  import  { AncestorCard3 as FatherCard3 } from './exports';
+  import  DefaultAncestorCard from './special-exports';
+  import  { RenamedAncestorCard } from './special-exports';
+  import {
+    contains,
+    field,
+    linksTo,
+    linksToMany
+  } from 'https://cardstack.com/base/card-api';
+
+  export class ChildCard1 extends AncestorCard2 {
+    static displayName = 'ChildCard1';
+    @field field1 = contains(AncestorField1)
+    @field field2 = linksTo(AncestorCard2)
+    @field field3 = linksTo(()=>ChildCard2)
+    @field field4 = linksToMany(AncestorCard2)
+  }
+
+  export class ChildCard2 extends DefaultAncestorCard {
+    static displayName = 'ChildCard2';
+  }
+
+  export class ChildCard3 extends RenamedAncestorCard{
+    static displayName = 'ChildCard3';
+  }
+
+  export class ChildCard4 extends FatherCard3{
+    static displayName = 'ChildCard4';
+  }
+
+  export class ChildCard5 extends ChildCard2 {
+    static displayName = 'ChildCard5';
+  }
+
+  export class ChildField1 extends AncestorField1{
+    static displayName = 'ChildField1';
+  }
+`;
+
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
+  let monacoService: MonacoService;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -228,6 +327,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       'friend.gts': friendCardSource,
       'employee.gts': employeeCardSource,
       'in-this-file.gts': inThisFileSource,
+      'exports.gts': exportsSource,
+      'special-exports.gts': specialExportsSource,
+      'imports.gts': importsSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -332,6 +434,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
+    monacoService = this.owner.lookup(
+      'service:monaco-service',
+    ) as MonacoService;
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
@@ -479,16 +584,17 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
+    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
       'AClassWithExportName (LocalClass) class',
       'ExportedClass class',
       'ExportedClassInheritLocalClass class',
       'exportedFunction function',
-      'LocalCard card', //TODO: CS-6009 will probably change this
+      'LocalCard card',
       'ExportedCard card',
       'ExportedCardInheritLocalCard card',
-      'LocalField field', //TODO: CS-6009 will probably change this
+      'LocalField field',
       'ExportedField field',
       'ExportedFieldInheritLocalField field',
       'default (DefaultClass) class',
@@ -526,6 +632,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       )
       .exists();
     assert.dom(`[data-test-total-fields]`).containsText('4 Fields');
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
 
     // clicking on a field
     elementName = 'ExportedField';
@@ -549,6 +656,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         `[data-test-card-schema="exported field"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
 
     // clicking on an exported function
     elementName = 'exportedFunction';
@@ -558,7 +666,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} function`);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
-    assert.dom('[data-test-schema-editor-incompatible-item]').exists();
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
+      );
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
   });
 
   test<TestContextWithSSE>('Can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
@@ -737,5 +850,339 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
       'the deleted card has been removed from recent files',
     );
+  });
+
+  test('After opening inherited definition inside inheritance panel, "in-this-file" highlights selected definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}imports.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    // clicking on normal card
+    let elementName = 'ChildCard1';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
+    });
+    let selected = 'AncestorCard2 card';
+    await waitFor(`[data-test-definition-container]`);
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on default card
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    elementName = 'ChildCard2';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
+    });
+    selected = 'default (DefaultAncestorCard) card';
+    await waitFor(`[data-test-definition-container]`);
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on card which is renamed during export
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    elementName = 'ChildCard3';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
+    });
+    selected = 'RenamedAncestorCard (AncestorCard) card';
+    await waitFor(`[data-test-definition-container]`);
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on card which is renamed during import
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    elementName = 'ChildCard4';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
+    });
+    selected = 'AncestorCard3 card';
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on card which is defined locally
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    elementName = 'ChildCard5';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
+    });
+    selected = 'ChildCard2 card';
+    await waitFor(`[data-test-definition-container]`);
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+    //clicking on field
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    elementName = 'ChildField1';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
+    });
+    selected = 'AncestorField1 field';
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+  });
+
+  test('After opening definition from card type and fields on RHS, "in-this-file" highlights selected definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: Submodes.Code,
+      codePath: `${testRealmURL}imports.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    //click card type
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    let elementName = 'AncestorCard2';
+    await waitFor(
+      `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
+    );
+    await click(
+      `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
+    );
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
+      codeSelection: {
+        codeRef: {
+          module: `${testRealmURL}exports`,
+          name: elementName,
+        },
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [],
+      submode: Submodes.Code,
+    });
+
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+
+    //click normal field
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    elementName = 'AncestorField1';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
+    );
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
+      codeSelection: {
+        codeRef: {
+          module: `${testRealmURL}exports`,
+          name: elementName,
+        },
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [],
+      submode: Submodes.Code,
+    });
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
+
+    //click linksTo card
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    elementName = 'AncestorCard2';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field2"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field2"] [data-test-card-display-name="${elementName}"]`,
+    );
+
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
+      codeSelection: {
+        codeRef: {
+          module: `${testRealmURL}exports`,
+          name: elementName,
+        },
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [],
+      submode: Submodes.Code,
+    });
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+    //click linksTo card in the same file
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    elementName = 'ChildCard2';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field3"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field3"] [data-test-card-display-name="${elementName}"]`,
+    );
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        codeRef: {
+          module: `${testRealmURL}imports`,
+          name: elementName,
+        },
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [],
+      submode: Submodes.Code,
+    });
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+
+    //click linksTo many card
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    elementName = 'AncestorCard2';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field4"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field4"] [data-test-card-display-name="${elementName}"]`,
+    );
+
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
+      codeSelection: {
+        codeRef: {
+          module: `${testRealmURL}exports`,
+          name: elementName,
+        },
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [],
+      submode: Submodes.Code,
+    });
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
   });
 });

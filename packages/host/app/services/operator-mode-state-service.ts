@@ -10,21 +10,23 @@ import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
+import { StackItem } from '@cardstack/host/lib/stack-item';
+
+import { getCard } from '@cardstack/host/resources/card-resource';
 import { file, isReady, FileResource } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import {
-  type Stack,
-  type StackItem,
-} from '../components/operator-mode/container';
+import { type Stack } from '../components/operator-mode/interact-submode';
 
 import type CardService from '../services/card-service';
 
@@ -38,6 +40,12 @@ export interface OperatorModeState {
   codePath: URL | null;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
+  codeSelection: CodeSelection;
+}
+
+interface CodeSelection {
+  codeRef?: ResolvedCodeRef;
+  localName?: string;
 }
 
 interface CardItem {
@@ -56,6 +64,7 @@ export type SerializedState = {
   codePath?: string;
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
+  codeSelection?: CodeSelection;
 };
 
 interface OpenFileSubscriber {
@@ -65,15 +74,17 @@ interface OpenFileSubscriber {
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
-    submode: Submode.Interact,
+    submode: Submodes.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
+    codeSelection: new TrackedObject({}),
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
   private cachedRealmURL: URL | null = null;
 
   @service declare cardService: CardService;
+  @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
   @service declare recentFilesService: RecentFilesService;
   @service declare realmInfoService: RealmInfoService;
@@ -109,6 +120,29 @@ export default class OperatorModeStateService extends Service {
       }
     }
   });
+
+  async deleteCard(card: CardDef) {
+    // remove all stack items for the deleted card
+    let items: StackItem[] = [];
+    for (let stack of this.state.stacks || []) {
+      items.push(
+        ...(stack.filter((i) => i.card.id === card.id) as StackItem[]),
+      );
+    }
+    for (let item of items) {
+      this.trimItemsFromStack(item);
+    }
+    this.removeRecentCard(card.id);
+
+    let cardRealmUrl = await this.cardService.getRealmURL(card);
+
+    if (cardRealmUrl) {
+      let realmPaths = new RealmPaths(cardRealmUrl);
+      let cardPath = realmPaths.local(`${card.id}.json`);
+      this.recentFilesService.removeRecentFile(cardPath);
+    }
+    await this.cardService.deleteCard(card);
+  }
 
   trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
@@ -198,7 +232,11 @@ export default class OperatorModeStateService extends Service {
 
     stackItemsCopy.forEach((item) => {
       this.popItemFromStack(item.stackIndex);
-      this.addItemToStack({ ...item, stackIndex: destinationIndex });
+      this.addItemToStack(
+        item.clone({
+          stackIndex: destinationIndex,
+        }),
+      );
     });
 
     return this.schedulePersist();
@@ -209,9 +247,21 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  updateCodeRefSelection(codeRef: ResolvedCodeRef) {
+    this.state.codeSelection = {
+      codeRef,
+    };
+    this.schedulePersist();
+  }
+
+  updateLocalNameSelection(localName: string | undefined) {
+    this.state.codeSelection = { localName }; //we need to update localName independently because card and field don't have code ref
+    this.schedulePersist();
+  }
+
   get codePathRelativeToRealm() {
-    if (this.state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(this.realmURL);
+    if (this.state.codePath && this.resolvedRealmURL) {
+      let realmPath = new RealmPaths(this.resolvedRealmURL);
 
       if (realmPath.inRealm(this.state.codePath)) {
         try {
@@ -316,6 +366,7 @@ export default class OperatorModeStateService extends Service {
       codePath: this.state.codePath?.toString(),
       fileView: this.state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
+      codeSelection: this.state.codeSelection,
     };
 
     for (let stack of this.state.stacks) {
@@ -324,9 +375,9 @@ export default class OperatorModeStateService extends Service {
         if (item.format !== 'isolated' && item.format !== 'edit') {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
-        if (item.card.id) {
+        if (item.url) {
           serializedStack.push({
-            id: item.card.id,
+            id: item.url.href,
             format: item.format,
           });
         }
@@ -354,10 +405,11 @@ export default class OperatorModeStateService extends Service {
 
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
-      submode: rawState.submode ?? Submode.Interact,
+      submode: rawState.submode ?? Submodes.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inheritance',
       openDirs,
+      codeSelection: rawState.codeSelection ?? {},
     });
 
     let stackIndex = 0;
@@ -365,15 +417,15 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
-        let card = await this.cardService.loadModel(this, new URL(item.id));
-        if (!card) {
-          throw new Error(`cannot load card ${item.id}`);
-        }
-        newStack.push({
-          card,
+        let cardResource = getCard(this, () => item.id);
+        let stackItem = new StackItem({
+          owner: this, // ugh, not a great owner...
+          cardResource,
           format,
           stackIndex,
         });
+        await stackItem.ready();
+        newStack.push(stackItem);
       }
       newState.stacks.push(newStack);
       stackIndex++;
@@ -390,10 +442,9 @@ export default class OperatorModeStateService extends Service {
 
     const recentCardIds = JSON.parse(recentCardIdsString) as string[];
     for (const recentCardId of recentCardIds) {
-      const card = await this.cardService.loadModel(
-        this,
-        new URL(recentCardId),
-      );
+      const cardResource = getCard(this, () => recentCardId);
+      await cardResource.loaded;
+      let { card } = cardResource;
       if (!card) {
         console.warn(`cannot load card ${recentCardId}`);
         continue;
@@ -490,6 +541,10 @@ export default class OperatorModeStateService extends Service {
     }
 
     return this.cardService.defaultURL;
+  }
+
+  get resolvedRealmURL() {
+    return this.loaderService.loader.resolve(this.realmURL);
   }
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
