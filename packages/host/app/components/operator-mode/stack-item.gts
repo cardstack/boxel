@@ -31,6 +31,7 @@ import {
   Header,
   IconButton,
   Tooltip,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { cn, eq, menuItem, optional } from '@cardstack/boxel-ui/helpers';
 
@@ -53,7 +54,7 @@ import type {
 import ElementTracker from '../../resources/element-tracker';
 import Preview from '../preview';
 
-import { type StackItem } from './interact-submode';
+import { type StackItem } from '@cardstack/host/lib/stack-item';
 
 import OperatorModeOverlays from './overlays';
 
@@ -106,7 +107,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked lastSaved: number | undefined;
   @tracked lastSavedMsg: string | undefined;
   private refreshSaveMsg: number | undefined;
-  private subscribedCard: CardDef;
+  private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
 
@@ -119,8 +120,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    this.loadCard.perform();
     this.subscribeToCard.perform();
-    this.subscribedCard = this.card;
     this.args.setupStackItem(
       this.args.item,
       this.clearSelections,
@@ -219,7 +220,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   get cardIdentifier() {
-    return this.args.item.card.id;
+    return this.args.item.url?.href;
   }
 
   @action
@@ -246,10 +247,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.item.card;
   }
 
+  private loadCard = restartableTask(async () => {
+    await this.args.item.ready();
+  });
+
   private subscribeToCard = task(async () => {
-    await this.cardService.ready;
+    await this.args.item.ready();
+    this.subscribedCard = this.card;
+    let api = this.args.item.api;
     registerDestructor(this, this.cleanup);
-    this.cardService.subscribe(this.subscribedCard, this.onCardChange);
+    api.subscribeToChanges(this.subscribedCard, this.onCardChange);
     this.refreshSaveMsg = setInterval(
       () => this.calculateLastSavedMsg(),
       10 * 1000,
@@ -257,8 +264,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   });
 
   private cleanup = () => {
-    this.cardService.unsubscribe(this.subscribedCard, this.onCardChange);
-    clearInterval(this.refreshSaveMsg);
+    if (this.subscribedCard) {
+      let api = this.args.item.api;
+      api.unsubscribeFromChanges(this.subscribedCard, this.onCardChange);
+      clearInterval(this.refreshSaveMsg);
+    }
   };
 
   private onCardChange = () => {
@@ -347,160 +357,170 @@ export default class OperatorModeStackItem extends Component<Signature> {
         class={{cn 'card' edit=(eq @item.format 'edit')}}
         {{ContentElement onSetup=this.setupContainerEl}}
       >
-        <Header
-          @title={{this.headerTitle}}
-          class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
-          {{on
-            'click'
-            (optional (if this.isBuried (fn @dismissStackedCardsAbove @index)))
-          }}
-          data-test-stack-card-header
-        >
-          <:icon>
-            {{#if this.headerIcon.URL}}
-              <RealmIcon
-                @realmIconURL={{this.headerIcon.URL}}
-                @realmName={{this.realmName}}
-                class='header-icon'
-                data-test-boxel-header-icon={{this.headerIcon.URL}}
-                {{on 'mouseenter' this.headerIcon.onMouseEnter}}
-                {{on 'mouseleave' this.headerIcon.onMouseLeave}}
-              />
-            {{/if}}
-          </:icon>
-          <:actions>
-            {{#if (eq @item.format 'isolated')}}
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <IconButton
-                    @icon={{IconPencil}}
-                    @width='24px'
-                    @height='24px'
-                    class='icon-button'
-                    aria-label='Edit'
-                    {{on 'click' (fn @edit @item)}}
-                    data-test-edit-button
-                  />
-                </:trigger>
-                <:content>
-                  Edit
-                </:content>
-              </Tooltip>
-            {{else}}
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <IconButton
-                    @icon={{IconPencil}}
-                    @width='24px'
-                    @height='24px'
-                    class='icon-save'
-                    aria-label='Finish Editing'
-                    {{on 'click' (fn @save @item true)}}
-                    data-test-edit-button
-                  />
-                </:trigger>
-                <:content>
-                  Finish Editing
-                </:content>
-              </Tooltip>
-            {{/if}}
-            <div>
-              <BoxelDropdown>
-                <:trigger as |bindings|>
-                  <Tooltip @placement='top'>
-                    <:trigger>
-                      <IconButton
-                        @icon={{ThreeDotsHorizontal}}
-                        @width='20px'
-                        @height='20px'
-                        class='icon-button'
-                        aria-label='Options'
-                        data-test-more-options-button
-                        {{bindings}}
-                      />
-                    </:trigger>
-                    <:content>
-                      More Options
-                    </:content>
-                  </Tooltip>
-                </:trigger>
-                <:content as |dd|>
-                  <BoxelMenu
-                    @closeMenu={{dd.close}}
-                    @items={{if
-                      (eq @item.format 'edit')
-                      (array
-                        (menuItem
-                          'Copy Card URL'
-                          (perform this.copyToClipboard)
-                          icon=IconLink
-                        )
-                        (menuItem
-                          'Delete'
-                          (fn @delete this.card)
-                          icon=IconTrash
-                          dangerous=true
-                        )
-                      )
-                      (array
-                        (menuItem
-                          'Copy Card URL'
-                          (perform this.copyToClipboard)
-                          icon=IconLink
-                        )
-                        (menuItem
-                          'Delete'
-                          (fn @delete this.card)
-                          icon=IconTrash
-                          dangerous=true
-                        )
-                      )
-                    }}
-                  />
-                </:content>
-              </BoxelDropdown>
-            </div>
-            <Tooltip @placement='top'>
-              <:trigger>
-                <IconButton
-                  @icon={{IconX}}
-                  @width='20px'
-                  @height='20px'
-                  class='icon-button'
-                  aria-label='Close'
-                  {{on 'click' (fn @close @item)}}
-                  data-test-close-button
+        {{#if this.loadCard.isRunning}}
+          <LoadingIndicator />
+        {{else}}
+          <Header
+            @title={{this.headerTitle}}
+            class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
+            {{on
+              'click'
+              (optional
+                (if this.isBuried (fn @dismissStackedCardsAbove @index))
+              )
+            }}
+            data-test-stack-card-header
+          >
+            <:icon>
+              {{#if this.headerIcon.URL}}
+                <RealmIcon
+                  @realmIconURL={{this.headerIcon.URL}}
+                  @realmName={{this.realmName}}
+                  class='header-icon'
+                  data-test-boxel-header-icon={{this.headerIcon.URL}}
+                  {{on 'mouseenter' this.headerIcon.onMouseEnter}}
+                  {{on 'mouseleave' this.headerIcon.onMouseLeave}}
                 />
-              </:trigger>
-              <:content>
-                {{if (eq @item.format 'isolated') 'Close' 'Cancel & Close'}}
-              </:content>
-            </Tooltip>
-          </:actions>
-          <:detail>
-            <div class='save-indicator'>
-              {{#if this.isSaving}}
-                Saving…
-              {{else if this.lastSavedMsg}}
-                {{this.lastSavedMsg}}
               {{/if}}
-            </div>
-          </:detail>
-        </Header>
-        <div class='content' {{ContentElement onSetup=this.setupContentEl}}>
-          <Preview
-            @card={{this.card}}
-            @format={{@item.format}}
-            @context={{this.context}}
-          />
-          <OperatorModeOverlays
-            @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
-            @publicAPI={{@publicAPI}}
-            @delete={{@delete}}
-            @toggleSelect={{this.toggleSelect}}
-            @selectedCards={{this.selectedCards}}
-          />
-        </div>
+            </:icon>
+            <:actions>
+              {{#if (eq @item.format 'isolated')}}
+                <Tooltip @placement='top'>
+                  <:trigger>
+                    <IconButton
+                      @icon={{IconPencil}}
+                      @width='24px'
+                      @height='24px'
+                      class='icon-button'
+                      aria-label='Edit'
+                      {{on 'click' (fn @edit @item)}}
+                      data-test-edit-button
+                    />
+                  </:trigger>
+                  <:content>
+                    Edit
+                  </:content>
+                </Tooltip>
+              {{else}}
+                <Tooltip @placement='top'>
+                  <:trigger>
+                    <IconButton
+                      @icon={{IconPencil}}
+                      @width='24px'
+                      @height='24px'
+                      class='icon-save'
+                      aria-label='Finish Editing'
+                      {{on 'click' (fn @save @item true)}}
+                      data-test-edit-button
+                    />
+                  </:trigger>
+                  <:content>
+                    Finish Editing
+                  </:content>
+                </Tooltip>
+              {{/if}}
+              <div>
+                <BoxelDropdown>
+                  <:trigger as |bindings|>
+                    <Tooltip @placement='top'>
+                      <:trigger>
+                        <IconButton
+                          @icon={{ThreeDotsHorizontal}}
+                          @width='20px'
+                          @height='20px'
+                          class='icon-button'
+                          aria-label='Options'
+                          data-test-more-options-button
+                          {{bindings}}
+                        />
+                      </:trigger>
+                      <:content>
+                        More Options
+                      </:content>
+                    </Tooltip>
+                  </:trigger>
+                  <:content as |dd|>
+                    <BoxelMenu
+                      @closeMenu={{dd.close}}
+                      @items={{if
+                        (eq @item.format 'edit')
+                        (array
+                          (menuItem
+                            'Copy Card URL'
+                            (perform this.copyToClipboard)
+                            icon=IconLink
+                          )
+                          (menuItem
+                            'Delete'
+                            (fn @delete this.card)
+                            icon=IconTrash
+                            dangerous=true
+                          )
+                        )
+                        (array
+                          (menuItem
+                            'Copy Card URL'
+                            (perform this.copyToClipboard)
+                            icon=IconLink
+                          )
+                          (menuItem
+                            'Delete'
+                            (fn @delete this.card)
+                            icon=IconTrash
+                            dangerous=true
+                          )
+                        )
+                      }}
+                    />
+                  </:content>
+                </BoxelDropdown>
+              </div>
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <IconButton
+                    @icon={{IconX}}
+                    @width='20px'
+                    @height='20px'
+                    class='icon-button'
+                    aria-label='Close'
+                    {{on 'click' (fn @close @item)}}
+                    data-test-close-button
+                  />
+                </:trigger>
+                <:content>
+                  {{if (eq @item.format 'isolated') 'Close' 'Cancel & Close'}}
+                </:content>
+              </Tooltip>
+            </:actions>
+            <:detail>
+              <div class='save-indicator'>
+                {{#if this.isSaving}}
+                  Saving…
+                {{else if this.lastSavedMsg}}
+                  {{this.lastSavedMsg}}
+                {{/if}}
+              </div>
+            </:detail>
+          </Header>
+          <div
+            class='content'
+            {{ContentElement onSetup=this.setupContentEl}}
+            data-test-stack-item-content
+          >
+            <Preview
+              @card={{this.card}}
+              @format={{@item.format}}
+              @context={{this.context}}
+            />
+            <OperatorModeOverlays
+              @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+              @publicAPI={{@publicAPI}}
+              @delete={{@delete}}
+              @toggleSelect={{this.toggleSelect}}
+              @selectedCards={{this.selectedCards}}
+            />
+          </div>
+        {{/if}}
       </CardContainer>
     </div>
     <style>

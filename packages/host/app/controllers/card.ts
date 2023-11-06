@@ -9,9 +9,11 @@ import { tracked } from '@glimmer/tracking';
 import { ComponentLike } from '@glint/template';
 import stringify from 'safe-stable-stringify';
 
+import type { Loader } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 import { Model } from '@cardstack/host/routes/card';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -74,16 +76,19 @@ export default class CardController extends Controller {
     );
   }
 
-  getLiveCard<T extends object>(
-    owner: T,
+  getCard(
     url: URL,
-    opts?: { cachedOnly?: true },
-  ): Promise<CardDef | undefined> {
-    return this.cardService.loadModel(owner, url, opts);
+    opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
+  ) {
+    return getCard(this, () => url.href, {
+      ...(opts?.isLive ? { isLive: () => opts.isLive! } : {}),
+      ...(opts?.cachedOnly ? { cachedOnly: () => opts.cachedOnly! } : {}),
+      ...(opts?.loader ? { loader: () => opts.loader! } : {}),
+    });
   }
 
-  trackLiveCard<T extends object>(owner: T, card: CardDef) {
-    return this.cardService.trackLiveCard(owner, card);
+  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL) {
+    return trackCard(owner, card, realmURL);
   }
 
   getLiveCards(

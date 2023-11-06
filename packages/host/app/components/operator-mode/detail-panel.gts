@@ -15,8 +15,6 @@ import {
 
 import { or, and } from '@cardstack/boxel-ui/helpers';
 
-import { type RealmInfo } from '@cardstack/runtime-common';
-
 import {
   hasExecutableExtension,
   getPlural,
@@ -63,7 +61,6 @@ import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    realmInfo: RealmInfo | null;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
     selectedDeclaration?: ModuleDeclaration;
@@ -122,7 +119,7 @@ export default class DetailPanel extends Component<Signature> {
 
   get isCardInstance() {
     return (
-      this.isJSON &&
+      this.args.readyFile.url.endsWith('.json') &&
       isCardDocumentString(this.args.readyFile.content) &&
       this.args.cardInstance !== undefined
     );
@@ -136,8 +133,11 @@ export default class DetailPanel extends Component<Signature> {
     return this.args.readyFile.isBinary;
   }
 
-  get isJSON() {
-    return this.args.readyFile.url.endsWith('.json');
+  private get isNonCardJson() {
+    return (
+      this.args.readyFile.url.endsWith('.json') &&
+      !isCardDocumentString(this.args.readyFile.content)
+    );
   }
 
   get isField() {
@@ -353,7 +353,7 @@ export default class DetailPanel extends Component<Signature> {
             {{/if}}
           </div>
         {{else}}
-          {{#if (or this.isBinary this.isJSON)}}
+          {{#if (or this.isBinary this.isNonCardJson)}}
             <div class='details-panel'>
               <header class='panel-header' aria-label='Details Panel Header'>
                 Details

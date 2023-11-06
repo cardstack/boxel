@@ -72,6 +72,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       await operatorModeStateService.restore({
         stacks: [[{ id: cardURL, format }]],
       });
+      await waitFor('[data-test-stack-item-content]');
     };
   });
 
