@@ -11,8 +11,10 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { Modal } from '@cardstack/boxel-ui/components';
 
+import { type Loader } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
+import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 
@@ -63,18 +65,21 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   // public API
   @action
-  getLiveCard<T extends object>(
-    owner: T,
+  getCard(
     url: URL,
-    opts?: { cachedOnly?: true },
-  ): Promise<CardDef | undefined> {
-    return this.cardService.loadModel(owner, url, opts);
+    opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
+  ) {
+    return getCard(this, () => url.href, {
+      ...(opts?.isLive ? { isLive: () => opts.isLive! } : {}),
+      ...(opts?.cachedOnly ? { cachedOnly: () => opts.cachedOnly! } : {}),
+      ...(opts?.loader ? { loader: () => opts.loader! } : {}),
+    });
   }
 
   // public API
   @action
-  trackLiveCard<T extends object>(owner: T, card: CardDef) {
-    return this.cardService.trackLiveCard(owner, card);
+  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL) {
+    return trackCard(owner, card, realmURL);
   }
 
   // public API

@@ -35,6 +35,7 @@ export interface DirectoryEntryRelationship {
 }
 import { RealmPaths } from './paths';
 import { Query } from './query';
+import { Loader } from './loader';
 export {
   aiBotUsername,
   baseRealm,
@@ -44,7 +45,7 @@ export {
   primitive,
 } from './constants';
 export { makeLogDefinitions, logger } from './log';
-export { RealmPaths };
+export { RealmPaths, Loader };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
 export { NotReady, isNotReadyError } from './not-ready';
 export { cardTypeDisplayName } from './helpers/card-type-display-name';
@@ -60,7 +61,6 @@ export const isNode =
 
 export { Realm } from './realm';
 export { SupportedMimeType } from './router';
-export { Loader } from './loader';
 export type {
   Kind,
   RealmAdapter,
@@ -98,9 +98,11 @@ export { getPlural } from './pluralize';
 
 import type {
   CardDef,
+  FieldDef,
   BaseDef,
   Format,
 } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
@@ -170,12 +172,15 @@ export interface CardSearch {
     ready: Promise<void>;
     isLoading: boolean;
   };
-  getLiveCard: <T extends object>(
-    owner: T,
+  getCard(
     url: URL,
-    opts?: { cachedOnly?: true },
-  ) => Promise<CardDef | undefined>;
-  trackLiveCard<T extends object>(owner: T, card: CardDef): CardDef;
+    opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
+  ): {
+    card: CardDef | undefined;
+    loaded: Promise<void> | undefined;
+    cardError?: undefined | { id: string; error: Error };
+  };
+  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL): CardDef;
   getLiveCards(
     query: Query,
     realms?: string[],
@@ -192,28 +197,31 @@ export function getCards(query: Query, realms?: string[]) {
   return finder?.getCards(query, realms);
 }
 
-export function getLiveCard<T extends object>(
-  owner: T,
+export function getCard(
   url: URL,
-  opts?: { cachedOnly?: true },
-): Promise<CardDef | undefined> {
+  opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
+) {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_SEARCH) {
     // on the server we don't need this
-    return Promise.resolve(undefined);
+    return { card: undefined, loaded: undefined };
   }
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getLiveCard(owner, url, opts);
+  return finder?.getCard(url, opts);
 }
 
-export function trackLiveCard<T extends object>(owner: T, card: CardDef) {
+export function trackCard<T extends object>(
+  owner: T,
+  card: CardDef,
+  realmURL: URL,
+) {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_SEARCH) {
     // on the server we don't need this
     return card;
   }
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.trackLiveCard(owner, card);
+  return finder?.trackCard(owner, card, realmURL);
 }
 
 export function getLiveCards(
@@ -293,7 +301,7 @@ export interface Actions {
     format?: Format,
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
     fieldName?: string,
-  ) => void;
+  ) => Promise<void>;
   createCardDirectly: (
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined,
@@ -337,4 +345,24 @@ export function internalKeyFor(
     case 'fieldOf':
       return `${internalKeyFor(ref.card, relativeTo)}/fields/${ref.field}`;
   }
+}
+
+export function loaderFor(cardOrField: CardDef | FieldDef) {
+  let clazz = Reflect.getPrototypeOf(cardOrField)!.constructor;
+  let loader = Loader.getLoaderFor(clazz);
+  if (!loader) {
+    throw new Error(`bug: could not determine loader for card or field`);
+  }
+  return loader;
+}
+
+export async function apiFor(cardOrField: CardDef | FieldDef) {
+  let loader = loaderFor(cardOrField);
+  let api = await loader.import<typeof CardAPI>(
+    'https://cardstack.com/base/card-api',
+  );
+  if (!api) {
+    throw new Error(`could not load card API`);
+  }
+  return api;
 }

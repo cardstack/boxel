@@ -86,6 +86,8 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
 
+import { getCard } from '@cardstack/host/resources/card-resource';
+
 interface Signature {
   Args: {
     saveSourceOnClose: (url: URL, content: string) => void;
@@ -135,7 +137,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
-  @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
 
@@ -143,8 +144,24 @@ export default class CodeSubmode extends Component<Signature> {
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
+  #currentCard: CardDef | undefined;
 
   private deleteModal: DeleteModal | undefined;
+  private cardResource = getCard(
+    this,
+    () => {
+      if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
+        return undefined;
+      }
+      // this includes all JSON files, but the card resource is smart enough
+      // to skip JSON that are not card instances
+      let url = this.codePath.href.replace(/\.json$/, '');
+      return url;
+    },
+    {
+      onCardInstanceChange: () => this.onCardLoaded,
+    },
+  );
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -171,13 +188,29 @@ export default class CodeSubmode extends Component<Signature> {
         if (monacoContent) {
           this.args.saveSourceOnClose(this.codePath, monacoContent);
         }
-      } else if (this.hasUnsavedCardChanges && this.card) {
-        this.args.saveCardOnClose(this.card);
+      } else if (this.hasUnsavedCardChanges && this.#currentCard) {
+        // we use this.#currentCard here instead of this.card because in
+        // the destructor we no longer have access to resources bound to
+        // this component since they are destroyed first, so this.#currentCard
+        // is something we copy from the card resource when it changes so that
+        // we have access to it in the destructor
+        this.args.saveCardOnClose(this.#currentCard);
       }
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
     this.loadMonaco.perform();
   }
+
+  private get card() {
+    if (
+      this.cardResource.card &&
+      this.codePath?.href.replace(/\.json$/, '') === this.cardResource.url
+    ) {
+      return this.cardResource.card;
+    }
+    return undefined;
+  }
+
   private backgroundURLStyle(backgroundURL: string | null) {
     let possibleStyle = backgroundURL
       ? `background-image: url(${backgroundURL});`
@@ -261,7 +294,7 @@ export default class CodeSubmode extends Component<Signature> {
     }
 
     // If rhs doesn't handle any case but we can't capture the error
-    if (!this.cardJsonLoaded && !this.selectedCardOrField) {
+    if (!this.card && !this.selectedCardOrField) {
       return "No tools are available to inspect this file or it's contents.";
     }
 
@@ -324,76 +357,18 @@ export default class CodeSubmode extends Component<Signature> {
     return;
   });
 
-  // We are actually loading cards using a side-effect of this cached getter
-  // instead of a resource because with a resource it becomes impossible
-  // to ignore our own auto-save echoes, since the act of auto-saving triggers
-  // the openFile resource to update which would otherwise trigger a card
-  // resource to update (and hence invalidate components can consume this card
-  // resource.) By using this side effect we can prevent invalidations when the
-  // card isn't actually different and we are just seeing SSE events in response
-  // to our own activity.
-  @cached
-  private get openFileCardJSON() {
-    this.cardError = undefined;
-    if (
-      this.currentOpenFile?.state === 'ready' &&
-      this.currentOpenFile.name.endsWith('.json')
-    ) {
-      let maybeCard: any;
-      try {
-        maybeCard = JSON.parse(this.currentOpenFile.content);
-      } catch (err: any) {
-        this.cardError = err;
-        return undefined;
-      }
-      if (isSingleCardDocument(maybeCard)) {
-        let url = new URL(this.currentOpenFile.url.replace(/\.json$/, ''));
-        // in order to not get trapped in a glimmer invalidation cycle we need to
-        // load the card in a different execution frame
-        this.loadLiveCard.perform(url);
-        return maybeCard;
-      }
+  private onCardLoaded = (
+    oldCard: CardDef | undefined,
+    newCard: CardDef | undefined,
+  ) => {
+    if (oldCard) {
+      this.cardResource.api.unsubscribeFromChanges(oldCard, this.onCardChange);
     }
-    // in order to not get trapped in a glimmer invalidation cycle we need to
-    // unload the card in a different execution frame
-    this.unloadCard.perform();
-    return undefined;
-  }
-
-  private loadLiveCard = restartableTask(async (url: URL) => {
-    let card = await this.cardService.loadModel(this, url);
-    if (!card) {
-      throw new Error(`bug: could not load card ${url.href}`);
+    if (newCard) {
+      this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
     }
-    if (card !== this.card) {
-      if (this.card) {
-        this.cardService.unsubscribe(this.card, this.onCardChange);
-      }
-      this.card = card;
-      this.cardService.subscribe(this.card, this.onCardChange);
-    }
-  });
-
-  private unloadCard = restartableTask(async () => {
-    await Promise.resolve();
-    if (this.card) {
-      this.cardService.unsubscribe(this.card, this.onCardChange);
-    }
-    this.card = undefined;
-    this.cardError = undefined;
-  });
-
-  private get cardJsonLoaded() {
-    return isReady(this.currentOpenFile) && this.openFileCardJSON;
-  }
-
-  private get cardIsLoaded() {
-    return (
-      isReady(this.currentOpenFile) &&
-      this.openFileCardJSON &&
-      this.card?.id === this.currentOpenFile.url.replace(/\.json$/, '')
-    );
-  }
+    this.#currentCard = newCard;
+  };
 
   private get loadedCard() {
     if (!this.card) {
@@ -892,7 +867,7 @@ export default class CodeSubmode extends Component<Signature> {
                     >
                       {{this.fileIncompatibilityMessage}}
                     </div>
-                  {{else if this.cardIsLoaded}}
+                  {{else if this.card}}
                     <CardPreviewPanel
                       @card={{this.loadedCard}}
                       @realmURL={{this.realmURL}}

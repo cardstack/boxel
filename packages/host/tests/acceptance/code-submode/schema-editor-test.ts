@@ -27,8 +27,10 @@ import {
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
+  setupOnSave,
   getMonacoContent,
   type TestContextWithSSE,
+  type TestContextWithSave,
 } from '../../helpers';
 
 const indexCardSource = `
@@ -230,6 +232,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   }
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
+  setupOnSave(hooks);
   setupServerSentEvents(hooks);
   setupWindowMock(hooks);
 
@@ -479,6 +482,34 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert
       .dom(`[data-test-card-schema="Card"] [data-test-realm-icon-url]`)
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
+  });
+
+  test('when selecting card definition from a card instance in code mode, the right hand panel changes from card preview to schema mode', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-code-mode-card-preview-body]');
+    assert
+      .dom('[data-test-code-mode-card-preview-body]')
+      .containsText('Hassan');
+    await waitFor(
+      `button[data-test-definition-container="${testRealmURL}person"]`,
+    );
+    await click(
+      `button[data-test-definition-container="${testRealmURL}person"]`,
+    );
+    await waitFor('[data-test-card-schema]');
+    assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    assert.dom('[data-test-total-fields]').containsText('8 Fields');
   });
 
   test('shows displayName of CardResource when field refers to itself', async function (assert) {
@@ -778,7 +809,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     );
   });
 
-  test('deleting a field from schema editor', async function (assert) {
+  test<TestContextWithSave>('deleting a field from schema editor', async function (assert) {
+    assert.expect(7);
     let operatorModeStateParam = stringify({
       stacks: [],
       submode: 'code',
@@ -805,6 +837,15 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       getMonacoContent().includes('firstName = contains(StringCard)'),
     );
 
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.false(
+        content.includes('firstName = contains(StringCard)'),
+        'firstName field removed from saved module',
+      );
+    });
     await click('[data-test-boxel-menu-item-text="Remove Field"]');
 
     assert.dom('[data-test-remove-field-modal]').exists();
@@ -825,10 +866,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
       .containsText('+ 4 Fields'); // One field less
-
-    assert.false(
-      getMonacoContent().includes('firstName = contains(StringCard)'),
-    );
 
     assert
       .dom(
