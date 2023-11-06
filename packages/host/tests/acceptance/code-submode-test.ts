@@ -868,7 +868,7 @@ module('Acceptance | code submode tests', function (hooks) {
       .hasText(elementName);
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
-    
+
     const editor = find('.monaco-editor');
     await triggerKeyEvent(editor!, 'keydown', 'ArrowDown');
     elementName = 'ExportedClass';
@@ -878,8 +878,8 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-boxel-selector-item-selected]')
       .hasText(`${elementName} class`);
-    
-    for(let i = 1; i <= 9; i++) {
+
+    for (let i = 1; i <= 9; i++) {
       await triggerKeyEvent(editor!, 'keydown', 'ArrowDown');
     }
     elementName = 'LocalCard';
@@ -889,8 +889,8 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-boxel-selector-item-selected]')
       .hasText(`${elementName} card`);
-    
-    for(let i = 1; i <= 16; i++) {
+
+    for (let i = 1; i <= 16; i++) {
       await triggerKeyEvent(editor!, 'keydown', 'ArrowDown');
     }
     elementName = 'ExportedField';

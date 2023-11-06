@@ -21,7 +21,6 @@ import {
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
 import { Position } from 'monaco-editor';
-import { TrackedObject } from 'tracked-built-ins';
 
 import {
   Button,
@@ -139,7 +138,6 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private monacoCursorPosition: Position | undefined;
 
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
@@ -404,21 +402,19 @@ export default class CodeSubmode extends Component<Signature> {
     return this.card;
   }
 
-  private get getMonacoCursorPosition() {
-    if (this.monacoCursorPosition) {
-      return this.monacoCursorPosition;
-    }
+  @action
+  private initializeMonacoCursorPosition() {
     if (this.selectedDeclaration?.path?.node.loc) {
       let { start } = this.selectedDeclaration.path.node.loc;
-      return new Position(start.line, 0);
+      this.monacoService.updateCursorPosition(
+        new Position(start.line, start.column),
+      );
     }
-    return undefined;
   }
 
   @action
   private onMonacoCursorPositionChange(position: Position) {
-    this.monacoCursorPosition = position;
-    this.selectDeclarationByMonacoCursorPosition(this.monacoCursorPosition);
+    this.selectDeclarationByMonacoCursorPosition(position);
   }
 
   @action
@@ -427,12 +423,15 @@ export default class CodeSubmode extends Component<Signature> {
   ) {
     if (declaration.path?.node.loc) {
       let { start, end } = declaration.path?.node.loc;
+      let currentCursorPosition = this.monacoService.getCursorPosition();
       if (
-        this.monacoCursorPosition &&
-        (this.monacoCursorPosition.lineNumber < start.line ||
-          this.monacoCursorPosition.lineNumber > end.line)
+        currentCursorPosition &&
+        (currentCursorPosition.lineNumber < start.line ||
+          currentCursorPosition.lineNumber > end.line)
       ) {
-        this.monacoCursorPosition = new Position(start.line, start.column);
+        this.monacoService.updateCursorPosition(
+          new Position(start.line, start.column),
+        );
       }
     }
   }
@@ -897,7 +896,7 @@ export default class CodeSubmode extends Component<Signature> {
                         contentChanged=(perform this.contentChangedTask)
                         monacoSDK=this.monacoSDK
                         language=this.language
-                        cursorPosition=this.getMonacoCursorPosition
+                        initializeCursorPosition=this.initializeMonacoCursorPosition
                         onCursorPositionChange=this.onMonacoCursorPositionChange
                       }}
                     ></div>
