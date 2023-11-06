@@ -20,6 +20,9 @@ interface Signature {
   };
 }
 
+// ignore SSE server echoes of our own saves by not processing content changes
+// within SERVER_ECHO_MS of the last monaco change in memory
+const SERVER_ECHO_MS = 2000;
 const DEBOUNCE_MS = 500;
 
 export default class Monaco extends Modifier<Signature> {
@@ -27,6 +30,7 @@ export default class Monaco extends Modifier<Signature> {
   private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
+  private lastModified = Date.now();
 
   modify(
     element: HTMLElement,
@@ -44,7 +48,10 @@ export default class Monaco extends Modifier<Signature> {
       if (language && language !== this.lastLanguage) {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
-      if (content !== this.lastContent) {
+      if (
+        content !== this.lastContent &&
+        Date.now() > this.lastModified + SERVER_ECHO_MS
+      ) {
         this.model.setValue(content);
       }
     } else {
@@ -77,7 +84,11 @@ export default class Monaco extends Modifier<Signature> {
       );
     }
     this.lastLanguage = language;
-    if (this.editor && cursorPosition) {
+    if (
+      this.editor &&
+      cursorPosition &&
+      Date.now() > this.lastModified + SERVER_ECHO_MS
+    ) {
       this.editor.focus();
       this.editor.setPosition({
         lineNumber: cursorPosition.startLineNumber,
@@ -89,6 +100,7 @@ export default class Monaco extends Modifier<Signature> {
 
   private onContentChanged = restartableTask(
     async (contentChanged: (text: string) => void) => {
+      this.lastModified = Date.now();
       timeout(DEBOUNCE_MS);
       if (this.model) {
         this.lastContent = this.model.getValue();
