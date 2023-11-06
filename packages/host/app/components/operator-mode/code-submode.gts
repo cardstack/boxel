@@ -144,6 +144,7 @@ export default class CodeSubmode extends Component<Signature> {
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
+  #currentCard: CardDef | undefined;
 
   private deleteModal: DeleteModal | undefined;
   private cardResource = getCard(
@@ -187,8 +188,13 @@ export default class CodeSubmode extends Component<Signature> {
         if (monacoContent) {
           this.args.saveSourceOnClose(this.codePath, monacoContent);
         }
-      } else if (this.hasUnsavedCardChanges && this.card) {
-        this.args.saveCardOnClose(this.card);
+      } else if (this.hasUnsavedCardChanges && this.#currentCard) {
+        // we use this.#currentCard here instead of this.card because in
+        // the destructor we no longer have access to resources bound to
+        // this component since they are destroyed first, so this.#currentCard
+        // is something we copy from the card resource when it changes so that
+        // we have access to it in the destructor
+        this.args.saveCardOnClose(this.#currentCard);
       }
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
@@ -361,6 +367,7 @@ export default class CodeSubmode extends Component<Signature> {
     if (newCard) {
       this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
     }
+    this.#currentCard = newCard;
   };
 
   private get loadedCard() {
