@@ -28,6 +28,7 @@ export default class Monaco extends Modifier<Signature> {
   private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
+  private isEditing: boolean = false;
 
   modify(
     element: HTMLElement,
@@ -47,7 +48,8 @@ export default class Monaco extends Modifier<Signature> {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
 
-      if (content !== this.lastContent && !this.editor.hasTextFocus()) {
+      // Prevent race condition by ensuring content cannot be updated during editing.
+      if ( content !== this.lastContent && !this.isEditing) {
         this.model.setValue(content);
       }
     } else {
@@ -78,21 +80,26 @@ export default class Monaco extends Modifier<Signature> {
       this.model.onDidChangeContent(() =>
         this.onContentChanged.perform(contentChanged),
       );
-      if (onCursorPositionChange) {
-        this.editor.onDidChangeCursorSelection((event) => {
-          if (
-            this.editor &&
-            event.source !== 'model' &&
-            event.selection.startLineNumber === event.selection.endLineNumber &&
-            event.selection.startColumn === event.selection.endColumn
-          ) {
-            let position = this.editor.getPosition();
-            if (position) {
-              onCursorPositionChange(position);
-            }
+      this.editor.onDidChangeCursorSelection((event) => {
+        if (
+          this.editor &&
+          event.source !== 'model' &&
+          event.selection.startLineNumber === event.selection.endLineNumber &&
+          event.selection.startColumn === event.selection.endColumn
+        ) {
+          let position = this.editor.getPosition();
+          if (position) {
+            onCursorPositionChange?.(position);
           }
-        });
-      }
+        }
+
+        if (event.source === 'keyboard' || event.source === 'mouse') {
+          this.isEditing = true;
+        }
+      });
+      this.editor.onDidBlurEditorText((_event) => {
+        this.isEditing = false;
+      });
     }
     this.lastLanguage = language;
     if (this.editor && !this.editor.hasTextFocus()) {
