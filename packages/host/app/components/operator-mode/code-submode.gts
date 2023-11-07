@@ -87,6 +87,7 @@ import SubmodeLayout from './submode-layout';
 import NewFileButton from './new-file-button';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
+import DeclarationsService from '@cardstack/host/services/declarations-service';
 
 interface Signature {
   Args: {
@@ -134,6 +135,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare recentFilesService: RecentFilesService;
   @service declare loaderService: LoaderService;
+  @service declare declarationsService: DeclarationsService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
@@ -407,11 +409,11 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get declarations() {
-    return this.moduleContentsResource?.declarations || [];
+    return this.declarationsService.declarations;
   }
 
   private get _selectedDeclaration() {
-    return this.moduleContentsResource?.declarations.find((dec) => {
+    return this.declarations.find((dec) => {
       // when refreshing module,
       // checks localName from serialized url
       if (
