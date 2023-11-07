@@ -905,7 +905,7 @@ module('Acceptance | code submode tests', function (hooks) {
   test<TestContextWithSSE>('the monaco cursor position is maintained during an auto-save', async function (assert) {
     assert.expect(3);
     // we only want to change this for this particular test so we emulate what the non-test env sees
-    monacoService.serverEchoDebounceMs = 2000;
+    monacoService.serverEchoDebounceMs = 5000;
     let expectedEvents = [
       {
         type: 'index',

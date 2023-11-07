@@ -27,7 +27,7 @@ module.exports = function (environment) {
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
     autoSaveDelayMs: 500,
     monacoDebounceMs: 500,
-    serverEchoDebounceMs: 2000,
+    serverEchoDebounceMs: 5000,
 
     // the fields below may be rewritten by the realm server
     ownRealmURL:
