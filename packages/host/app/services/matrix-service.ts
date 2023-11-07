@@ -253,7 +253,8 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
-    if (context?.submode === Submode.Interact) {
+    console.log(context);
+    if (context?.submode === 'interact') {
       let serializedCards = await Promise.all(
         context!.openCards.map(async (card) => {
           return await this.cardService.serializeCard(card);

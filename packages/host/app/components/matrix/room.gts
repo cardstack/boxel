@@ -180,7 +180,8 @@ export default class Room extends Component<RoomArgs> {
           {{on 'click' this.chooseCard}}
         >Choose Card</Button>
 
-        <label for='share-checkbox'>Share top cards</label>
+        <label for='share-checkbox'>Allow access to the cards you can see at the
+          top of your stacks</label>
         <Input
           id={{(concat 'helper-text-' this.helperId)}}
           data-test-share-context
