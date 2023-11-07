@@ -2904,3 +2904,83 @@ type ElementType<T> = T extends (infer V)[] ? V : never;
 function makeRelativeURL(maybeURL: string, opts?: SerializeOpts): string {
   return opts?.maybeRelativeURL ? opts.maybeRelativeURL(maybeURL) : maybeURL;
 }
+
+type EmptySchema = {};
+
+type ArraySchema = {
+  type: 'array';
+  items: Schema;
+};
+
+type ObjectSchema = {
+  type: 'object';
+  properties: {
+    [fieldName: string]: Schema;
+  };
+};
+
+type DateSchema = {
+  type: 'string';
+  format: 'date' | 'date-time';
+};
+
+type PrimitiveSchema = {
+  type: 'string' | 'number' | 'boolean';
+};
+
+type Schema =
+  | EmptySchema
+  | ArraySchema
+  | ObjectSchema
+  | DateSchema
+  | PrimitiveSchema;
+
+export function generatePatchCallSpecification(def: typeof BaseDef) {
+  /*
+    From a card definition, generate a JSON Schema that can be used to
+    define the shape of a patch call. Fields that cannot be automatically
+    identified may be omitted from the schema.
+
+    This is a subset of JSON Schema.
+
+    */
+  if (primitive in def) {
+    switch (def.name) {
+      case 'NumberField':
+        return { type: 'number' };
+      case 'StringField':
+        return { type: 'string' };
+      case 'BooleanField':
+        return { type: 'boolean' };
+      case 'DateField':
+        return { type: 'string', format: 'date' };
+      case 'DateTimeField':
+        return { type: 'string', format: 'date-time' };
+      default:
+        return {};
+    }
+  }
+
+  let schema: ObjectSchema = {
+    type: 'object',
+    properties: {},
+  };
+  let { id: removedIdField, ...fields } = getFields(def, {
+    usedFieldsOnly: false,
+  });
+  for (let [fieldName, field] of Object.entries(fields)) {
+    if (field.computeVia) {
+      continue;
+    }
+    let fieldSchema = generatePatchCallSpecification(field.card);
+    if (field.fieldType == 'containsMany') {
+      schema.properties[fieldName] = {
+        type: 'array',
+        items: fieldSchema,
+      };
+    } else if (field.fieldType == 'contains') {
+      schema.properties[fieldName] = fieldSchema;
+    }
+  }
+  return schema;
+}
