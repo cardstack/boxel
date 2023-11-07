@@ -1846,14 +1846,14 @@ module('Integration | operator-mode', function (hooks) {
       )
       .exists();
 
-    await fillIn(`[data-test-search-field] input`, `pet`);
+    await fillIn(`[data-test-search-field]`, `pet`);
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
       { count: 0 },
     );
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
 
-    await fillIn(`[data-test-search-field] input`, `publishing packet`);
+    await fillIn(`[data-test-search-field]`, `publishing packet`);
     await waitUntil(
       () =>
         !document.querySelector(
@@ -1904,7 +1904,7 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('Choose an Author card');
     assert.dom('[data-test-results-count]').hasText('3 results');
 
-    await fillIn(`[data-test-search-field] input`, `alien`);
+    await fillIn(`[data-test-search-field]`, `alien`);
     await waitFor('[data-test-card-catalog-item]');
     assert.dom(`[data-test-select="${testRealmURL}Author/1"]`).exists();
   });
@@ -1924,7 +1924,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
 
-    await fillIn(`[data-test-search-field] input`, `friend`);
+    await fillIn(`[data-test-search-field]`, `friend`);
     await waitFor('[data-test-card-catalog-item]', { count: 0 });
     assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
   });
@@ -1945,7 +1945,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-catalog-item]');
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 4 });
 
-    await fillIn(`[data-test-search-field] input`, `general`);
+    await fillIn(`[data-test-search-field]`, `general`);
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
       { count: 0 },
@@ -1986,7 +1986,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-realm="Base Workspace"]').exists();
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
 
-    await fillIn(`[data-test-search-field] input`, '');
+    await fillIn(`[data-test-search-field]`, '');
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
     );
@@ -1994,7 +1994,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-card-catalog-item]`)
       .exists({ count: 4 }, 'can clear search input');
 
-    await fillIn(`[data-test-search-field] input`, 'pet');
+    await fillIn(`[data-test-search-field]`, 'pet');
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
     );
@@ -2019,7 +2019,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
 
-    await typeIn(`[data-test-search-field] input`, `pet`);
+    await typeIn(`[data-test-search-field]`, `pet`);
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
       { count: 0 },
