@@ -91,7 +91,7 @@ async function sendStream(
   stream: AsyncIterable<ChatCompletionChunk>,
   client: MatrixClient,
   room: Room,
-  append_to?: string,
+  appendTo?: string,
 ) {
   let unsent = 0;
   let lastUnsentMessage = undefined;
@@ -105,20 +105,20 @@ async function sendStream(
       if (cleanedContent) {
         // If there's no message to append to, just send the message
         // If there's more than 20 pending messages, send the message
-        if (!append_to) {
+        if (!appendTo) {
           let initialMessage = await sendMessage(
             client,
             room,
             cleanedContent,
-            append_to,
+            appendTo,
           );
           unsent = 0;
           lastUnsentMessage = undefined;
-          append_to = initialMessage.event_id;
+          appendTo = initialMessage.event_id;
         }
 
         if (unsent > 20 || message.complete) {
-          await sendMessage(client, room, cleanedContent, append_to);
+          await sendMessage(client, room, cleanedContent, appendTo);
           lastUnsentMessage = undefined;
           unsent = 0;
         } else {
@@ -131,7 +131,7 @@ async function sendStream(
         await sendOption(client, room, message.content);
       }
       unsent = 0;
-      append_to = undefined;
+      appendTo = undefined;
     }
   }
 
@@ -139,7 +139,7 @@ async function sendStream(
   if (lastUnsentMessage && lastUnsentMessage.content) {
     let cleanedContent = cleanContent(lastUnsentMessage.content);
     if (cleanedContent) {
-      await sendMessage(client, room, cleanedContent, append_to);
+      await sendMessage(client, room, cleanedContent, appendTo);
     }
   }
 }
@@ -172,9 +172,9 @@ async function getResponse(history: IRoomEvent[], aiBotUserId: string) {
     aiBotUsername,
     process.env.BOXEL_AIBOT_PASSWORD || 'pass',
   );
-  let { user_id } = auth;
+  let { user_id: userId } = auth;
   client.on(RoomMemberEvent.Membership, function (_event, member) {
-    if (member.membership === 'invite' && member.userId === user_id) {
+    if (member.membership === 'invite' && member.userId === userId) {
       client
         .joinRoom(member.roomId)
         .then(function () {
@@ -212,7 +212,7 @@ async function getResponse(history: IRoomEvent[], aiBotUserId: string) {
       if (event.getType() !== 'm.room.message') {
         return; // only print messages
       }
-      if (event.getSender() === user_id) {
+      if (event.getSender() === userId) {
         return;
       }
       let initialMessage: ISendEventResponse = await client.sendHtmlMessage(
@@ -266,7 +266,7 @@ async function getResponse(history: IRoomEvent[], aiBotUserId: string) {
         );
       }
 
-      const stream = await getResponse(history, user_id);
+      const stream = await getResponse(history, userId);
       return await sendStream(stream, client, room, initialMessage.event_id);
     },
   );

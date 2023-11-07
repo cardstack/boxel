@@ -3,7 +3,46 @@ import { chain } from 'stream-chain';
 import { parser } from 'stream-json';
 import { streamValues } from 'stream-json/streamers/StreamValues';
 import { Readable } from 'node:stream';
-//import { aiBotUsername } from '@cardstack/runtime-common';
+
+const MODIFY_SYSTEM_MESSAGE =
+  '\
+You are able to modify content according to user requests as well as answer questions for them. You may ask any followup questions you may need.\
+If a user may be requesting a change, respond politely but not ingratiatingly to the user. The more complex the request, the more you can explain what you\'re about to do.\
+\
+Along with the changes you want to make, you must include the card ID of the card being changed. The original card. \
+Return up to 3 options for the user to select from, exploring a range of things the user may want. If the request has only one sensible option or they ask for something very directly you don\'t need to return more than one. The format of your response should be\
+```\
+Explanatory text\
+Option 1: Description\
+{\
+  "id": "originalCardID",\
+  "patch": {\
+    ...\
+  }\
+}\
+\
+Option 2: Description\
+{\
+  "id": "originalCardID",\
+  "patch": {\
+    ...\
+  }\
+}\
+\
+Option 3: Description\
+\
+{\
+  "id": "originalCardID",\
+  "patch": {\
+    ...\
+  }\
+}\
+```\
+The data in the option block will be used to update things for the user behind a button so they will not see the content directly - you must give a short text summary before the option block.\
+Return only JSON inside each option block, in a compatible format with the one you receive. The contents of any field will be automatically replaced with your changes, and must follow a subset of the same format - you may miss out fields but cannot add new ones. Do not add new nested components, it will fail validation.\
+Modify only the parts you are asked to. Only return modified fields.\
+You must not return any fields that you do not see in the input data.\
+If the user hasn\'t shared any cards with you or what they\'re asking for doesn\'t make sense for the card type, you can ask them to "send their open cards" to you.';
 
 type ChatCompletion = {
   choices: Array<{
@@ -251,46 +290,6 @@ interface OpenAIPromptMessage {
   role: 'system' | 'user' | 'assistant' | 'function';
 }
 
-const MODIFY_SYSTEM_MESSAGE =
-  '\
-You are able to modify content according to user requests as well as answer questions for them. You may ask any followup questions you may need.\
-If a user may be requesting a change, respond politely but not ingratiatingly to the user. The more complex the request, the more you can explain what you\'re about to do.\
-\
-Along with the changes you want to make, you must include the card ID of the card being changed. The original card. \
-Return up to 3 options for the user to select from, exploring a range of things the user may want. If the request has only one sensible option or they ask for something very directly you don\'t need to return more than one. The format of your response should be\
-```\
-Explanatory text\
-Option 1: Description\
-{\
-  "id": "originalCardID",\
-  "patch": {\
-    ...\
-  }\
-}\
-\
-Option 2: Description\
-{\
-  "id": "originalCardID",\
-  "patch": {\
-    ...\
-  }\
-}\
-\
-Option 3: Description\
-\
-{\
-  "id": "originalCardID",\
-  "patch": {\
-    ...\
-  }\
-}\
-```\
-The data in the option block will be used to update things for the user behind a button so they will not see the content directly - you must give a short text summary before the option block.\
-Return only JSON inside each option block, in a compatible format with the one you receive. The contents of any field will be automatically replaced with your changes, and must follow a subset of the same format - you may miss out fields but cannot add new ones. Do not add new nested components, it will fail validation.\
-Modify only the parts you are asked to. Only return modified fields.\
-You must not return any fields that you do not see in the input data.\
-If the user hasn\'t shared any cards with you or what they\'re asking for doesn\'t make sense for the card type, you can ask them to "send their open cards" to you.';
-
 function getUserMessage(event: IRoomEvent) {
   const content = event.content;
   if (content.msgtype === 'org.boxel.card') {
@@ -313,17 +312,17 @@ export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {
       'The user ID must be a full ID, not just a username. The user ID should be in the format @username:domain',
     );
   }
-  let historical_messages: OpenAIPromptMessage[] = [];
+  let historicalMessages: OpenAIPromptMessage[] = [];
   for (let event of history) {
     let body = event.content.body;
     if (body) {
       if (event.sender === aiBotUserId) {
-        historical_messages.push({
+        historicalMessages.push({
           role: 'assistant',
           content: body,
         });
       } else {
-        historical_messages.push({
+        historicalMessages.push({
           role: 'user',
           content: getUserMessage(event),
         });
@@ -337,7 +336,7 @@ export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {
     },
   ];
 
-  messages = messages.concat(historical_messages);
+  messages = messages.concat(historicalMessages);
   return messages;
 }
 
