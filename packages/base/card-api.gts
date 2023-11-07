@@ -48,7 +48,6 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol('cardstack-serialize');
-export const schema = Symbol('cardstack-schema');
 export const deserialize = Symbol('cardstack-deserialize');
 export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol('cardstack-field-decorator');
@@ -1558,35 +1557,6 @@ export class BaseDef {
     return instance.constructor.displayName;
   }
 
-  static schema(): any {
-    let properties = {};
-    let { id: removedIdField, ...fields } = getFields(this, {
-      usedFieldsOnly: false,
-    });
-
-    for (let [fieldName, field] of Object.entries(fields)) {
-      // TODO: ignore computeds
-      if (field.computeVia) {
-        continue;
-      }
-      if (field.fieldType == 'containsMany') {
-        properties[fieldName] = {
-          type: 'array',
-          items: field.card.schema(),
-        };
-      } else if (field.fieldType == 'contains') {
-        properties[fieldName] = field.card.schema();
-      }
-    }
-    // let fieldResources = Object.keys(fields).map((fieldName) =>
-    //  serializedGet(model, fieldName, doc, visited, opts),
-    //);
-    return {
-      type: 'object',
-      properties: properties,
-    };
-  }
-
   static [serialize](
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -1815,9 +1785,6 @@ export class FieldDef extends BaseDef {
 class IDField extends FieldDef {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
-  static schema() {
-    return { type: 'string' };
-  }
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{@model}}
@@ -1838,11 +1805,7 @@ class IDField extends FieldDef {
 export class StringField extends FieldDef {
   static displayName = 'String';
   static [primitive]: string;
-  static schematype: string = typeof this[primitive];
   static [useIndexBasedKey]: never;
-  static schema() {
-    return { type: 'string' };
-  }
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{@model}}
@@ -2920,50 +2883,4 @@ type ElementType<T> = T extends (infer V)[] ? V : never;
 
 function makeRelativeURL(maybeURL: string, opts?: SerializeOpts): string {
   return opts?.maybeRelativeURL ? opts.maybeRelativeURL(maybeURL) : maybeURL;
-}
-
-export function generateJSONSchema(def: typeof BaseDef) {
-  let properties: Map<string, any> = new Map();
-  let { id: removedIdField, ...fields } = getFields(def, {
-    usedFieldsOnly: false,
-  });
-  console.log('Extracting from ', def);
-  for (let [fieldName, field] of Object.entries(fields)) {
-    // TODO: ignore computeds
-    if (field.computeVia) {
-      continue;
-    }
-    if (field.fieldType == 'containsMany') {
-      properties.set(fieldName, {
-        type: 'array',
-        items: generateJSONSchema(field.card),
-      });
-    } else if (field.fieldType == 'contains') {
-      properties.set(fieldName, generateJSONSchema(field.card));
-    }
-  }
-  // let fieldResources = Object.keys(fields).map((fieldName) =>
-  //  serializedGet(model, fieldName, doc, visited, opts),
-  //);
-  if (primitive in def) {
-    console.log('Primitive', def[primitive]);
-    console.log('Type of primitive', typeof def[primitive]);
-    if ('schematype' in def) {
-      console.log('Type of primitive - compiletime', def.schematype);
-    }
-    if (typeof def[primitive] == 'number') {
-      return {
-        type: 'number',
-      };
-    } else if (typeof def[primitive] == 'string') {
-      return {
-        type: 'string',
-      };
-    }
-  }
-  // SHould we ever get here?
-  return {
-    type: 'object',
-    properties: properties,
-  };
 }

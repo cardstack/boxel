@@ -44,10 +44,6 @@ export default class DateField extends FieldDef {
   }
   static displayName = 'Date';
 
-  static schema() {
-    return { type: 'string', format: 'date' };
-  }
-
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     date: any,

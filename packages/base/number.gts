@@ -62,9 +62,6 @@ export default class NumberField extends FieldDef {
   static schematype: string = typeof this[primitive];
   static [useIndexBasedKey]: never;
 
-  static schema() {
-    return { type: 'number' };
-  }
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     number: any,

@@ -43,11 +43,6 @@ export default class DatetimeField extends FieldDef {
   static [serialize](date: Date) {
     return date.toISOString();
   }
-
-  static schema() {
-    return { type: 'string', format: 'date-time' };
-  }
-
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     date: any,
