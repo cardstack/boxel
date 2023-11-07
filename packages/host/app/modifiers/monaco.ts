@@ -100,11 +100,7 @@ export default class Monaco extends Modifier<Signature> {
       });
     }
     this.lastLanguage = language;
-    if (
-      this.editor &&
-      !this.editor.hasTextFocus()
-      // Date.now() >= this.lastModified + serverEchoDebounceMs
-    ) {
+    if (this.editor && !this.editor.hasTextFocus()) {
       initializeCursorPosition?.();
     }
   }
