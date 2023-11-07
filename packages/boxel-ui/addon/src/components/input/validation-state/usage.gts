@@ -7,6 +7,24 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import type { InputValidationState } from './index.gts';
 import BoxelInputValidationState from './index.gts';
 
+const TYPES = [
+  undefined,
+  'password',
+  'number',
+  'email',
+  'color',
+  'tel',
+  'file',
+  'url',
+  'date',
+  'datetime-local',
+  'checkbox',
+  'image',
+  'radio',
+  'range',
+  'search',
+];
+
 export default class BoxelInputValidationStateUsage extends Component {
   @tracked id = 'validation-input-usage-id';
   @tracked value = '';
@@ -14,6 +32,9 @@ export default class BoxelInputValidationStateUsage extends Component {
   @tracked helperText = 'Please enter a value';
   @tracked errorMessage = '';
   @tracked disabled = false;
+  @tracked type = undefined;
+
+  defaultType = undefined;
 
   @action set(val: string): void {
     this.value = val;
@@ -47,6 +68,7 @@ export default class BoxelInputValidationStateUsage extends Component {
           @id={{this.id}}
           @disabled={{this.disabled}}
           @state={{this.state}}
+          @type={{this.type}}
           @value={{this.value}}
           @onInput={{this.set}}
           @onBlur={{this.validate}}
@@ -55,6 +77,14 @@ export default class BoxelInputValidationStateUsage extends Component {
         />
       </:example>
       <:api as |Args|>
+        <Args.String
+          @name='type'
+          @description='The input type'
+          @onInput={{fn (mut this.type)}}
+          @options={{TYPES}}
+          @value={{this.type}}
+          @defaultValue={{this.defaultType}}
+        />
         <Args.String
           @name='id'
           @description='The id of the input'
