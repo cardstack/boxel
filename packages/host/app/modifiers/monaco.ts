@@ -5,14 +5,15 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 
-import type * as MonacoSDK from 'monaco-editor';
+import * as MonacoSDK from 'monaco-editor';
 
 interface Signature {
   Args: {
     Named: {
       content: string;
       contentChanged: (text: string) => void;
-      cursorPosition?: MonacoSDK.Range;
+      initializeCursorPosition?: () => void;
+      onCursorPositionChange?: (position: MonacoSDK.Position) => void;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
       language?: string;
       monacoSDK: typeof MonacoSDK;
@@ -27,6 +28,7 @@ export default class Monaco extends Modifier<Signature> {
   private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
+  private isEditing = false;
 
   modify(
     element: HTMLElement,
@@ -35,16 +37,19 @@ export default class Monaco extends Modifier<Signature> {
       content,
       language,
       contentChanged,
-      cursorPosition,
+      initializeCursorPosition,
+      onCursorPositionChange,
       onSetup,
       monacoSDK,
     }: Signature['Args']['Named'],
   ) {
-    if (this.model) {
+    if (this.editor && this.model) {
       if (language && language !== this.lastLanguage) {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
-      if (content !== this.lastContent) {
+
+      // Prevent race condition by ensuring content cannot be updated during editing.
+      if (content !== this.lastContent && !this.isEditing) {
         this.model.setValue(content);
       }
     } else {
@@ -75,15 +80,30 @@ export default class Monaco extends Modifier<Signature> {
       this.model.onDidChangeContent(() =>
         this.onContentChanged.perform(contentChanged),
       );
+      this.editor.onDidChangeCursorSelection((event) => {
+        if (
+          this.editor &&
+          event.source !== 'model' &&
+          event.selection.startLineNumber === event.selection.endLineNumber &&
+          event.selection.startColumn === event.selection.endColumn
+        ) {
+          let position = this.editor.getPosition();
+          if (position) {
+            onCursorPositionChange?.(position);
+          }
+        }
+
+        if (event.source === 'keyboard' || event.source === 'mouse') {
+          this.isEditing = true;
+        }
+      });
+      this.editor.onDidBlurEditorText((_event) => {
+        this.isEditing = false;
+      });
     }
     this.lastLanguage = language;
-    if (this.editor && cursorPosition) {
-      this.editor.focus();
-      this.editor.setPosition({
-        lineNumber: cursorPosition.startLineNumber,
-        column: cursorPosition.startColumn,
-      });
-      this.editor.revealLineInCenter(cursorPosition.startLineNumber);
+    if (this.editor && !this.editor.hasTextFocus()) {
+      initializeCursorPosition?.();
     }
   }
 

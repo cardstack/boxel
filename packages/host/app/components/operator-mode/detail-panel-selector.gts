@@ -1,18 +1,23 @@
 import { type EmptyObject } from '@ember/component/helper';
-import compact from 'ember-composable-helpers/helpers/compact';
-import { on } from '@ember/modifier';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
+
+import compact from 'ember-composable-helpers/helpers/compact';
+
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
+
+import { DiagonalArrowLeftUp } from '@cardstack/boxel-ui/icons';
 
 import {
   isCardDef,
   isBaseDef,
   isFieldDef,
 } from '@cardstack/runtime-common/code-ref';
-import { DiagonalArrowLeftUp } from '@cardstack/boxel-ui/icons';
 
+import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
@@ -120,12 +125,14 @@ export default class Selector extends Component<Signature> {
                 }}
                 data-test-boxel-selector-item
                 data-test-boxel-selector-item-selected={{selectorItem.selected}}
+                {{scrollIntoViewModifier selectorItem.selected}}
               >
                 {{! template-lint-disable require-context-role }}
                 <div
                   class='boxel-selector__item__content'
                   role='menuitem'
                   href='#'
+                  data-boxel-selector-item-text={{selectorItem.declaration.localName}}
                   data-test-boxel-selector-item-text={{selectorItem.declaration.localName}}
                   {{on
                     'click'
