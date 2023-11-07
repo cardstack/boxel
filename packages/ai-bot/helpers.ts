@@ -207,6 +207,8 @@ export async function* processStream(stream: AsyncGenerator<string>) {
     if (part == '{') {
       // If we were processing text and now are probably looking at
       // JSON, yield the text we've seen so far, marked as "complete"
+      // If there's no text, we don't need to yield anything
+      // Typically this happens when a { is the very first token
       if (currentMessage) {
         yield {
           type: 'text',
