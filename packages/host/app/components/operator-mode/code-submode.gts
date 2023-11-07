@@ -84,6 +84,7 @@ import CardURLBar from './card-url-bar';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
+import NewFileButton from './new-file-button';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -727,14 +728,16 @@ export default class CodeSubmode extends Component<Signature> {
         ></div>
       </:ready>
     </RealmInfoProvider>
-    <CardURLBar
-      @loadFileError={{this.loadFileError}}
-      @resetLoadFileError={{this.resetLoadFileError}}
-      @userHasDismissedError={{this.userHasDismissedURLError}}
-      @dismissURLError={{this.dismissURLError}}
-      @realmURL={{this.realmURL}}
-      class='card-url-bar'
-    />
+    <div class='code-mode-top-bar'>
+      <CardURLBar
+        @loadFileError={{this.loadFileError}}
+        @resetLoadFileError={{this.resetLoadFileError}}
+        @userHasDismissedError={{this.userHasDismissedURLError}}
+        @dismissURLError={{this.dismissURLError}}
+        @realmURL={{this.realmURL}}
+      />
+      <NewFileButton />
+    </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
       <div
         class='code-mode'
@@ -1070,16 +1073,17 @@ export default class CodeSubmode extends Component<Signature> {
         background: var(--boxel-light);
       }
 
-      .card-url-bar {
-        position: absolute;
-        top: var(--boxel-sp);
-        left: calc(var(--submode-switcher-width) + (var(--boxel-sp) * 2));
-
-        --card-url-bar-width: calc(
-          100% - (var(--submode-switcher-width) + (var(--boxel-sp) * 3))
+      .code-mode-top-bar {
+        --code-mode-top-bar-padding-left: calc(
+          var(--submode-switcher-width) + (var(--boxel-sp) * 2)
         );
-        height: var(--submode-switcher-height);
 
+        position: absolute;
+        top: 0;
+        right: 0;
+        padding: var(--boxel-sp) var(--boxel-sp) 0
+          var(--code-mode-top-bar-padding-left);
+        display: flex;
         z-index: 2;
       }
 
