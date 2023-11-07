@@ -14,9 +14,22 @@ import IconSearch from '../../icons/icon-search.gts';
 type Values<T> = T[keyof T];
 
 export const InputTypes = {
-  Search: 'search',
-  Text: 'text',
+  Default: 'default',
   Textarea: 'textarea',
+  Password: 'password',
+  Number: 'number',
+  Email: 'email',
+  Color: 'color',
+  Tel: 'tel',
+  File: 'file',
+  Url: 'url',
+  Date: 'date',
+  Datetime: 'datetime-local',
+  Checkbox: 'checkbox',
+  Image: 'image', // FIXME is this worth supporting? requires src to make sense
+  Radio: 'radio',
+  Range: 'range', // FIXME maybe show this with separate usage to add range parameters
+  Search: 'search', // FIXME only move icon left when validation exists
 };
 
 export type InputType = Values<typeof InputTypes>;
@@ -63,6 +76,19 @@ export default class BoxelInput extends Component<Signature> {
     return this.args.type === 'search';
   }
 
+  get modifiedTypeFIXME() {
+    // what is a good name for this? mostly @type but undefined when it’s default or textarea
+
+    let type = this.args.type;
+
+    if (type === InputTypes.Default || type === InputTypes.Textarea) {
+      // FIXME assert on this in tests
+      return undefined;
+    }
+
+    return type;
+  }
+
   <template>
     <div class='input-container'>
       {{#if (and (not @required) @optional)}}
@@ -88,6 +114,7 @@ export default class BoxelInput extends Component<Signature> {
               boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
             }}
             id={{this.id}}
+            type={{this.modifiedTypeFIXME}}
             value={{@value}}
             placeholder={{@placeholder}}
             required={{@required}}

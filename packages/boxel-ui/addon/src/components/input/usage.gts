@@ -94,6 +94,13 @@ export default class InputUsage extends Component {
           @onInput={{fn (mut this.id)}}
         />
         <Args.String
+          @name='type'
+          @options={{validTypes}}
+          @defaultValue={{this.defaultType}}
+          @onInput={{fn (mut this.type)}}
+          @value={{this.type}}
+        />
+        <Args.String
           @name='value'
           @value={{this.value}}
           @onInput={{fn (mut this.value)}}
@@ -118,14 +125,6 @@ export default class InputUsage extends Component {
           @name='invalid'
           @value={{this.invalid}}
           @onInput={{fn (mut this.invalid)}}
-        />
-        <Args.String
-          @name='type'
-          @description='textarea or search'
-          @options={{validTypes}}
-          @defaultValue={{this.defaultType}}
-          @onInput={{fn (mut this.type)}}
-          @value={{this.type}}
         />
         <Args.String
           @name='errorMessage'
