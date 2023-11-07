@@ -1608,7 +1608,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
 
-    await focus(`[data-test-search-input] input`);
+    await focus(`[data-test-search-field]`);
     assert
       .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
       .exists();
@@ -1619,7 +1619,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
 
-    await focus(`[data-test-search-input] input`);
+    await focus(`[data-test-search-field]`);
     assert.dom(`[data-test-search-sheet-recent-card]`).exists({ count: 2 });
     assert
       .dom(
@@ -1652,7 +1652,7 @@ module('Integration | operator-mode', function (hooks) {
       await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
     }
 
-    await focus(`[data-test-search-input] input`);
+    await focus(`[data-test-search-field]`);
     assert.dom(`[data-test-search-result]`).exists({ count: 10 });
   });
 
@@ -1671,8 +1671,8 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-cards-grid-item]`);
 
-    await focus(`[data-test-search-input] input`);
-    await typeIn(`[data-test-search-input] input`, 'Ma');
+    await focus(`[data-test-search-field]`);
+    await typeIn(`[data-test-search-field]`, 'Ma');
     assert.dom(`[data-test-search-label]`).containsText('Searching for "Ma"');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
@@ -1687,13 +1687,13 @@ module('Integration | operator-mode', function (hooks) {
 
     //Ensures that there is no cards when reopen the search sheet
     await click(`[data-test-search-sheet-cancel-button]`);
-    await focus(`[data-test-search-input] input`);
+    await focus(`[data-test-search-field]`);
     assert.dom(`[data-test-search-label]`).doesNotExist();
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
 
     //No cards match
-    await focus(`[data-test-search-input] input`);
-    await typeIn(`[data-test-search-input] input`, 'No Cards');
+    await focus(`[data-test-search-field]`);
+    await typeIn(`[data-test-search-field]`, 'No Cards');
     assert
       .dom(`[data-test-search-label]`)
       .containsText('Searching for "No Cards"');
@@ -2054,8 +2054,8 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
 
-    await typeIn(`[data-test-search-input] input`, `pet`);
-    assert.dom(`[data-test-search-input] input`).hasValue('pet');
+    await typeIn(`[data-test-search-field]`, `pet`);
+    assert.dom(`[data-test-search-field]`).hasValue('pet');
     await waitFor('[data-test-card-catalog-item]', { count: 2 });
     await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`);
     assert
@@ -2075,7 +2075,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
     assert
-      .dom(`[data-test-search-input] input`)
+      .dom(`[data-test-search-field]`)
       .hasNoValue('Card picker state is reset');
     assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
   });
@@ -2096,8 +2096,8 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-card-catalog-modal]');
     await waitFor('[data-test-card-catalog-item]', { count: 3 });
-    await typeIn(`[data-test-search-input] input`, `bob`);
-    assert.dom(`[data-test-search-input] input`).hasValue('bob');
+    await typeIn(`[data-test-search-field]`, `bob`);
+    assert.dom(`[data-test-search-field]`).hasValue('bob');
     await waitFor('[data-test-card-catalog-item]', { count: 1 });
     await click(`[data-test-select="${testRealmURL}Author/1"]`);
     assert
@@ -2115,7 +2115,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-field="authorBio"] [data-test-add-new]`);
     assert
-      .dom(`[data-test-search-input] input`)
+      .dom(`[data-test-search-field]`)
       .hasNoValue('Field picker state is reset');
     assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
   });
@@ -2132,7 +2132,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await focus(`[data-test-search-input] input`);
+    await focus(`[data-test-search-field]`);
 
     await fillIn(
       `[data-test-url-field] input`,
@@ -2159,7 +2159,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await focus(`[data-test-search-input] input`);
+    await focus(`[data-test-search-field]`);
 
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
@@ -2588,13 +2588,13 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
 
-    await focus(`[data-test-search-input] input`);
+    await focus(`[data-test-search-field]`);
     assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
 
     await click(`[data-test-search-sheet] .search-sheet-content`);
     assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
 
-    await typeIn(`[data-test-search-input] input`, 'A');
+    await typeIn(`[data-test-search-field]`, 'A');
     await click(
       `[data-test-search-sheet] .search-sheet-content .search-result-section`,
     );

@@ -263,6 +263,7 @@ export default class SearchSheet extends Component<Signature> {
         @onInput={{this.setSearchKey}}
         {{on 'keydown' this.onSearchInputKeyDown}}
         class='search-sheet__search-input-group'
+        data-test-search-field
       />
       <div class='search-sheet-content'>
         {{! @glint-ignore Argument of type 'string' is not assignable to parameter of type 'boolean' }}

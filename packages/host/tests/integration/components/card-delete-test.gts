@@ -656,7 +656,7 @@ module('Integration | card-delete', function (hooks) {
         await waitFor(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
         );
-        await focus(`[data-test-search-input] input`);
+        await focus(`[data-test-search-field]`);
         assert
           .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
           .exists();
@@ -680,7 +680,7 @@ module('Integration | card-delete', function (hooks) {
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
-    await focus(`[data-test-search-input] input`);
+    await focus(`[data-test-search-field]`);
     assert
       .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
       .doesNotExist('recent item removed');
