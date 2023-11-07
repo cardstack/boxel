@@ -10,7 +10,10 @@ import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
 import Header from './components/header/index.gts';
 import IconButton from './components/icon-button/index.gts';
-import BoxelInput from './components/input/index.gts';
+import BoxelInput, {
+  type InputBottomTreatment as BoxelInputBottomTreatment,
+  InputBottomTreatments as BoxelInputBottomTreatments,
+} from './components/input/index.gts';
 import SearchInput, {
   type SearchInputBottomTreatment,
   SearchInputBottomTreatments,
@@ -35,6 +38,8 @@ export {
   BoxelDropdown,
   BoxelHeader,
   BoxelInput,
+  BoxelInputBottomTreatment,
+  BoxelInputBottomTreatments,
   BoxelInputValidationState,
   BoxelMessage,
   Button,
