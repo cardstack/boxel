@@ -28,7 +28,7 @@ export default class InputUsage extends Component {
   @tracked helperText = '';
   @tracked variant: 'large' | 'default' = 'default';
 
-  defaultType = InputTypes.Text;
+  defaultType = InputTypes.Default;
   @tracked type = this.defaultType;
 
   defaultBottomTreatment = InputBottomTreatments.Rounded;
