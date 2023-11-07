@@ -1,4 +1,4 @@
-import { click } from '@ember/test-helpers';
+import { click, waitFor } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 import percySnapshot from '@percy/ember';
@@ -72,10 +72,11 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       await operatorModeStateService.restore({
         stacks: [[{ id: cardURL, format }]],
       });
+      await waitFor('[data-test-stack-item-content]');
     };
   });
 
-  test('render a primitive `contains` field nested in an edit field', async function (assert) {
+  test('render a primitive field (singular) contained in a FieldDef', async function (assert) {
     let { field, contains, FieldDef, CardDef } = cardApi;
     let { default: StringField } = string;
 
@@ -144,7 +145,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .hasValue('mama@leonesons.com');
   });
 
-  test('render a composite `contains` field nested in an edit field', async function (assert) {
+  test('render a compound field (singular) contained in a FieldDef', async function (assert) {
     let { field, contains, FieldDef, CardDef } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
@@ -217,7 +218,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .hasValue('5551212');
   });
 
-  test('render a primitive `containsMany` field nested in an edit field (read-only)', async function (assert) {
+  test('primitive field (plural) contained in a FieldDef is read-only', async function (assert) {
     let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
 
@@ -295,7 +296,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .doesNotExist();
   });
 
-  test('composite `containsMany` field nested in an edit field renders in atom format (read-only)', async function (assert) {
+  test('compound field (plural) contained in a FieldDef renders in atom format (read-only)', async function (assert) {
     let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
@@ -401,7 +402,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .exists('top level containsMany field item has remove button');
   });
 
-  test('render a `linksTo` card nested in an edit field', async function (assert) {
+  test('render a CardDef field (singular) linked to from a FieldDef', async function (assert) {
     let { field, contains, linksTo, CardDef, FieldDef, Component } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
@@ -466,6 +467,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       'usd.json': usdCardDoc,
       'Tx/1.json': txCardDoc,
     });
+
     await renderComponent(OperatorModeComponent);
     await setCardInOperatorModeState(`${testRealmURL}Tx/1`, 'edit');
 
@@ -521,5 +523,81 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     assert
       .dom('[data-test-field="denomination"] [data-test-links-to-editor]')
       .containsText('Link Currency', 'empty state is correct');
+  });
+
+  test('CardDef field (plural) linked to from a FieldDef renders in atom format', async function (assert) {
+    let { field, contains, linksToMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
+    class Country extends CardDef {
+      static displayName = 'Country';
+      @field name = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia(this: Country) {
+          return this.name;
+        },
+      });
+    }
+    class Trips extends FieldDef {
+      static displayName = 'Trips';
+      @field countries = linksToMany(Country);
+    }
+    class Person extends CardDef {
+      static displayName = 'Person';
+      @field firstName = contains(StringField);
+      @field trips = contains(Trips);
+    }
+
+    await shimModule(`${testRealmURL}country`, { Country }, loader);
+    await shimModule(`${testRealmURL}person`, { Person }, loader);
+
+    let usa = new Country({ name: 'United States' });
+    let japan = new Country({ name: 'Japan' });
+    let fadhlan = new Person({
+      firstName: 'Fadhlan',
+    });
+
+    let usaCardDoc = await saveCard(usa, `${testRealmURL}usa`, loader);
+    let japanCardDoc = await saveCard(japan, `${testRealmURL}japan`, loader);
+    let personCardDoc = await saveCard(
+      fadhlan,
+      `${testRealmURL}Person/fadhlan`,
+      loader,
+    );
+
+    await createTestRealm({
+      'usa.json': usaCardDoc,
+      'japan.json': japanCardDoc,
+      'Person/fadhlan.json': personCardDoc,
+    });
+
+    await renderComponent(OperatorModeComponent);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`, 'edit');
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+    assert.dom('[data-test-field="trips"] [data-test-add-new]').exists();
+
+    await click('[data-test-links-to-many="countries"] [data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
+    await click(`[data-test-select="${testRealmURL}japan"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitFor('[card-catalog-modal]', { count: 0 });
+    assert.dom('[data-test-pill-item]').exists({ count: 1 });
+    assert.dom('[data-test-field="trips"]').containsText('Japan');
+
+    await click('[data-test-links-to-many="countries"] [data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}usa"]`);
+    await click(`[data-test-select="${testRealmURL}usa"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitFor('[card-catalog-modal]', { count: 0 });
+    assert.dom('[data-test-pill-item]').exists({ count: 2 });
+    assert.dom('[data-test-field="trips"]').containsText('Japan United States');
+
+    await click('[data-test-pill-item] [data-test-remove-card]');
+    assert.dom('[data-test-pill-item]').exists({ count: 1 });
+    await click('[data-test-pill-item] [data-test-remove-card]');
+    assert.dom('[data-test-pill-item]').exists({ count: 0 });
   });
 });

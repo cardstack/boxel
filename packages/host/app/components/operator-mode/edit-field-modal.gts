@@ -21,13 +21,16 @@ import {
   loadCard,
   identifyCard,
   catalogEntryRef,
+  CodeRef,
 } from '@cardstack/runtime-common';
 import { makeResolvedURL } from '@cardstack/runtime-common/loader';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import Pill from '@cardstack/host/components/pill';
+import { FieldOfType, Type } from '@cardstack/host/resources/card-type';
+
 import { Ready } from '@cardstack/host/resources/file';
 import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -41,16 +44,21 @@ interface Signature {
     file: Ready;
     card: typeof BaseDef;
     moduleSyntax: ModuleSyntax;
+    field?: FieldOfType;
     onClose: () => void;
   };
 }
 
-export default class AddFieldModal extends Component<Signature> {
-  @tracked chosenCatalogEntry: CatalogEntry | undefined = undefined;
-  @tracked chosenCatalogEntryRefCard: typeof BaseDef | undefined = undefined;
+export default class EditFieldModal extends Component<Signature> {
+  @tracked fieldCard: typeof BaseDef | undefined = undefined;
   @tracked fieldModuleURL: URL | undefined = undefined;
   @tracked fieldName: string | undefined = undefined;
   @tracked cardinality: 'one' | 'many' = 'one';
+  @tracked isFieldDef: boolean | undefined = undefined;
+  @tracked cardURL: URL | undefined = undefined;
+  @tracked fieldRef: CodeRef | undefined = undefined;
+
+  @tracked fieldNameErrorMessage: string | undefined;
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
@@ -65,17 +73,96 @@ export default class AddFieldModal extends Component<Signature> {
     },
   ];
 
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+
+    // This component has 2 flows - adding a new field, and editing an existing field. When adding a new field, this.args.field will be undefined and when editing, it will be present
+
+    this.setInitialValues.perform();
+  }
+
+  get isNewField(): boolean {
+    return !this.args.field;
+  }
+
+  get fieldType(): FieldType {
+    if (this.isFieldDef) {
+      return this.cardinality === 'one' ? 'contains' : 'containsMany';
+    } else {
+      return this.cardinality === 'one' ? 'linksTo' : 'linksToMany';
+    }
+  }
+
   @action chooseCard() {
     this.chooseCardTask.perform();
   }
 
   @action onFieldNameInput(value: string) {
     this.fieldName = value;
+    this.validateFieldName();
   }
 
-  @action onCardinalityChange(id: 'one' | 'many'): void {
+  @action onCardinalityChange(id: 'one' | 'many') {
     this.cardinality = id;
   }
+
+  private setInitialValues = restartableTask(async () => {
+    let field = this.args.field;
+
+    // When adding a new field, we want to default to the base string card
+    if (!field) {
+      let ref = {
+        module: 'https://cardstack.com/base/string', // This seems fundamental enough to be hardcoded
+        name: 'default',
+      };
+      this.isFieldDef = true;
+
+      try {
+        this.fieldCard = await loadCard(ref, {
+          loader: this.loaderService.loader,
+        });
+      } catch (error) {
+        console.error("Couldn't load default string card (from base realm)");
+        throw error;
+      }
+
+      this.fieldModuleURL = new URL(ref.module);
+      this.cardURL = new URL(ref.module);
+      this.fieldRef = ref;
+      return;
+    }
+
+    this.fieldName = field.name;
+    this.cardinality = ['containsMany', 'linksToMany'].includes(field.type)
+      ? 'many'
+      : 'one';
+
+    let ref: { module: string; name: string };
+
+    let fieldCardType = field.card;
+    let isCardType = 'codeRef' in fieldCardType; // To see whether we are dealing with Type or CodeRefType
+
+    if (isCardType) {
+      ref = (fieldCardType as Type).codeRef as typeof ref;
+    } else {
+      ref = fieldCardType as typeof ref;
+    }
+
+    this.fieldCard = await loadCard(ref, {
+      loader: this.loaderService.loader,
+    });
+
+    this.fieldModuleURL = new URL(ref.module);
+    this.cardURL = new URL(ref.module);
+    this.fieldRef = ref;
+
+    // Field's card can descend from a FieldDef or a CardDef, so we need to determine which one it is. We do this by checking the field's type -
+    // contains/containsMany is a FieldDef, and linksTo/linksToMany is a CardDef. When spawning the card chooser, the catalog entry will have the isField property set,
+    // which dictates the field type. But at this point where we are editing an existing field, we don't have the catalog entry available, so we need to determine isFieldDef
+    // from the field's type
+    this.isFieldDef =
+      this.determineFieldOrCardFromFieldType(field.type) === 'field';
+  });
 
   private chooseCardTask = restartableTask(async () => {
     let chosenCatalogEntry = await chooseCard<CatalogEntry>({
@@ -89,7 +176,14 @@ export default class AddFieldModal extends Component<Signature> {
     });
 
     if (chosenCatalogEntry) {
-      this.chosenCatalogEntry = chosenCatalogEntry;
+      this.fieldCard = await loadCard(chosenCatalogEntry.ref, {
+        loader: this.loaderService.loader,
+        relativeTo: new URL(chosenCatalogEntry.id),
+      });
+
+      this.isFieldDef = chosenCatalogEntry.isField;
+      this.cardURL = new URL(chosenCatalogEntry.id);
+      this.fieldRef = chosenCatalogEntry.ref;
 
       // This transforms relative module paths, such as "../person", to absolute ones -
       // we need that absolute path to load realm info
@@ -97,72 +191,96 @@ export default class AddFieldModal extends Component<Signature> {
         chosenCatalogEntry.ref.module,
         chosenCatalogEntry.id,
       );
-
-      this.chosenCatalogEntryRefCard = await loadCard(chosenCatalogEntry.ref, {
-        loader: this.loaderService.loader,
-        relativeTo: new URL(chosenCatalogEntry.id),
-      });
     }
   });
 
+  private determineFieldOrCardFromFieldType(
+    fieldType: FieldType,
+  ): 'field' | 'card' {
+    if (fieldType === 'contains' || fieldType === 'containsMany') {
+      return 'field';
+    } else {
+      return 'card';
+    }
+  }
+
   @action saveField() {
-    if (!this.chosenCatalogEntry || !this.args.card || !this.fieldName) {
+    if (!this.args.card || !this.fieldName) {
       throw new Error(
         'bug: cannot save field without a selected card and a name',
       );
     }
 
-    let isField = this.chosenCatalogEntry.isField;
+    let identifiedCard = identifyCard(this.args.card) as {
+      module: string;
+      name: string;
+    };
 
-    let relationshipType: FieldType;
+    let addFieldAtIndex = undefined;
 
-    if (isField) {
-      relationshipType =
-        this.cardinality === 'one' ? 'contains' : 'containsMany';
-    } else {
-      relationshipType = this.cardinality === 'one' ? 'linksTo' : 'linksToMany';
+    if (!this.isNewField) {
+      // We are editing a field, so we need to first remove the old one, and then add the new one
+      addFieldAtIndex = this.args.moduleSyntax.removeField(
+        { type: 'exportedName', name: identifiedCard.name },
+        this.args.field!.name,
+      );
     }
 
-    this.args.moduleSyntax.addField(
-      {
-        type: 'exportedName',
-        name: (
-          identifyCard(this.args.card)! as { module: string; name: string }
-        ).name,
-      },
-      this.fieldName,
-      this.chosenCatalogEntry.ref,
-      relationshipType,
-      new URL(this.chosenCatalogEntry.id),
-      this.loaderService.loader.reverseResolution(
-        makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
-      ),
-      new URL(this.args.file.realmURL),
-    );
+    try {
+      this.args.moduleSyntax.addField(
+        {
+          type: 'exportedName',
+          name: identifiedCard.name,
+        },
+        this.fieldName,
+        this.fieldRef as { module: string; name: string },
+        this.fieldType,
+        this.cardURL,
+        this.loaderService.loader.reverseResolution(
+          makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
+        ),
+        new URL(this.args.file.realmURL),
+        addFieldAtIndex,
+      );
+    } catch (error) {
+      let errorMessage = (error as Error).message;
+      if (errorMessage.includes('already exists')) {
+        // message example: "the field "firstName" already exists"
+        this.fieldNameErrorMessage = errorMessage;
+      }
+      console.log(error);
+      return;
+    }
 
     this.writeTask.perform(this.args.moduleSyntax.code());
   }
 
-  get nameErrorMessage() {
-    if (this.fieldName) {
-      if (/\s/g.test(this.fieldName)) {
-        return 'Field names cannot contain spaces';
-      }
+  validateFieldName() {
+    this.fieldNameErrorMessage = undefined;
 
-      if (this.fieldName[0] === this.fieldName[0].toUpperCase()) {
-        return 'Field names must start with a lowercase letter';
-      }
+    if (/\s/g.test(this.fieldName!)) {
+      this.fieldNameErrorMessage = 'Field names cannot contain spaces';
+      return;
     }
 
-    return undefined;
+    if (this.fieldName![0] === this.fieldName![0].toUpperCase()) {
+      this.fieldNameErrorMessage =
+        'Field names must start with a lowercase letter';
+      return;
+    }
+
+    if (!/^[a-z0-9_]+$/i.test(this.fieldName!)) {
+      this.fieldNameErrorMessage =
+        'Field names can only contain letters, numbers, and underscores';
+      return;
+    }
   }
 
   get submitDisabled(): boolean {
     return bool(
       !this.fieldName ||
-        !this.chosenCatalogEntry ||
-        !this.chosenCatalogEntryRefCard ||
-        this.nameErrorMessage ||
+        !this.fieldCard ||
+        this.fieldNameErrorMessage ||
         this.writeTask.isRunning,
     );
   }
@@ -173,6 +291,7 @@ export default class AddFieldModal extends Component<Signature> {
     // get torn down before subsequent code can execute
 
     await this.args.file.write(src, true);
+    this.args.onClose();
   });
 
   <template>
@@ -215,10 +334,9 @@ export default class AddFieldModal extends Component<Signature> {
 
       .card-chooser-area {
         display: flex;
-        min-height: 3em;
       }
 
-      .card-chooser-area button {
+      .card-chooser-area button.change {
         background-color: transparent;
         border: none;
         color: var(--boxel-highlight);
@@ -238,7 +356,7 @@ export default class AddFieldModal extends Component<Signature> {
     </style>
 
     <ModalContainer
-      @title='Add a Field'
+      @title={{if this.isNewField 'Add field' 'Edit field settings'}}
       @onClose={{@onClose}}
       @size='medium'
       @centered={{true}}
@@ -249,9 +367,9 @@ export default class AddFieldModal extends Component<Signature> {
       <:content>
         <FieldContainer @label='Field Type'>
           <div class='card-chooser-area'>
-            {{#if this.chosenCatalogEntryRefCard}}
-              <div class='pill'>
-                <div class='realm-icon' data-test-selected-field-realm-icon>
+            {{#if this.fieldCard}}
+              <Pill @inert={{true}} data-test-selected-field-realm-icon>
+                <:icon>
                   {{#if this.fieldModuleURL.href}}
                     <RealmInfoProvider @fileURL={{this.fieldModuleURL.href}}>
                       <:ready as |realmInfo|>
@@ -263,36 +381,31 @@ export default class AddFieldModal extends Component<Signature> {
                       </:ready>
                     </RealmInfoProvider>
                   {{/if}}
-                </div>
-                <div>
+                </:icon>
+                <:default>
                   <span data-test-selected-field-display-name>
-                    {{this.chosenCatalogEntryRefCard.displayName}}
+                    {{this.fieldCard.displayName}}
                   </span>
-                </div>
-              </div>
+                </:default>
+              </Pill>
             {{/if}}
 
             <button
               {{on 'click' this.chooseCard}}
-              class='{{if this.chosenCatalogEntryRefCard "pull-right"}}'
+              class='change {{if this.fieldCard "pull-right"}}'
               data-test-choose-card-button
             >
-              {{#if this.chosenCatalogEntryRefCard}}
-                Change
-              {{else}}
-                Select a field
-              {{/if}}
+              Change
             </button>
           </div>
-
         </FieldContainer>
 
-        <FieldContainer @label='Field name'>
+        <FieldContainer @label='Field Name'>
           <BoxelInput
             @value={{this.fieldName}}
             @onInput={{this.onFieldNameInput}}
-            @errorMessage={{this.nameErrorMessage}}
-            @invalid={{bool this.nameErrorMessage}}
+            @errorMessage={{this.fieldNameErrorMessage}}
+            @invalid={{bool this.fieldNameErrorMessage}}
             data-test-field-name-input
           />
         </FieldContainer>
@@ -336,9 +449,17 @@ export default class AddFieldModal extends Component<Signature> {
               data-test-save-field-button
             >
               {{#if this.writeTask.isRunning}}
-                Adding…
+                {{#if this.isNewField}}
+                  Adding…
+                {{else}}
+                  Saving…
+                {{/if}}
               {{else}}
-                Add
+                {{#if this.isNewField}}
+                  Add
+                {{else}}
+                  Save
+                {{/if}}
               {{/if}}
             </BoxelButton>
           </div>

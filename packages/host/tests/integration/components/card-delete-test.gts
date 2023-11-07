@@ -12,7 +12,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -180,11 +179,6 @@ module('Integration | card-delete', function (hooks) {
       realmURL: testRealmURL,
     });
     await realm.ready;
-
-    let cardService = this.owner.lookup('service:card-service') as CardService;
-    // the copy button only appears after this service has loaded,
-    // so let's just wait for it here
-    await cardService.ready;
   });
 
   test<TestContextWithSSE>('can delete a card from the index card stack item', async function (assert) {

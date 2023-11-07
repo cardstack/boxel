@@ -16,7 +16,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -292,11 +291,6 @@ module('Integration | card-copy', function (hooks) {
         },
       } as LooseSingleCardDocument),
     );
-
-    let cardService = this.owner.lookup('service:card-service') as CardService;
-    // the copy button only appears after this service has loaded,
-    // so let's just wait for it here
-    await cardService.ready;
   });
 
   test('copy button does not appear when there is 1 stack for single card item', async function (assert) {

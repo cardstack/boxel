@@ -25,7 +25,9 @@ interface Signature {
 
 export default class Modal extends Component<Signature> {
   get backgroundImageURL() {
-    return `url(${this.args.backgroundImageURL})`;
+    return this.args.backgroundImageURL
+      ? `url(${this.args.backgroundImageURL})`
+      : '';
   }
 
   <template>
@@ -150,6 +152,7 @@ export default class Modal extends Component<Signature> {
       :global(.boxel-modal__inner > *) {
         width: 100%;
         pointer-events: auto;
+        cursor: default;
       }
     </style>
   </template>

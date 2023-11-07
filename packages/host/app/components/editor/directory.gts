@@ -77,7 +77,6 @@ export default class Directory extends Component<Args> {
         --icon-margin: 4px;
 
         padding-left: 0em;
-        margin-bottom: 2px;
       }
 
       .level .level {
@@ -112,7 +111,6 @@ export default class Directory extends Component<Args> {
       .directory :deep(.icon) {
         width: var(--icon-length);
         height: var(--icon-length);
-        margin-right: var(--icon-margin);
         margin-bottom: -4px;
       }
 

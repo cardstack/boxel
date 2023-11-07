@@ -28,11 +28,17 @@ export class Transaction extends CardDef {
   @field effectiveGasPrice = contains(BigIntegerCard);
   @field blockExplorerLink = contains(StringCard, {
     computeVia: function (this: Transaction) {
+      if (!this.chain) {
+        return;
+      }
       return `${this.chain.blockExplorer}/tx/${this.transactionHash}`;
     },
   });
   @field title = contains(StringCard, {
     computeVia: function (this: Transaction) {
+      if (!this.transactionHash) {
+        return;
+      }
       return `Txn ${this.transactionHash}`;
     },
   });

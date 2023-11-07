@@ -3,10 +3,8 @@ import {
   containsMany,
   field,
   Component,
-  CardDef,
   primitive,
   useIndexBasedKey,
-  createFromSerialized,
   FieldDef,
 } from './card-api';
 import StringField from './string';
@@ -17,23 +15,12 @@ import { BoxelMessage } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
-import { restartableTask } from 'ember-concurrency';
-import { tracked } from '@glimmer/tracking';
 import {
   Loader,
-  SupportedMimeType,
-  Deferred,
-  isMatrixCardError,
+  getCard,
   type LooseSingleCardDocument,
-  type SingleCardDocument,
   type CodeRef,
-  type MatrixCardError,
 } from '@cardstack/runtime-common';
-
-const attachedCards = new Map<
-  string,
-  Promise<CardDef | MatrixCardError | undefined>
->();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -190,16 +177,14 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       {{! template-lint-disable no-triple-curlies }}
       {{{@model.formattedMessage}}}
 
-      {{#if this.attachedCard}}
-        {{#if this.cardError}}
-          <div data-test-card-error class='error'>
-            Error: cannot render card
-            {{this.cardError.id}}:
-            {{this.cardError.error.message}}
-          </div>
-        {{else}}
-          <this.cardComponent />
-        {{/if}}
+      {{#if this.attachedCardResource.cardError}}
+        <div data-test-card-error class='error'>
+          Error: cannot render card
+          {{this.attachedCardResource.cardError.id}}:
+          {{this.attachedCardResource.cardError.error.message}}
+        </div>
+      {{else if this.attachedCardResource.card}}
+        <this.cardComponent />
       {{/if}}
     </BoxelMessage>
 
@@ -211,12 +196,9 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
     </style>
   </template>
 
-  @tracked attachedCard: CardDef | MatrixCardError | undefined;
-
-  constructor(owner: unknown, args: any) {
-    super(owner, args);
-    this.loadAttachedCard.perform();
-  }
+  attachedCardResource = this.args.model.attachedCardId
+    ? getCard(new URL(this.args.model.attachedCardId))
+    : undefined;
 
   get timestamp() {
     if (!this.args.model.created) {
@@ -226,70 +208,12 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
   }
 
   get cardComponent() {
-    if (!this.attachedCard || isMatrixCardError(this.attachedCard)) {
+    let card = this.attachedCardResource?.card;
+    if (!card) {
       return;
     }
-    return this.attachedCard.constructor.getComponent(
-      this.attachedCard,
-      'isolated',
-    );
+    return card.constructor.getComponent(card, 'isolated');
   }
-
-  get cardError() {
-    if (isMatrixCardError(this.attachedCard)) {
-      return this.attachedCard;
-    }
-    return;
-  }
-
-  loadAttachedCard = restartableTask(async () => {
-    if (!this.args.model.attachedCardId) {
-      return;
-    }
-    let cached = attachedCards.get(this.args.model.attachedCardId);
-    if (cached) {
-      this.attachedCard = await cached;
-      return;
-    }
-    let deferred = new Deferred<CardDef | MatrixCardError>();
-    attachedCards.set(this.args.model.attachedCardId, deferred.promise);
-    let cardOrError: CardDef | MatrixCardError;
-    let doc: SingleCardDocument | undefined;
-    try {
-      let response = await fetch(this.args.model.attachedCardId, {
-        headers: { Accept: SupportedMimeType.CardJson },
-      });
-      if (!response.ok) {
-        throw new Error(
-          `status: ${response.status} -
-        ${response.statusText}. ${await response.text()}`,
-        );
-      }
-      doc = await response.json();
-      if (!doc) {
-        throw new Error(
-          `No document exists for ${this.args.model.attachedCardId}`,
-        );
-      }
-      let loader = Loader.getLoaderFor(createFromSerialized);
-      if (!loader) {
-        throw new Error('Could not obtain a loader');
-      }
-      cardOrError = await createFromSerialized<typeof CardDef>(
-        doc.data,
-        doc,
-        new URL(doc.data.id),
-        loader,
-      );
-    } catch (error: any) {
-      cardOrError = {
-        id: this.args.model.attachedCardId,
-        error,
-      } as MatrixCardError;
-    }
-    this.attachedCard = cardOrError;
-    deferred.fulfill(cardOrError);
-  });
 }
 
 type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
@@ -342,17 +266,6 @@ const roomStateCache = new WeakMap<RoomField, RoomState>();
 
 export class RoomField extends FieldDef {
   static displayName = 'Room';
-  // This can be used  to get the attached `cardInstance` like:
-  //   Reflect.getProtypeOf(roomFieldInstance).constructor.getAttachedCard(cardInstance);
-  static getAttachedCard(id: string) {
-    return attachedCards.get(id);
-  }
-  static setAttachedCard(
-    id: string,
-    cardPromise: Promise<CardDef | MatrixCardError | undefined>,
-  ) {
-    attachedCards.set(id, cardPromise);
-  }
 
   // the only writeable field for this card should be the "events" field.
   // All other fields should derive from the "events" field.

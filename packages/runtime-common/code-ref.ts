@@ -9,11 +9,13 @@ import { Loader } from './loader';
 import { isField } from './constants';
 import { CardError } from './error';
 
+export type ResolvedCodeRef = {
+  module: string;
+  name: string;
+};
+
 export type CodeRef =
-  | {
-      module: string;
-      name: string;
-    }
+  | ResolvedCodeRef
   | {
       type: 'ancestorOf';
       card: CodeRef; //TODO: consider changing this key to ref, this will break serializations
@@ -30,6 +32,14 @@ let localIdentities = new WeakMap<
   | { type: 'ancestorOf'; card: typeof BaseDef }
   | { type: 'fieldOf'; card: typeof BaseDef; field: string }
 >();
+
+export function isResolvedCodeRef(ref: CodeRef): ref is ResolvedCodeRef {
+  if ('module' in ref && 'name' in ref) {
+    return true;
+  } else {
+    return false;
+  }
+}
 
 export function isCodeRef(ref: any): ref is CodeRef {
   if (typeof ref !== 'object') {
@@ -62,7 +72,7 @@ export function isBaseDef(cardOrField: any): cardOrField is typeof BaseDef {
 }
 
 export function isCardDef(card: any): card is typeof CardDef {
-  return !('isFieldDef' in card) && isBaseDef(card);
+  return !('isFieldDef' in card) && 'isCardDef' in card && isBaseDef(card);
 }
 
 export function isFieldDef(field: any): field is typeof FieldDef {

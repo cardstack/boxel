@@ -1,4 +1,5 @@
 import Service, { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
@@ -21,6 +22,7 @@ export type IStandaloneCodeEditor = _MonacoSDK.editor.IStandaloneCodeEditor;
 
 export default class MonacoService extends Service {
   #ready: Promise<MonacoSDK>;
+  @tracked editor: _MonacoSDK.editor.ICodeEditor | null = null;
   @service declare cardService: CardService;
 
   constructor(properties: object) {
@@ -36,6 +38,9 @@ export default class MonacoService extends Service {
     let promises = languageConfigs.map((lang) =>
       this.extendMonacoLanguage(lang, monaco),
     );
+    monaco.editor.onDidCreateEditor((editor: _MonacoSDK.editor.ICodeEditor) => {
+      this.editor = editor;
+    });
     await Promise.all(promises);
     return monaco;
   });
@@ -126,5 +131,25 @@ export default class MonacoService extends Service {
       experimentalDecorators: true,
       allowNonTsExtensions: true,
     };
+  }
+
+  getMonacoContent() {
+    let model = this.editor?.getModel();
+    if (!model) {
+      return null;
+    }
+    return model.getValue();
+  }
+
+  getLineCursorOn(): string | null {
+    let model = this.editor?.getModel();
+    if (!model || !this.editor) {
+      return null;
+    }
+
+    let currentPosition = this.editor.getPosition();
+    return currentPosition
+      ? model.getLineContent(currentPosition.lineNumber)
+      : null;
   }
 }

@@ -26,6 +26,7 @@ import {
   chooseCard,
   baseCardRef,
   catalogEntryRef,
+  apiFor,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -40,6 +41,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { getRoom } from '../../resources/room';
 
@@ -312,6 +314,7 @@ export default class Room extends Component<RoomArgs> {
   private cardsToSend: TrackedMap<string, CardDef | undefined> =
     new TrackedMap();
   private roomResource = getRoom(this, () => this.args.roomId);
+  private api: typeof CardAPI | undefined;
 
   constructor(owner: Owner, args: RoomArgs['Args']) {
     super(owner, args);
@@ -346,14 +349,18 @@ export default class Room extends Component<RoomArgs> {
   };
 
   private subscribeToRoomChanges = task(async () => {
-    await this.cardService.ready;
     while (true) {
       if (this.room && this.subscribedRoom !== this.room) {
         if (this.subscribedRoom) {
-          this.cardService.unsubscribe(this.subscribedRoom, this.onCardChange);
+          this.api = await apiFor(this.subscribedRoom);
+          this.api.unsubscribeFromChanges(
+            this.subscribedRoom,
+            this.onCardChange,
+          );
         }
         this.subscribedRoom = this.room;
-        this.cardService.subscribe(this.subscribedRoom, this.onCardChange);
+        this.api = await apiFor(this.subscribedRoom);
+        this.api.subscribeToChanges(this.subscribedRoom, this.onCardChange);
       }
       await timeout(50);
     }
@@ -368,8 +375,8 @@ export default class Room extends Component<RoomArgs> {
   });
 
   private cleanup = () => {
-    if (this.subscribedRoom) {
-      this.cardService.unsubscribe(this.subscribedRoom, this.onCardChange);
+    if (this.subscribedRoom && this.api) {
+      this.api.unsubscribeFromChanges(this.subscribedRoom, this.onCardChange);
     }
   };
 
