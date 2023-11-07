@@ -84,6 +84,7 @@ export default class BoxelInput extends Component<Signature> {
               'boxel-input'
               invalid=@invalid
               search=this.isSearch
+              boxel-input--large=(eq @variant 'large')
               boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
             }}
             id={{this.id}}
@@ -147,6 +148,13 @@ export default class BoxelInput extends Component<Signature> {
           font-weight: 400;
           letter-spacing: var(--boxel-lsp-xs);
           transition: border-color var(--boxel-transition);
+        }
+
+        .boxel-input--large {
+          --boxel-form-control-height: 4.375rem;
+
+          font: var(--boxel-font);
+          letter-spacing: var(--boxel-lsp-xs);
         }
 
         .boxel-text-area {

@@ -26,7 +26,7 @@ export default class InputUsage extends Component {
   @tracked placeholder = '';
   @tracked errorMessage = '';
   @tracked helperText = '';
-  @tracked variant = 'default';
+  @tracked variant: 'large' | 'default' = 'default';
 
   defaultType = InputTypes.Text;
   @tracked type = this.defaultType;
@@ -78,6 +78,7 @@ export default class InputUsage extends Component {
           @type={{this.type}}
           @placeholder={{this.placeholder}}
           @bottomTreatment={{this.bottomTreatment}}
+          @variant={{this.variant}}
           @errorMessage={{this.errorMessage}}
           @helperText={{this.helperText}}
           style={{cssVar boxel-input-height=this.boxelInputHeight.value}}
@@ -151,6 +152,14 @@ export default class InputUsage extends Component {
           @options={{validBottomTreatments}}
           @value={{this.bottomTreatment}}
           @defaultValue={{this.defaultBottomTreatment}}
+        />
+        <Args.String
+          @name='variant'
+          @description='The visual shape of the bottom of the input'
+          @onInput={{fn (mut this.variant)}}
+          @options={{Array 'default' 'large'}}
+          @value={{this.variant}}
+          @defaultValue={{this.variant}}
         />
         <Args.Action
           @name='onInput'
