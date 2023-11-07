@@ -27,7 +27,6 @@ import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import CardService from '@cardstack/host/services/card-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -52,7 +51,6 @@ const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (card: string) => Promise<void>;
 
 let loader: Loader;
-let cardService: CardService;
 
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -62,7 +60,6 @@ module('Integration | operator-mode', function (hooks) {
   hooks.beforeEach(function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    cardService = this.owner.lookup('service:card-service') as CardService;
   });
 
   setupLocalIndexing(hooks);
@@ -471,43 +468,6 @@ module('Integration | operator-mode', function (hooks) {
             adoptsFrom: {
               module: 'https://cardstack.com/base/catalog-entry',
               name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'example.gts': `
-        import { contains, containsMany, field, CardDef } from 'https://cardstack.com/base/card-api';
-        import {
-          CappedNumberField,
-          ContainedNumberField,
-        } from 'https://cardstack.com/base/capped-number';
-
-        export class Example extends CardDef {
-          static displayName = 'Example';
-          @field amount = contains(ContainedNumberField);
-          @field listOfNumbers = containsMany(ContainedNumberField);
-          @field amountCapped = contains(CappedNumberField);
-        }
-      `,
-      'Example/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            amount: {
-              internalValue: 12,
-            },
-            amountCapped: {
-              internalValue: 34,
-              maxValue: 100,
-            },
-            title: 'I have an internal value woo',
-            description: null,
-            thumbnailURL: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../example',
-              name: 'Example',
             },
           },
         },
