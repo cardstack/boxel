@@ -5,8 +5,6 @@ import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import Modifier, { PositionalArgs } from 'ember-modifier';
-
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { RealmPaths, type LocalPath } from '@cardstack/runtime-common/paths';
@@ -16,6 +14,7 @@ import { directory } from '@cardstack/host/resources/directory';
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 
 interface Args {
   Args: {
@@ -33,7 +32,7 @@ export default class Directory extends Component<Args> {
             <button
               data-test-file={{entryPath}}
               {{on 'click' (fn this.openFile entryPath)}}
-              {{ScrollIntoViewModifier
+              {{scrollIntoViewModifier
                 (fileIsSelected entryPath this.operatorModeStateService)
               }}
               class='file
@@ -161,33 +160,4 @@ function isOpen(
   ).find((item) => item.startsWith(path));
 
   return directoryIsPersistedOpen;
-}
-
-interface ScrollIntoViewModifierArgs {
-  Positional: [boolean];
-}
-
-interface ScrollIntoViewModifierSignature {
-  Element: Element;
-  Args: ScrollIntoViewModifierArgs;
-}
-
-class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModifierSignature> {
-  element!: Element;
-  #didSetup = false;
-
-  modify(
-    element: Element,
-    [shouldScrollIntoView]: PositionalArgs<ScrollIntoViewModifierSignature>,
-  ): void {
-    this.element = element;
-
-    if (!this.#didSetup) {
-      this.#didSetup = true;
-
-      if (shouldScrollIntoView) {
-        this.element.scrollIntoView({ block: 'center' });
-      }
-    }
-  }
 }
