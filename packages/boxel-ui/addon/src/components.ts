@@ -12,7 +12,8 @@ import Header from './components/header/index.gts';
 import IconButton from './components/icon-button/index.gts';
 import BoxelInput from './components/input/index.gts';
 import SearchInput, {
-  SearchInputBottomTreatment,
+  type SearchInputBottomTreatment,
+  SearchInputBottomTreatments,
 } from './components/input/search-input/index.gts';
 import type { InputValidationState } from './components/input/validation-state/index.gts';
 import BoxelInputValidationState from './components/input/validation-state/index.gts';
@@ -54,5 +55,6 @@ export {
   ResizablePanelGroup,
   SearchInput,
   SearchInputBottomTreatment,
+  SearchInputBottomTreatments,
   Tooltip,
 };

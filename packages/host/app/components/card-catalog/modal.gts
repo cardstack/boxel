@@ -64,7 +64,7 @@ type Request = {
   search: Search;
   deferred: Deferred<CardDef | undefined>;
   opts?: {
-    offerToCreate?: { ref: CodeRef, relativeTo: URL | undefined };
+    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
     createNewCard?: CreateNewCard;
   };
 };
@@ -136,7 +136,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   class='create-new-button'
                   {{on
                     'click'
-                    (fn 
+                    (fn
                       this.createNew
                       this.state.request.opts.offerToCreate.ref
                       this.state.request.opts.offerToCreate.relativeTo
@@ -304,7 +304,10 @@ export default class CardCatalogModal extends Component<Signature> {
   private _chooseCard = task(
     async <T extends CardDef>(
       query: Query,
-      opts: { offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined }; multiSelect?: boolean } = {},
+      opts: {
+        offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+        multiSelect?: boolean;
+      } = {},
     ) => {
       this.stateId++;
       let title = chooseCardTitle(query.filter, opts?.multiSelect);
@@ -369,12 +372,12 @@ export default class CardCatalogModal extends Component<Signature> {
     }
     let results: RealmCards[] = [];
     for (let { url, realmInfo, cards } of this.displayedRealms) {
-      let filteredCards = cards.filter((c) =>
-        c.title
-          .trim()
+      let filteredCards = cards.filter((c) => {
+        return c.title
+          ?.trim()
           .toLowerCase()
-          .includes(this.state.searchKey.trim().toLowerCase()),
-      );
+          .includes(this.state.searchKey.trim().toLowerCase());
+      });
       if (filteredCards.length) {
         results.push({
           url,
@@ -416,23 +419,32 @@ export default class CardCatalogModal extends Component<Signature> {
     this.createNewTask.perform(ref, relativeTo);
   }
 
-  createNewTask = task(async (ref: CodeRef, relativeTo: URL | undefined /* this should be the catalog entry ID */) => {
-    let newCard;
-    this.state.dismissModal = true;
+  createNewTask = task(
+    async (
+      ref: CodeRef,
+      relativeTo: URL | undefined /* this should be the catalog entry ID */,
+    ) => {
+      let newCard;
+      this.state.dismissModal = true;
 
-    // We need to store the current state in a variable
-    // because there is a possibility that in createNewCard,
-    // users will open the card catalog modal and insert a new state into the stack.
-    let currentState = this.state;
-    if (this.state.request.opts?.createNewCard) {
-      newCard = await this.state.request.opts?.createNewCard(ref, relativeTo, {
-        isLinkedCard: true,
-      });
-    } else {
-      newCard = await createNewCard(ref, relativeTo);
-    }
-    this.pick(newCard, currentState);
-  });
+      // We need to store the current state in a variable
+      // because there is a possibility that in createNewCard,
+      // users will open the card catalog modal and insert a new state into the stack.
+      let currentState = this.state;
+      if (this.state.request.opts?.createNewCard) {
+        newCard = await this.state.request.opts?.createNewCard(
+          ref,
+          relativeTo,
+          {
+            isLinkedCard: true,
+          },
+        );
+      } else {
+        newCard = await createNewCard(ref, relativeTo);
+      }
+      this.pick(newCard, currentState);
+    },
+  );
 }
 
 function chooseCardTitle(

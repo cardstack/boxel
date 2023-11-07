@@ -115,6 +115,45 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('can deserialize a card where the card instance has fields that are not found in the definition', async function (assert) {
+    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
+    let { default: NumberField } = number;
+
+    class Item extends CardDef {
+      @field priceRenamed = contains(NumberField); // Simulating the scenario where someone renamed the price field to priceRenamed and did not also update the field in the instance data
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <@fields.priceRenamed />
+        </template>
+      };
+    }
+    await shimModule(`${realmURL}test-cards`, { Item }, loader);
+
+    // initialize card data as serialized to force us to deserialize instead of using cached data
+    let resource = {
+      attributes: {
+        price: 100,
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Item',
+        },
+      },
+    };
+
+    let post = await createFromSerialized(
+      resource,
+      { data: resource },
+      undefined,
+      loader,
+    ); // Deserializing should be fault tolerant and not throw an error if the instance data does not match the card definition
+
+    let root = await renderCard(loader, post, 'isolated');
+
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), '');
+  });
+
   test('can deserialize a card that has an ID', async function (assert) {
     let { field, contains, CardDef, createFromSerialized, isSaved } = cardApi;
     let { default: StringField } = string;
@@ -2242,7 +2281,11 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Person/hassan`,
             type: 'card',
-            attributes: { firstName: 'Hassan' },
+            attributes: {
+              description: null,
+              firstName: 'Hassan',
+              thumbnailURL: null,
+            },
             relationships: {
               pet: {
                 links: { self: `${realmURL}Pet/mango` },
@@ -3701,6 +3744,47 @@ module('Integration | serialization', function (hooks) {
     });
   });
 
+  test('Includes non-computed contained fields, even if the fields are unrendered', async function (assert) {
+    let { field, contains, CardDef, Component, serializeCard } = cardApi;
+    let { default: StringField } = string;
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field unRenderedField = contains(StringField);
+
+      static isolated = class Embedded extends Component<typeof this> {
+        <template>
+          <div><@fields.firstName /></div>
+        </template>
+      };
+    }
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+
+    let mango = new Person({
+      id: `${realmURL}Person/mango`,
+      firstName: 'Mango',
+    });
+
+    assert.deepEqual(serializeCard(mango, { includeUnrenderedFields: true }), {
+      data: {
+        id: `${realmURL}Person/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango',
+          unRenderedField: null,
+          title: null,
+          description: null,
+          thumbnailURL: null,
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person',
+          },
+        },
+      },
+    });
+  });
+
   module('linksToMany', function () {
     test('can serialize a linksToMany relationship', async function (assert) {
       let { field, contains, linksToMany, CardDef, serializeCard } = cardApi;
@@ -3743,7 +3827,11 @@ module('Integration | serialization', function (hooks) {
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
-          attributes: { firstName: 'Hassan' },
+          attributes: {
+            description: null,
+            firstName: 'Hassan',
+            thumbnailURL: null,
+          },
           relationships: {
             'pets.0': {
               links: {
@@ -3766,7 +3854,11 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Pet/mango`,
             type: 'card',
-            attributes: { firstName: 'Mango' },
+            attributes: {
+              description: null,
+              firstName: 'Mango',
+              thumbnailURL: null,
+            },
             meta: {
               adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
             },
@@ -3774,7 +3866,11 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Pet/vanGogh`,
             type: 'card',
-            attributes: { firstName: 'Van Gogh' },
+            attributes: {
+              description: null,
+              firstName: 'Van Gogh',
+              thumbnailURL: null,
+            },
             meta: {
               adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
             },
@@ -3806,7 +3902,11 @@ module('Integration | serialization', function (hooks) {
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
-          attributes: { firstName: 'Hassan' },
+          attributes: {
+            description: null,
+            firstName: 'Hassan',
+            thumbnailURL: null,
+          },
           relationships: {
             'pets.0': {
               links: {
@@ -3827,7 +3927,11 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Pet/mango`,
             type: 'card',
-            attributes: { firstName: 'Mango' },
+            attributes: {
+              description: null,
+              firstName: 'Mango',
+              thumbnailURL: null,
+            },
             meta: {
               adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
             },
@@ -3835,7 +3939,11 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Pet/vanGogh`,
             type: 'card',
-            attributes: { firstName: 'Van Gogh' },
+            attributes: {
+              description: null,
+              firstName: 'Van Gogh',
+              thumbnailURL: null,
+            },
             meta: {
               adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
             },
@@ -3968,7 +4076,11 @@ module('Integration | serialization', function (hooks) {
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
-          attributes: { firstName: 'Hassan' },
+          attributes: {
+            description: null,
+            firstName: 'Hassan',
+            thumbnailURL: null,
+          },
           relationships: {
             'pets.0': {
               links: {
@@ -3985,7 +4097,10 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Toy/spookyToiletPaper`,
             type: 'card',
-            attributes: { description: 'Toilet paper ghost: Poooo!' },
+            attributes: {
+              description: 'Toilet paper ghost: Poooo!',
+              thumbnailURL: null,
+            },
             meta: {
               adoptsFrom: { module: `${realmURL}test-cards`, name: 'Toy' },
             },
@@ -3993,7 +4108,11 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Pet/mango`,
             type: 'card',
-            attributes: { firstName: 'Mango' },
+            attributes: {
+              description: null,
+              firstName: 'Mango',
+              thumbnailURL: null,
+            },
             relationships: {
               favoriteToy: {
                 links: {
@@ -4081,7 +4200,9 @@ module('Integration | serialization', function (hooks) {
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
-          attributes: { firstName: 'Hassan' },
+          attributes: {
+            firstName: 'Hassan',
+          },
           relationships: {
             pets: {
               links: {
@@ -4100,7 +4221,9 @@ module('Integration | serialization', function (hooks) {
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
-          attributes: { firstName: 'Mango' },
+          attributes: {
+            firstName: 'Mango',
+          },
           relationships: {
             pets: {
               links: {
@@ -4132,7 +4255,11 @@ module('Integration | serialization', function (hooks) {
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
-          attributes: { firstName: 'Hassan' },
+          attributes: {
+            description: null,
+            firstName: 'Hassan',
+            thumbnailURL: null,
+          },
           relationships: {
             pets: {
               links: {
@@ -4199,7 +4326,9 @@ module('Integration | serialization', function (hooks) {
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
-          attributes: { firstName: 'Hassan' },
+          attributes: {
+            firstName: 'Hassan',
+          },
           relationships: {
             'pets.0': { links: { self: `${realmURL}Pet/mango` } },
             'pets.1': { links: { self: `${realmURL}Pet/vanGogh` } },
@@ -4215,7 +4344,9 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Pet/mango`,
             type: 'card',
-            attributes: { firstName: 'Mango' },
+            attributes: {
+              firstName: 'Mango',
+            },
             meta: {
               adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
             },
@@ -4270,7 +4401,9 @@ module('Integration | serialization', function (hooks) {
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
-          attributes: { firstName: 'Hassan' },
+          attributes: {
+            firstName: 'Hassan',
+          },
           relationships: {
             'pets.0': {
               links: {
@@ -4296,7 +4429,9 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Pet/mango`,
             type: 'card',
-            attributes: { firstName: 'Mango' },
+            attributes: {
+              firstName: 'Mango',
+            },
             meta: {
               adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
             },
@@ -4340,7 +4475,9 @@ module('Integration | serialization', function (hooks) {
         data: {
           type: 'card',
           id: `${realmURL}Person/hassan`,
-          attributes: { firstName: 'Hassan' },
+          attributes: {
+            firstName: 'Hassan',
+          },
           relationships: {
             'friends.0': {
               links: { self: `./mango` },
@@ -4359,7 +4496,9 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Person/mango`,
             type: 'card',
-            attributes: { firstName: 'Mango' },
+            attributes: {
+              firstName: 'Mango',
+            },
             relationships: {
               friends: { links: { self: null } },
             },
@@ -4370,7 +4509,9 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Person/vanGogh`,
             type: 'card',
-            attributes: { firstName: 'Van Gogh' },
+            attributes: {
+              firstName: 'Van Gogh',
+            },
             relationships: {
               friends: { links: { self: null } },
             },
@@ -4408,7 +4549,11 @@ module('Integration | serialization', function (hooks) {
         data: {
           type: 'card',
           id: `${realmURL}Person/hassan`,
-          attributes: { firstName: 'Hassan' },
+          attributes: {
+            description: null,
+            firstName: 'Hassan',
+            thumbnailURL: null,
+          },
           relationships: {
             'friends.0': {
               links: { self: `${realmURL}Person/mango` },
@@ -4427,7 +4572,11 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Person/mango`,
             type: 'card',
-            attributes: { firstName: 'Mango' },
+            attributes: {
+              description: null,
+              firstName: 'Mango',
+              thumbnailURL: null,
+            },
             relationships: {
               friends: { links: { self: null } },
             },
@@ -4438,7 +4587,11 @@ module('Integration | serialization', function (hooks) {
           {
             id: `${realmURL}Person/vanGogh`,
             type: 'card',
-            attributes: { firstName: 'Van Gogh' },
+            attributes: {
+              description: null,
+              firstName: 'Van Gogh',
+              thumbnailURL: null,
+            },
             relationships: {
               'friends.0': {
                 links: { self: `${realmURL}Person/hassan` },

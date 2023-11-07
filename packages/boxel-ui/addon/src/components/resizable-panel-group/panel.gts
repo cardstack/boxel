@@ -15,6 +15,7 @@ export type PanelContext = {
 interface Signature {
   Args: {
     defaultLength: string;
+    hideHandle: boolean;
     isLastPanel: (panelId: number) => boolean;
     length?: string;
     minLength?: string;
@@ -58,7 +59,7 @@ export default class Panel extends Component<Signature> {
       <div class='separator-{{@orientation}}' ...attributes>
         <button
           id={{this.resizeHandlerId}}
-          class='resize-handler {{@orientation}}'
+          class='resize-handler {{@orientation}} {{if @hideHandle "hidden"}}'
           aria-label={{this.resizeHandlerId}}
           {{on 'mousedown' @onResizeHandlerMouseDown}}
           {{on 'dblclick' @onResizeHandlerDblClick}}
@@ -68,8 +69,6 @@ export default class Panel extends Component<Signature> {
     <style>
       .boxel-panel {
         --resizable-panel-length: '300px;';
-
-        container-type: inline-size;
       }
 
       .boxel-panel.horizontal {
@@ -94,7 +93,9 @@ export default class Panel extends Component<Signature> {
         --boxel-panel-resize-handler-height: 100px;
         --boxel-panel-resize-handler-width: 5px;
         --boxel-panel-resize-handler-background-color: var(--boxel-450);
-        --boxel-panel-resize-handler-hover-background-color: var(--boxel-highlight);
+        --boxel-panel-resize-handler-hover-background-color: var(
+          --boxel-highlight
+        );
 
         padding: var(--boxel-sp-xxxs);
       }
@@ -105,7 +106,9 @@ export default class Panel extends Component<Signature> {
         --boxel-panel-resize-handler-width: 100px;
         --boxel-panel-resize-handler-height: 5px;
         --boxel-panel-resize-handler-background-color: var(--boxel-450);
-        --boxel-panel-resize-handler-hover-background-color: var(--boxel-highlight);
+        --boxel-panel-resize-handler-hover-background-color: var(
+          --boxel-highlight
+        );
 
         padding: var(--boxel-sp-xxxs);
       }
@@ -124,7 +127,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler:hover {
-        background-color: var(--boxel-panel-resize-handler-hover-background-color);
+        background-color: var(
+          --boxel-panel-resize-handler-hover-background-color
+        );
       }
 
       .resize-handler.horizontal {
@@ -135,16 +140,8 @@ export default class Panel extends Component<Signature> {
         cursor: row-resize;
       }
 
-      @container (width <= 30px) {
-        .resize-handler.vertical {
-          visibility: hidden;
-        }
-      }
-
-      @container (height <= 30px) {
-        .resize-handler.horizontal {
-          visibility: hidden;
-        }
+      .resize-handler.hidden {
+        visibility: hidden;
       }
 
       .arrow {
@@ -166,7 +163,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler:hover .arrow.right {
-        border-left-color: var(--boxel-panel-resize-handler-hover-background-color);
+        border-left-color: var(
+          --boxel-panel-resize-handler-hover-background-color
+        );
       }
 
       .arrow.left {
@@ -180,7 +179,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler:hover .arrow.left {
-        border-right-color: var(--boxel-panel-resize-handler-hover-background-color);
+        border-right-color: var(
+          --boxel-panel-resize-handler-hover-background-color
+        );
       }
 
       .arrow.top {
@@ -194,7 +195,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler:hover .arrow.top {
-        border-bottom-color: var(--boxel-panel-resize-handler-hover-background-color);
+        border-bottom-color: var(
+          --boxel-panel-resize-handler-hover-background-color
+        );
       }
 
       .arrow.bottom {
@@ -208,7 +211,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler:hover .arrow.bottom {
-        border-top-color: var(--boxel-panel-resize-handler-hover-background-color);
+        border-top-color: var(
+          --boxel-panel-resize-handler-hover-background-color
+        );
       }
     </style>
   </template>
@@ -256,18 +261,25 @@ export default class Panel extends Component<Signature> {
 
     let toward: string | null = null;
 
-    if (
-      (this.id === 1 && this.panelContext?.length !== '0px') ||
-      (this.id &&
-        this.args.isLastPanel(this.id + 1) &&
-        this.args.panelContext(this.id + 1)?.length === '0px')
-    ) {
-      toward = reverse ? 'end' : 'beginning';
-    } else if (
-      (this.id && this.args.isLastPanel(this.id + 1)) ||
-      (this.id === 1 && this.panelContext?.length === '0px')
-    ) {
-      toward = reverse ? 'beginning' : 'end';
+    let isFirstPanel = this.id === 1;
+    let isCollapsed = this.panelContext?.length === '0px';
+
+    let nextPanelIsLast = this.args.isLastPanel(this.id + 1);
+    let nextPanelIsCollapsed =
+      this.args.panelContext(this.id + 1)?.length === '0px';
+
+    if (isFirstPanel && !isCollapsed) {
+      if (nextPanelIsLast && nextPanelIsCollapsed) {
+        toward = reverse ? 'beginning' : 'end';
+      } else {
+        toward = reverse ? 'end' : 'beginning';
+      }
+    } else if (nextPanelIsLast || (isFirstPanel && isCollapsed)) {
+      if (nextPanelIsCollapsed) {
+        toward = 'beginning';
+      } else {
+        toward = reverse ? 'beginning' : 'end';
+      }
     }
 
     if (toward) {

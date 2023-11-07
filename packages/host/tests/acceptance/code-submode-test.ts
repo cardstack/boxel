@@ -23,6 +23,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import {
   TestRealm,
   TestRealmAdapter,
+  getMonacoContent,
   setupLocalIndexing,
   testRealmURL,
   sourceFetchRedirectHandle,
@@ -120,7 +121,7 @@ const employeeCardSource = `
     return !this.isSalaried;
   }
 
-  class Isolated extends Component<typeof Employee> {
+  export class Isolated extends Component<typeof Employee> {
     <template>
       <@fields.firstName /> <@fields.lastName />
 
@@ -460,7 +461,11 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
 
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
+      );
   });
 
   test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
@@ -490,8 +495,11 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
-
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
+      );
   });
 
   test('empty state displays default realm info', async function (assert) {
@@ -588,8 +596,11 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-binary-info] [data-test-last-modified]')
       .containsText('Last modified');
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
-
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
+      );
     await percySnapshot(assert);
   });
 
@@ -694,15 +705,18 @@ module('Acceptance | code submode tests', function (hooks) {
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
 
+    await waitFor(
+      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected]',
+    );
     assert
       .dom(
         '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected]',
       )
       .hasText('isHourly function');
     assert
-      .dom('[data-test-schema-editor-incompatible-item]')
+      .dom('[data-test-file-incompatibility-message]')
       .hasText(
-        'Schema Editor cannot be used for selected function "isHourly".',
+        'No tools are available for the selected item: function "isHourly". Select a card or field definition in the inspector.',
       );
 
     await click('[data-test-boxel-selector-item-text="Isolated"]');
@@ -714,8 +728,10 @@ module('Acceptance | code submode tests', function (hooks) {
       )
       .hasText('Isolated class');
     assert
-      .dom('[data-test-schema-editor-incompatible-item]')
-      .hasText('Schema Editor cannot be used for selected class "Isolated".');
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available for the selected item: class "Isolated". Select a card or field definition in the inspector.',
+      );
 
     operatorModeStateParam = stringify({
       stacks: [],
@@ -730,6 +746,56 @@ module('Acceptance | code submode tests', function (hooks) {
     );
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
+    assert.dom('[data-test-file-incompatibility-message]').exists();
+  });
+
+  test('Clicking card in search panel opens card JSON in editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+    // Click on search-input
+    await click('[data-test-search-input] input');
+
+    assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
+
+    await fillIn('[data-test-search-input] input', 'Mango');
+
+    assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
+
+    await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`, {
+      timeout: 2000,
+    });
+
+    // Click on search result
+    await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+    assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
+
+    // The card appears in the editor
+    await waitFor('[data-test-editor]');
+    assert.deepEqual(JSON.parse(getMonacoContent()), {
+      data: {
+        attributes: {
+          name: 'Mango',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        },
+      },
+    });
   });
 });

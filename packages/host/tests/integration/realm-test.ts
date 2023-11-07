@@ -126,6 +126,8 @@ module('Integration | realm', function (hooks) {
         data: {
           id: `${testRealmURL}dir/mango`,
           attributes: {
+            description: null,
+            thumbnailURL: null,
             firstName: 'Mango',
           },
           relationships: {
@@ -163,6 +165,8 @@ module('Integration | realm', function (hooks) {
         attributes: {
           firstName: 'Mango',
           title: 'Mango',
+          description: null,
+          thumbnailURL: null,
         },
         relationships: {
           owner: {
@@ -195,6 +199,9 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/owner`,
           attributes: {
+            email: null,
+            posts: null,
+            thumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
@@ -224,6 +231,8 @@ module('Integration | realm', function (hooks) {
         data: {
           id: `${testRealmURL}dir/mango`,
           attributes: {
+            description: null,
+            thumbnailURL: null,
             firstName: 'Mango',
           },
           relationships: {
@@ -263,6 +272,8 @@ module('Integration | realm', function (hooks) {
         attributes: {
           firstName: 'Mango',
           title: 'Mango',
+          description: null,
+          thumbnailURL: null,
         },
         relationships: {
           owner: {
@@ -295,6 +306,9 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `http://localhost:4202/test/hassan`,
           attributes: {
+            email: null,
+            posts: null,
+            thumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
@@ -401,7 +415,7 @@ module('Integration | realm', function (hooks) {
     ];
     await this.expectEvents(assert, realm, adapter, expected, async () => {
       {
-        let response = await realm.handle(
+        let response = realm.handle(
           new Request(testRealmURL, {
             method: 'POST',
             headers: {
@@ -424,8 +438,14 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
-        assert.strictEqual(response.status, 201, 'successful http status');
-        let json = await response.json();
+        await realm.flushOperations();
+
+        assert.strictEqual(
+          (await response).status,
+          201,
+          'successful http status',
+        );
+        let json = await (await response).json();
         if (isSingleCardDocument(json)) {
           assert.strictEqual(
             json.data.id,
@@ -441,7 +461,11 @@ module('Integration | realm', function (hooks) {
             JSON.parse(fileRef.content as string),
             {
               data: {
-                attributes: {},
+                attributes: {
+                  description: null,
+                  thumbnailURL: null,
+                  title: null,
+                },
                 type: 'card',
                 meta: {
                   adoptsFrom: {
@@ -473,7 +497,7 @@ module('Integration | realm', function (hooks) {
 
       // create second file
       {
-        let response = await realm.handle(
+        let response = realm.handle(
           new Request(testRealmURL, {
             method: 'POST',
             headers: {
@@ -496,8 +520,13 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
-        assert.strictEqual(response.status, 201, 'successful http status');
-        let json = await response.json();
+        await realm.flushOperations();
+        assert.strictEqual(
+          (await response).status,
+          201,
+          'successful http status',
+        );
+        let json = await (await response).json();
         if (isSingleCardDocument(json)) {
           assert.strictEqual(
             json.data.id,
@@ -589,6 +618,8 @@ module('Integration | realm', function (hooks) {
         attributes: {
           firstName: 'Mango',
           title: 'Mango',
+          description: null,
+          thumbnailURL: null,
         },
         relationships: {
           owner: {
@@ -619,6 +650,9 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/owner`,
           attributes: {
+            email: null,
+            posts: null,
+            thumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
@@ -650,6 +684,8 @@ module('Integration | realm', function (hooks) {
         data: {
           type: 'card',
           attributes: {
+            description: null,
+            thumbnailURL: null,
             firstName: 'Mango',
           },
           relationships: {
@@ -705,7 +741,7 @@ module('Integration | realm', function (hooks) {
       adapter,
       expected,
       async () => {
-        return await realm.handle(
+        let response = realm.handle(
           new Request(`${testRealmURL}dir/card`, {
             method: 'PATCH',
             headers: {
@@ -731,6 +767,8 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
+        await realm.flushOperations();
+        return await response;
       },
     );
     assert.strictEqual(response.status, 200, 'successful http status');
@@ -766,6 +804,9 @@ module('Integration | realm', function (hooks) {
           data: {
             type: 'card',
             attributes: {
+              email: null,
+              posts: null,
+              thumbnailURL: null,
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
             },
@@ -891,6 +932,8 @@ module('Integration | realm', function (hooks) {
               firstName: 'Hassan',
               lastName: null,
               title: 'Hassan ',
+              email: null,
+              posts: null,
             },
           ],
           sponsors: ['Burton'],
@@ -929,6 +972,8 @@ module('Integration | realm', function (hooks) {
               {
                 firstName: 'Hassan',
                 lastName: null,
+                email: null,
+                posts: null,
               },
             ],
             sponsors: ['Burton'],
@@ -1076,6 +1121,9 @@ module('Integration | realm', function (hooks) {
           id: `${testRealmURL}dir/friend`,
           links: { self: `${testRealmURL}dir/friend` },
           attributes: {
+            email: null,
+            posts: null,
+            thumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
@@ -1096,7 +1144,12 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/van-gogh`,
           links: { self: `${testRealmURL}dir/van-gogh` },
-          attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
+          attributes: {
+            firstName: 'Van Gogh',
+            title: 'Van Gogh',
+            description: null,
+            thumbnailURL: null,
+          },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: {
@@ -1770,6 +1823,8 @@ module('Integration | realm', function (hooks) {
         data: {
           id: `${testRealmURL}dir/mango`,
           attributes: {
+            description: null,
+            thumbnailURL: null,
             firstName: 'Mango',
           },
           relationships: {
@@ -1830,6 +1885,8 @@ module('Integration | realm', function (hooks) {
         attributes: {
           firstName: 'Mango',
           title: 'Mango',
+          description: null,
+          thumbnailURL: null,
         },
         relationships: {
           owner: {
@@ -1865,6 +1922,9 @@ module('Integration | realm', function (hooks) {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
             title: 'Mariko Abdel-Rahman',
+            email: null,
+            posts: null,
+            thumbnailURL: null,
           },
           meta: {
             adoptsFrom: {
@@ -1893,6 +1953,8 @@ module('Integration | realm', function (hooks) {
         data: {
           type: 'card',
           attributes: {
+            description: null,
+            thumbnailURL: null,
             firstName: 'Mango',
           },
           relationships: {
@@ -1972,7 +2034,7 @@ module('Integration | realm', function (hooks) {
       adapter,
       expected,
       async () => {
-        return await realm.handle(
+        let response = realm.handle(
           new Request(`${testRealmURL}cards/2`, {
             method: 'DELETE',
             headers: {
@@ -1980,6 +2042,8 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
+        await realm.flushOperations();
+        return await response;
       },
     );
     assert.strictEqual(response.status, 204, 'status was 204');
@@ -2086,7 +2150,7 @@ module('Integration | realm', function (hooks) {
         adapter,
         expected,
         async () => {
-          return await realm.handle(
+          let response = realm.handle(
             new Request(`${testRealmURL}dir/person.gts`, {
               method: 'POST',
               headers: {
@@ -2095,6 +2159,8 @@ module('Integration | realm', function (hooks) {
               body: cardSrc,
             }),
           );
+          await realm.flushOperations();
+          return await response;
         },
       );
 
@@ -2148,16 +2214,17 @@ module('Integration | realm', function (hooks) {
       adapter,
       expected,
       async () => {
-        let response = await realm.handle(
+        let response = realm.handle(
           new Request(`${testRealmURL}person`, {
             headers: {
               Accept: 'application/vnd.card+source',
             },
           }),
         );
-        assert.strictEqual(response.status, 302, 'file exists');
+        await realm.flushOperations();
+        assert.strictEqual((await response).status, 302, 'file exists');
 
-        return await realm.handle(
+        response = realm.handle(
           new Request(`${testRealmURL}person`, {
             method: 'DELETE',
             headers: {
@@ -2165,6 +2232,8 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
+        await realm.flushOperations();
+        return await response;
       },
     );
     assert.strictEqual(response.status, 204, 'file is deleted');
@@ -2303,6 +2372,8 @@ module('Integration | realm', function (hooks) {
         data: {
           id: `${testRealmURL}dir/mango`,
           attributes: {
+            description: null,
+            thumbnailURL: null,
             firstName: 'Mango',
           },
           relationships: {
@@ -2370,8 +2441,10 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/mango`,
           attributes: {
+            description: null,
             firstName: 'Mango',
             title: 'Mango',
+            thumbnailURL: null,
           },
           relationships: {
             owner: {
@@ -2406,6 +2479,9 @@ module('Integration | realm', function (hooks) {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
             title: 'Mariko Abdel-Rahman',
+            email: null,
+            posts: null,
+            thumbnailURL: null,
           },
           meta: {
             adoptsFrom: {
@@ -2426,8 +2502,10 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/vanGogh`,
           attributes: {
+            description: null,
             firstName: 'Van Gogh',
             title: 'Van Gogh',
+            thumbnailURL: null,
           },
           relationships: {
             owner: {
@@ -2461,6 +2539,9 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `http://localhost:4202/test/hassan`,
           attributes: {
+            email: null,
+            posts: null,
+            thumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
