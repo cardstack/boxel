@@ -28,7 +28,7 @@ export default class Monaco extends Modifier<Signature> {
   private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
-  private isEditing: boolean = false;
+  private isEditing = false;
 
   modify(
     element: HTMLElement,
@@ -49,7 +49,7 @@ export default class Monaco extends Modifier<Signature> {
       }
 
       // Prevent race condition by ensuring content cannot be updated during editing.
-      if ( content !== this.lastContent && !this.isEditing) {
+      if (content !== this.lastContent && !this.isEditing) {
         this.model.setValue(content);
       }
     } else {
