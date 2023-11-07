@@ -26,11 +26,13 @@ import {
   TestRealm,
   TestRealmAdapter,
   getMonacoContent,
+  setMonacoContent,
   setupLocalIndexing,
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
+  type TestContextWithSSE,
 } from '../helpers';
 
 const indexCardSource = `
@@ -898,5 +900,64 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-boxel-selector-item-selected]')
       .hasText(`${elementName} card`);
+  });
+
+  test<TestContextWithSSE>('the monaco cursor position is maintained during an auto-save', async function (assert) {
+    assert.expect(3);
+    // we only want to change this for this particular test so we emulate what the non-test env sees
+    monacoService.serverEchoDebounceMs = 5000;
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}in-this-file.gts`],
+        },
+      },
+    ];
+
+    try {
+      let operatorModeStateParam = stringify({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}in-this-file.gts`,
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+      await waitFor('[data-test-editor]');
+
+      let originalPosition: MonacoSDK.Position | undefined | null;
+      await this.expectEvents(
+        assert,
+        realm,
+        adapter,
+        expectedEvents,
+        async () => {
+          setMonacoContent(`// This is a change \n${inThisFileSource}`);
+          monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
+          originalPosition = monacoService.getCursorPosition();
+        },
+      );
+      await waitFor('[data-test-saved]');
+      await waitFor('[data-test-save-idle]');
+      let currentPosition = monacoService.getCursorPosition();
+      assert.strictEqual(
+        originalPosition!.lineNumber,
+        currentPosition?.lineNumber,
+        'cursor position line number has not changed',
+      );
+      assert.strictEqual(
+        originalPosition!.column,
+        currentPosition?.column,
+        'cursor position column has not changed',
+      );
+    } finally {
+      // set this back correctly regardless of test outcome
+      monacoService.serverEchoDebounceMs = 0;
+    }
   });
 });
