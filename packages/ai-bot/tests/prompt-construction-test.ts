@@ -25,7 +25,7 @@ module('getModifyPrompt', () => {
     assert.equal(result[1].content, 'Hey');
   });
 
-  test('should generate a more strucutred response if the user uploads a ', () => {
+  test('should generate a more strucutred response if the user uploads a card', () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
