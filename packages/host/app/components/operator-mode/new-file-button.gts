@@ -35,9 +35,12 @@ const NewFileButton: TemplateOnlyComponent = <template>
   </BoxelDropdown>
   <style>
     .new-file-button {
+      --new-file-button-width: 7.5rem;
+      --new-file-button-height: var(--boxel-form-control-height);
       --boxel-button-text-color: var(--boxel-light);
-      height: 2.5rem;
-      width: 7.5rem;
+
+      height: var(--new-file-button-height);
+      width: var(--new-file-button-width);
       margin-left: var(--boxel-sp);
     }
     .new-file-button-icon {

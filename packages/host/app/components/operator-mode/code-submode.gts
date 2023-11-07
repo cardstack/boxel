@@ -735,7 +735,6 @@ export default class CodeSubmode extends Component<Signature> {
         @userHasDismissedError={{this.userHasDismissedURLError}}
         @dismissURLError={{this.dismissURLError}}
         @realmURL={{this.realmURL}}
-        class='card-url-bar'
       />
       <NewFileButton />
     </div>
@@ -1086,10 +1085,6 @@ export default class CodeSubmode extends Component<Signature> {
           var(--code-mode-top-bar-padding-left);
         display: flex;
         z-index: 2;
-      }
-
-      .card-url-bar {
-        height: var(--submode-switcher-height);
       }
 
       .monaco-container {
