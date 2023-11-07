@@ -3,6 +3,8 @@ import { isTesting } from '@embroider/macros';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
+
+import config from '@cardstack/host/config/environment';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 
 import type * as MonacoSDK from 'monaco-editor';
@@ -21,9 +23,8 @@ interface Signature {
 }
 
 // ignore SSE server echoes of our own saves by not processing content changes
-// within SERVER_ECHO_MS of the last monaco change in memory
-const SERVER_ECHO_MS = 2000;
-const DEBOUNCE_MS = 500;
+// within serverEchoDebounceMs of the last monaco change in memory
+const { serverEchoDebounceMs, monacoDebounceMs } = config;
 
 export default class Monaco extends Modifier<Signature> {
   private model: MonacoSDK.editor.ITextModel | undefined;
@@ -50,7 +51,7 @@ export default class Monaco extends Modifier<Signature> {
       }
       if (
         content !== this.lastContent &&
-        Date.now() > this.lastModified + SERVER_ECHO_MS
+        Date.now() >= this.lastModified + serverEchoDebounceMs
       ) {
         this.model.setValue(content);
       }
@@ -87,7 +88,7 @@ export default class Monaco extends Modifier<Signature> {
     if (
       this.editor &&
       cursorPosition &&
-      Date.now() > this.lastModified + SERVER_ECHO_MS
+      Date.now() >= this.lastModified + serverEchoDebounceMs
     ) {
       this.editor.focus();
       this.editor.setPosition({
@@ -101,7 +102,7 @@ export default class Monaco extends Modifier<Signature> {
   private onContentChanged = restartableTask(
     async (contentChanged: (text: string) => void) => {
       this.lastModified = Date.now();
-      timeout(DEBOUNCE_MS);
+      await timeout(monacoDebounceMs);
       if (this.model) {
         this.lastContent = this.model.getValue();
         contentChanged(this.lastContent);

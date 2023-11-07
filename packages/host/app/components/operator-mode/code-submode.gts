@@ -32,11 +32,10 @@ import type { PanelContext } from '@cardstack/boxel-ui/components';
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
-import { Deferred } from '@cardstack/runtime-common';
-
 import {
   type SingleCardDocument,
   RealmPaths,
+  Deferred,
   logger,
   isCardDocumentString,
   isSingleCardDocument,
@@ -466,7 +465,8 @@ export default class CodeSubmode extends Component<Signature> {
 
   private contentChangedTask = restartableTask(async (content: string) => {
     this.hasUnsavedSourceChanges = true;
-    await timeout(autoSaveDelayMs);
+    // note that there is already a debounce in the monaco modifier so there
+    // is no need to delay further for auto save initiation
     if (
       !isReady(this.currentOpenFile) ||
       content === this.currentOpenFile?.content
