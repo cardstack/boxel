@@ -20,7 +20,7 @@ import {
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-import { Range } from 'monaco-editor';
+import { Position } from 'monaco-editor';
 
 import {
   Button,
@@ -378,12 +378,33 @@ export default class CodeSubmode extends Component<Signature> {
     return this.card;
   }
 
-  private get monacoCursorPosition() {
+  @action
+  private initializeMonacoCursorPosition() {
     if (this.selectedDeclaration?.path?.node.loc) {
-      let { start, end } = this.selectedDeclaration.path.node.loc;
-      return new Range(start.line, start.column, end.line, end.column);
+      let { start } = this.selectedDeclaration.path.node.loc;
+      this.monacoService.updateCursorPosition(
+        new Position(start.line, start.column),
+      );
     }
-    return undefined;
+  }
+
+  @action
+  private updateMonacoCursorPositionByDeclaration(
+    declaration: ModuleDeclaration,
+  ) {
+    if (declaration.path?.node.loc) {
+      let { start, end } = declaration.path?.node.loc;
+      let currentCursorPosition = this.monacoService.getCursorPosition();
+      if (
+        currentCursorPosition &&
+        (currentCursorPosition.lineNumber < start.line ||
+          currentCursorPosition.lineNumber > end.line)
+      ) {
+        this.monacoService.updateCursorPosition(
+          new Position(start.line, start.column),
+        );
+      }
+    }
   }
 
   private get declarations() {
@@ -433,8 +454,31 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
+  private selectDeclarationByMonacoCursorPosition(position: Position) {
+    let declarationCursorOn = this.declarations.find(
+      (declaration: ModuleDeclaration) => {
+        if (declaration.path?.node.loc) {
+          let { start, end } = declaration.path?.node.loc;
+          return (
+            position.lineNumber >= start.line && position.lineNumber <= end.line
+          );
+        }
+        return false;
+      },
+    );
+
+    if (
+      declarationCursorOn &&
+      declarationCursorOn !== this.selectedDeclaration
+    ) {
+      this.selectDeclaration(declarationCursorOn);
+    }
+  }
+
+  @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this.operatorModeStateService.updateLocalNameSelection(dec.localName);
+    this.updateMonacoCursorPositionByDeclaration(dec);
   }
 
   @action
@@ -507,7 +551,8 @@ export default class CodeSubmode extends Component<Signature> {
       throw new Error('File is not ready to be written to');
     }
 
-    return file.write(content);
+    // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
+    return file.write(content, true);
   }
 
   private safeJSONParse(content: string) {
@@ -826,7 +871,8 @@ export default class CodeSubmode extends Component<Signature> {
                         contentChanged=(perform this.contentChangedTask)
                         monacoSDK=this.monacoSDK
                         language=this.language
-                        cursorPosition=this.monacoCursorPosition
+                        initializeCursorPosition=this.initializeMonacoCursorPosition
+                        onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
                       }}
                     ></div>
                   {{/if}}
