@@ -883,7 +883,7 @@ export default class CodeSubmode extends Component<Signature> {
                         </span>
                       </span>
                     {{else}}
-                      <span class='saved-msg'>
+                      <span data-test-saved class='saved-msg'>
                         Saved
                       </span>
                       <CheckMark width='27' height='27' />

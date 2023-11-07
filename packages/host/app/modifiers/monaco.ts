@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
 import { restartableTask, timeout } from 'ember-concurrency';
@@ -7,6 +8,7 @@ import Modifier from 'ember-modifier';
 import * as MonacoSDK from 'monaco-editor';
 
 import config from '@cardstack/host/config/environment';
+import type MonacoService from '@cardstack/host/services/monaco-service';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 
 interface Signature {
@@ -23,9 +25,7 @@ interface Signature {
   };
 }
 
-// ignore SSE server echoes of our own saves by not processing content changes
-// within serverEchoDebounceMs of the last monaco change in memory
-const { serverEchoDebounceMs, monacoDebounceMs } = config;
+const { monacoDebounceMs } = config;
 
 export default class Monaco extends Modifier<Signature> {
   private model: MonacoSDK.editor.ITextModel | undefined;
@@ -33,6 +33,7 @@ export default class Monaco extends Modifier<Signature> {
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
   private lastModified = Date.now();
+  @service private declare monacoService: MonacoService;
 
   modify(
     element: HTMLElement,
@@ -53,7 +54,10 @@ export default class Monaco extends Modifier<Signature> {
       }
       if (
         content !== this.lastContent &&
-        Date.now() >= this.lastModified + serverEchoDebounceMs
+        // ignore SSE server echoes of our own saves by not processing content changes
+        // within serverEchoDebounceMs of the last monaco change in memory
+        Date.now() >=
+          this.lastModified + this.monacoService.serverEchoDebounceMs
       ) {
         this.model.setValue(content);
       }

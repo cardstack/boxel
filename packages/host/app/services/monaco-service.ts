@@ -7,6 +7,7 @@ import merge from 'lodash/merge';
 
 import { type SingleCardDocument } from '@cardstack/runtime-common';
 
+import config from '@cardstack/host/config/environment';
 import CardService from '@cardstack/host/services/card-service';
 import {
   type MonacoLanguageConfig,
@@ -20,10 +21,14 @@ import type * as _MonacoSDK from 'monaco-editor';
 export type MonacoSDK = typeof _MonacoSDK;
 export type IStandaloneCodeEditor = _MonacoSDK.editor.IStandaloneCodeEditor;
 
+const { serverEchoDebounceMs } = config;
+
 export default class MonacoService extends Service {
   #ready: Promise<MonacoSDK>;
   @tracked editor: _MonacoSDK.editor.ICodeEditor | null = null;
   @service declare cardService: CardService;
+  // this is in the service so that we can manipulate it in our tests
+  serverEchoDebounceMs = serverEchoDebounceMs;
 
   constructor(properties: object) {
     super(properties);
