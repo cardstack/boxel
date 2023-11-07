@@ -349,5 +349,5 @@ export function cleanContent(content: string) {
   if (content.endsWith('json')) {
     content = content.slice(0, -4);
   }
-  return content;
+  return content.trim();
 }
