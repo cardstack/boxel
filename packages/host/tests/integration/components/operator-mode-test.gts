@@ -31,10 +31,6 @@ import CardService from '@cardstack/host/services/card-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-function generateJSONSchema(x: any) {
-  return x;
-}
-
 import {
   testRealmURL,
   setupCardLogs,
@@ -1624,34 +1620,6 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
-  });
-
-  test(`OH MY`, async function (assert) {
-    let exampleCard = await loadCard(`${testRealmURL}Example/1`);
-    console.log(exampleCard);
-    let schema = cardApi.generateJSONSchema(exampleCard.constructor);
-    console.log(
-      'ref',
-      Reflect.getOwnPropertyDescriptor(exampleCard.constructor, 'primitive'),
-    );
-    assert.equal(schema, {});
-    console.log(schema);
-    console.log(JSON.stringify(schema));
-    exampleCard.amount = exampleCard.amountCapped;
-    let serialised = await cardService.serializeCard(exampleCard);
-    console.log(serialised);
-    assert.equal(serialised, 'womp');
-  });
-
-  test(`OH MY 2`, async function (assert) {
-    let exampleCard = await loadCard(`${testRealmURL}Person/fadhlan`);
-    console.log(exampleCard);
-    assert.equal(exampleCard.constructor.schema(), {});
-    console.log(exampleCard.constructor.schema());
-    console.log(JSON.stringify(exampleCard.constructor.schema()));
-    let serialised = await cardService.serializeCard(exampleCard);
-    console.log(serialised);
-    assert.equal(serialised, 'womp');
   });
 
   test(`displays recently accessed card`, async function (assert) {
