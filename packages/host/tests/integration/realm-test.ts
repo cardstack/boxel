@@ -394,6 +394,82 @@ module('Integration | realm', function (hooks) {
   });
 
   test<TestContextWithSSE>('realm can serve create card requests', async function (assert) {
+    let adapter = new TestRealmAdapter({});
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+    let expected = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}CardDef/1`],
+        },
+      },
+    ];
+    let response = await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expected,
+      async () => {
+        let response = realm.handle(
+          new Request(testRealmURL, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/vnd.card+json',
+            },
+            body: JSON.stringify(
+              {
+                data: {
+                  type: 'card',
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/card-api',
+                      name: 'CardDef',
+                    },
+                  },
+                },
+              },
+              null,
+              2,
+            ),
+          }),
+        );
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
+        return await response;
+      },
+    );
+    assert.strictEqual((await response).status, 201, 'successful http status');
+    let json = await response.json();
+    if (isSingleCardDocument(json)) {
+      assert.strictEqual(
+        json.data.id,
+        `${testRealmURL}CardDef/1`,
+        'the id is correct',
+      );
+      assert.ok(
+        (await adapter.openFile('CardDef/1.json'))?.content,
+        'file contents exist',
+      );
+    } else {
+      assert.ok(false, 'response body is not a card document');
+    }
+
+    let searchIndex = realm.searchIndex;
+    let result = await searchIndex.card(new URL(json.data.links.self));
+    if (result?.type === 'error') {
+      throw new Error(
+        `unexpected error when getting card from index: ${result.error.detail}`,
+      );
+    }
+    assert.strictEqual(
+      result?.doc.data.id,
+      `${testRealmURL}CardDef/1`,
+      'found card in index',
+    );
+  });
+
+  test<TestContextWithSSE>('new cards are assigned sequential IDs', async function (assert) {
     let adapter = new TestRealmAdapter({
       'CardDef/1.json': {
         data: {
