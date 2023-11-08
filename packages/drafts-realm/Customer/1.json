@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "createdAt": null,
+      "notes": null,
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "contact": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../customer",
+        "name": "Customer"
+      }
+    }
+  }
+}

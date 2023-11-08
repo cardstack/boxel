@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Project",
+      "description": "Catalog entry for Project",
+      "ref": {
+        "module": "../project",
+        "name": "Project"
+      },
+      "demo": {}
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "../project",
+            "name": "Project"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

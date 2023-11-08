@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Riverside Park Redevelopment",
+      "startDate": "2023-04-14",
+      "duration": 180,
+      "budget": {
+        "quantity": 85000
+      },
+      "description": "This project involves the redesign and development of Riverside Park to include new recreational areas, updated landscaping, and eco-friendly facilities. Our aim is to create a modern, accessible, and sustainable space for the local community to enjoy",
+      "resourceAllocations": [
+        {
+          "role": "Project Manager",
+          "dayRate": {
+            "quantity": 1000
+          },
+          "perDay": 0.25
+        },
+        {
+          "role": "Designer",
+          "dayRate": {
+            "quantity": 1000
+          },
+          "perDay": 0.25
+        },
+        {
+          "role": "Engineer",
+          "dayRate": {
+            "quantity": 2000
+          },
+          "perDay": 2
+        }
+      ],
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "customer": {
+        "links": {
+          "self": "../Customer/2"
+        }
+      },
+      "budget.currency": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Currency/1"
+        }
+      },
+      "resourceAllocations.0.dayRate.currency": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Currency/1"
+        }
+      },
+      "resourceAllocations.1.dayRate.currency": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Currency/1"
+        }
+      },
+      "resourceAllocations.2.dayRate.currency": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Currency/1"
+        }
+      },
+      "invoices": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../project",
+        "name": "Project"
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Greenspace Innovations",
+      "createdAt": "2023-11-08T19:21:00.000Z",
+      "notes": null,
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "contact": {
+        "links": {
+          "self": "../ContactCard/1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../customer",
+        "name": "Customer"
+      }
+    }
+  }
+}
