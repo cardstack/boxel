@@ -2,12 +2,11 @@ import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
+import { loadCard } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
-
-import { loadCard } from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -24,7 +23,6 @@ import {
 //import { generatePatchCallSpecification } from '@cardstack/host/utils/ai-helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
-const realmName = 'Operator Mode Workspace';
 
 let loader: Loader;
 
@@ -47,7 +45,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
   );
   setupServerSentEvents(hooks);
 
-  async function createCard(code) {
+  async function createCard(code: string) {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     adapter = new TestRealmAdapter({
       'testcard.gts': code,
