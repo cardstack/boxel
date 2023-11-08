@@ -405,7 +405,7 @@ export default class EditFieldModal extends Component<Signature> {
             @value={{this.fieldName}}
             @onInput={{this.onFieldNameInput}}
             @errorMessage={{this.fieldNameErrorMessage}}
-            @invalid={{bool this.fieldNameErrorMessage}}
+            @state={{if (bool this.fieldNameErrorMessage) 'invalid' 'none'}}
             data-test-field-name-input
           />
         </FieldContainer>
