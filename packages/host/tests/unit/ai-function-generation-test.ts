@@ -108,6 +108,34 @@ module('Unit | ai-function-generation-test', function (hooks) {
     });
   });
 
+  test(`generates a simple compliant schema when there are thunks`, async function (assert) {
+    let basicCard = await createCard(`
+    import StringField from 'https://cardstack.com/base/string';
+    import NumberField from 'https://cardstack.com/base/number';
+    import {
+        Component,
+        CardDef,
+        field,
+        contains,
+    } from 'https://cardstack.com/base/card-api';
+
+    export class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field stringField = contains(() => StringField);
+    }
+    `);
+    let schema = cardApi.generatePatchCallSpecification(basicCard);
+    assert.deepEqual(schema, {
+      type: 'object',
+      properties: {
+        thumbnailURL: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        stringField: { type: 'string' },
+      },
+    });
+  });
+
   test(`generates a simple compliant schema for nested types`, async function (assert) {
     let nestedCard = await createCard(`
     import StringField from 'https://cardstack.com/base/string';
@@ -248,6 +276,46 @@ module('Unit | ai-function-generation-test', function (hooks) {
         title: { type: 'string' },
         description: { type: 'string' },
         keepField: { type: 'string' },
+      },
+    });
+  });
+
+  test(`Doesn't break when there's a loop`, async function (assert) {
+    let nestedCard = await createCard(`
+    import StringField from 'https://cardstack.com/base/string';
+    import {
+        Component,
+        CardDef,
+        FieldDef,
+        field,
+        contains,
+    } from 'https://cardstack.com/base/card-api';
+
+    class RecursiveField extends FieldDef {
+        @field innerRecursiveField = contains(() => RecursiveField);
+        @field innerStringField = contains(StringField);
+    }
+
+    export class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field keepField = contains(StringField);
+        @field recursiveField = contains(RecursiveField);
+    }
+    `);
+    let schema = cardApi.generatePatchCallSpecification(nestedCard);
+    assert.deepEqual(schema, {
+      type: 'object',
+      properties: {
+        thumbnailURL: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        keepField: { type: 'string' },
+        recursiveField: {
+          type: 'object',
+          properties: {
+            innerStringField: { type: 'string' },
+          },
+        },
       },
     });
   });

@@ -2935,17 +2935,27 @@ type Schema =
   | DateSchema
   | PrimitiveSchema;
 
-export function generatePatchCallSpecification(def: typeof BaseDef) {
-  /*
-    From a card definition, generate a JSON Schema that can be used to
-    define the shape of a patch call. Fields that cannot be automatically
-    identified may be omitted from the schema.
-
-    This is a subset of JSON Schema.
-
-
-
-    */
+/**
+ * Generates the JSON schema required for patching
+ *
+ * @param def - The BaseDef to generate the patch call specification for.
+ * @param typeChain - A list of the types
+ */
+function _generatePatchCallSpecification(
+  def: typeof BaseDef,
+  typeChain: string[],
+) {
+  // If we have already seen this type, then we are in a recursive loop
+  // and we should stop. This can happen when a card has a field that
+  // references itself.
+  if (typeChain.includes(def.name)) {
+    return undefined;
+  } else {
+    // This must be a copy, otherwise we're mutating an array
+    // used through the recursive calls
+    typeChain = [...typeChain, def.name];
+  }
+  // An explicit list of types that we will support in the patch call
   if (primitive in def) {
     switch (def.name) {
       case 'NumberField':
@@ -2963,18 +2973,24 @@ export function generatePatchCallSpecification(def: typeof BaseDef) {
     }
   }
 
+  // If it's not a primitive, it contains other fields
+  // and should be represented by an object
   let schema: ObjectSchema = {
     type: 'object',
     properties: {},
   };
+
   let { id: removedIdField, ...fields } = getFields(def, {
     usedFieldsOnly: false,
   });
+
+  //
   for (let [fieldName, field] of Object.entries(fields)) {
+    // We're generating patch data, so computeds should be skipped
     if (field.computeVia) {
       continue;
     }
-    let fieldSchema = generatePatchCallSpecification(field.card);
+    let fieldSchema = _generatePatchCallSpecification(field.card, typeChain);
     if (fieldSchema == undefined) {
       continue;
     }
@@ -2988,4 +3004,20 @@ export function generatePatchCallSpecification(def: typeof BaseDef) {
     }
   }
   return schema;
+}
+
+/**
+ * From a card definition, generate a JSON Schema that can be used to
+ *  define the shape of a patch call. Fields that cannot be automatically
+ *  identified may be omitted from the schema.
+ *
+ *  This is a subset of JSON Schema.
+ *
+ * @param def - The BaseDef to generate the patch call specification for.
+ * @returns The generated patch call specification as JSON schema
+ */
+export function generatePatchCallSpecification(def: typeof BaseDef) {
+  // End users should never be calling the function specifying the typeChain
+  // parameter, so we default it to an empty array.
+  return _generatePatchCallSpecification(def, []);
 }
