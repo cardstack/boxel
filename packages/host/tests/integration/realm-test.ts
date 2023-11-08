@@ -438,7 +438,7 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
-        await realm.flushOperations();
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
 
         assert.strictEqual(
           (await response).status,
@@ -520,7 +520,7 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
-        await realm.flushOperations();
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         assert.strictEqual(
           (await response).status,
           201,
@@ -767,7 +767,7 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
-        await realm.flushOperations();
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         return await response;
       },
     );
@@ -2042,7 +2042,7 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
-        await realm.flushOperations();
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         return await response;
       },
     );
@@ -2159,7 +2159,10 @@ module('Integration | realm', function (hooks) {
               body: cardSrc,
             }),
           );
-          await realm.flushOperations();
+          await Promise.all([
+            realm.flushOperations(),
+            realm.flushUpdateEvents(),
+          ]);
           return await response;
         },
       );
@@ -2221,7 +2224,7 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
-        await realm.flushOperations();
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         assert.strictEqual((await response).status, 302, 'file exists');
 
         response = realm.handle(
@@ -2232,7 +2235,7 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
-        await realm.flushOperations();
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         return await response;
       },
     );
