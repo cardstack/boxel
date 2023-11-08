@@ -183,6 +183,40 @@ module('Unit | ai-function-generation-test', function (hooks) {
     });
   });
 
+  test(`does not generate anything for linksTo`, async function (assert) {
+    let nestedCard = await createCard(`
+    import StringField from 'https://cardstack.com/base/string';
+    import {
+        Component,
+        CardDef,
+        FieldDef,
+        field,
+        linksTo,
+        contains
+    } from 'https://cardstack.com/base/card-api';
+
+    class OtherCard extends CardDef {
+        @field innerStringField = contains(StringField);
+    }
+
+    export class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field linkedCard = linksTo(OtherCard);
+        @field simpleField = contains(StringField);
+    }
+    `);
+    let schema = cardApi.generatePatchCallSpecification(nestedCard);
+    assert.deepEqual(schema, {
+      type: 'object',
+      properties: {
+        thumbnailURL: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        simpleField: { type: 'string' },
+      },
+    });
+  });
+
   test(`skips over fields that can't be recognised`, async function (assert) {
     let nestedCard = await createCard(`
     import StringField from 'https://cardstack.com/base/string';
