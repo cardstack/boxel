@@ -44,7 +44,6 @@ import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import OperatorModeStack from './stack';
 import SubmodeLayout from './submode-layout';
-import CardCatalogModal from '../card-catalog/modal';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -599,7 +598,6 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   <template>
-    <CardCatalogModal />
     <SubmodeLayout
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}

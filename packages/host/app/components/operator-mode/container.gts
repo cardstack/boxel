@@ -27,6 +27,7 @@ import {
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { Submodes } from '../submode-switcher';
+import CardCatalogModal from '../card-catalog/modal';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -145,6 +146,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   <template>
+    <CardCatalogModal />
     <Modal
       class='operator-mode'
       @size='full-screen'
