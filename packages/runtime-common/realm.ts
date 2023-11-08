@@ -311,6 +311,7 @@ export class Realm {
   // each other we use a queue of operations to mutate realm state. We should
   // remove this queue when we move to a pg backed index
   private async drainOperations() {
+    this.#log.debug('drainOperations called'); // remove after debugging slow card source writing
     await this.#flushOperations;
 
     let operationsDrained: () => void;
@@ -320,6 +321,7 @@ export class Realm {
     let operations = [...this.#operationQueue];
     this.#operationQueue = [];
     for (let operation of operations) {
+      this.#log.debug(`processing operation`, JSON.stringify(operation)); // remove after debugging slow card source writing
       if (operation.type === 'write') {
         let result = await this.#write(operation.path, operation.contents);
         operation.deferred.fulfill(result);
@@ -329,10 +331,12 @@ export class Realm {
       }
     }
 
+    this.#log.debug(`calling operationsDrained`); // remove after debugging slow card source writing
     operationsDrained!();
   }
 
   async write(path: LocalPath, contents: string): Promise<WriteResult> {
+    this.#log.debug('write called'); // remove after debugging slow card source writing
     let deferred = new Deferred<WriteResult>();
     this.#operationQueue.push({
       type: 'write',
@@ -341,12 +345,17 @@ export class Realm {
       deferred,
     });
     this.drainOperations();
+    this.#log.debug(`operations drained done`); // remove after debugging slow card source writing
     return deferred.promise;
   }
 
   async #write(path: LocalPath, contents: string): Promise<WriteResult> {
+    this.#log.debug(`#write called`, JSON.stringify({ path, contents })); // remove after debugging slow card source writing
     await this.trackOwnWrite(path);
+
+    this.#log.debug(`#adapter.write called`); // remove after debugging slow card source writing
     let results = await this.#adapter.write(path, contents);
+    this.#log.debug(`updating search index`); // remove after debugging slow card source writing
     await this.#searchIndex.update(this.paths.fileURL(path), {
       onInvalidation: (invalidatedURLs: URL[]) => {
         this.sendServerEvent({
@@ -358,11 +367,14 @@ export class Realm {
         });
       },
     });
+
+    this.#log.debug(`updating search index done`); // remove after debugging slow card source writing
     return results;
   }
 
   // we track our own writes so that we can eliminate echoes in the file watcher
   private async trackOwnWrite(path: LocalPath, opts?: { isDelete: true }) {
+    this.#log.debug(`trackOwnWrite called`); // remove after debugging slow card source writing
     let type = opts?.isDelete
       ? 'removed'
       : (await this.#adapter.exists(path))
@@ -603,6 +615,8 @@ export class Realm {
   }
 
   private async upsertCardSource(request: Request): Promise<Response> {
+    this.#log.debug('upsertCardSource called'); // remove after debugging slow card source writing
+
     let { lastModified } = await this.write(
       this.paths.local(request.url),
       await request.text(),

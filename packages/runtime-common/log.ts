@@ -12,7 +12,7 @@ import LogLevel, { type LogLevelDesc } from 'loglevel';
  *    app:index all done
  */
 
-const DEFAULT_LOG_LEVEL = 'info';
+const DEFAULT_LOG_LEVEL = 'debug';
 
 const validLevels = [
   'trace',

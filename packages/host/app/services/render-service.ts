@@ -57,6 +57,7 @@ export default class RenderService extends Service {
   owner: Owner = getOwner(this)!;
 
   async renderCard(params: RenderCardParams): Promise<string> {
+    console.log('renderCard called: ', params.card.id);
     let {
       card,
       visit,
@@ -120,6 +121,7 @@ export default class RenderService extends Service {
 
     let serializer = new Serializer(voidMap);
     let html = serializer.serialize(element);
+    console.log('renderCard finished');
     return parseCardHtml(html);
   }
 

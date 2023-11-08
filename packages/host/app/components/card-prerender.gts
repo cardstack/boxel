@@ -54,8 +54,10 @@ export default class CardPrerender extends Component {
   }
 
   private async fromScratch(realmURL: URL): Promise<RunState> {
+    console.log('fromScratch', realmURL.href);
     try {
       let state = await this.doFromScratch.perform(realmURL);
+      console.log('fromScratch finished');
       return state;
     } catch (e: any) {
       if (!didCancel(e)) {
@@ -73,6 +75,7 @@ export default class CardPrerender extends Component {
     operation: 'delete' | 'update',
     onInvalidation?: (invalidatedURLs: URL[]) => void,
   ): Promise<RunState> {
+    console.log('incremental started');
     if (hasExecutableExtension(url.href) && !this.fastboot.isFastBoot) {
       this.loaderService.reset();
     }
@@ -92,6 +95,8 @@ export default class CardPrerender extends Component {
     throw new Error(
       `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`,
     );
+
+    console.log('incremental finished');
   }
 
   private warmUpModuleCache = dropTask(async () => {
