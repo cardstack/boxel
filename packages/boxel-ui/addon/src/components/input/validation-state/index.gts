@@ -75,7 +75,7 @@ export default class BoxelInputValidationState extends Component<Signature> {
         @required={{unless @disabled true}}
         @onInput={{@onInput}}
         @onBlur={{@onBlur}}
-        @invalid={{unless @disabled this.isInvalid}}
+        @state={{@state}}
         @disabled={{@disabled}}
         @errorMessage={{@errorMessage}}
         @helperText={{@helperText}}

@@ -62,7 +62,6 @@ export interface Signature {
     errorMessage?: string;
     helperText?: string;
     id?: string;
-    invalid?: boolean;
     onBlur?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
@@ -109,6 +108,10 @@ export default class BoxelInput extends Component<Signature> {
     return this.args.state && this.args.state !== 'none';
   }
 
+  private get isInvalid() {
+    return this.args.state === 'invalid';
+  }
+
   <template>
     <div class='input-container'>
       {{#if (and (not @required) @optional)}}
@@ -121,7 +124,10 @@ export default class BoxelInput extends Component<Signature> {
           <IconSearch class='search-icon' width='20' height='20' />
         </div>
       {{/if}}
-      {{#let (and @invalid (bool @errorMessage)) as |shouldShowErrorMessage|}}
+      {{#let
+        (and this.isInvalid (bool @errorMessage))
+        as |shouldShowErrorMessage|
+      }}
         {{#let
           (element (if this.isMultiline 'textarea' 'input'))
           as |InputTag|
@@ -131,7 +137,7 @@ export default class BoxelInput extends Component<Signature> {
             class={{cn
               'boxel-input'
               has-validation=this.hasValidation
-              invalid=@invalid
+              invalid=this.isInvalid
               search=this.isSearch
               boxel-input--large=(eq @variant 'large')
               boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
@@ -147,7 +153,7 @@ export default class BoxelInput extends Component<Signature> {
               (concat 'helper-text-' this.helperId)
               false
             }}
-            aria-invalid={{if @invalid 'true'}}
+            aria-invalid={{if this.isInvalid 'true'}}
             aria-errormessage={{if
               shouldShowErrorMessage
               (concat 'error-message-' this.helperId)
