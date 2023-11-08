@@ -20,8 +20,6 @@ import {
   sourceFetchReturnUrlHandle,
 } from '../helpers';
 
-//import { generatePatchCallSpecification } from '@cardstack/host/utils/ai-helpers';
-
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 let loader: Loader;
