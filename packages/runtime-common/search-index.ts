@@ -226,12 +226,12 @@ export class SearchIndex {
     url: URL,
     opts?: { delete?: true; onInvalidation?: (invalidatedURLs: URL[]) => void },
   ): Promise<void> {
-    logger('realm').debug(`search index update called`); // remove after debugging slow card source writing
+    logger('realm').info(`search index update called`); // remove after debugging slow card source writing
     await this.setupRunner(async () => {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
       }
-      logger('realm').debug(`calling #incremental`); // remove after debugging slow card source writing
+      logger('realm').info(`calling #incremental`); // remove after debugging slow card source writing
       let current = await this.#incremental(
         this.#index,
         url,
@@ -250,7 +250,7 @@ export class SearchIndex {
         stats: current.stats,
         loader: Loader.cloneLoader(this.#realm.loader),
       };
-      logger('realm').debug(`search index update finished`); // remove after debugging slow card source writing
+      logger('realm').info(`search index update finished`); // remove after debugging slow card source writing
     });
   }
 

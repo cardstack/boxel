@@ -599,7 +599,7 @@ export class Loader {
     let moduleIdentifier =
       typeof moduleURL === 'string' ? moduleURL : moduleURL.href;
 
-    this.log.debug(
+    this.log.info(
       `loader cache miss for ${moduleURL.href}, fetching this module...`,
     );
     let module = {
