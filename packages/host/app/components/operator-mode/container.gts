@@ -27,6 +27,7 @@ import {
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { Submodes } from '../submode-switcher';
+import CardCatalogModal from '../card-catalog/modal';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -153,6 +154,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
+      <CardCatalogModal />
       {{#if this.isCodeMode}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
