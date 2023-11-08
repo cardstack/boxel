@@ -9,7 +9,11 @@ import optional from '../../helpers/optional.ts';
 import pick from '../../helpers/pick.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { and, bool, not } from '../../helpers/truth-helpers.ts';
+import FailureBordered from '../../icons/failure-bordered.gts';
 import IconSearch from '../../icons/icon-search.gts';
+import LoadingIndicator from '../../icons/loading-indicator.gts';
+import SuccessBordered from '../../icons/success-bordered.gts';
+import type { Icon } from '../../icons/types.ts';
 
 type Values<T> = T[keyof T];
 
@@ -112,6 +116,22 @@ export default class BoxelInput extends Component<Signature> {
     return this.args.state === 'invalid';
   }
 
+  get validationIcon(): Icon | undefined {
+    if (this.args.disabled) {
+      return undefined;
+    }
+    switch (this.args.state) {
+      case 'valid':
+        return SuccessBordered;
+      case 'invalid':
+        return FailureBordered;
+      case 'loading':
+        return LoadingIndicator;
+      default:
+        return undefined;
+    }
+  }
+
   <template>
     <div class='input-container'>
       {{#if (and (not @required) @optional)}}
@@ -167,6 +187,11 @@ export default class BoxelInput extends Component<Signature> {
             {{on 'focus' (optional @onFocus)}}
             ...attributes
           />
+          {{#if this.validationIcon}}
+            <span class='validation-icon'>
+              <this.validationIcon role='presentation' />
+            </span>
+          {{/if}}
           {{#if shouldShowErrorMessage}}
             <div
               id={{concat 'error-message-' this.helperId}}
@@ -188,7 +213,13 @@ export default class BoxelInput extends Component<Signature> {
     <style>
       @layer {
         .input-container {
+          --validation-group-height: 4.375rem;
+          --validation-group-icon-size: var(--boxel-icon-sm);
+          --validation-group-icon-space: var(--boxel-sp-xs);
+
           position: relative;
+          /* FIXME names? also only this height when validation exists? */
+          height: var(--validation-group-height);
         }
 
         .boxel-input {
@@ -265,18 +296,24 @@ export default class BoxelInput extends Component<Signature> {
           --icon-color: var(--boxel-highlight);
 
           position: absolute;
-          top: 0;
-          bottom: 0;
-          right: var(--boxel-sp-xs);
-          height: 100%;
-          display: flex;
-          justify-content: center;
-          align-items: center;
+          width: var(--validation-group-icon-size);
+          left: var(--validation-group-icon-space);
+          top: var(--validation-group-icon-space);
+          display: inline-block;
         }
 
         .search-icon-container.has-validation {
           right: unset;
           left: var(--boxel-sp-xs);
+        }
+
+        .validation-icon {
+          position: absolute;
+          width: var(--validation-group-icon-size);
+          right: var(--validation-group-icon-space);
+          top: var(--validation-group-icon-space);
+          display: inline-block;
+          user-select: none;
         }
 
         .optional {
