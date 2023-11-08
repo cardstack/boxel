@@ -1,17 +1,14 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
-
 import { BoxelButton } from '@cardstack/boxel-ui/components';
-import { eq, gt, and } from '@cardstack/boxel-ui/helpers';
+import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { StackItem } from './interact-submode';
+import type { StackItem } from '@cardstack/host/lib/stack-item';
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -38,7 +35,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   <template>
-    {{#if (and this.loadCardService.isIdle (gt this.stacks.length 1))}}
+    {{#if (gt this.stacks.length 1)}}
       {{#if this.state}}
         <BoxelButton
           class='copy-button'
@@ -100,11 +97,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     </style>
   </template>
 
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    this.loadCardService.perform();
-  }
-
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
   }
@@ -122,7 +114,16 @@ export default class OperatorModeContainer extends Component<Signature> {
     let topMostStackItems = this.operatorModeStateService.topMostStackItems();
     let indexCardIndicies = topMostStackItems.reduce(
       (indexCards, item, index) => {
-        if (this.cardService.isIndexCard(item.card)) {
+        if (!item?.card) {
+          return indexCards;
+        }
+        let realmURL = item.card[item.api.realmURL];
+        if (!realmURL) {
+          throw new Error(
+            `could not determine realm URL for card ${item.card.id}`,
+          );
+        }
+        if (item.card.id === `${realmURL.href}index`) {
           return [...indexCards, index];
         }
         return indexCards;
@@ -209,8 +210,4 @@ export default class OperatorModeContainer extends Component<Signature> {
         );
     }
   }
-
-  private loadCardService = task(this, async () => {
-    await this.cardService.ready;
-  });
 }

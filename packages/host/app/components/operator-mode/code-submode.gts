@@ -20,7 +20,7 @@ import {
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-import { Range } from 'monaco-editor';
+import { Position } from 'monaco-editor';
 
 import {
   Button,
@@ -32,11 +32,10 @@ import type { PanelContext } from '@cardstack/boxel-ui/components';
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
-import { Deferred } from '@cardstack/runtime-common';
-
 import {
   type SingleCardDocument,
   RealmPaths,
+  Deferred,
   logger,
   isCardDocumentString,
   isSingleCardDocument,
@@ -85,6 +84,9 @@ import CardURLBar from './card-url-bar';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
+import NewFileButton from './new-file-button';
+
+import { getCard } from '@cardstack/host/resources/card-resource';
 
 interface Signature {
   Args: {
@@ -135,7 +137,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
-  @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
 
@@ -143,8 +144,24 @@ export default class CodeSubmode extends Component<Signature> {
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
+  #currentCard: CardDef | undefined;
 
   private deleteModal: DeleteModal | undefined;
+  private cardResource = getCard(
+    this,
+    () => {
+      if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
+        return undefined;
+      }
+      // this includes all JSON files, but the card resource is smart enough
+      // to skip JSON that are not card instances
+      let url = this.codePath.href.replace(/\.json$/, '');
+      return url;
+    },
+    {
+      onCardInstanceChange: () => this.onCardLoaded,
+    },
+  );
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -171,13 +188,29 @@ export default class CodeSubmode extends Component<Signature> {
         if (monacoContent) {
           this.args.saveSourceOnClose(this.codePath, monacoContent);
         }
-      } else if (this.hasUnsavedCardChanges && this.card) {
-        this.args.saveCardOnClose(this.card);
+      } else if (this.hasUnsavedCardChanges && this.#currentCard) {
+        // we use this.#currentCard here instead of this.card because in
+        // the destructor we no longer have access to resources bound to
+        // this component since they are destroyed first, so this.#currentCard
+        // is something we copy from the card resource when it changes so that
+        // we have access to it in the destructor
+        this.args.saveCardOnClose(this.#currentCard);
       }
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
     this.loadMonaco.perform();
   }
+
+  private get card() {
+    if (
+      this.cardResource.card &&
+      this.codePath?.href.replace(/\.json$/, '') === this.cardResource.url
+    ) {
+      return this.cardResource.card;
+    }
+    return undefined;
+  }
+
   private backgroundURLStyle(backgroundURL: string | null) {
     let possibleStyle = backgroundURL
       ? `background-image: url(${backgroundURL});`
@@ -261,8 +294,8 @@ export default class CodeSubmode extends Component<Signature> {
     }
 
     // If rhs doesn't handle any case but we can't capture the error
-    if (!this.cardJsonLoaded && !this.selectedCardOrField) {
-      return "No tools are available to inspect this file or it's contents.";
+    if (!this.card && !this.selectedCardOrField) {
+      return 'No tools are available to inspect this file or its contents.';
     }
 
     // TODO: handle card preview errors (when json is valid but card returns error)
@@ -324,76 +357,18 @@ export default class CodeSubmode extends Component<Signature> {
     return;
   });
 
-  // We are actually loading cards using a side-effect of this cached getter
-  // instead of a resource because with a resource it becomes impossible
-  // to ignore our own auto-save echoes, since the act of auto-saving triggers
-  // the openFile resource to update which would otherwise trigger a card
-  // resource to update (and hence invalidate components can consume this card
-  // resource.) By using this side effect we can prevent invalidations when the
-  // card isn't actually different and we are just seeing SSE events in response
-  // to our own activity.
-  @cached
-  private get openFileCardJSON() {
-    this.cardError = undefined;
-    if (
-      this.currentOpenFile?.state === 'ready' &&
-      this.currentOpenFile.name.endsWith('.json')
-    ) {
-      let maybeCard: any;
-      try {
-        maybeCard = JSON.parse(this.currentOpenFile.content);
-      } catch (err: any) {
-        this.cardError = err;
-        return undefined;
-      }
-      if (isSingleCardDocument(maybeCard)) {
-        let url = new URL(this.currentOpenFile.url.replace(/\.json$/, ''));
-        // in order to not get trapped in a glimmer invalidation cycle we need to
-        // load the card in a different execution frame
-        this.loadLiveCard.perform(url);
-        return maybeCard;
-      }
+  private onCardLoaded = (
+    oldCard: CardDef | undefined,
+    newCard: CardDef | undefined,
+  ) => {
+    if (oldCard) {
+      this.cardResource.api.unsubscribeFromChanges(oldCard, this.onCardChange);
     }
-    // in order to not get trapped in a glimmer invalidation cycle we need to
-    // unload the card in a different execution frame
-    this.unloadCard.perform();
-    return undefined;
-  }
-
-  private loadLiveCard = restartableTask(async (url: URL) => {
-    let card = await this.cardService.loadModel(this, url);
-    if (!card) {
-      throw new Error(`bug: could not load card ${url.href}`);
+    if (newCard) {
+      this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
     }
-    if (card !== this.card) {
-      if (this.card) {
-        this.cardService.unsubscribe(this.card, this.onCardChange);
-      }
-      this.card = card;
-      this.cardService.subscribe(this.card, this.onCardChange);
-    }
-  });
-
-  private unloadCard = restartableTask(async () => {
-    await Promise.resolve();
-    if (this.card) {
-      this.cardService.unsubscribe(this.card, this.onCardChange);
-    }
-    this.card = undefined;
-    this.cardError = undefined;
-  });
-
-  private get cardJsonLoaded() {
-    return isReady(this.currentOpenFile) && this.openFileCardJSON;
-  }
-
-  private get cardIsLoaded() {
-    return (
-      isReady(this.currentOpenFile) &&
-      this.openFileCardJSON &&
-      this.card?.id === this.currentOpenFile.url.replace(/\.json$/, '')
-    );
-  }
+    this.#currentCard = newCard;
+  };
 
   private get loadedCard() {
     if (!this.card) {
@@ -402,12 +377,33 @@ export default class CodeSubmode extends Component<Signature> {
     return this.card;
   }
 
-  private get monacoCursorPosition() {
+  @action
+  private initializeMonacoCursorPosition() {
     if (this.selectedDeclaration?.path?.node.loc) {
-      let { start, end } = this.selectedDeclaration.path.node.loc;
-      return new Range(start.line, start.column, end.line, end.column);
+      let { start } = this.selectedDeclaration.path.node.loc;
+      this.monacoService.updateCursorPosition(
+        new Position(start.line, start.column),
+      );
     }
-    return undefined;
+  }
+
+  @action
+  private updateMonacoCursorPositionByDeclaration(
+    declaration: ModuleDeclaration,
+  ) {
+    if (declaration.path?.node.loc) {
+      let { start, end } = declaration.path?.node.loc;
+      let currentCursorPosition = this.monacoService.getCursorPosition();
+      if (
+        currentCursorPosition &&
+        (currentCursorPosition.lineNumber < start.line ||
+          currentCursorPosition.lineNumber > end.line)
+      ) {
+        this.monacoService.updateCursorPosition(
+          new Position(start.line, start.column),
+        );
+      }
+    }
   }
 
   private get declarations() {
@@ -457,8 +453,31 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
+  private selectDeclarationByMonacoCursorPosition(position: Position) {
+    let declarationCursorOn = this.declarations.find(
+      (declaration: ModuleDeclaration) => {
+        if (declaration.path?.node.loc) {
+          let { start, end } = declaration.path?.node.loc;
+          return (
+            position.lineNumber >= start.line && position.lineNumber <= end.line
+          );
+        }
+        return false;
+      },
+    );
+
+    if (
+      declarationCursorOn &&
+      declarationCursorOn !== this.selectedDeclaration
+    ) {
+      this.selectDeclaration(declarationCursorOn);
+    }
+  }
+
+  @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this.operatorModeStateService.updateLocalNameSelection(dec.localName);
+    this.updateMonacoCursorPositionByDeclaration(dec);
   }
 
   @action
@@ -491,7 +510,8 @@ export default class CodeSubmode extends Component<Signature> {
 
   private contentChangedTask = restartableTask(async (content: string) => {
     this.hasUnsavedSourceChanges = true;
-    await timeout(autoSaveDelayMs);
+    // note that there is already a debounce in the monaco modifier so there
+    // is no need to delay further for auto save initiation
     if (
       !isReady(this.currentOpenFile) ||
       content === this.currentOpenFile?.content
@@ -531,7 +551,8 @@ export default class CodeSubmode extends Component<Signature> {
       throw new Error('File is not ready to be written to');
     }
 
-    return file.write(content);
+    // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
+    return file.write(content, true);
   }
 
   private safeJSONParse(content: string) {
@@ -707,14 +728,16 @@ export default class CodeSubmode extends Component<Signature> {
         ></div>
       </:ready>
     </RealmInfoProvider>
-    <CardURLBar
-      @loadFileError={{this.loadFileError}}
-      @resetLoadFileError={{this.resetLoadFileError}}
-      @userHasDismissedError={{this.userHasDismissedURLError}}
-      @dismissURLError={{this.dismissURLError}}
-      @realmURL={{this.realmURL}}
-      class='card-url-bar'
-    />
+    <div class='code-mode-top-bar'>
+      <CardURLBar
+        @loadFileError={{this.loadFileError}}
+        @resetLoadFileError={{this.resetLoadFileError}}
+        @userHasDismissedError={{this.userHasDismissedURLError}}
+        @dismissURLError={{this.dismissURLError}}
+        @realmURL={{this.realmURL}}
+      />
+      <NewFileButton />
+    </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
       <div
         class='code-mode'
@@ -847,7 +870,8 @@ export default class CodeSubmode extends Component<Signature> {
                         contentChanged=(perform this.contentChangedTask)
                         monacoSDK=this.monacoSDK
                         language=this.language
-                        cursorPosition=this.monacoCursorPosition
+                        initializeCursorPosition=this.initializeMonacoCursorPosition
+                        onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
                       }}
                     ></div>
                   {{/if}}
@@ -862,7 +886,7 @@ export default class CodeSubmode extends Component<Signature> {
                         </span>
                       </span>
                     {{else}}
-                      <span class='saved-msg'>
+                      <span data-test-saved class='saved-msg'>
                         Saved
                       </span>
                       <CheckMark width='27' height='27' />
@@ -892,7 +916,7 @@ export default class CodeSubmode extends Component<Signature> {
                     >
                       {{this.fileIncompatibilityMessage}}
                     </div>
-                  {{else if this.cardIsLoaded}}
+                  {{else if this.card}}
                     <CardPreviewPanel
                       @card={{this.loadedCard}}
                       @realmURL={{this.realmURL}}
@@ -1049,16 +1073,17 @@ export default class CodeSubmode extends Component<Signature> {
         background: var(--boxel-light);
       }
 
-      .card-url-bar {
-        position: absolute;
-        top: var(--boxel-sp);
-        left: calc(var(--submode-switcher-width) + (var(--boxel-sp) * 2));
-
-        --card-url-bar-width: calc(
-          100% - (var(--submode-switcher-width) + (var(--boxel-sp) * 3))
+      .code-mode-top-bar {
+        --code-mode-top-bar-padding-left: calc(
+          var(--submode-switcher-width) + (var(--boxel-sp) * 2)
         );
-        height: var(--submode-switcher-height);
 
+        position: absolute;
+        top: 0;
+        right: 0;
+        padding: var(--boxel-sp) var(--boxel-sp) 0
+          var(--code-mode-top-bar-padding-left);
+        display: flex;
         z-index: 2;
       }
 

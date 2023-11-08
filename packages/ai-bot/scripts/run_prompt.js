@@ -13,9 +13,7 @@ async function modify(args) {
     messages = JSON.parse(fileContent);
     messages = messages.slice(0, -args.vars.cut_from_end);
   }
-
-  console.log(getModifyPrompt(messages, args.vars.aibot_username));
-  return getModifyPrompt(messages, args.vars.aibot_username);
+  return getModifyPrompt(messages, args.vars.ai_bot_user_id);
 }
 
 module.exports = {

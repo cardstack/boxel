@@ -26,6 +26,8 @@ module.exports = function (environment) {
     logLevels: process.env.LOG_LEVELS || '*=info,current-run=error',
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
     autoSaveDelayMs: 500,
+    monacoDebounceMs: 500,
+    serverEchoDebounceMs: 5000,
 
     // the fields below may be rewritten by the realm server
     ownRealmURL:
@@ -67,6 +69,8 @@ module.exports = function (environment) {
     ENV.APP.autoboot = false;
     ENV.APP.experimentalAIEnabled = true;
     ENV.autoSaveDelayMs = 0;
+    ENV.monacoDebounceMs = 0;
+    ENV.serverEchoDebounceMs = 0;
   }
 
   if (environment === 'production') {

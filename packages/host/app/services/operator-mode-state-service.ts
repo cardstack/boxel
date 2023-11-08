@@ -14,6 +14,9 @@ import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
+import { StackItem } from '@cardstack/host/lib/stack-item';
+
+import { getCard } from '@cardstack/host/resources/card-resource';
 import { file, isReady, FileResource } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -23,10 +26,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import {
-  type Stack,
-  type StackItem,
-} from '../components/operator-mode/interact-submode';
+import { type Stack } from '../components/operator-mode/interact-submode';
 
 import type CardService from '../services/card-service';
 
@@ -232,7 +232,11 @@ export default class OperatorModeStateService extends Service {
 
     stackItemsCopy.forEach((item) => {
       this.popItemFromStack(item.stackIndex);
-      this.addItemToStack({ ...item, stackIndex: destinationIndex });
+      this.addItemToStack(
+        item.clone({
+          stackIndex: destinationIndex,
+        }),
+      );
     });
 
     return this.schedulePersist();
@@ -371,9 +375,9 @@ export default class OperatorModeStateService extends Service {
         if (item.format !== 'isolated' && item.format !== 'edit') {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
-        if (item.card.id) {
+        if (item.url) {
           serializedStack.push({
-            id: item.card.id,
+            id: item.url.href,
             format: item.format,
           });
         }
@@ -413,15 +417,15 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
-        let card = await this.cardService.loadModel(this, new URL(item.id));
-        if (!card) {
-          throw new Error(`cannot load card ${item.id}`);
-        }
-        newStack.push({
-          card,
+        let cardResource = getCard(this, () => item.id);
+        let stackItem = new StackItem({
+          owner: this, // ugh, not a great owner...
+          cardResource,
           format,
           stackIndex,
         });
+        await stackItem.ready();
+        newStack.push(stackItem);
       }
       newState.stacks.push(newStack);
       stackIndex++;
@@ -438,10 +442,9 @@ export default class OperatorModeStateService extends Service {
 
     const recentCardIds = JSON.parse(recentCardIdsString) as string[];
     for (const recentCardId of recentCardIds) {
-      const card = await this.cardService.loadModel(
-        this,
-        new URL(recentCardId),
-      );
+      const cardResource = getCard(this, () => recentCardId);
+      await cardResource.loaded;
+      let { card } = cardResource;
       if (!card) {
         console.warn(`cannot load card ${recentCardId}`);
         continue;

@@ -92,8 +92,10 @@ export default class CardURLBar extends Component<Signature> {
     <style>
       :global(:root) {
         --card-url-bar-width: 100%;
+        --card-url-bar-height: var(--boxel-form-control-height);
       }
       .card-url-bar {
+        position: relative;
         display: flex;
         align-items: center;
 
@@ -102,6 +104,7 @@ export default class CardURLBar extends Component<Signature> {
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
 
         width: var(--card-url-bar-width);
+        height: var(--card-url-bar-height);
       }
       .focused {
         outline: 2px solid var(--boxel-highlight);

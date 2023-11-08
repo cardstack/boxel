@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { velcro } from 'ember-velcro';
 import { type TrackedArray } from 'tracked-built-ins';
+import { restartableTask } from 'ember-concurrency';
 
 import {
   BoxelDropdown,
@@ -52,10 +53,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
   @action
   isIncludeHeader(renderedCard: RenderedCardForOverlayActions) {
-    return (
-      this.isEmbeddedCard(renderedCard) &&
-      renderedCard.format !== 'atom'
-    );
+    return this.isEmbeddedCard(renderedCard) && renderedCard.format !== 'atom';
   }
 
   <template>
@@ -269,13 +267,24 @@ export default class OperatorModeOverlays extends Component<Signature> {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
       this.args.toggleSelect(card);
     } else {
-      this.args.publicAPI.viewCard(card, format, fieldType, fieldName);
+      this.viewCard.perform(card, format, fieldType, fieldName);
     }
   }
 
   @action isSelected(card: CardDef) {
     return this.args.selectedCards?.some((c: CardDef) => c === card);
   }
+
+  private viewCard = restartableTask(
+    async (
+      card: CardDef,
+      format: Format = 'isolated',
+      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+      fieldName?: string,
+    ) => {
+      await this.args.publicAPI.viewCard(card, format, fieldType, fieldName);
+    },
+  );
 
   // TODO: actions for 'preview' and 'more-actions' buttons
 }

@@ -10,6 +10,7 @@ import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
@@ -19,16 +20,19 @@ import { baseRealm } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   TestRealm,
   TestRealmAdapter,
   getMonacoContent,
+  setMonacoContent,
   setupLocalIndexing,
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
+  type TestContextWithSSE,
 } from '../helpers';
 
 const indexCardSource = `
@@ -228,6 +232,7 @@ const friendCardSource = `
 module('Acceptance | code submode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
+  let monacoService: MonacoService;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -240,6 +245,9 @@ module('Acceptance | code submode tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
+    monacoService = this.owner.lookup(
+      'service:monaco-service',
+    ) as MonacoService;
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -797,5 +805,159 @@ module('Acceptance | code submode tests', function (hooks) {
         },
       },
     });
+  });
+
+  test('changes cursor position when selected module declaration is changed', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    //default is the 1st index
+    let elementName = 'AClassWithExportName (LocalClass) class';
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(elementName);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
+
+    // clicking on a card
+    elementName = 'ExportedCard';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+
+    // clicking on a field
+    elementName = 'ExportedField';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+
+    // clicking on an exported function
+    elementName = 'exportedFunction';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+  });
+
+  test('changes selected module declaration when cursor position is changed', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    //default is the 1st index
+    let elementName = 'AClassWithExportName (LocalClass) class';
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(elementName);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
+
+    elementName = 'ExportedFieldInheritLocalField';
+    let position = new MonacoSDK.Position(45, 0);
+    monacoService.updateCursorPosition(position);
+    await waitFor(
+      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
+
+    elementName = 'LocalField';
+    position = new MonacoSDK.Position(38, 0);
+    monacoService.updateCursorPosition(position);
+    await waitFor(
+      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
+
+    elementName = 'ExportedCard';
+    position = new MonacoSDK.Position(31, 0);
+    monacoService.updateCursorPosition(position);
+    await waitFor(
+      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+  });
+
+  test<TestContextWithSSE>('the monaco cursor position is maintained during an auto-save', async function (assert) {
+    assert.expect(3);
+    // we only want to change this for this particular test so we emulate what the non-test env sees
+    monacoService.serverEchoDebounceMs = 5000;
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}in-this-file.gts`],
+        },
+      },
+    ];
+
+    try {
+      let operatorModeStateParam = stringify({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}in-this-file.gts`,
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+      await waitFor('[data-test-editor]');
+
+      let originalPosition: MonacoSDK.Position | undefined | null;
+      await this.expectEvents(
+        assert,
+        realm,
+        adapter,
+        expectedEvents,
+        async () => {
+          setMonacoContent(`// This is a change \n${inThisFileSource}`);
+          monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
+          originalPosition = monacoService.getCursorPosition();
+        },
+      );
+      await waitFor('[data-test-saved]');
+      await waitFor('[data-test-save-idle]');
+      let currentPosition = monacoService.getCursorPosition();
+      assert.strictEqual(
+        originalPosition!.lineNumber,
+        currentPosition?.lineNumber,
+        'cursor position line number has not changed',
+      );
+      assert.strictEqual(
+        originalPosition!.column,
+        currentPosition?.column,
+        'cursor position column has not changed',
+      );
+    } finally {
+      // set this back correctly regardless of test outcome
+      monacoService.serverEchoDebounceMs = 0;
+    }
   });
 });
