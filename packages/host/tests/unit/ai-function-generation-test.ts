@@ -145,6 +145,44 @@ module('Unit | ai-function-generation-test', function (hooks) {
     });
   });
 
+  test(`should support contains many`, async function (assert) {
+    let nestedCard = await createCard(`
+    import StringField from 'https://cardstack.com/base/string';
+    import {
+        Component,
+        CardDef,
+        FieldDef,
+        field,
+        contains,
+        containsMany,
+    } from 'https://cardstack.com/base/card-api';
+
+    class InternalField extends FieldDef {
+        @field innerStringField = containsMany(StringField);
+    }
+
+    export class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field containerField = contains(InternalField);
+    }
+    `);
+    let schema = cardApi.generatePatchCallSpecification(nestedCard);
+    assert.deepEqual(schema, {
+      type: 'object',
+      properties: {
+        thumbnailURL: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        containerField: {
+          type: 'object',
+          properties: {
+            innerStringField: { type: 'array', items: { type: 'string' } },
+          },
+        },
+      },
+    });
+  });
+
   test(`skips over fields that can't be recognised`, async function (assert) {
     let nestedCard = await createCard(`
     import StringField from 'https://cardstack.com/base/string';
