@@ -397,164 +397,188 @@ module('Integration | realm', function (hooks) {
     let adapter = new TestRealmAdapter({});
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
-    let expected = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}CardDef/1`],
+    {
+      let expected = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: [`${testRealmURL}CardDef/1`],
+          },
         },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}CardDef/2`],
-        },
-      },
-    ];
-    await this.expectEvents(assert, realm, adapter, expected, async () => {
-      {
-        let response = realm.handle(
-          new Request(testRealmURL, {
-            method: 'POST',
-            headers: {
-              Accept: 'application/vnd.card+json',
-            },
-            body: JSON.stringify(
-              {
-                data: {
-                  type: 'card',
-                  meta: {
-                    adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
-                      name: 'CardDef',
+      ];
+      let response = await this.expectEvents(
+        assert,
+        realm,
+        adapter,
+        expected,
+        async () => {
+          let response = realm.handle(
+            new Request(testRealmURL, {
+              method: 'POST',
+              headers: {
+                Accept: 'application/vnd.card+json',
+              },
+              body: JSON.stringify(
+                {
+                  data: {
+                    type: 'card',
+                    meta: {
+                      adoptsFrom: {
+                        module: 'https://cardstack.com/base/card-api',
+                        name: 'CardDef',
+                      },
                     },
                   },
                 },
-              },
-              null,
-              2,
-            ),
-          }),
-        );
-        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
+                null,
+                2,
+              ),
+            }),
+          );
+          await Promise.all([
+            realm.flushOperations(),
+            realm.flushUpdateEvents(),
+          ]);
+          return await response;
+        },
+      );
 
+      assert.strictEqual(
+        (await response).status,
+        201,
+        'successful http status',
+      );
+      let json = await response.json();
+      if (isSingleCardDocument(json)) {
         assert.strictEqual(
-          (await response).status,
-          201,
-          'successful http status',
-        );
-        let json = await (await response).json();
-        if (isSingleCardDocument(json)) {
-          assert.strictEqual(
-            json.data.id,
-            `${testRealmURL}CardDef/1`,
-            'the id is correct',
-          );
-          assert.ok(json.data.meta.lastModified, 'lastModified is populated');
-          let fileRef = await adapter.openFile('CardDef/1.json');
-          if (!fileRef) {
-            throw new Error('file not found');
-          }
-          assert.deepEqual(
-            JSON.parse(fileRef.content as string),
-            {
-              data: {
-                attributes: {
-                  description: null,
-                  thumbnailURL: null,
-                  title: null,
-                },
-                type: 'card',
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            },
-            'file contents are correct',
-          );
-        } else {
-          assert.ok(false, 'response body is not a card document');
-        }
-
-        let searchIndex = realm.searchIndex;
-        let result = await searchIndex.card(new URL(json.data.links.self));
-        if (result?.type === 'error') {
-          throw new Error(
-            `unexpected error when getting card from index: ${result.error.detail}`,
-          );
-        }
-        assert.strictEqual(
-          result?.doc.data.id,
+          json.data.id,
           `${testRealmURL}CardDef/1`,
-          'found card in index',
+          'the id is correct',
         );
+        assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+        let fileRef = await adapter.openFile('CardDef/1.json');
+        if (!fileRef) {
+          throw new Error('file not found');
+        }
+        assert.deepEqual(
+          JSON.parse(fileRef.content as string),
+          {
+            data: {
+              attributes: {
+                description: null,
+                thumbnailURL: null,
+                title: null,
+              },
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
+          'file contents are correct',
+        );
+      } else {
+        assert.ok(false, 'response body is not a card document');
       }
 
-      // create second file
-      {
-        let response = realm.handle(
-          new Request(testRealmURL, {
-            method: 'POST',
-            headers: {
-              Accept: 'application/vnd.card+json',
-            },
-            body: JSON.stringify(
-              {
-                data: {
-                  type: 'card',
-                  meta: {
-                    adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
-                      name: 'CardDef',
+      let searchIndex = realm.searchIndex;
+      let result = await searchIndex.card(new URL(json.data.links.self));
+      if (result?.type === 'error') {
+        throw new Error(
+          `unexpected error when getting card from index: ${result.error.detail}`,
+        );
+      }
+      assert.strictEqual(
+        result?.doc.data.id,
+        `${testRealmURL}CardDef/1`,
+        'found card in index',
+      );
+    }
+
+    // create second file
+    {
+      let expected = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: [`${testRealmURL}CardDef/2`],
+          },
+        },
+      ];
+      let response = await this.expectEvents(
+        assert,
+        realm,
+        adapter,
+        expected,
+        async () => {
+          let response = realm.handle(
+            new Request(testRealmURL, {
+              method: 'POST',
+              headers: {
+                Accept: 'application/vnd.card+json',
+              },
+              body: JSON.stringify(
+                {
+                  data: {
+                    type: 'card',
+                    meta: {
+                      adoptsFrom: {
+                        module: 'https://cardstack.com/base/card-api',
+                        name: 'CardDef',
+                      },
                     },
                   },
                 },
-              },
-              null,
-              2,
-            ),
-          }),
-        );
-        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
+                null,
+                2,
+              ),
+            }),
+          );
+          await Promise.all([
+            realm.flushOperations(),
+            realm.flushUpdateEvents(),
+          ]);
+          return await response;
+        },
+      );
+      assert.strictEqual(
+        (await response).status,
+        201,
+        'successful http status',
+      );
+      let json = await response.json();
+      if (isSingleCardDocument(json)) {
         assert.strictEqual(
-          (await response).status,
-          201,
-          'successful http status',
-        );
-        let json = await (await response).json();
-        if (isSingleCardDocument(json)) {
-          assert.strictEqual(
-            json.data.id,
-            `${testRealmURL}CardDef/2`,
-            'the id is correct',
-          );
-          assert.ok(
-            (await adapter.openFile('CardDef/2.json'))?.content,
-            'file contents exist',
-          );
-        } else {
-          assert.ok(false, 'response body is not a card document');
-        }
-
-        let searchIndex = realm.searchIndex;
-        let result = await searchIndex.card(new URL(json.data.links.self));
-        if (result?.type === 'error') {
-          throw new Error(
-            `unexpected error when getting card from index: ${result.error.detail}`,
-          );
-        }
-        assert.strictEqual(
-          result?.doc.data.id,
+          json.data.id,
           `${testRealmURL}CardDef/2`,
-          'found card in index',
+          'the id is correct',
+        );
+        assert.ok(
+          (await adapter.openFile('CardDef/2.json'))?.content,
+          'file contents exist',
+        );
+      } else {
+        assert.ok(false, 'response body is not a card document');
+      }
+
+      let searchIndex = realm.searchIndex;
+      let result = await searchIndex.card(new URL(json.data.links.self));
+      if (result?.type === 'error') {
+        throw new Error(
+          `unexpected error when getting card from index: ${result.error.detail}`,
         );
       }
-    });
+      assert.strictEqual(
+        result?.doc.data.id,
+        `${testRealmURL}CardDef/2`,
+        'found card in index',
+      );
+    }
   });
 
   test('realm can serve POST requests that include linksTo fields', async function (assert) {
