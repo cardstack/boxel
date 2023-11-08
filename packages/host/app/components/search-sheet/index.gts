@@ -20,7 +20,6 @@ import {
   Button,
   Label,
   BoxelInput,
-  BoxelInputBottomTreatment,
   BoxelInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
 
