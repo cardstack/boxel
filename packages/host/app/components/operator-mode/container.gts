@@ -146,7 +146,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   <template>
-    <CardCatalogModal />
     <Modal
       class='operator-mode'
       @size='full-screen'
@@ -155,6 +154,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
+      <CardCatalogModal />
       {{#if this.isCodeMode}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
