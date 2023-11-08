@@ -1732,10 +1732,20 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     for (let i = 1; i <= 11; i++) {
       await click(`[data-test-cards-grid-item="${testRealmURL}Person/${i}"]`);
-      await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
+      await waitFor(
+        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/${i}"]`,
+      );
+      await click(
+        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/${i}"] [data-test-close-button]`,
+      );
+      await waitFor(
+        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/${i}"]`,
+        { count: 0 },
+      );
     }
 
     await focus(`[data-test-search-input] input`);
+    await waitFor(`[data-test-search-result]`);
     assert.dom(`[data-test-search-result]`).exists({ count: 10 });
   });
 
