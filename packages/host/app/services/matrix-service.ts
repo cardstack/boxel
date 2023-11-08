@@ -22,6 +22,7 @@ import {
   sanitizeHtml,
 } from '@cardstack/runtime-common';
 
+import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -45,6 +46,11 @@ const SET_OBJECTIVE_POWER_LEVEL = 50;
 const DEFAULT_PAGE_SIZE = 50;
 
 export type Event = Partial<IEvent>;
+
+export type OperatorModeContext = {
+  submode: Submode;
+  openCards: CardDef[];
+};
 
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
@@ -244,8 +250,28 @@ export default class MatrixService extends Service {
     roomId: string,
     body: string | undefined,
     card?: CardDef,
+    context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
+    console.log(context);
+    if (context?.submode === 'interact') {
+      let serializedCards = await Promise.all(
+        context!.openCards.map(async (card) => {
+          return await this.cardService.serializeCard(card);
+        }),
+      );
+      await this.client.sendEvent(roomId, 'm.room.message', {
+        msgtype: 'org.boxel.message',
+        body,
+        formatted_body: html,
+        context: {
+          openCards: serializedCards,
+          submode: context.submode,
+        },
+      });
+      return;
+    }
+
     let serializedCard: LooseSingleCardDocument | undefined;
     if (card) {
       serializedCard = await this.cardService.serializeCard(card);

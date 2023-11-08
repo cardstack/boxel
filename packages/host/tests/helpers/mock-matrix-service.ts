@@ -7,12 +7,16 @@ import { type MatrixCardError } from '@cardstack/runtime-common';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
+import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import type { RoomField } from 'https://cardstack.com/base/room';
 import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 class MockClient {
+  lastSentEvent: any;
   public getProfileInfo(userId: string) {
     return Promise.resolve({
       displayname: userId,
@@ -33,7 +37,10 @@ class MockClient {
 
 export class MockMatrixService extends Service {
   @service declare loaderService: LoaderService;
-
+  lastMessageSent: any;
+  // @ts-ignore
+  client: MockClient = new MockClient();
+  // @ts-ignore
   cardAPI!: typeof cardApi;
   // These will be empty in the tests, but we need to define them to satisfy the interface
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
@@ -45,11 +52,6 @@ export class MockMatrixService extends Service {
   get isLoggedIn() {
     return true;
   }
-
-  get client() {
-    return new MockClient();
-  }
-
   get userId() {
     return '@testuser:staging';
   }
@@ -64,6 +66,15 @@ export class MockMatrixService extends Service {
     _topic?: string,
   ): Promise<string> {
     return name;
+  }
+
+  async sendMessage(
+    roomId: string,
+    body: string | undefined,
+    card?: CardDef,
+    context?: OperatorModeContext,
+  ) {
+    this.lastMessageSent = { roomId, body, card, context };
   }
 
   public createAndJoinRoom(roomId: string) {
