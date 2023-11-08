@@ -2943,6 +2943,8 @@ export function generatePatchCallSpecification(def: typeof BaseDef) {
 
     This is a subset of JSON Schema.
 
+
+
     */
   if (primitive in def) {
     switch (def.name) {
@@ -2957,7 +2959,7 @@ export function generatePatchCallSpecification(def: typeof BaseDef) {
       case 'DateTimeField':
         return { type: 'string', format: 'date-time' };
       default:
-        return {};
+        return undefined;
     }
   }
 
@@ -2973,6 +2975,9 @@ export function generatePatchCallSpecification(def: typeof BaseDef) {
       continue;
     }
     let fieldSchema = generatePatchCallSpecification(field.card);
+    if (fieldSchema == undefined) {
+      continue;
+    }
     if (field.fieldType == 'containsMany') {
       schema.properties[fieldName] = {
         type: 'array',

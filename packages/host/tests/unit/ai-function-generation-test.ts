@@ -144,4 +144,39 @@ module('Unit | ai-function-generation-test', function (hooks) {
       },
     });
   });
+
+  test(`skips over fields that can't be recognised`, async function (assert) {
+    let nestedCard = await createCard(`
+    import StringField from 'https://cardstack.com/base/string';
+    import {
+        Component,
+        CardDef,
+        FieldDef,
+        field,
+        contains,
+        primitive
+    } from 'https://cardstack.com/base/card-api';
+
+    class NewField extends FieldDef {
+        static displayName = 'NewField';
+        static [primitive]: number;
+    }
+
+    export class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field keepField = contains(StringField);
+        @field skipField = contains(NewField);
+    }
+    `);
+    let schema = cardApi.generatePatchCallSpecification(nestedCard);
+    assert.deepEqual(schema, {
+      type: 'object',
+      properties: {
+        thumbnailURL: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        keepField: { type: 'string' },
+      },
+    });
+  });
 });
