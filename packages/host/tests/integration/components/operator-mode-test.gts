@@ -776,6 +776,89 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-person]').hasText('Fadhlan');
   });
 
+  test('it sends regular messages without any context while the share checkbox is unticked', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+    await click('[data-test-open-chat]');
+
+    matrixService.createAndJoinRoom('testroom');
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    // Add some text so that we can click the send button
+    // Do not share the context here
+    assert.dom('[data-test-message-field="test_a"]').exists();
+    await fillIn('[data-test-message-field="test_a"]', 'hello');
+
+    // Send message
+    await click('[data-test-send-message-btn]');
+    assert.deepEqual(matrixService.lastMessageSent, {
+      body: 'hello',
+      card: undefined,
+      context: undefined,
+      roomId: 'testroom',
+    });
+  });
+
+  test('sends the top stack cards when context sharing is on', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.dom('[data-test-boxel-header-title]').hasText('Pet');
+    await click('[data-test-open-chat]');
+
+    matrixService.createAndJoinRoom('testroom');
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    // Add some text so that we can click the send button
+    assert.dom('[data-test-message-field="test_a"]').exists();
+    await fillIn('[data-test-message-field="test_a"]', 'hello');
+    // Set sharing the context to true
+    await click('[data-test-share-context]');
+
+    // Send message
+    await click('[data-test-send-message-btn]');
+    // Checking the object itself has issues due to serialisation
+    // checking we're sharing the correct card should be enough
+    assert.equal(matrixService.lastMessageSent.context.openCards.length, 1);
+    assert.equal(matrixService.lastMessageSent.context.submode, 'interact');
+    assert.equal(
+      matrixService.lastMessageSent.context.openCards[0].id,
+      'http://test-realm/test/Pet/mango',
+    );
+  });
+
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
     this.owner.register('service:matrixService', MockMatrixService);
     let matrixService = this.owner.lookup(
@@ -2513,7 +2596,6 @@ module('Integration | operator-mode', function (hooks) {
     operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
-    console.log(operatorModeStateService.state.codePath);
 
     await waitUntil(() =>
       document

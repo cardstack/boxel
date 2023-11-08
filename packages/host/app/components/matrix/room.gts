@@ -1,7 +1,10 @@
+import { Input } from '@ember/component';
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -53,6 +56,7 @@ interface RoomArgs {
 }
 
 export default class Room extends Component<RoomArgs> {
+  helperId = guidFor(this);
   <template>
     <div>Number of cards: {{this.totalCards}}</div>
     <div class='room-members'>
@@ -175,12 +179,15 @@ export default class Room extends Component<RoomArgs> {
           @disabled={{this.doChooseCard.isRunning}}
           {{on 'click' this.chooseCard}}
         >Choose Card</Button>
-        <Button
-          data-test-send-open-cards-btn
-          @loading={{this.doSendMessage.isRunning}}
-          @disabled={{this.doSendMessage.isRunning}}
-          {{on 'click' this.sendOpenCards}}
-        >Send open cards</Button>
+
+        <label for='share-checkbox'>Allow access to the cards you can see at the
+          top of your stacks</label>
+        <Input
+          id={{(concat 'helper-text-' this.helperId)}}
+          data-test-share-context
+          @type='checkbox'
+          @checked={{this.shareCurrentContext}}
+        />
       {{/if}}
       <Button
         data-test-send-message-btn
@@ -301,6 +308,8 @@ export default class Room extends Component<RoomArgs> {
   @tracked private membersToInvite: string[] = [];
   @tracked private allowedToSetObjective: boolean | undefined;
   @tracked private subscribedRoom: FieldDef | undefined;
+
+  private shareCurrentContext = false;
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, CardDef | undefined> =
@@ -467,13 +476,6 @@ export default class Room extends Component<RoomArgs> {
   }
 
   @action
-  private sendOpenCards() {
-    for (let stackItem of this.operatorModeStateService.topMostStackItems()) {
-      this.doSendMessage.perform(undefined, stackItem.card);
-    }
-  }
-
-  @action
   private showInviteMode() {
     this.isInviteMode = true;
   }
@@ -512,7 +514,21 @@ export default class Room extends Component<RoomArgs> {
     async (message: string | undefined, card?: CardDef) => {
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
-      await this.matrixService.sendMessage(this.args.roomId, message, card);
+      let context = undefined;
+      if (this.shareCurrentContext) {
+        context = {
+          submode: this.operatorModeStateService.state.submode,
+          openCards: this.operatorModeStateService
+            .topMostStackItems()
+            .map((stackItem) => stackItem.card),
+        };
+      }
+      await this.matrixService.sendMessage(
+        this.args.roomId,
+        message,
+        card,
+        context,
+      );
     },
   );
 
