@@ -11,10 +11,16 @@ import {
 
 import cssVar from '../../helpers/css-var.ts';
 import BoxelInput from './index.gts';
-import { InputBottomTreatments, InputTypes } from './index.gts';
+import {
+  InputBottomTreatments,
+  InputTypes,
+  InputValidationState,
+  InputValidationStates,
+} from './index.gts';
 
 const validTypes = Object.values(InputTypes);
 const validBottomTreatments = Object.values(InputBottomTreatments);
+const validStates = Object.values(InputValidationStates);
 
 export default class InputUsage extends Component {
   @tracked id = 'sample-input';
@@ -26,6 +32,7 @@ export default class InputUsage extends Component {
   @tracked placeholder = '';
   @tracked errorMessage = '';
   @tracked helperText = '';
+  @tracked state: InputValidationState = 'initial';
   @tracked variant: 'large' | 'default' = 'default';
 
   defaultType = InputTypes.Default;
@@ -74,8 +81,10 @@ export default class InputUsage extends Component {
           @disabled={{this.disabled}}
           @required={{this.required}}
           @optional={{this.optional}}
+          {{! FIXME remove }}
           @invalid={{this.invalid}}
           @type={{this.type}}
+          @state={{this.state}}
           @placeholder={{this.placeholder}}
           @bottomTreatment={{this.bottomTreatment}}
           @variant={{this.variant}}
@@ -104,6 +113,13 @@ export default class InputUsage extends Component {
           @name='value'
           @value={{this.value}}
           @onInput={{fn (mut this.value)}}
+        />
+        <Args.String
+          @name='state'
+          @description='The validation state of the input'
+          @options={{validStates}}
+          @onInput={{fn (mut this.state)}}
+          @value={{this.state}}
         />
         <Args.Bool
           @name='disabled'

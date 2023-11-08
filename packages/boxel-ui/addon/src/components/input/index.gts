@@ -34,6 +34,21 @@ export const InputTypes = {
 
 export type InputType = Values<typeof InputTypes>;
 
+export const InputValidationStates = {
+  None: 'none',
+  Valid: 'valid',
+  Invalid: 'invalid',
+  Loading: 'loading',
+  Initial: 'initial',
+};
+
+export type InputValidationState =
+  | 'none'
+  | 'valid'
+  | 'invalid'
+  | 'loading'
+  | 'initial';
+
 export const InputBottomTreatments = {
   Flat: 'flat',
   Rounded: 'rounded',
@@ -55,6 +70,7 @@ export interface Signature {
     optional?: boolean;
     placeholder?: string;
     required?: boolean;
+    state?: InputValidationState;
     type?: InputType;
     value: string | number | null | undefined;
     variant?: 'large' | 'default'; // FIXME ignored for now
@@ -89,13 +105,19 @@ export default class BoxelInput extends Component<Signature> {
     return type;
   }
 
+  get hasValidation() {
+    return this.args.state && this.args.state !== 'none';
+  }
+
   <template>
     <div class='input-container'>
       {{#if (and (not @required) @optional)}}
         <div class='optional'>Optional</div>
       {{/if}}
       {{#if this.isSearch}}
-        <div class='search-icon-container'>
+        <div
+          class={{cn 'search-icon-container' has-validation=this.hasValidation}}
+        >
           <IconSearch class='search-icon' width='20' height='20' />
         </div>
       {{/if}}
@@ -108,6 +130,7 @@ export default class BoxelInput extends Component<Signature> {
           <InputTag
             class={{cn
               'boxel-input'
+              has-validation=this.hasValidation
               invalid=@invalid
               search=this.isSearch
               boxel-input--large=(eq @variant 'large')
@@ -219,6 +242,11 @@ export default class BoxelInput extends Component<Signature> {
 
           background-color: var(--boxel-dark);
           color: var(--boxel-light);
+          padding-right: var(--boxel-sp-xl);
+        }
+
+        .search.has-validation {
+          padding-right: unset;
           padding-left: var(--boxel-sp-xl);
         }
 
@@ -233,11 +261,16 @@ export default class BoxelInput extends Component<Signature> {
           position: absolute;
           top: 0;
           bottom: 0;
-          left: var(--boxel-sp-xs);
+          right: var(--boxel-sp-xs);
           height: 100%;
           display: flex;
           justify-content: center;
           align-items: center;
+        }
+
+        .search-icon-container.has-validation {
+          right: unset;
+          left: var(--boxel-sp-xs);
         }
 
         .optional {
