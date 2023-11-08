@@ -28,7 +28,6 @@ export default class InputUsage extends Component {
   @tracked disabled = false;
   @tracked required = false;
   @tracked optional = false;
-  @tracked invalid = false;
   @tracked placeholder = '';
   @tracked errorMessage = '';
   @tracked helperText = '';
@@ -57,7 +56,7 @@ export default class InputUsage extends Component {
   @action validate(ev: Event): void {
     let target = ev.target as HTMLInputElement;
     if (!target.validity?.valid) {
-      this.invalid = true;
+      this.state = 'invalid';
       if (target.validity?.valueMissing) {
         this.errorMessage = 'This is a required field';
       } else {
@@ -65,7 +64,7 @@ export default class InputUsage extends Component {
       }
       return;
     }
-    this.invalid = false;
+    this.state = 'valid';
     this.errorMessage = '';
   }
 
@@ -81,8 +80,6 @@ export default class InputUsage extends Component {
           @disabled={{this.disabled}}
           @required={{this.required}}
           @optional={{this.optional}}
-          {{! FIXME remove }}
-          @invalid={{this.invalid}}
           @type={{this.type}}
           @state={{this.state}}
           @placeholder={{this.placeholder}}
@@ -136,11 +133,6 @@ export default class InputUsage extends Component {
           @value={{this.optional}}
           @onInput={{fn (mut this.optional)}}
           @description="Displays 'optional' label, unless the '@required' arg is also true"
-        />
-        <Args.Bool
-          @name='invalid'
-          @value={{this.invalid}}
-          @onInput={{fn (mut this.invalid)}}
         />
         <Args.String
           @name='errorMessage'
