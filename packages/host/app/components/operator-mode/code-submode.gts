@@ -20,7 +20,7 @@ import {
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-import { Range } from 'monaco-editor';
+import { Position } from 'monaco-editor';
 
 import {
   Button,
@@ -32,11 +32,10 @@ import type { PanelContext } from '@cardstack/boxel-ui/components';
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
-import { Deferred } from '@cardstack/runtime-common';
-
 import {
   type SingleCardDocument,
   RealmPaths,
+  Deferred,
   logger,
   isCardDocumentString,
   isSingleCardDocument,
@@ -85,6 +84,7 @@ import CardURLBar from './card-url-bar';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
+import NewFileButton from './new-file-button';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -377,12 +377,33 @@ export default class CodeSubmode extends Component<Signature> {
     return this.card;
   }
 
-  private get monacoCursorPosition() {
+  @action
+  private initializeMonacoCursorPosition() {
     if (this.selectedDeclaration?.path?.node.loc) {
-      let { start, end } = this.selectedDeclaration.path.node.loc;
-      return new Range(start.line, start.column, end.line, end.column);
+      let { start } = this.selectedDeclaration.path.node.loc;
+      this.monacoService.updateCursorPosition(
+        new Position(start.line, start.column),
+      );
     }
-    return undefined;
+  }
+
+  @action
+  private updateMonacoCursorPositionByDeclaration(
+    declaration: ModuleDeclaration,
+  ) {
+    if (declaration.path?.node.loc) {
+      let { start, end } = declaration.path?.node.loc;
+      let currentCursorPosition = this.monacoService.getCursorPosition();
+      if (
+        currentCursorPosition &&
+        (currentCursorPosition.lineNumber < start.line ||
+          currentCursorPosition.lineNumber > end.line)
+      ) {
+        this.monacoService.updateCursorPosition(
+          new Position(start.line, start.column),
+        );
+      }
+    }
   }
 
   private get declarations() {
@@ -432,8 +453,31 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
+  private selectDeclarationByMonacoCursorPosition(position: Position) {
+    let declarationCursorOn = this.declarations.find(
+      (declaration: ModuleDeclaration) => {
+        if (declaration.path?.node.loc) {
+          let { start, end } = declaration.path?.node.loc;
+          return (
+            position.lineNumber >= start.line && position.lineNumber <= end.line
+          );
+        }
+        return false;
+      },
+    );
+
+    if (
+      declarationCursorOn &&
+      declarationCursorOn !== this.selectedDeclaration
+    ) {
+      this.selectDeclaration(declarationCursorOn);
+    }
+  }
+
+  @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this.operatorModeStateService.updateLocalNameSelection(dec.localName);
+    this.updateMonacoCursorPositionByDeclaration(dec);
   }
 
   @action
@@ -466,7 +510,8 @@ export default class CodeSubmode extends Component<Signature> {
 
   private contentChangedTask = restartableTask(async (content: string) => {
     this.hasUnsavedSourceChanges = true;
-    await timeout(autoSaveDelayMs);
+    // note that there is already a debounce in the monaco modifier so there
+    // is no need to delay further for auto save initiation
     if (
       !isReady(this.currentOpenFile) ||
       content === this.currentOpenFile?.content
@@ -506,7 +551,8 @@ export default class CodeSubmode extends Component<Signature> {
       throw new Error('File is not ready to be written to');
     }
 
-    return file.write(content);
+    // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
+    return file.write(content, true);
   }
 
   private safeJSONParse(content: string) {
@@ -682,14 +728,16 @@ export default class CodeSubmode extends Component<Signature> {
         ></div>
       </:ready>
     </RealmInfoProvider>
-    <CardURLBar
-      @loadFileError={{this.loadFileError}}
-      @resetLoadFileError={{this.resetLoadFileError}}
-      @userHasDismissedError={{this.userHasDismissedURLError}}
-      @dismissURLError={{this.dismissURLError}}
-      @realmURL={{this.realmURL}}
-      class='card-url-bar'
-    />
+    <div class='code-mode-top-bar'>
+      <CardURLBar
+        @loadFileError={{this.loadFileError}}
+        @resetLoadFileError={{this.resetLoadFileError}}
+        @userHasDismissedError={{this.userHasDismissedURLError}}
+        @dismissURLError={{this.dismissURLError}}
+        @realmURL={{this.realmURL}}
+      />
+      <NewFileButton />
+    </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
       <div
         class='code-mode'
@@ -822,7 +870,8 @@ export default class CodeSubmode extends Component<Signature> {
                         contentChanged=(perform this.contentChangedTask)
                         monacoSDK=this.monacoSDK
                         language=this.language
-                        cursorPosition=this.monacoCursorPosition
+                        initializeCursorPosition=this.initializeMonacoCursorPosition
+                        onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
                       }}
                     ></div>
                   {{/if}}
@@ -837,7 +886,7 @@ export default class CodeSubmode extends Component<Signature> {
                         </span>
                       </span>
                     {{else}}
-                      <span class='saved-msg'>
+                      <span data-test-saved class='saved-msg'>
                         Saved
                       </span>
                       <CheckMark width='27' height='27' />
@@ -1024,16 +1073,17 @@ export default class CodeSubmode extends Component<Signature> {
         background: var(--boxel-light);
       }
 
-      .card-url-bar {
-        position: absolute;
-        top: var(--boxel-sp);
-        left: calc(var(--submode-switcher-width) + (var(--boxel-sp) * 2));
-
-        --card-url-bar-width: calc(
-          100% - (var(--submode-switcher-width) + (var(--boxel-sp) * 3))
+      .code-mode-top-bar {
+        --code-mode-top-bar-padding-left: calc(
+          var(--submode-switcher-width) + (var(--boxel-sp) * 2)
         );
-        height: var(--submode-switcher-height);
 
+        position: absolute;
+        top: 0;
+        right: 0;
+        padding: var(--boxel-sp) var(--boxel-sp) 0
+          var(--code-mode-top-bar-padding-left);
+        display: flex;
         z-index: 2;
       }
 

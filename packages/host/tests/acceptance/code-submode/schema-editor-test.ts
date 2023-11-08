@@ -874,7 +874,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .doesNotExist();
   });
 
-  test('editing a field from schema editor', async function (assert) {
+  test<TestContextWithSave>('editing a field from schema editor', async function (assert) {
     assert.expect(2);
     let operatorModeStateParam = stringify({
       stacks: [],
@@ -914,14 +914,16 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await fillIn('[data-test-field-name-input]', 'friendCount');
     await click('[data-test-boxel-radio-option-id="one"]');
 
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.ok(content.includes('friendCount = contains(BigIntegerCard)'));
+    });
     await click('[data-test-save-field-button]');
 
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="friendCount"] [data-test-card-display-name="BigInteger"]',
-    );
-
-    assert.ok(
-      getMonacoContent().includes('friendCount = contains(BigIntegerCard)'),
     );
   });
 

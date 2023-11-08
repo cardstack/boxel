@@ -27,7 +27,6 @@ import {
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
-  setupServerSentEvents,
 } from '../../helpers';
 
 const indexCardSource = `
@@ -191,7 +190,6 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupWindowMock(hooks);
 
   hooks.afterEach(async function () {

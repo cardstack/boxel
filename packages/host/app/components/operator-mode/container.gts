@@ -27,9 +27,12 @@ import {
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { Submodes } from '../submode-switcher';
+import CardCatalogModal from '../card-catalog/modal';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+
+import config from '@cardstack/host/config/environment';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -45,10 +48,16 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
+
+    if (config.environment === 'test') {
+      (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
+      registerDestructor(this, () => {
+        delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
+      });
+    }
+
     this.constructRecentCards.perform();
     registerDestructor(this, () => {
-      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
   }
@@ -145,6 +154,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
+      <CardCatalogModal />
       {{#if this.isCodeMode}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}

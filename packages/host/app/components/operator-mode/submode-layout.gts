@@ -16,7 +16,6 @@ import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 import ChatSidebar from '../matrix/chat-sidebar';
-import CardCatalogModal from '../card-catalog/modal';
 import SearchSheet, {
   SearchSheetMode,
   SearchSheetModes,
@@ -114,8 +113,6 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   <template>
-    <CardCatalogModal />
-
     <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
       <SubmodeSwitcher
         @submode={{this.operatorModeStateService.state.submode}}

@@ -30,8 +30,8 @@ export default class Pill extends Component<PillSignature> {
       .pill {
         display: inline-flex;
         align-items: center;
-        padding: var(--boxel-sp-xxxxxs) var(--boxel-sp-xxxs)
-          var(--boxel-sp-xxxxxs) var(--boxel-sp-xxxxxs);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs) var(--boxel-sp-5xs)
+          var(--boxel-sp-5xs);
         background-color: var(--boxel-light);
         border: 1px solid var(--boxel-400);
         border-radius: var(--boxel-border-radius-sm);
@@ -53,7 +53,7 @@ export default class Pill extends Component<PillSignature> {
         display: flex;
         margin-block: 0;
         margin-inline: 0;
-        margin-right: var(--boxel-sp-xxxxxs);
+        margin-right: var(--boxel-sp-5xs);
       }
 
       .icon > :deep(*) {
