@@ -896,11 +896,7 @@ export default class CodeSubmode extends Component<Signature> {
               @length={{this.panelWidths.rightPanel}}
             >
               <div class='inner-container'>
-                {{#if this.isLoading}}
-                  <div class='loading'>
-                    <LoadingIndicator />
-                  </div>
-                {{else if this.isReady}}
+                {{#if this.isReady}}
                   {{#if this.fileIncompatibilityMessage}}
                     <div
                       class='file-incompatible-message'

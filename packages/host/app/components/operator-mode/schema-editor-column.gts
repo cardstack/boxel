@@ -25,6 +25,7 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
 import { BaseDef } from 'https://cardstack.com/base/card-api';
+import { inheritanceChain } from '@cardstack/host/resources/inheritance-chain';
 
 interface Signature {
   Element: HTMLElement;
@@ -60,62 +61,12 @@ export default class SchemaEditorColumn extends Component<Signature> {
     this.selectedItem = item;
   }
 
-  @use cardInheritanceChain = resource(() => {
-    const state: {
-      isLoading: boolean;
-      value: CardInheritance[];
-      error: Error | undefined;
-      load: () => Promise<void>;
-    } = new TrackedObject({
-      isLoading: true,
-      value: [],
-      error: undefined,
-      load: async () => {
-        state.isLoading = true;
-        let fileUrl = this.args.file.url;
-        let { card, cardTypeResource } = this.args;
-
-        try {
-          await cardTypeResource!.ready;
-          let cardType = cardTypeResource!.type;
-
-          if (!cardType) {
-            throw new Error('Card type not found');
-          }
-
-          // Chain goes from most specific to least specific
-          let cardInheritanceChain = [
-            {
-              cardType,
-              card,
-            },
-          ];
-
-          while (cardType.super) {
-            cardType = cardType.super;
-
-            let superCard = await loadCard(cardType.codeRef, {
-              loader: this.loaderService.loader,
-              relativeTo: new URL(fileUrl), // because the module can be relative
-            });
-
-            cardInheritanceChain.push({
-              cardType,
-              card: superCard,
-            });
-          }
-          state.value = cardInheritanceChain;
-        } catch (error: any) {
-          state.error = error;
-        } finally {
-          state.isLoading = false;
-        }
-      },
-    });
-
-    state.load();
-    return state;
-  });
+  private cardInheritanceChain = inheritanceChain(
+    this,
+    () => this.args.file.url,
+    () => this.args.card,
+    () => this.args.cardTypeResource,
+  );
 
   get totalFields() {
     return this.cardInheritanceChain.value.reduce(

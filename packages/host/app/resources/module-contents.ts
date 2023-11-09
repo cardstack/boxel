@@ -23,7 +23,10 @@ import {
 
 import { type Ready } from '@cardstack/host/resources/file';
 
-import { importResource } from '@cardstack/host/resources/import';
+import {
+  type ImportResource,
+  importResource,
+} from '@cardstack/host/resources/import';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -56,7 +59,7 @@ interface Args {
 
 export class ModuleContentsResource extends Resource<Args> {
   @tracked private _declarations: ModuleDeclaration[] = [];
-  private moduleResource: ImportResource;
+  private moduleResource: ImportResource | undefined;
 
   get isLoading() {
     return this.load.isRunning;
@@ -68,12 +71,12 @@ export class ModuleContentsResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { executableFile } = named;
-    this.moduleResource = importResource(this, () => executableFile.url);
     this.load.perform(executableFile);
   }
 
   private load = restartableTask(async (executableFile: Ready) => {
     //==loading module
+    this.moduleResource = importResource(this, () => executableFile.url);
     await this.moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
     let exportedCardsOrFields = Object.values(
       this.moduleResource?.module || {},
