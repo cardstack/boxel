@@ -295,7 +295,7 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
-      return "No tools are available to inspect this file or it's contents.";
+      return 'No tools are available to inspect this file or its contents.';
     }
 
     // TODO: handle card preview errors (when json is valid but card returns error)
