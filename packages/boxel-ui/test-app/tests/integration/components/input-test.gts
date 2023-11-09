@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
-import { fillIn, render } from '@ember/test-helpers';
+import { click, fillIn, render } from '@ember/test-helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 module('Integration | Component | input', function (hooks) {
@@ -27,6 +27,30 @@ module('Integration | Component | input', function (hooks) {
     await fillIn('[data-test-input]', 'no');
 
     assert.strictEqual(value, 'no');
+  });
+
+  test('it passes focus and blur events', async function (assert) {
+    let focused = false;
+    let blurred = false;
+
+    function onFocus() {
+      focused = true;
+    }
+
+    function onBlur() {
+      blurred = true;
+    }
+
+    await render(<template>
+      <button>do nothing</button>
+      <BoxelInput data-test-input @onFocus={{onFocus}} @onBlur={{onBlur}} />
+    </template>);
+
+    await click('[data-test-input]');
+    await click('button');
+
+    assert.true(focused);
+    assert.true(blurred);
   });
 
   test('textarea @type produces a textarea', async function (assert) {
