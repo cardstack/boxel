@@ -19,7 +19,6 @@ import {
   all,
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { use, resource } from 'ember-resources';
 import { Position } from 'monaco-editor';
 
 import {
@@ -51,11 +50,7 @@ import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
-import {
-  isReady,
-  type Ready,
-  type FileResource,
-} from '@cardstack/host/resources/file';
+import { isReady, type FileResource } from '@cardstack/host/resources/file';
 
 import {
   moduleContentsResource,
