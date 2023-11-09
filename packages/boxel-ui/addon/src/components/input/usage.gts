@@ -162,7 +162,7 @@ export default class InputUsage extends Component {
         />
         <Args.String
           @name='variant'
-          @description='The visual shape of the bottom of the input'
+          @description='Optional larger size'
           @onInput={{fn (mut this.variant)}}
           @options={{Array 'default' 'large'}}
           @value={{this.variant}}
