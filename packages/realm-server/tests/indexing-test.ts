@@ -556,4 +556,26 @@ module('indexing', function (hooks) {
       'indexed correct number of files',
     );
   });
+
+  test('does not crash when indexing a broken instance', async function (assert) {
+    await realm.write(
+      'broken.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'FieldDef',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    ); // this is an example of a card that where loadCard will throw an error
+
+    assert.ok(
+      true,
+      'the realm server does not crash during indexing when the instance is broken',
+    );
+  });
 });
