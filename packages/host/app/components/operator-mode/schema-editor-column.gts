@@ -7,13 +7,10 @@ import { tracked } from '@glimmer/tracking';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 
-import { use, resource } from 'ember-resources';
-import { TrackedObject } from 'tracked-built-ins';
-
 import { Accordion } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { getPlural, loadCard } from '@cardstack/runtime-common';
+import { getPlural } from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
