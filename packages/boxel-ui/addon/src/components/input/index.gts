@@ -127,6 +127,10 @@ export default class BoxelInput extends Component<Signature> {
     }
   }
 
+  private get shouldShowErrorMessage() {
+    return this.isInvalid && this.args.errorMessage;
+  }
+
   <template>
     <div class={{cn 'input-container' is-multiline=this.isMultiline}}>
       {{#if (and (not @required) @optional)}}
@@ -139,71 +143,62 @@ export default class BoxelInput extends Component<Signature> {
           <IconSearch class='search-icon' width='20' height='20' />
         </div>
       {{/if}}
-      {{#let
-        (and this.isInvalid (bool @errorMessage))
-        as |shouldShowErrorMessage|
-      }}
-        {{#let
-          (element (if this.isMultiline 'textarea' 'input'))
-          as |InputTag|
-        }}
-
-          <InputTag
-            class={{cn
-              'boxel-input'
-              has-validation=this.hasValidation
-              invalid=this.isInvalid
-              search=this.isSearch
-              boxel-input--large=(eq @variant 'large')
-              boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
-            }}
-            id={{this.id}}
-            type={{this.modifiedTypeFIXME}}
-            value={{@value}}
-            placeholder={{@placeholder}}
-            required={{@required}}
-            disabled={{@disabled}}
-            aria-describedby={{if
-              @helperText
-              (concat 'helper-text-' this.helperId)
-              false
-            }}
-            aria-invalid={{if this.isInvalid 'true'}}
-            aria-errormessage={{if
-              shouldShowErrorMessage
-              (concat 'error-message-' this.helperId)
-              false
-            }}
-            data-test-boxel-input
-            data-test-boxel-input-id={{@id}}
-            data-test-boxel-input-validation-state={{if @disabled false @state}}
-            {{on 'input' (pick 'target.value' (optional @onInput))}}
-            {{on 'blur' (optional @onBlur)}}
-            {{on 'keypress' (optional @onKeyPress)}}
-            {{on 'focus' (optional @onFocus)}}
-            ...attributes
-          />
-          {{#if this.validationIcon}}
-            <span class='validation-icon'>
-              <this.validationIcon role='presentation' />
-            </span>
-          {{/if}}
-          {{#if shouldShowErrorMessage}}
-            <div
-              id={{concat 'error-message-' this.helperId}}
-              class='error-message'
-              aria-live='polite'
-              data-test-boxel-input-error-message
-            >{{@errorMessage}}</div>
-          {{/if}}
-          {{#if @helperText}}
-            <div
-              id={{concat 'helper-text-' this.helperId}}
-              class='helper-text'
-              data-test-boxel-input-helper-text
-            >{{@helperText}}</div>
-          {{/if}}
-        {{/let}}
+      {{#let (element (if this.isMultiline 'textarea' 'input')) as |InputTag|}}
+        <InputTag
+          class={{cn
+            'boxel-input'
+            has-validation=this.hasValidation
+            invalid=this.isInvalid
+            search=this.isSearch
+            boxel-input--large=(eq @variant 'large')
+            boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
+          }}
+          id={{this.id}}
+          type={{this.modifiedTypeFIXME}}
+          value={{@value}}
+          placeholder={{@placeholder}}
+          required={{@required}}
+          disabled={{@disabled}}
+          aria-describedby={{if
+            @helperText
+            (concat 'helper-text-' this.helperId)
+            false
+          }}
+          aria-invalid={{if this.isInvalid 'true'}}
+          aria-errormessage={{if
+            this.shouldShowErrorMessage
+            (concat 'error-message-' this.helperId)
+            false
+          }}
+          data-test-boxel-input
+          data-test-boxel-input-id={{@id}}
+          data-test-boxel-input-validation-state={{if @disabled false @state}}
+          {{on 'input' (pick 'target.value' (optional @onInput))}}
+          {{on 'blur' (optional @onBlur)}}
+          {{on 'keypress' (optional @onKeyPress)}}
+          {{on 'focus' (optional @onFocus)}}
+          ...attributes
+        />
+        {{#if this.validationIcon}}
+          <span class='validation-icon'>
+            <this.validationIcon role='presentation' />
+          </span>
+        {{/if}}
+        {{#if this.shouldShowErrorMessage}}
+          <div
+            id={{concat 'error-message-' this.helperId}}
+            class='error-message'
+            aria-live='polite'
+            data-test-boxel-input-error-message
+          >{{@errorMessage}}</div>
+        {{/if}}
+        {{#if @helperText}}
+          <div
+            id={{concat 'helper-text-' this.helperId}}
+            class='helper-text'
+            data-test-boxel-input-helper-text
+          >{{@helperText}}</div>
+        {{/if}}
       {{/let}}
     </div>
     <style>
