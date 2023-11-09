@@ -157,10 +157,11 @@ export default class CodeSubmode extends Component<Signature> {
       onCardInstanceChange: () => this.onCardLoaded,
     },
   );
-  private moduleContentsResource = moduleContentsResource(
-    this,
-    () => this.readyFile,
-  );
+  private moduleContentsResource = moduleContentsResource(this, () => {
+    return hasExecutableExtension(this.readyFile.url)
+      ? this.readyFile
+      : undefined;
+  });
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);

@@ -52,7 +52,7 @@ export function isCardOrFieldDeclaration(
 }
 
 interface Args {
-  named: { executableFile: Ready };
+  named: { executableFile: Ready | undefined };
 }
 
 export class ModuleContentsResource extends Resource<Args> {
@@ -68,7 +68,9 @@ export class ModuleContentsResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { executableFile } = named;
-    this.load.perform(executableFile);
+    if (executableFile) {
+      this.load.perform(executableFile);
+    }
   }
 
   private load = restartableTask(async (executableFile: Ready) => {
@@ -145,7 +147,7 @@ export class ModuleContentsResource extends Resource<Args> {
 
 export function moduleContentsResource(
   parent: object,
-  executableFile: () => Ready,
+  executableFile: () => Ready | undefined,
 ): ModuleContentsResource {
   return ModuleContentsResource.from(parent, () => ({
     named: {
