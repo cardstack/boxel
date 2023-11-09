@@ -14,6 +14,7 @@ module('Integration | Component | input', function (hooks) {
     assert.dom('[data-test-input]').hasValue('hello');
 
     assert.dom('[data-test-boxel-input-helper-text]').doesNotExist();
+    assert.dom('[placeholder]').doesNotExist();
   });
 
   test('it returns values through onInput', async function (assert) {
@@ -89,6 +90,14 @@ module('Integration | Component | input', function (hooks) {
     </template>);
 
     assert.dom('*:has([data-test-input])').containsText('help!');
+  });
+
+  test('@placeholder shows', async function (assert) {
+    await render(<template>
+      <BoxelInput data-test-input @placeholder='a placeholder' />
+    </template>);
+
+    assert.dom('[placeholder]').hasAttribute('placeholder', 'a placeholder');
   });
 
   test('it indicates @optional status but @required takes priority', async function (assert) {
