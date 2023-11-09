@@ -6,6 +6,8 @@ import { Resource } from 'ember-resources';
 
 import { getAncestor, getField, isBaseDef } from '@cardstack/runtime-common';
 
+import { Loader } from '@cardstack/runtime-common/loader';
+
 import {
   ModuleSyntax,
   type PossibleCardOrFieldClass,
