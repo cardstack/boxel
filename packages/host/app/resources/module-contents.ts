@@ -14,6 +14,7 @@ import {
   type BaseDeclaration,
   isInternalReference,
   isPossibleCardOrFieldClass,
+  Declaration,
 } from '@cardstack/runtime-common/module-syntax';
 
 import {
@@ -23,10 +24,7 @@ import {
 
 import { type Ready } from '@cardstack/host/resources/file';
 
-import {
-  type ImportResource,
-  importResource,
-} from '@cardstack/host/resources/import';
+import { importResource } from '@cardstack/host/resources/import';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -59,7 +57,6 @@ interface Args {
 
 export class ModuleContentsResource extends Resource<Args> {
   @tracked private _declarations: ModuleDeclaration[] = [];
-  private moduleResource: ImportResource | undefined;
 
   get isLoading() {
     return this.load.isRunning;
@@ -76,10 +73,10 @@ export class ModuleContentsResource extends Resource<Args> {
 
   private load = restartableTask(async (executableFile: Ready) => {
     //==loading module
-    this.moduleResource = importResource(this, () => executableFile.url);
-    await this.moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
+    let moduleResource = importResource(this, () => executableFile.url);
+    await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
     let exportedCardsOrFields = Object.values(
-      this.moduleResource?.module || {},
+      moduleResource?.module || {},
     ).filter(isBaseDef);
 
     //==building declaration structure
@@ -93,48 +90,56 @@ export class ModuleContentsResource extends Resource<Args> {
       moduleSyntax,
       exportedCardsOrFields,
     );
-
-    let results = [];
-    for (const value of moduleSyntax.declarations) {
-      if (isPossibleCardOrFieldClass(value)) {
-        const cardOrField = exportedCardsOrFields.find(
-          (c) => c.name === value.localName,
-        );
-        let loader = Loader.getLoaderFor(cardOrField);
-        if (cardOrField && loader) {
-          let cardType = await getCardType(
-            this,
-            () => cardOrField,
-            () => loader,
+    this._declarations = moduleSyntax.declarations.reduce(
+      (acc: ModuleDeclaration[], value: Declaration) => {
+        if (isPossibleCardOrFieldClass(value)) {
+          const cardOrField = exportedCardsOrFields.find(
+            (c) => c.name === value.localName,
           );
-          results.push({
-            ...value,
-            cardOrField,
-            cardType,
-          } as CardOrField & Partial<PossibleCardOrFieldClass>);
-        } else if (localCardsOrFields.has(value)) {
-          let cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
           let loader = Loader.getLoaderFor(cardOrField);
-          if (cardOrField && loader) {
-            let cardType = await getCardType(
-              this,
-              () => cardOrField,
-              () => loader,
-            );
-            results.push({
-              ...value,
-              cardOrField,
-              cardType,
-            } as CardOrField & Partial<PossibleCardOrFieldClass>);
+          if (cardOrField && loader !== undefined) {
+            return [
+              ...acc,
+              {
+                ...value,
+                cardOrField,
+                cardType: getCardType(
+                  this,
+                  () => cardOrField as typeof BaseDef,
+                  () => loader as Loader,
+                ),
+              } as CardOrField & Partial<PossibleCardOrFieldClass>,
+            ];
+          } else {
+            if (localCardsOrFields.has(value)) {
+              let cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
+              let loader = Loader.getLoaderFor(cardOrField);
+              if (cardOrField && loader !== undefined) {
+                return [
+                  ...acc,
+                  {
+                    ...value,
+                    cardOrField,
+                    cardType: getCardType(
+                      this,
+                      () => cardOrField,
+                      () => loader as Loader,
+                    ),
+                  } as CardOrField & Partial<PossibleCardOrFieldClass>,
+                ];
+              }
+            }
           }
         }
-      } else if (value.exportedAs !== undefined) {
-        // some classes that look like cards may still be included,
-        // we should only non-card or fields which are exported
-        results.push({ ...value } as BaseDeclaration);
-      }
-    }
-    this._declarations = results;
+        if (value.exportedAs !== undefined) {
+          // some classes that look like cards may still be included,
+          // we should only non-card or fields which are exported
+          return [...acc, { ...value } as BaseDeclaration];
+        }
+        return acc;
+      },
+      [],
+    );
   });
 }
 
