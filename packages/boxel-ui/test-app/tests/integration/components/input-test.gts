@@ -80,4 +80,22 @@ module('Integration | Component | input', function (hooks) {
 
     assert.dom('[data-test-input]').hasAttribute('type', 'number');
   });
+
+  test('it indicates @optional status but @required takes priority', async function (assert) {
+    await render(<template>
+      <BoxelInput data-test-optional-input @optional={{true}} />
+      <BoxelInput
+        data-test-required-input
+        @required={{true}}
+        @optional={{true}}
+      />
+    </template>);
+
+    assert.dom('*:has([data-test-optional-input])').containsText('Optional');
+
+    assert
+      .dom('*:has([data-test-required-input])')
+      .doesNotContainText('Optional');
+    assert.dom('[data-test-required-input]').hasAttribute('required');
+  });
 });
