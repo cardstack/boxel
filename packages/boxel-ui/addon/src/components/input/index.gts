@@ -78,11 +78,11 @@ export interface Signature {
 
 export default class BoxelInput extends Component<Signature> {
   helperId = guidFor(this);
-  get id() {
+  private get id() {
     return this.args.id || this.helperId;
   }
 
-  get isMultiline() {
+  private get isMultiline() {
     return this.args.type === 'textarea';
   }
 
@@ -90,7 +90,7 @@ export default class BoxelInput extends Component<Signature> {
     return this.args.type === 'search';
   }
 
-  get modifiedTypeFIXME() {
+  private get modifiedTypeFIXME() {
     // what is a good name for this? mostly @type but undefined when it’s default or textarea
 
     let type = this.args.type;
@@ -103,7 +103,7 @@ export default class BoxelInput extends Component<Signature> {
     return type;
   }
 
-  get hasValidation() {
+  private get hasValidation() {
     return this.args.state && this.args.state !== 'none';
   }
 
@@ -111,7 +111,7 @@ export default class BoxelInput extends Component<Signature> {
     return this.args.state === 'invalid';
   }
 
-  get validationIcon(): Icon | undefined {
+  private get validationIcon(): Icon | undefined {
     if (this.args.disabled) {
       return undefined;
     }
