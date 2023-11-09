@@ -91,13 +91,10 @@ export default class BoxelInput extends Component<Signature> {
     return this.args.type === 'search';
   }
 
-  private get modifiedTypeFIXME() {
-    // what is a good name for this? mostly @type but undefined when it’s default or textarea
-
+  private get type() {
     let type = this.args.type;
 
     if (type === InputTypes.Default || type === InputTypes.Textarea) {
-      // FIXME assert on this in tests
       return undefined;
     }
 
@@ -155,7 +152,7 @@ export default class BoxelInput extends Component<Signature> {
             boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
           }}
           id={{this.id}}
-          type={{this.modifiedTypeFIXME}}
+          type={{this.type}}
           value={{@value}}
           placeholder={{@placeholder}}
           required={{@required}}
