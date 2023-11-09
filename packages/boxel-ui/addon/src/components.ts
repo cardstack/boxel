@@ -12,9 +12,9 @@ import Header from './components/header/index.gts';
 import IconButton from './components/icon-button/index.gts';
 import BoxelInput, {
   type InputBottomTreatment as BoxelInputBottomTreatment,
-  InputBottomTreatments as BoxelInputBottomTreatments,
   // FIXME what is a consistent export nomenclature?
-  InputValidationState,
+  type InputValidationState,
+  InputBottomTreatments as BoxelInputBottomTreatments,
   InputValidationStates,
 } from './components/input/index.gts';
 import Label from './components/label/index.gts';

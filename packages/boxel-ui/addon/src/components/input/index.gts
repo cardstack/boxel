@@ -46,12 +46,7 @@ export const InputValidationStates = {
   Initial: 'initial',
 };
 
-export type InputValidationState =
-  | 'none'
-  | 'valid'
-  | 'invalid'
-  | 'loading'
-  | 'initial';
+export type InputValidationState = Values<typeof InputValidationStates>;
 
 export const InputBottomTreatments = {
   Flat: 'flat',
