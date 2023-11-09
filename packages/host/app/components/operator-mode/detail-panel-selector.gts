@@ -278,6 +278,7 @@ export default class Selector extends Component<Signature> {
           margin-left: auto;
           text-transform: uppercase;
           color: var(--boxel-450);
+          white-space: nowrap;
         }
 
         .boxel-selector__item--selected .selector-item .type {
