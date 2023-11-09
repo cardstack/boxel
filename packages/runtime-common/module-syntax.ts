@@ -331,8 +331,12 @@ function makeNewField({
   if (
     (fieldType === 'linksTo' || fieldType === 'linksToMany') &&
     isEqual(
-      codeRefWithAbsoluteURL(fieldRef, moduleURL),
-      codeRefWithAbsoluteURL(cardBeingModified, moduleURL),
+      codeRefWithAbsoluteURL(fieldRef, moduleURL, {
+        trimExecutableExtension: true,
+      }),
+      codeRefWithAbsoluteURL(cardBeingModified, moduleURL, {
+        trimExecutableExtension: true,
+      }),
     )
   ) {
     // syntax for when a card has a linksTo or linksToMany field to a card with the same type as itself
