@@ -6,12 +6,14 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 module('Integration | Component | input', function (hooks) {
   setupRenderingTest(hooks);
 
-  test('it passes through the value', async function (assert) {
+  test('it passes through the value and does not render missing optional properties', async function (assert) {
     await render(<template>
       <BoxelInput data-test-input @value='hello' />
     </template>);
 
     assert.dom('[data-test-input]').hasValue('hello');
+
+    assert.dom('[data-test-boxel-input-helper-text]').doesNotExist();
   });
 
   test('it returns values through onInput', async function (assert) {
@@ -79,6 +81,14 @@ module('Integration | Component | input', function (hooks) {
     </template>);
 
     assert.dom('[data-test-input]').hasAttribute('type', 'number');
+  });
+
+  test('@helperText shows', async function (assert) {
+    await render(<template>
+      <BoxelInput data-test-input @helperText='help!' />
+    </template>);
+
+    assert.dom('*:has([data-test-input])').containsText('help!');
   });
 
   test('it indicates @optional status but @required takes priority', async function (assert) {
