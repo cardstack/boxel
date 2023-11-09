@@ -77,10 +77,10 @@ export interface Signature {
 }
 
 export default class BoxelInput extends Component<Signature> {
-  private helperId = guidFor(this);
+  private guid = guidFor(this);
 
   private get id() {
-    return this.args.id || this.helperId;
+    return this.args.id || this.guid;
   }
 
   private get isMultiline() {
@@ -162,13 +162,13 @@ export default class BoxelInput extends Component<Signature> {
           disabled={{@disabled}}
           aria-describedby={{if
             @helperText
-            (concat 'helper-text-' this.helperId)
+            (concat 'helper-text-' this.guid)
             false
           }}
           aria-invalid={{if this.isInvalid 'true'}}
           aria-errormessage={{if
             this.shouldShowErrorMessage
-            (concat 'error-message-' this.helperId)
+            (concat 'error-message-' this.guid)
             false
           }}
           data-test-boxel-input
@@ -187,7 +187,7 @@ export default class BoxelInput extends Component<Signature> {
         {{/if}}
         {{#if this.shouldShowErrorMessage}}
           <div
-            id={{concat 'error-message-' this.helperId}}
+            id={{concat 'error-message-' this.guid}}
             class='error-message'
             aria-live='polite'
             data-test-boxel-input-error-message
@@ -195,7 +195,7 @@ export default class BoxelInput extends Component<Signature> {
         {{/if}}
         {{#if @helperText}}
           <div
-            id={{concat 'helper-text-' this.helperId}}
+            id={{concat 'helper-text-' this.guid}}
             class='helper-text'
             data-test-boxel-input-helper-text
           >{{@helperText}}</div>
