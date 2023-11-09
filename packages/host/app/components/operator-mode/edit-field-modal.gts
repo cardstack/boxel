@@ -211,27 +211,20 @@ export default class EditFieldModal extends Component<Signature> {
       );
     }
 
-    let identifiedCard = identifyCard(this.args.card) as {
-      module: string;
-      name: string;
-    };
-
+    let identifiedCard = identifyCard(this.args.card)!;
     let addFieldAtIndex = undefined;
 
     if (!this.isNewField) {
       // We are editing a field, so we need to first remove the old one, and then add the new one
       addFieldAtIndex = this.args.moduleSyntax.removeField(
-        { type: 'exportedName', name: identifiedCard.name },
+        identifiedCard,
         this.args.field!.name,
       );
     }
 
     try {
       this.args.moduleSyntax.addField(
-        {
-          type: 'exportedName',
-          name: identifiedCard.name,
-        },
+        identifiedCard,
         this.fieldName,
         this.fieldRef as { module: string; name: string },
         this.fieldType,

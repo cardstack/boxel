@@ -6,6 +6,7 @@ import {
   type PossibleCardOrFieldClass,
   type Declaration,
   type BaseDeclaration,
+  type ClassReference,
   isPossibleCardOrFieldClass,
   isInternalReference,
 } from './schema-analysis-plugin';
@@ -14,11 +15,17 @@ import {
   Options as RemoveOptions,
 } from './remove-field-plugin';
 import { ImportUtil } from 'babel-import-util';
-import startCase from 'lodash/startCase';
 import camelCase from 'lodash/camelCase';
 import upperFirst from 'lodash/upperFirst';
+import isEqual from 'lodash/isEqual';
 import { parseTemplates } from '@cardstack/ember-template-imports/lib/parse-templates';
-import { baseRealm, maybeRelativeURL } from './index';
+import {
+  baseRealm,
+  maybeRelativeURL,
+  trimExecutableExtension,
+  codeRefWithAbsoluteURL,
+  type CodeRef,
+} from './index';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -37,8 +44,10 @@ export class ModuleSyntax {
   declare possibleCardsOrFields: PossibleCardOrFieldClass[];
   declare declarations: Declaration[];
   private declare ast: t.File;
+  private url: URL;
 
-  constructor(src: string) {
+  constructor(src: string, url: URL) {
+    this.url = trimExecutableExtension(url);
     this.analyze(src);
   }
 
@@ -75,9 +84,7 @@ export class ModuleSyntax {
   // A note about incomingRelativeTo and outgoingRelativeTo - path parameters in input (e.g. field module path) and output (e.g. field import path) are
   // relative to some path, and we use these parameters to determine what that path is so that the emitted code has correct relative paths.
   addField(
-    cardName:
-      | { type: 'exportedName'; name: string }
-      | { type: 'localName'; name: string },
+    cardBeingModified: CodeRef,
     fieldName: string,
     fieldRef: { name: string; module: string }, // module could be a relative path
     fieldType: FieldType,
@@ -86,7 +93,7 @@ export class ModuleSyntax {
     outgoingRealmURL: URL | undefined, // should be provided when the other 2 params are provided
     addFieldAtIndex?: number, // if provided, the field will be added at the specified index in the card's possibleFields map
   ) {
-    let card = this.getCard(cardName);
+    let card = this.getCard(cardBeingModified);
     if (card.possibleFields.has(fieldName)) {
       // At this level, we can only see this specific module. we'll need the
       // upstream caller to perform a field existence check on the card
@@ -94,20 +101,21 @@ export class ModuleSyntax {
       throw new Error(`the field "${fieldName}" already exists`);
     }
 
-    let newField = makeNewField(
-      card.path,
+    let newField = makeNewField({
+      target: card.path,
       fieldRef,
       fieldType,
       fieldName,
-      cardName.name,
+      cardBeingModified,
       incomingRelativeTo,
       outgoingRelativeTo,
       outgoingRealmURL,
-    );
+      moduleURL: this.url,
+    });
 
     let src = this.code();
     this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
-    card = this.getCard(cardName); // re-get the card to get the updated node positions
+    card = this.getCard(cardBeingModified); // re-get the card to get the updated node positions
 
     let insertPosition: number;
 
@@ -161,13 +169,8 @@ export class ModuleSyntax {
   // child cards. Removing a field that is consumed by this card or cards that
   // adopt from this card will cause runtime errors. We'd probably need to rely
   // on card compilation to be able to guard for this scenario
-  removeField(
-    cardName:
-      | { type: 'exportedName'; name: string }
-      | { type: 'localName'; name: string },
-    fieldName: string,
-  ) {
-    let card = this.getCard(cardName);
+  removeField(cardBeingModified: CodeRef, fieldName: string) {
+    let card = this.getCard(cardBeingModified);
     let field = card.possibleFields.get(fieldName);
     if (!field) {
       throw new Error(`field "${fieldName}" does not exist`);
@@ -193,30 +196,76 @@ export class ModuleSyntax {
     return fieldIndex; // Useful for re-adding a new field in the same position (i.e editing a field, which is composed of removeField and addField)
   }
 
-  private getCard(
-    card:
-      | { type: 'exportedName'; name: string }
-      | { type: 'localName'; name: string },
-  ): PossibleCardOrFieldClass {
-    let cardName = card.name;
-    let cardClass: PossibleCardOrFieldClass | undefined;
-    if (card.type === 'exportedName') {
-      cardClass = this.possibleCardsOrFields.find(
-        (c) => c.exportedAs === cardName,
+  // This function performs the same job as
+  // @cardstack/runtime-common/code-ref.ts#loadCard() but using syntax instead
+  // of running code
+  private getCard(codeRef: CodeRef): PossibleCardOrFieldClass {
+    let cardOrFieldClass: PossibleCardOrFieldClass | undefined;
+    if (!('type' in codeRef)) {
+      cardOrFieldClass = this.possibleCardsOrFields.find(
+        (c) => c.exportedAs === codeRef.name,
+      );
+    } else if (codeRef.type === 'ancestorOf') {
+      let classRef = this.getCard(codeRef.card).super;
+      if (!classRef) {
+        throw new Error(
+          `Could not determine the ancestor of ${JSON.stringify(
+            codeRef,
+          )} in module ${this.url.href}`,
+        );
+      }
+      cardOrFieldClass = this.getPossibleCardForClassReference(classRef);
+    } else if (codeRef.type === 'fieldOf') {
+      let parentCard = this.getCard(codeRef.card);
+      let field = parentCard.possibleFields.get(codeRef.field);
+      if (!field) {
+        throw new Error(
+          `interior card ${JSON.stringify(codeRef)} has no field '${
+            codeRef.field
+          }' in module ${this.url.href}`,
+        );
+      }
+      cardOrFieldClass = this.getPossibleCardForClassReference(field.card);
+    }
+    if (!cardOrFieldClass) {
+      throw new Error(
+        `cannot find card ${JSON.stringify(codeRef)} in module ${
+          this.url.href
+        }`,
+      );
+    }
+    return cardOrFieldClass;
+  }
+
+  private getPossibleCardForClassReference(
+    classRef: ClassReference,
+  ): PossibleCardOrFieldClass | undefined {
+    if (classRef.type === 'external') {
+      if (
+        trimExecutableExtension(new URL(classRef.module, this.url)) === this.url
+      ) {
+        return this.possibleCardsOrFields.find(
+          (c) => c.exportedAs === classRef.name,
+        );
+      }
+      throw new Error(
+        `Don't know how to resolve external class reference ${JSON.stringify(
+          classRef,
+        )} into a card/field. Module syntax only has knowledge of this particular module ${
+          this.url.href
+        }.`,
       );
     } else {
-      cardClass = this.possibleCardsOrFields.find(
-        (c) => c.localName === cardName,
+      if (classRef.classIndex == null) {
+        throw new Error(
+          `Cannot resolve class reference with undefined 'classIndex' when looking up interior card/field in module ${this.url.href}`,
+        );
+      }
+      let declaration = this.declarations[classRef.classIndex];
+      return this.possibleCardsOrFields.find(
+        (c) => c.path === declaration.path,
       );
     }
-    if (!cardClass) {
-      throw new Error(
-        `cannot find card with ${startCase(
-          card.type,
-        ).toLowerCase()} of "${cardName}" in module`,
-      );
-    }
-    return cardClass;
   }
 }
 
@@ -241,16 +290,27 @@ function preprocessTemplateTags(src: string): string {
   return output.join('');
 }
 
-function makeNewField(
-  target: NodePath<t.Node>,
-  fieldRef: { name: string; module: string },
-  fieldType: FieldType,
-  fieldName: string,
-  cardName: string,
-  incomingRelativeTo: URL | undefined,
-  outgoingRelativeTo: URL | undefined,
-  outgoingRealmURL: URL | undefined,
-): string {
+function makeNewField({
+  target,
+  fieldRef,
+  fieldType,
+  fieldName,
+  cardBeingModified,
+  incomingRelativeTo,
+  outgoingRelativeTo,
+  outgoingRealmURL,
+  moduleURL,
+}: {
+  target: NodePath<t.Node>;
+  fieldRef: { name: string; module: string };
+  fieldType: FieldType;
+  fieldName: string;
+  cardBeingModified: CodeRef;
+  incomingRelativeTo: URL | undefined;
+  outgoingRelativeTo: URL | undefined;
+  outgoingRealmURL: URL | undefined;
+  moduleURL: URL;
+}): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
   //typeof Babel.types
@@ -270,10 +330,13 @@ function makeNewField(
 
   if (
     (fieldType === 'linksTo' || fieldType === 'linksToMany') &&
-    cardName === fieldRef.name
+    isEqual(
+      codeRefWithAbsoluteURL(fieldRef, moduleURL),
+      codeRefWithAbsoluteURL(cardBeingModified, moduleURL),
+    )
   ) {
     // syntax for when a card has a linksTo or linksToMany field to a card with the same type as itself
-    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${cardName});`;
+    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldRef.name});`;
   }
 
   let relativeFieldModuleRef;
