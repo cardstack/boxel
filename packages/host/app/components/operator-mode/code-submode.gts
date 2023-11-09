@@ -283,6 +283,9 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
+    if (this.moduleContentsResource.isLoading) {
+      return null;
+    }
     // If file is incompatible
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
