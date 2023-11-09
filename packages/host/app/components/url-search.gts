@@ -6,7 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
 
-import { BoxelInputValidationState } from '@cardstack/boxel-ui/components';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import type { InputValidationState } from '@cardstack/boxel-ui/components';
 
 import {
@@ -29,7 +29,7 @@ export default class UrlSearch extends Component<Signature> {
   <template>
     <label class='url-search'>
       <span>Enter Card URL:</span>
-      <BoxelInputValidationState
+      <BoxelInput
         data-test-url-field
         placeholder='https://'
         @value={{this.cardURL}}
