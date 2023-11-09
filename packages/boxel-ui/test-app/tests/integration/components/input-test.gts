@@ -20,6 +20,7 @@ module('Integration | Component | input', function (hooks) {
     </template>);
 
     assert.dom('[data-test-input]').hasValue('hello');
+    assert.dom('[data-test-input]').doesNotHaveAttribute('type');
 
     assert.dom('[data-test-boxel-input-helper-text]').doesNotExist();
     assert.dom('[aria-describedBy]').doesNotExist();
@@ -84,6 +85,7 @@ module('Integration | Component | input', function (hooks) {
     </template>);
 
     assert.dom('[data-test-input]').hasTagName('textarea');
+    assert.dom('[data-test-input]').doesNotHaveAttribute('type');
   });
 
   test('other @type passes through', async function (assert) {
