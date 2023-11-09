@@ -176,6 +176,7 @@ export default class BoxelInput extends Component<Signature> {
             }}
             data-test-boxel-input
             data-test-boxel-input-id={{@id}}
+            data-test-boxel-input-validation-state={{if @disabled true @state}}
             {{on 'input' (pick 'target.value' (optional @onInput))}}
             {{on 'blur' (optional @onBlur)}}
             {{on 'keypress' (optional @onKeyPress)}}
