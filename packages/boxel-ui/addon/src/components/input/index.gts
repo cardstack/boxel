@@ -128,7 +128,7 @@ export default class BoxelInput extends Component<Signature> {
   }
 
   <template>
-    <div class='input-container'>
+    <div class={{cn 'input-container' is-multiline=this.isMultiline}}>
       {{#if (and (not @required) @optional)}}
         <div class='optional'>Optional</div>
       {{/if}}
@@ -215,6 +215,10 @@ export default class BoxelInput extends Component<Signature> {
           position: relative;
           /* FIXME names? also only this height when validation exists? */
           height: var(--validation-group-height);
+
+          &.is-multiline {
+            height: auto;
+          }
         }
 
         .boxel-input {
