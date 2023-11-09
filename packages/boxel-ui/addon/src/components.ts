@@ -13,13 +13,10 @@ import IconButton from './components/icon-button/index.gts';
 import BoxelInput, {
   type InputBottomTreatment as BoxelInputBottomTreatment,
   InputBottomTreatments as BoxelInputBottomTreatments,
+  // FIXME what is a consistent export nomenclature?
+  InputValidationState,
+  InputValidationStates,
 } from './components/input/index.gts';
-import SearchInput, {
-  type SearchInputBottomTreatment,
-  SearchInputBottomTreatments,
-} from './components/input/search-input/index.gts';
-import type { InputValidationState } from './components/input/validation-state/index.gts';
-import BoxelInputValidationState from './components/input/validation-state/index.gts';
 import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import Menu from './components/menu/index.gts';
@@ -40,7 +37,6 @@ export {
   BoxelInput,
   BoxelInputBottomTreatment,
   BoxelInputBottomTreatments,
-  BoxelInputValidationState,
   BoxelMessage,
   Button,
   CardContainer,
@@ -50,6 +46,7 @@ export {
   Header,
   IconButton,
   InputValidationState,
+  InputValidationStates,
   Label,
   LoadingIndicator,
   Menu,
@@ -58,8 +55,5 @@ export {
   PanelContext,
   RadioInput,
   ResizablePanelGroup,
-  SearchInput,
-  SearchInputBottomTreatment,
-  SearchInputBottomTreatments,
   Tooltip,
 };
