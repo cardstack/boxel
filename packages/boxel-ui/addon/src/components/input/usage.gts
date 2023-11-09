@@ -12,9 +12,9 @@ import {
 import cssVar from '../../helpers/css-var.ts';
 import BoxelInput from './index.gts';
 import {
+  type InputValidationState,
   InputBottomTreatments,
   InputTypes,
-  InputValidationState,
   InputValidationStates,
 } from './index.gts';
 
