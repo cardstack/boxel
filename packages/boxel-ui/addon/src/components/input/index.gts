@@ -130,7 +130,13 @@ export default class BoxelInput extends Component<Signature> {
   }
 
   <template>
-    <div class={{cn 'input-container' is-multiline=this.isMultiline}}>
+    <div
+      class={{cn
+        'input-container'
+        has-validation=this.hasValidation
+        is-multiline=this.isMultiline
+      }}
+    >
       {{#if (and (not @required) @optional)}}
         <div class='optional'>Optional</div>
       {{/if}}
@@ -178,9 +184,9 @@ export default class BoxelInput extends Component<Signature> {
           ...attributes
         />
         {{#if this.validationIcon}}
-          <span class='validation-icon'>
+          <div class='validation-icon'>
             <this.validationIcon role='presentation' />
-          </span>
+          </div>
         {{/if}}
         {{#if this.shouldShowErrorMessage}}
           <div
@@ -201,18 +207,17 @@ export default class BoxelInput extends Component<Signature> {
     </div>
     <style>
       @layer {
-        .input-container {
+        .input-container.has-validation {
           --validation-group-height: 4.375rem;
           --validation-group-icon-size: var(--boxel-icon-sm);
           --validation-group-icon-space: var(--boxel-sp-xs);
 
           position: relative;
-          /* FIXME names? also only this height when validation exists? */
           height: var(--validation-group-height);
+        }
 
-          &.is-multiline {
-            height: auto;
-          }
+        .input-container.is-multiline {
+          height: auto;
         }
 
         .boxel-input {
@@ -305,7 +310,9 @@ export default class BoxelInput extends Component<Signature> {
           width: var(--validation-group-icon-size);
           right: var(--validation-group-icon-space);
           top: var(--validation-group-icon-space);
-          display: inline-block;
+          bottom: var(--validation-group-icon-space);
+          display: flex;
+          align-items: center;
           user-select: none;
         }
 
