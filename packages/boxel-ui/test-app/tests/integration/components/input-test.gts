@@ -1,7 +1,15 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
-import { click, fillIn, find, render, typeIn } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  find,
+  render,
+  settled,
+  typeIn,
+} from '@ember/test-helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { tracked } from '@glimmer/tracking';
 
 module('Integration | Component | input', function (hooks) {
   setupRenderingTest(hooks);
@@ -123,5 +131,75 @@ module('Integration | Component | input', function (hooks) {
       .dom('*:has([data-test-required-input])')
       .doesNotContainText('Optional');
     assert.dom('[data-test-required-input]').hasAttribute('required');
+  });
+
+  test('it shows validation states but not when disabled and not when no error message', async function (assert) {
+    class StateObject {
+      @tracked errorMessage: string | undefined = 'an error';
+      @tracked state = 'none';
+      @tracked disabled = false;
+    }
+
+    let stateObject = new StateObject();
+
+    await render(<template>
+      <BoxelInput
+        data-test-input
+        @state={{stateObject.state}}
+        @disabled={{stateObject.disabled}}
+        @errorMessage={{stateObject.errorMessage}}
+      />
+    </template>);
+
+    assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
+    assert.dom('[data-test-boxel-input-validation-state="none"]').exists();
+    assert.dom('[aria-invalid]').doesNotExist();
+
+    stateObject.state = 'initial';
+    await settled();
+
+    assert.dom('[data-test-boxel-input-validation-state="initial"]').exists();
+
+    stateObject.state = 'invalid';
+    await settled();
+
+    assert.dom('[data-test-boxel-input-validation-state="invalid"]').exists();
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .containsText('an error');
+    assert.dom('[aria-invalid]').exists();
+
+    let errorElementId = find('[data-test-boxel-input-error-message]')?.id;
+    assert.ok(errorElementId, 'error element should exist');
+    assert
+      .dom('[data-test-input]')
+      .hasAttribute('aria-errormessage', errorElementId!);
+
+    stateObject.errorMessage = undefined;
+    await settled();
+
+    assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
+
+    stateObject.errorMessage = 'error again';
+    await settled();
+
+    stateObject.state = 'loading';
+    await settled();
+
+    assert.dom('[data-test-boxel-input-validation-state="loading"]').exists();
+    assert.dom('[aria-invalid]').doesNotExist();
+
+    stateObject.state = 'valid';
+    await settled();
+
+    assert.dom('[data-test-boxel-input-validation-state="valid"]').exists();
+
+    stateObject.disabled = true;
+    await settled();
+
+    assert.dom('[data-test-input]').hasAttribute('disabled');
+    assert
+      .dom('[data-test-input]')
+      .hasNoAttribute('data-test-boxel-input-validation-state');
   });
 });
