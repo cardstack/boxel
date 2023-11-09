@@ -158,9 +158,12 @@ export default class CodeSubmode extends Component<Signature> {
     },
   );
   private moduleContentsResource = moduleContentsResource(this, () => {
-    return hasExecutableExtension(this.readyFile.url)
-      ? this.readyFile
-      : undefined;
+    if (this.isReady) {
+      return hasExecutableExtension(this.readyFile.url)
+        ? this.readyFile
+        : undefined;
+    }
+    return;
   });
 
   constructor(owner: Owner, args: Signature['Args']) {
