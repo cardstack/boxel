@@ -1817,7 +1817,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(
-      `[data-test-url-search] input`,
+      `[data-test-url-search]`,
       `https://cardstack.com/base/types/card`,
     );
     await waitUntil(
@@ -1860,7 +1860,7 @@ module('Integration | operator-mode', function (hooks) {
       .doesNotExist('invalid state is not shown');
 
     await fillIn(
-      `[data-test-url-search] input`,
+      `[data-test-url-search]`,
       `https://cardstack.com/base/not-a-card`,
     );
     await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
@@ -1868,7 +1868,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-boxel-input-error-message]`)
       .containsText('Not a valid Card URL');
     await fillIn(
-      `[data-test-url-search] input`,
+      `[data-test-url-search]`,
       `https://cardstack.com/base/types/room-objective`,
     );
     assert
@@ -1901,7 +1901,7 @@ module('Integration | operator-mode', function (hooks) {
       .exists('card is selected');
 
     await fillIn(
-      `[data-test-url-search] input`,
+      `[data-test-url-search]`,
       `https://cardstack.com/base/types/card`,
     );
 
@@ -1915,7 +1915,7 @@ module('Integration | operator-mode', function (hooks) {
       `[data-test-card-catalog-item="https://cardstack.com/base/types/card"] button`,
     );
     assert
-      .dom(`[data-test-url-search] input`)
+      .dom(`[data-test-url-search]`)
       .hasNoValue('card URL field is cleared');
   });
 
@@ -2227,10 +2227,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await focus(`[data-test-search-field]`);
 
-    await fillIn(
-      `[data-test-url-field] input`,
-      `http://localhost:4202/test/mango`,
-    );
+    await fillIn(`[data-test-url-field]`, `http://localhost:4202/test/mango`);
     await click(`[data-test-go-button]`);
     await waitFor(`[data-test-stack-card="http://localhost:4202/test/mango"]`);
     assert
@@ -2259,7 +2256,7 @@ module('Integration | operator-mode', function (hooks) {
       .doesNotExist('invalid state is not shown');
 
     await fillIn(
-      `[data-test-url-field] input`,
+      `[data-test-url-field]`,
       `http://localhost:4202/test/not-a-card`,
     );
     await click(`[data-test-go-button]`);
@@ -2267,10 +2264,7 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-boxel-input-error-message]`)
       .containsText('Not a valid Card URL');
-    await fillIn(
-      `[data-test-url-field] input`,
-      `http://localhost:4202/test/mango`,
-    );
+    await fillIn(`[data-test-url-field]`, `http://localhost:4202/test/mango`);
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist('invalid state is not shown');

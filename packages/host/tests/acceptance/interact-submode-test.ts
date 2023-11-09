@@ -361,7 +361,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-add-card-button]');
 
       await waitFor('[data-test-url-field]');
-      await fillIn('[data-test-url-field] input', `${testRealmURL}index`);
+      await fillIn('[data-test-url-field]', `${testRealmURL}index`);
 
       await waitFor('[data-test-card-catalog-go-button][disabled]', {
         count: 0,
