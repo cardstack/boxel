@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
-import { click, fillIn, render, typeIn } from '@ember/test-helpers';
+import { click, fillIn, find, render, typeIn } from '@ember/test-helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 module('Integration | Component | input', function (hooks) {
@@ -14,6 +14,8 @@ module('Integration | Component | input', function (hooks) {
     assert.dom('[data-test-input]').hasValue('hello');
 
     assert.dom('[data-test-boxel-input-helper-text]').doesNotExist();
+    assert.dom('[aria-describedBy]').doesNotExist();
+
     assert.dom('[placeholder]').doesNotExist();
   });
 
@@ -89,7 +91,12 @@ module('Integration | Component | input', function (hooks) {
       <BoxelInput data-test-input @helperText='help!' />
     </template>);
 
+    let helperElementId = find('[data-test-boxel-input-helper-text]')?.id;
+
     assert.dom('*:has([data-test-input])').containsText('help!');
+    assert
+      .dom('[data-test-input]')
+      .hasAttribute('aria-describedBy', helperElementId!);
   });
 
   test('@placeholder shows', async function (assert) {
