@@ -77,7 +77,7 @@ export interface Signature {
 }
 
 export default class BoxelInput extends Component<Signature> {
-  helperId = guidFor(this);
+  private helperId = guidFor(this);
 
   private get id() {
     return this.args.id || this.helperId;
