@@ -162,6 +162,10 @@ export default class CodeSubmode extends Component<Signature> {
       onCardInstanceChange: () => this.onCardLoaded,
     },
   );
+  private moduleContentsResource = moduleContentsResource(
+    this,
+    () => this.readyFile,
+  );
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -344,18 +348,6 @@ export default class CodeSubmode extends Component<Signature> {
   private get currentOpenFile() {
     return this.operatorModeStateService.openFile.current;
   }
-
-  @use private moduleContentsResource = resource(() => {
-    if (isReady(this.currentOpenFile)) {
-      let f: Ready = this.currentOpenFile;
-      if (hasExecutableExtension(f.url)) {
-        return moduleContentsResource(this, () => ({
-          executableFile: f,
-        }));
-      }
-    }
-    return;
-  });
 
   private onCardLoaded = (
     oldCard: CardDef | undefined,
