@@ -139,13 +139,6 @@ export default class BoxelInput extends Component<Signature> {
       {{#if (and (not @required) @optional)}}
         <div class='optional'>Optional</div>
       {{/if}}
-      {{#if this.isSearch}}
-        <div
-          class={{cn 'search-icon-container' has-validation=this.hasValidation}}
-        >
-          <IconSearch class='search-icon' width='20' height='20' />
-        </div>
-      {{/if}}
       {{#let (element (if this.isMultiline 'textarea' 'input')) as |InputTag|}}
         <InputTag
           class={{cn
@@ -182,8 +175,18 @@ export default class BoxelInput extends Component<Signature> {
           {{on 'focus' (optional @onFocus)}}
           ...attributes
         />
+        {{#if this.isSearch}}
+          <div
+            class={{cn
+              'search-icon-container'
+              has-validation=this.hasValidation
+            }}
+          >
+            <IconSearch class='search-icon' width='20' height='20' />
+          </div>
+        {{/if}}
         {{#if this.validationIcon}}
-          <div class='validation-icon'>
+          <div class='validation-icon-container'>
             <this.validationIcon role='presentation' />
           </div>
         {{/if}}
@@ -208,22 +211,24 @@ export default class BoxelInput extends Component<Signature> {
       .input-container {
         --icon-size: var(--boxel-icon-sm);
         --icon-space: var(--boxel-sp-xs);
+        --icon-full-length: calc(var(--boxel-icon-sm) + var(--boxel-sp-xs) * 2);
 
-        position: relative;
-      }
-
-      .input-container.has-validation {
-        --validation-group-height: 4.375rem;
-
-        height: var(--validation-group-height);
-      }
-
-      .input-container.is-multiline {
-        height: auto;
+        display: grid;
+        grid-template-columns: var(--icon-full-length) 1fr var(
+            --icon-full-length
+          );
+        grid-template-areas:
+          'optional optional optional'
+          'pre-icon input post-icon'
+          'error error error'
+          'helper helper helper';
       }
 
       .boxel-input {
         --boxel-input-height: var(--boxel-form-control-height);
+
+        grid-column: 1 / span 3;
+        grid-row: 2;
 
         box-sizing: border-box;
         width: 100%;
@@ -295,36 +300,32 @@ export default class BoxelInput extends Component<Signature> {
       .search-icon-container {
         --icon-color: var(--boxel-highlight);
 
-        position: absolute;
-        width: var(--icon-size);
-        right: var(--icon-space);
-        top: 0;
+        grid-area: post-icon;
 
         display: flex;
         height: 100%;
         align-items: center;
+        justify-content: center;
       }
 
       .search-icon-container.has-validation {
-        right: unset;
-        width: var(--icon-size);
-        right: var(--icon-space);
-        top: var(--icon-space);
-        bottom: var(--icon-space);
-
-        left: var(--boxel-sp-xs);
+        grid-area: pre-icon;
       }
 
-      .validation-icon {
-        position: absolute;
+      .validation-icon-container {
+        grid-area: post-icon;
+
         display: flex;
         align-items: center;
+        justify-content: center;
         user-select: none;
       }
 
       .optional {
-        grid-row: 1;
-        grid-column: 1 / -1;
+        /*grid-row: 1;
+        grid-column: 1 / -1;*/
+        grid-area: optional;
+
         margin-bottom: var(--boxel-sp-xxxs);
         color: rgb(0 0 0 / 75%);
         font: var(--boxel-font-sm);
@@ -334,18 +335,20 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .error-message {
-        grid-column: 2;
+        grid-area: error;
+
         margin-top: var(--boxel-sp-xxxs);
-        margin-left: var(--boxel-sp-xxxs);
+        margin-left: calc(var(--boxel-sp-sm) + 1px);
         color: var(--boxel-error-200);
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
       }
 
       .helper-text {
-        grid-column: 2;
+        grid-area: helper;
+
         margin-top: var(--boxel-sp-xs);
-        margin-left: var(--boxel-sp-xs);
+        margin-left: calc(var(--boxel-sp-sm) + 1px);
         color: rgb(0 0 0 / 75%);
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
