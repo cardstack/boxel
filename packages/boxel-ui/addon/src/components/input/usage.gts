@@ -132,13 +132,13 @@ export default class InputUsage extends Component {
           @name='optional'
           @value={{this.optional}}
           @onInput={{fn (mut this.optional)}}
-          @description="Displays 'optional' label, unless the '@required' arg is also true"
+          @description='Displays optional label, unless @required=true'
         />
         <Args.String
           @name='errorMessage'
           @value={{this.errorMessage}}
           @onInput={{fn (mut this.errorMessage)}}
-          @description="This will only show up if the '@invalid' arg returns true"
+          @description="Only shows with @state='invalid'"
         />
         <Args.String
           @name='helperText'
@@ -169,7 +169,7 @@ export default class InputUsage extends Component {
         />
         <Args.Action
           @name='onInput'
-          @description='Function to update the passed in value. This receives the changed value as a string.'
+          @description='Receives the changed value as a string'
         />
         <Args.Action @name='onKeyPress' @description='Action on key press' />
         <Args.Action @name='onFocus' @description='Action on focus' />
