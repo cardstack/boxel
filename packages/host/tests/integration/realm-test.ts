@@ -2808,4 +2808,30 @@ posts/ignore-me.gts
       '/_info response is correct',
     );
   });
+
+  test('realm does not crash when indexing a broken instance', async function (assert) {
+    let realm = await TestRealm.create(
+      loader,
+      {
+        'FieldDef/1.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'FieldDef',
+              },
+            },
+          },
+        },
+      },
+      this.owner,
+    ); // this is an example of a card that where loadCard will throw an error
+
+    await realm.ready;
+    assert.ok(
+      true,
+      'realm did not crash when trying to index a broken instance',
+    );
+  });
 });
