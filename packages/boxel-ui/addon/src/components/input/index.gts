@@ -322,8 +322,6 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .optional {
-        /*grid-row: 1;
-        grid-column: 1 / -1;*/
         grid-area: optional;
 
         margin-bottom: var(--boxel-sp-xxxs);
