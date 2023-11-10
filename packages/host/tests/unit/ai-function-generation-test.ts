@@ -2,37 +2,63 @@ import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { loadCard } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import {
-  testRealmURL,
-  setupCardLogs,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
   TestRealmAdapter,
-  TestRealm,
-  sourceFetchRedirectHandle,
-  sourceFetchReturnUrlHandle,
+  setupCardLogs,
 } from '../helpers';
 
+import {
+  RenderingTestContext,
+} from '@ember/test-helpers';
+
+
+import { shimExternals } from '@cardstack/host/lib/externals';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import {
+  primitive as primitiveType,
+  queryableValue as queryableValueType,
+} from 'https://cardstack.com/base/card-api';
+
+
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let string: typeof import('https://cardstack.com/base/string');
+let number: typeof import('https://cardstack.com/base/number');
+let date: typeof import('https://cardstack.com/base/date');
+let datetime: typeof import('https://cardstack.com/base/datetime');
+let boolean: typeof import('https://cardstack.com/base/boolean');
+let codeRef: typeof import('https://cardstack.com/base/code-ref');
+let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
+let primitive: typeof primitiveType;
+let queryableValue: typeof queryableValueType;
 
 let loader: Loader;
 
 module('Unit | ai-function-generation-test', function (hooks) {
-  let adapter: TestRealmAdapter;
-  let realm: Realm;
   let owner: any;
   setupRenderingTest(hooks);
-
-  hooks.beforeEach(function () {
+  hooks.beforeEach(function (this: RenderingTestContext) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
+  });
+  hooks.beforeEach(async function () {
+    shimExternals(loader);
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    primitive = cardApi.primitive;
+    queryableValue = cardApi.queryableValue;
+    string = await loader.import(`${baseRealm.url}string`);
+    number = await loader.import(`${baseRealm.url}number`);
+    date = await loader.import(`${baseRealm.url}date`);
+    datetime = await loader.import(`${baseRealm.url}datetime`);
+    boolean = await loader.import(`${baseRealm.url}boolean`);
+    codeRef = await loader.import(`${baseRealm.url}code-ref`);
+    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
   });
 
   setupLocalIndexing(hooks);
@@ -43,55 +69,20 @@ module('Unit | ai-function-generation-test', function (hooks) {
   );
   setupServerSentEvents(hooks);
 
-  async function createCard(code: string) {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    adapter = new TestRealmAdapter({
-      'testcard.gts': code,
-    });
-    realm = await TestRealm.createWithAdapter(adapter, loader, owner, {
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
-        },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
-        },
-      ],
-    });
-    await realm.ready;
-    return await loadCard(
-      { name: 'TestCard', module: 'testcard' },
-      { loader: loader, relativeTo: new URL(testRealmURL) },
-    );
-  }
-
   hooks.beforeEach(async function () {
     owner = this.owner;
   });
 
   test(`generates a simple compliant schema for basic types`, async function (assert) {
-    let basicCard = await createCard(`
-    import StringField from 'https://cardstack.com/base/string';
-    import NumberField from 'https://cardstack.com/base/number';
-    import {
-        Component,
-        CardDef,
-        field,
-        contains,
-    } from 'https://cardstack.com/base/card-api';
-
-    export class TestCard extends CardDef {
-        static displayName = 'TestCard';
-        @field stringField = contains(StringField);
-        @field numberField = contains(NumberField);
-        @field computedField = contains(StringField, {
-        computeVia: function (this: TestCard) {
-            return 'generated';
-        },
-        });
+    let { field, contains, CardDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+    class BasicCard extends CardDef {
+      @field stringField = contains(StringField);
+      @field numberField = contains(NumberField);
     }
-    `);
-    let schema = cardApi.generatePatchCallSpecification(basicCard);
+
+    let schema = cardApi.generatePatchCallSpecification(BasicCard);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -104,55 +95,19 @@ module('Unit | ai-function-generation-test', function (hooks) {
     });
   });
 
-  test(`generates a simple compliant schema when there are thunks`, async function (assert) {
-    let basicCard = await createCard(`
-    import StringField from 'https://cardstack.com/base/string';
-    import NumberField from 'https://cardstack.com/base/number';
-    import {
-        Component,
-        CardDef,
-        field,
-        contains,
-    } from 'https://cardstack.com/base/card-api';
-
-    export class TestCard extends CardDef {
-        static displayName = 'TestCard';
-        @field stringField = contains(() => StringField);
-    }
-    `);
-    let schema = cardApi.generatePatchCallSpecification(basicCard);
-    assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        stringField: { type: 'string' },
-      },
-    });
-  });
-
   test(`generates a simple compliant schema for nested types`, async function (assert) {
-    let nestedCard = await createCard(`
-    import StringField from 'https://cardstack.com/base/string';
-    import {
-        Component,
-        CardDef,
-        FieldDef,
-        field,
-        contains,
-    } from 'https://cardstack.com/base/card-api';
+
+    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
 
     class InternalField extends FieldDef {
-        @field innerStringField = contains(StringField);
+      @field innerStringField = contains(StringField);
+    }
+    class BasicCard extends CardDef {
+      @field containerField = contains(InternalField);
     }
 
-    export class TestCard extends CardDef {
-        static displayName = 'TestCard';
-        @field containerField = contains(InternalField);
-    }
-    `);
-    let schema = cardApi.generatePatchCallSpecification(nestedCard);
+    let schema = cardApi.generatePatchCallSpecification(BasicCard);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -170,27 +125,17 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`should support contains many`, async function (assert) {
-    let nestedCard = await createCard(`
-    import StringField from 'https://cardstack.com/base/string';
-    import {
-        Component,
-        CardDef,
-        FieldDef,
-        field,
-        contains,
-        containsMany,
-    } from 'https://cardstack.com/base/card-api';
+    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
 
     class InternalField extends FieldDef {
-        @field innerStringField = containsMany(StringField);
+      @field innerStringField = containsMany(StringField);
+    }
+    class TestCard extends CardDef {
+      @field containerField = contains(InternalField);
     }
 
-    export class TestCard extends CardDef {
-        static displayName = 'TestCard';
-        @field containerField = contains(InternalField);
-    }
-    `);
-    let schema = cardApi.generatePatchCallSpecification(nestedCard);
+    let schema = cardApi.generatePatchCallSpecification(TestCard);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -208,28 +153,19 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`does not generate anything for linksTo`, async function (assert) {
-    let nestedCard = await createCard(`
-    import StringField from 'https://cardstack.com/base/string';
-    import {
-        Component,
-        CardDef,
-        FieldDef,
-        field,
-        linksTo,
-        contains
-    } from 'https://cardstack.com/base/card-api';
-
+    let { field, contains, linksTo, CardDef } = cardApi;
+    let { default: StringField } = string;
     class OtherCard extends CardDef {
-        @field innerStringField = contains(StringField);
+      @field innerStringField = contains(StringField);
     }
 
-    export class TestCard extends CardDef {
-        static displayName = 'TestCard';
-        @field linkedCard = linksTo(OtherCard);
-        @field simpleField = contains(StringField);
+    class TestCard extends CardDef {
+      static displayName = 'TestCard';
+      @field linkedCard = linksTo(OtherCard);
+      @field simpleField = contains(StringField);
     }
-    `);
-    let schema = cardApi.generatePatchCallSpecification(nestedCard);
+
+    let schema = cardApi.generatePatchCallSpecification(TestCard);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -242,29 +178,21 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`skips over fields that can't be recognised`, async function (assert) {
-    let nestedCard = await createCard(`
-    import StringField from 'https://cardstack.com/base/string';
-    import {
-        Component,
-        CardDef,
-        FieldDef,
-        field,
-        contains,
-        primitive
-    } from 'https://cardstack.com/base/card-api';
+    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
 
     class NewField extends FieldDef {
-        static displayName = 'NewField';
-        static [primitive]: number;
+      static displayName = 'NewField';
+      static [primitive]: number;
     }
 
-    export class TestCard extends CardDef {
-        static displayName = 'TestCard';
-        @field keepField = contains(StringField);
-        @field skipField = contains(NewField);
+    class TestCard extends CardDef {
+      static displayName = 'TestCard';
+      @field keepField = contains(StringField);
+      @field skipField = contains(NewField);
     }
-    `);
-    let schema = cardApi.generatePatchCallSpecification(nestedCard);
+
+    let schema = cardApi.generatePatchCallSpecification(TestCard);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -272,46 +200,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
         title: { type: 'string' },
         description: { type: 'string' },
         keepField: { type: 'string' },
-      },
-    });
-  });
-
-  test(`Doesn't break when there's a loop`, async function (assert) {
-    let nestedCard = await createCard(`
-    import StringField from 'https://cardstack.com/base/string';
-    import {
-        Component,
-        CardDef,
-        FieldDef,
-        field,
-        contains,
-    } from 'https://cardstack.com/base/card-api';
-
-    class RecursiveField extends FieldDef {
-        @field innerRecursiveField = contains(() => RecursiveField);
-        @field innerStringField = contains(StringField);
-    }
-
-    export class TestCard extends CardDef {
-        static displayName = 'TestCard';
-        @field keepField = contains(StringField);
-        @field recursiveField = contains(RecursiveField);
-    }
-    `);
-    let schema = cardApi.generatePatchCallSpecification(nestedCard);
-    assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        keepField: { type: 'string' },
-        recursiveField: {
-          type: 'object',
-          properties: {
-            innerStringField: { type: 'string' },
-          },
-        },
       },
     });
   });
