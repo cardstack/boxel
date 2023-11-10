@@ -60,8 +60,6 @@ export default class CodeEditor extends Component<Signature> {
       // parent component (EC task lifetimes are bound to their context)
       // that is not being destroyed.
       if (this.codePath && this.hasUnsavedSourceChanges) {
-        // we let the monaco changes win if there are unsaved changes both
-        // monaco and the card preview (an arbitrary choice)
         let monacoContent = this.monacoService.getMonacoContent();
         if (monacoContent) {
           this.args.saveSourceOnClose(this.codePath, monacoContent);
