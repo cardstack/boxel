@@ -45,12 +45,13 @@ import {
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
-import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
+import { getCard } from '@cardstack/host/resources/card-resource';
 import {
   isReady,
   type Ready,
@@ -83,10 +84,8 @@ import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
-import SubmodeLayout from './submode-layout';
 import NewFileButton from './new-file-button';
-
-import { getCard } from '@cardstack/host/resources/card-resource';
+import SubmodeLayout from './submode-layout';
 
 interface Signature {
   Args: {
@@ -382,14 +381,12 @@ export default class CodeSubmode extends Component<Signature> {
     return this.card;
   }
 
-  @action
-  private initializeMonacoCursorPosition() {
+  private get initialMonacoCursorPosition() {
     if (this.selectedDeclaration?.path?.node.loc) {
       let { start } = this.selectedDeclaration.path.node.loc;
-      this.monacoService.updateCursorPosition(
-        new Position(start.line, start.column),
-      );
+      return new Position(start.line, start.column);
     }
+    return undefined;
   }
 
   @action
@@ -875,7 +872,7 @@ export default class CodeSubmode extends Component<Signature> {
                         contentChanged=(perform this.contentChangedTask)
                         monacoSDK=this.monacoSDK
                         language=this.language
-                        initializeCursorPosition=this.initializeMonacoCursorPosition
+                        initialCursorPosition=this.initialMonacoCursorPosition
                         onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
                       }}
                     ></div>

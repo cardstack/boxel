@@ -16,7 +16,7 @@ interface Signature {
     Named: {
       content: string;
       contentChanged: (text: string) => void;
-      initializeCursorPosition?: () => void;
+      initialCursorPosition?: MonacoSDK.Position;
       onCursorPositionChange?: (position: MonacoSDK.Position) => void;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
       language?: string;
@@ -25,7 +25,7 @@ interface Signature {
   };
 }
 
-const { monacoDebounceMs } = config;
+const { monacoDebounceMs, monacoCursorDebounceMs } = config;
 
 export default class Monaco extends Modifier<Signature> {
   private model: MonacoSDK.editor.ITextModel | undefined;
@@ -33,6 +33,7 @@ export default class Monaco extends Modifier<Signature> {
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
   private lastModified = Date.now();
+  private lastCursorPosition: MonacoSDK.Position | undefined;
   @service private declare monacoService: MonacoService;
 
   modify(
@@ -42,7 +43,7 @@ export default class Monaco extends Modifier<Signature> {
       content,
       language,
       contentChanged,
-      initializeCursorPosition,
+      initialCursorPosition,
       onCursorPositionChange,
       onSetup,
       monacoSDK,
@@ -99,14 +100,13 @@ export default class Monaco extends Modifier<Signature> {
           let position = this.editor.getPosition();
           if (position) {
             onCursorPositionChange?.(position);
+            this.lastCursorPosition = position;
           }
         }
       });
     }
     this.lastLanguage = language;
-    if (this.editor && !this.editor.hasTextFocus()) {
-      initializeCursorPosition?.();
-    }
+    this.initializeCursorPosition.perform(initialCursorPosition);
   }
 
   private onContentChanged = restartableTask(
@@ -116,6 +116,22 @@ export default class Monaco extends Modifier<Signature> {
       if (this.model) {
         this.lastContent = this.model.getValue();
         contentChanged(this.lastContent);
+      }
+    },
+  );
+
+  // Initialize cursor position asynchronously
+  // to avoid potential effects on other elements.
+  // If this affects other elements, there is a potential double update to a value in the same computation,
+  // leading to an infinite Glimmer invalidation error.
+  private initializeCursorPosition = restartableTask(
+    async (position?: MonacoSDK.Position) => {
+      await timeout(monacoCursorDebounceMs);
+      if (!position) {
+        position = new MonacoSDK.Position(1, 1);
+      }
+      if (!this.lastCursorPosition) {
+        this.monacoService.updateCursorPosition(position);
       }
     },
   );
