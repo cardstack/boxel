@@ -34,7 +34,7 @@ export default class InputUsage extends Component {
   @tracked state: InputValidationState = 'initial';
   @tracked variant: 'large' | 'default' = 'default';
 
-  defaultType = InputTypes.Default;
+  defaultType = InputTypes.Text;
   @tracked type = this.defaultType;
 
   defaultBottomTreatment = InputBottomTreatments.Rounded;

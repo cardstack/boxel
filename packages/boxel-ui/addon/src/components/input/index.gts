@@ -17,7 +17,7 @@ import type { Icon } from '../../icons/types.ts';
 type Values<T> = T[keyof T];
 
 export const InputTypes = {
-  Default: 'default',
+  Text: 'text',
   Textarea: 'textarea',
   Password: 'password',
   Number: 'number',
@@ -93,7 +93,7 @@ export default class BoxelInput extends Component<Signature> {
   private get type() {
     let type = this.args.type;
 
-    if (type === InputTypes.Default || type === InputTypes.Textarea) {
+    if (type === InputTypes.Textarea) {
       return undefined;
     }
 
@@ -359,7 +359,7 @@ export default class BoxelInput extends Component<Signature> {
         display: none;
       }
 
-      .boxel-input::placeholder {
+      .boxel-input.search::placeholder {
         color: var(--boxel-light);
         opacity: 0.6;
       }
