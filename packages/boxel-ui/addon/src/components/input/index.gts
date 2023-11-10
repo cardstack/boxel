@@ -284,7 +284,9 @@ export default class BoxelInput extends Component<Signature> {
 
         background-color: var(--boxel-dark);
         color: var(--boxel-light);
+        padding-top: var(--boxel-sp-xxxs);
         padding-right: var(--boxel-sp-xl);
+        padding-bottom: var(--boxel-sp-xxxs);
       }
 
       .search.has-validation {
