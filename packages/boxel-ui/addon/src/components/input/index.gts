@@ -206,13 +206,14 @@ export default class BoxelInput extends Component<Signature> {
     </div>
     <style>
       .input-container {
+        --icon-size: var(--boxel-icon-sm);
+        --icon-space: var(--boxel-sp-xs);
+
         position: relative;
       }
 
       .input-container.has-validation {
         --validation-group-height: 4.375rem;
-        --validation-group-icon-size: var(--boxel-icon-sm);
-        --validation-group-icon-space: var(--boxel-sp-xs);
 
         height: var(--validation-group-height);
       }
@@ -295,23 +296,27 @@ export default class BoxelInput extends Component<Signature> {
         --icon-color: var(--boxel-highlight);
 
         position: absolute;
-        width: var(--validation-group-icon-size);
-        left: var(--validation-group-icon-space);
-        top: var(--validation-group-icon-space);
-        display: inline-block;
+        width: var(--icon-size);
+        right: var(--icon-space);
+        top: 0;
+
+        display: flex;
+        height: 100%;
+        align-items: center;
       }
 
       .search-icon-container.has-validation {
         right: unset;
+        width: var(--icon-size);
+        right: var(--icon-space);
+        top: var(--icon-space);
+        bottom: var(--icon-space);
+
         left: var(--boxel-sp-xs);
       }
 
       .validation-icon {
         position: absolute;
-        width: var(--validation-group-icon-size);
-        right: var(--validation-group-icon-space);
-        top: var(--validation-group-icon-space);
-        bottom: var(--validation-group-icon-space);
         display: flex;
         align-items: center;
         user-select: none;
