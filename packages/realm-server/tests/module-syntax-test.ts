@@ -364,6 +364,69 @@ module('module-syntax', function () {
     );
   });
 
+  test('can add a field to an interior card within a module that also has non card declarations', async function (assert) {
+    let src = `
+      import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Foo {}
+
+      class Details extends CardDef {
+        @field favoriteColor = contains(StringCard);
+      }
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringCard);
+        @field details = contains(Details);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.firstName/></h1></template>
+        }
+      }
+    `;
+
+    let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+    mod.addField(
+      {
+        type: 'fieldOf',
+        field: 'details',
+        card: { module: `${testRealm}dir/person`, name: 'Person' },
+      },
+      'age',
+      {
+        module: 'https://cardstack.com/base/number',
+        name: 'default',
+      },
+      'contains',
+      undefined,
+      undefined,
+      undefined,
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import NumberCard from "https://cardstack.com/base/number";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Foo {}
+
+        class Details extends CardDef {
+          @field favoriteColor = contains(StringCard);
+          @field age = contains(NumberCard);
+        }
+
+        export class Person extends CardDef {
+          @field firstName = contains(StringCard);
+          @field details = contains(Details);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><h1><@fields.firstName/></h1></template>
+          }
+        }
+      `,
+    );
+  });
+
   test('can add a containsMany field', async function (assert) {
     let src = `
       import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";

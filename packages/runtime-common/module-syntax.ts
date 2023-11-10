@@ -261,10 +261,7 @@ export class ModuleSyntax {
           `Cannot resolve class reference with undefined 'classIndex' when looking up interior card/field in module ${this.url.href}`,
         );
       }
-      let declaration = this.declarations[classRef.classIndex];
-      return this.possibleCardsOrFields.find(
-        (c) => c.path === declaration.path,
-      );
+      return this.possibleCardsOrFields[classRef.classIndex];
     }
   }
 }
