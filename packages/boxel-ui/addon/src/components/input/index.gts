@@ -205,161 +205,159 @@ export default class BoxelInput extends Component<Signature> {
       {{/let}}
     </div>
     <style>
-      @layer {
-        .input-container {
-          position: relative;
-        }
+      .input-container {
+        position: relative;
+      }
 
-        .input-container.has-validation {
-          --validation-group-height: 4.375rem;
-          --validation-group-icon-size: var(--boxel-icon-sm);
-          --validation-group-icon-space: var(--boxel-sp-xs);
+      .input-container.has-validation {
+        --validation-group-height: 4.375rem;
+        --validation-group-icon-size: var(--boxel-icon-sm);
+        --validation-group-icon-space: var(--boxel-sp-xs);
 
-          height: var(--validation-group-height);
-        }
+        height: var(--validation-group-height);
+      }
 
-        .input-container.is-multiline {
-          height: auto;
-        }
+      .input-container.is-multiline {
+        height: auto;
+      }
 
-        .boxel-input {
-          --boxel-input-height: var(--boxel-form-control-height);
+      .boxel-input {
+        --boxel-input-height: var(--boxel-form-control-height);
 
-          box-sizing: border-box;
-          width: 100%;
-          min-height: var(--boxel-input-height);
-          padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-          border: 1px solid var(--boxel-form-control-border-color);
-          border-radius: var(--boxel-form-control-border-radius);
-          font: var(--boxel-font-sm);
-          font-weight: 400;
-          letter-spacing: var(--boxel-lsp-xs);
-          transition: border-color var(--boxel-transition);
-        }
+        box-sizing: border-box;
+        width: 100%;
+        min-height: var(--boxel-input-height);
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border: 1px solid var(--boxel-form-control-border-color);
+        border-radius: var(--boxel-form-control-border-radius);
+        font: var(--boxel-font-sm);
+        font-weight: 400;
+        letter-spacing: var(--boxel-lsp-xs);
+        transition: border-color var(--boxel-transition);
+      }
 
-        .boxel-input--large {
-          --boxel-form-control-height: 4.375rem;
+      .boxel-input--large {
+        --boxel-form-control-height: 4.375rem;
 
-          font: var(--boxel-font);
-          letter-spacing: var(--boxel-lsp-xs);
-        }
+        font: var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
 
-        .boxel-text-area {
-          --boxel-input-height: 10rem;
-        }
+      .boxel-text-area {
+        --boxel-input-height: 10rem;
+      }
 
-        .boxel-input:disabled {
-          background-color: var(--boxel-light);
-          border-color: var(--boxel-purple-300);
-          color: rgb(0 0 0 / 50%);
-          opacity: 0.5;
-        }
+      .boxel-input:disabled {
+        background-color: var(--boxel-light);
+        border-color: var(--boxel-purple-300);
+        color: rgb(0 0 0 / 50%);
+        opacity: 0.5;
+      }
 
-        .boxel-input:hover:not(:disabled) {
-          border-color: var(--boxel-dark);
-        }
+      .boxel-input:hover:not(:disabled) {
+        border-color: var(--boxel-dark);
+      }
 
-        .invalid {
-          border-color: var(--boxel-error-100);
-          box-shadow: 0 0 0 1px var(--boxel-error-100);
-        }
+      .invalid {
+        border-color: var(--boxel-error-100);
+        box-shadow: 0 0 0 1px var(--boxel-error-100);
+      }
 
-        .invalid:focus {
-          outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
-          box-shadow: 0 0 0 1.5px var(--boxel-error-100);
-        }
+      .invalid:focus {
+        outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
+        box-shadow: 0 0 0 1.5px var(--boxel-error-100);
+      }
 
-        .invalid:hover:not(:disabled) {
-          border-color: var(--boxel-error-100);
-        }
+      .invalid:hover:not(:disabled) {
+        border-color: var(--boxel-error-100);
+      }
 
-        .search {
-          --boxel-form-control-border-color: var(--boxel-dark);
-          --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
+      .search {
+        --boxel-form-control-border-color: var(--boxel-dark);
+        --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
 
-          background-color: var(--boxel-dark);
-          color: var(--boxel-light);
-          padding-right: var(--boxel-sp-xl);
-        }
+        background-color: var(--boxel-dark);
+        color: var(--boxel-light);
+        padding-right: var(--boxel-sp-xl);
+      }
 
-        .search.has-validation {
-          padding-right: unset;
-          padding-left: var(--boxel-sp-xl);
-        }
+      .search.has-validation {
+        padding-right: unset;
+        padding-left: var(--boxel-sp-xl);
+      }
 
-        .boxel-input--bottom-flat {
-          --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
-            var(--boxel-border-radius-xl) 0 0;
-        }
+      .boxel-input--bottom-flat {
+        --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
+          var(--boxel-border-radius-xl) 0 0;
+      }
 
-        .search-icon-container {
-          --icon-color: var(--boxel-highlight);
+      .search-icon-container {
+        --icon-color: var(--boxel-highlight);
 
-          position: absolute;
-          width: var(--validation-group-icon-size);
-          left: var(--validation-group-icon-space);
-          top: var(--validation-group-icon-space);
-          display: inline-block;
-        }
+        position: absolute;
+        width: var(--validation-group-icon-size);
+        left: var(--validation-group-icon-space);
+        top: var(--validation-group-icon-space);
+        display: inline-block;
+      }
 
-        .search-icon-container.has-validation {
-          right: unset;
-          left: var(--boxel-sp-xs);
-        }
+      .search-icon-container.has-validation {
+        right: unset;
+        left: var(--boxel-sp-xs);
+      }
 
-        .validation-icon {
-          position: absolute;
-          width: var(--validation-group-icon-size);
-          right: var(--validation-group-icon-space);
-          top: var(--validation-group-icon-space);
-          bottom: var(--validation-group-icon-space);
-          display: flex;
-          align-items: center;
-          user-select: none;
-        }
+      .validation-icon {
+        position: absolute;
+        width: var(--validation-group-icon-size);
+        right: var(--validation-group-icon-space);
+        top: var(--validation-group-icon-space);
+        bottom: var(--validation-group-icon-space);
+        display: flex;
+        align-items: center;
+        user-select: none;
+      }
 
-        .optional {
-          grid-row: 1;
-          grid-column: 1 / -1;
-          margin-bottom: var(--boxel-sp-xxxs);
-          color: rgb(0 0 0 / 75%);
-          font: var(--boxel-font-sm);
-          font-style: oblique;
-          letter-spacing: var(--boxel-lsp);
-          text-align: right;
-        }
+      .optional {
+        grid-row: 1;
+        grid-column: 1 / -1;
+        margin-bottom: var(--boxel-sp-xxxs);
+        color: rgb(0 0 0 / 75%);
+        font: var(--boxel-font-sm);
+        font-style: oblique;
+        letter-spacing: var(--boxel-lsp);
+        text-align: right;
+      }
 
-        .error-message {
-          grid-column: 2;
-          margin-top: var(--boxel-sp-xxxs);
-          margin-left: var(--boxel-sp-xxxs);
-          color: var(--boxel-error-200);
-          font: 500 var(--boxel-font-sm);
-          letter-spacing: var(--boxel-lsp);
-        }
+      .error-message {
+        grid-column: 2;
+        margin-top: var(--boxel-sp-xxxs);
+        margin-left: var(--boxel-sp-xxxs);
+        color: var(--boxel-error-200);
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
+      }
 
-        .helper-text {
-          grid-column: 2;
-          margin-top: var(--boxel-sp-xs);
-          margin-left: var(--boxel-sp-xs);
-          color: rgb(0 0 0 / 75%);
-          font: var(--boxel-font-sm);
-          letter-spacing: var(--boxel-lsp);
-        }
+      .helper-text {
+        grid-column: 2;
+        margin-top: var(--boxel-sp-xs);
+        margin-left: var(--boxel-sp-xs);
+        color: rgb(0 0 0 / 75%);
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
+      }
 
-        /* Combine these when this is fixed: https://github.com/cardstack/glimmer-scoped-css/pull/11 */
-        .boxel-input:disabled ~ .error-message {
-          display: none;
-        }
+      /* Combine these when this is fixed: https://github.com/cardstack/glimmer-scoped-css/pull/11 */
+      .boxel-input:disabled ~ .error-message {
+        display: none;
+      }
 
-        .boxel-input:disabled ~ .helper-text {
-          display: none;
-        }
+      .boxel-input:disabled ~ .helper-text {
+        display: none;
+      }
 
-        .boxel-input::placeholder {
-          color: var(--boxel-light);
-          opacity: 0.6;
-        }
+      .boxel-input::placeholder {
+        color: var(--boxel-light);
+        opacity: 0.6;
       }
     </style>
   </template>
