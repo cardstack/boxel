@@ -206,12 +206,15 @@ export default class BoxelInput extends Component<Signature> {
     </div>
     <style>
       @layer {
+        .input-container {
+          position: relative;
+        }
+
         .input-container.has-validation {
           --validation-group-height: 4.375rem;
           --validation-group-icon-size: var(--boxel-icon-sm);
           --validation-group-icon-space: var(--boxel-sp-xs);
 
-          position: relative;
           height: var(--validation-group-height);
         }
 
