@@ -115,13 +115,13 @@ test.describe('User Registration w/ Token', () => {
     await page.locator('[data-test-confirm-password-field]').fill('mypassword');
     await expect(
       page.locator(
-        '[data-test-username-field] [data-test-boxel-input-validation-state="initial"]',
+        '[data-test-username-field][data-test-boxel-input-validation-state="initial"]',
       ),
       'username field displays initial validation state',
     ).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-username-field] [data-test-boxel-input-error-message]',
+        '[data-test-username-field] ~ [data-test-boxel-input-error-message]',
       ),
       'no error message is displayed',
     ).toHaveCount(0);
@@ -129,20 +129,20 @@ test.describe('User Registration w/ Token', () => {
 
     await expect(
       page.locator(
-        '[data-test-username-field] [data-test-boxel-input-validation-state="invalid"]',
+        '[data-test-username-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'username field displays invalid validation state',
     ).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-username-field] [data-test-boxel-input-error-message]',
+        '[data-test-username-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText('User ID already taken');
 
     await page.locator('[data-test-username-field]').fill('user2');
     await expect(
       page.locator(
-        '[data-test-username-field] [data-test-boxel-input-error-message]',
+        '[data-test-username-field] ~ [data-test-boxel-input-error-message]',
       ),
       'no error message is displayed',
     ).toHaveCount(0);
@@ -179,39 +179,39 @@ test.describe('User Registration w/ Token', () => {
     await page.locator('[data-test-token-field]').fill('invalid token');
     await expect(
       page.locator(
-        '[data-test-token-field] [data-test-boxel-input-validation-state="initial"]',
+        '[data-test-token-field][data-test-boxel-input-validation-state="initial"]',
       ),
       'token field displays initial validation state',
     ).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-token-field] [data-test-boxel-input-error-message]',
+        '[data-test-token-field] ~ [data-test-boxel-input-error-message]',
       ),
       'no error message is displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-next-btn]').click();
     await expect(
       page.locator(
-        '[data-test-token-field] [data-test-boxel-input-validation-state="invalid"]',
+        '[data-test-token-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'token field displays invalid validation state',
     ).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-token-field] [data-test-boxel-input-error-message]',
+        '[data-test-token-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText('Invalid registration token');
 
     await page.locator('[data-test-token-field]').fill('abc123');
     await expect(
       page.locator(
-        '[data-test-token-field] [data-test-boxel-input-validation-state="initial"]',
+        '[data-test-token-field][data-test-boxel-input-validation-state="initial"]',
       ),
       'token field displays initial validation state',
     ).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-token-field] [data-test-boxel-input-error-message]',
+        '[data-test-token-field] ~ [data-test-boxel-input-error-message]',
       ),
       'no error message is displayed',
     ).toHaveCount(0);
@@ -233,36 +233,36 @@ test.describe('User Registration w/ Token', () => {
     await page.locator('[data-test-register-btn]').click();
     await expect(
       page.locator(
-        '[data-test-password-field] [data-test-boxel-input-validation-state="invalid"]',
+        '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
     ).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-password-field] [data-test-boxel-input-error-message]',
+        '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toHaveText('Passwords do not match');
     await expect(
       page.locator(
-        '[data-test-confirm-password-field] [data-test-boxel-input-validation-state="invalid"]',
+        '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
     ).toHaveCount(1);
 
     await page.locator('[data-test-confirm-password-field]').fill('mypassword');
     await expect(
       page.locator(
-        '[data-test-password-field] [data-test-boxel-input-validation-state="invalid"]',
+        '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'password field does not have error state',
     ).toHaveCount(0);
     await expect(
       page.locator(
-        '[data-test-password-field] [data-test-boxel-input-error-message]',
+        '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
       ),
       'password error message does not appear',
     ).toHaveCount(0);
     await expect(
       page.locator(
-        '[data-test-confirm-password-field] [data-test-boxel-input-validation-state="invalid"]',
+        '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'confirm password field does not have error state',
     ).toHaveCount(0);
