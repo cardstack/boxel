@@ -12,10 +12,9 @@ import Header from './components/header/index.gts';
 import IconButton from './components/icon-button/index.gts';
 import BoxelInput, {
   type InputBottomTreatment as BoxelInputBottomTreatment,
-  // FIXME what is a consistent export nomenclature?
-  type InputValidationState,
+  type InputValidationState as BoxelInputValidationState,
   InputBottomTreatments as BoxelInputBottomTreatments,
-  InputValidationStates,
+  InputValidationStates as BoxelInputValidationStates,
 } from './components/input/index.gts';
 import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
@@ -37,6 +36,8 @@ export {
   BoxelInput,
   BoxelInputBottomTreatment,
   BoxelInputBottomTreatments,
+  BoxelInputValidationState,
+  BoxelInputValidationStates,
   BoxelMessage,
   Button,
   CardContainer,
@@ -45,8 +46,6 @@ export {
   GridContainer,
   Header,
   IconButton,
-  InputValidationState,
-  InputValidationStates,
   Label,
   LoadingIndicator,
   Menu,
