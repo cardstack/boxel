@@ -8,6 +8,7 @@ import {
 import { Loader } from './loader';
 import { isField } from './constants';
 import { CardError } from './error';
+import { trimExecutableExtension } from './index';
 
 export type ResolvedCodeRef = {
   module: string;
@@ -82,9 +83,14 @@ export function isFieldDef(field: any): field is typeof FieldDef {
 export function codeRefWithAbsoluteURL(
   ref: CodeRef,
   relativeTo?: URL | undefined,
+  opts?: { trimExecutableExtension?: true },
 ): CodeRef {
   if (!('type' in ref)) {
-    return { ...ref, module: new URL(ref.module, relativeTo).href };
+    let moduleURL = new URL(ref.module, relativeTo);
+    if (opts?.trimExecutableExtension) {
+      moduleURL = trimExecutableExtension(moduleURL);
+    }
+    return { ...ref, module: moduleURL.href };
   }
   return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
 }

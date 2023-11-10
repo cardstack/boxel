@@ -758,9 +758,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-add-field-button]');
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
-    +(await waitFor(
-      '[data-test-select="http://test-realm/test/person-entry"]',
-    ));
+    await waitFor('[data-test-select="http://test-realm/test/person-entry"]');
     await click('[data-test-select="http://test-realm/test/person-entry"]');
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'favPerson');
