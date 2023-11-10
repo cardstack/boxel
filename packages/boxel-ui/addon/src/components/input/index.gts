@@ -29,10 +29,10 @@ export const InputTypes = {
   Date: 'date',
   Datetime: 'datetime-local',
   Checkbox: 'checkbox',
-  Image: 'image', // FIXME is this worth supporting? requires src to make sense
+  Image: 'image',
   Radio: 'radio',
-  Range: 'range', // FIXME maybe show this with separate usage to add range parameters
-  Search: 'search', // FIXME only move icon left when validation exists
+  Range: 'range',
+  Search: 'search',
 };
 
 export type InputType = Values<typeof InputTypes>;
@@ -70,7 +70,7 @@ export interface Signature {
     state?: InputValidationState;
     type?: InputType;
     value: string | number | null | undefined;
-    variant?: 'large' | 'default'; // FIXME ignored for now
+    variant?: 'large' | 'default';
   };
   Element: HTMLInputElement | HTMLTextAreaElement;
 }
