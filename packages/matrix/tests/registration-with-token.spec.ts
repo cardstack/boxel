@@ -71,13 +71,11 @@ test.describe('User Registration w/ Token', () => {
       'token field is not displayed',
     ).toHaveCount(0);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field] input').fill('user1');
+    await page.locator('[data-test-username-field]').fill('user1');
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field] input').fill('mypassword');
+    await page.locator('[data-test-password-field]').fill('mypassword');
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page
-      .locator('[data-test-confirm-password-field] input')
-      .fill('mypassword');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword');
     await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
     await page.locator('[data-test-register-btn]').click();
 
@@ -87,7 +85,7 @@ test.describe('User Registration w/ Token', () => {
       'username field is not displayed',
     ).toHaveCount(0);
     await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
-    await page.locator('[data-test-token-field] input').fill('abc123');
+    await page.locator('[data-test-token-field]').fill('abc123');
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
@@ -112,8 +110,8 @@ test.describe('User Registration w/ Token', () => {
 
     await gotoRegistration(page);
     await validateEmail(page, 'user1@example.com');
-    await page.locator('[data-test-username-field] input').fill('user1');
-    await page.locator('[data-test-password-field] input').fill('mypassword');
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword');
     await page.locator('[data-test-confirm-password-field]').fill('mypassword');
     await expect(
       page.locator(
@@ -141,7 +139,7 @@ test.describe('User Registration w/ Token', () => {
       ),
     ).toContainText('User ID already taken');
 
-    await page.locator('[data-test-username-field] input').fill('user2');
+    await page.locator('[data-test-username-field]').fill('user2');
     await expect(
       page.locator(
         '[data-test-username-field] [data-test-boxel-input-error-message]',
@@ -150,7 +148,7 @@ test.describe('User Registration w/ Token', () => {
     ).toHaveCount(0);
     await page.locator('[data-test-register-btn]').click();
 
-    await page.locator('[data-test-token-field] input').fill('abc123');
+    await page.locator('[data-test-token-field]').fill('abc123');
     await page.locator('[data-test-next-btn]').click();
 
     await assertLoggedIn(page, {
@@ -172,13 +170,13 @@ test.describe('User Registration w/ Token', () => {
 
     await gotoRegistration(page);
     await validateEmail(page, 'user1@example.com');
-    await page.locator('[data-test-username-field] input').fill('user1');
-    await page.locator('[data-test-password-field] input').fill('mypassword');
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword');
     await page.locator('[data-test-confirm-password-field]').fill('mypassword');
     await page.locator('[data-test-register-btn]').click();
 
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
-    await page.locator('[data-test-token-field] input').fill('invalid token');
+    await page.locator('[data-test-token-field]').fill('invalid token');
     await expect(
       page.locator(
         '[data-test-token-field] [data-test-boxel-input-validation-state="initial"]',
@@ -204,7 +202,7 @@ test.describe('User Registration w/ Token', () => {
       ),
     ).toContainText('Invalid registration token');
 
-    await page.locator('[data-test-token-field] input').fill('abc123');
+    await page.locator('[data-test-token-field]').fill('abc123');
     await expect(
       page.locator(
         '[data-test-token-field] [data-test-boxel-input-validation-state="initial"]',
@@ -227,10 +225,10 @@ test.describe('User Registration w/ Token', () => {
     await gotoRegistration(page);
     await validateEmail(page, 'user1@example.com');
 
-    await page.locator('[data-test-username-field] input').fill('user1');
-    await page.locator('[data-test-password-field] input').fill('mypassword');
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword');
     await page
-      .locator('[data-test-confirm-password-field] input')
+      .locator('[data-test-confirm-password-field]')
       .fill('does not match');
     await page.locator('[data-test-register-btn]').click();
     await expect(
@@ -249,9 +247,7 @@ test.describe('User Registration w/ Token', () => {
       ),
     ).toHaveCount(1);
 
-    await page
-      .locator('[data-test-confirm-password-field] input')
-      .fill('mypassword');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword');
     await expect(
       page.locator(
         '[data-test-password-field] [data-test-boxel-input-validation-state="invalid"]',
@@ -299,12 +295,10 @@ test.describe('User Registration w/ Token', () => {
           page.locator('[data-test-token-field]'),
           'token field is not displayed',
         ).toHaveCount(0);
-        await page.locator('[data-test-username-field] input').fill('user1');
+        await page.locator('[data-test-username-field]').fill('user1');
+        await page.locator('[data-test-password-field]').fill('mypassword');
         await page
-          .locator('[data-test-password-field] input')
-          .fill('mypassword');
-        await page
-          .locator('[data-test-confirm-password-field] input')
+          .locator('[data-test-confirm-password-field]')
           .fill('mypassword');
         await page.locator('[data-test-register-btn]').click();
 
@@ -313,7 +307,7 @@ test.describe('User Registration w/ Token', () => {
           page.locator('[data-test-username-field]'),
           'username field is not displayed',
         ).toHaveCount(0);
-        await page.locator('[data-test-token-field] input').fill('abc123');
+        await page.locator('[data-test-token-field]').fill('abc123');
         await page.locator('[data-test-next-btn]').click();
 
         await expect(
