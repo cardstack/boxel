@@ -2936,25 +2936,18 @@ type Schema =
   | PrimitiveSchema;
 
 /**
- * Generates the JSON schema required for patching
+ * From a card definition, generate a JSON Schema that can be used to
+ *  define the shape of a patch call. Fields that cannot be automatically
+ *  identified may be omitted from the schema.
+ *
+ *  This is a subset of JSON Schema.
  *
  * @param def - The BaseDef to generate the patch call specification for.
- * @param typeChain - A list of the types
+ * @returns The generated patch call specification as JSON schema
  */
-function _generatePatchCallSpecification(
+export function generatePatchCallSpecification(
   def: typeof BaseDef,
-  typeChain: string[],
 ) {
-  // If we have already seen this type, then we are in a recursive loop
-  // and we should stop. This can happen when a card has a field that
-  // references itself.
-  if (typeChain.includes(def.name)) {
-    return undefined;
-  } else {
-    // This must be a copy, otherwise we're mutating an array
-    // used through the recursive calls
-    typeChain = [...typeChain, def.name];
-  }
   // An explicit list of types that we will support in the patch call
   if (primitive in def) {
     switch (def.name) {
@@ -2969,6 +2962,7 @@ function _generatePatchCallSpecification(
       case 'DateTimeField':
         return { type: 'string', format: 'date-time' };
       default:
+        // Any case not explicitly known about should be skipped
         return undefined;
     }
   }
@@ -2990,7 +2984,7 @@ function _generatePatchCallSpecification(
     if (field.computeVia) {
       continue;
     }
-    let fieldSchema = _generatePatchCallSpecification(field.card, typeChain);
+    let fieldSchema = generatePatchCallSpecification(field.card);
     if (fieldSchema == undefined) {
       continue;
     }
@@ -3004,20 +2998,4 @@ function _generatePatchCallSpecification(
     }
   }
   return schema;
-}
-
-/**
- * From a card definition, generate a JSON Schema that can be used to
- *  define the shape of a patch call. Fields that cannot be automatically
- *  identified may be omitted from the schema.
- *
- *  This is a subset of JSON Schema.
- *
- * @param def - The BaseDef to generate the patch call specification for.
- * @returns The generated patch call specification as JSON schema
- */
-export function generatePatchCallSpecification(def: typeof BaseDef) {
-  // End users should never be calling the function specifying the typeChain
-  // parameter, so we default it to an empty array.
-  return _generatePatchCallSpecification(def, []);
 }
