@@ -823,28 +823,41 @@ module('Acceptance | code submode tests', function (hooks) {
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
+    await waitFor('[data-test-editor]');
     //default is the 1st index
     let elementName = 'AClassWithExportName (LocalClass) class';
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
-    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
+    assert.true(
+      monacoService.getLineCursorOn()?.includes('LocalClass'),
+      'cursor is on LocalClass line',
+    );
 
     // clicking on a card
     elementName = 'ExportedCard';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+    assert.true(
+      monacoService.getLineCursorOn()?.includes(elementName),
+      'cursor is on ExportedCard line',
+    );
 
     // clicking on a field
     elementName = 'ExportedField';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+    assert.true(
+      monacoService.getLineCursorOn()?.includes(elementName),
+      'cursor is on ExportedField line',
+    );
 
     // clicking on an exported function
     elementName = 'exportedFunction';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+    assert.true(
+      monacoService.getLineCursorOn()?.includes(elementName),
+      'cursor is on exportedFunction line',
+    );
   });
 
   test('changes selected module declaration when cursor position is changed', async function (assert) {
