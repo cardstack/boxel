@@ -150,7 +150,6 @@ export default class InputUsage extends Component {
           @description='Placeholder text'
           @onInput={{fn (mut this.placeholder)}}
           @value={{this.placeholder}}
-          @defaultValue='Search'
         />
         <Args.String
           @name='bottomTreatment'
