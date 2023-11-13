@@ -23,6 +23,8 @@ import {
   SearchInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
 
+import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
+
 import {
   isSingleCardDocument,
   baseRealm,
@@ -33,8 +35,6 @@ import ENV from '@cardstack/host/config/environment';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-
-import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
 import UrlSearch from '../url-search';
 
@@ -115,13 +115,24 @@ export default class SearchSheet extends Component<Signature> {
     return 'Search for…';
   }
 
+  get searchKeyIsURL() {
+    try {
+      new URL(this.searchKey);
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
   getCard = restartableTask(async (cardURL: string) => {
     let response = await this.loaderService.loader.fetch(cardURL, {
       headers: {
         Accept: 'application/vnd.card+json',
       },
     });
+    console.log('rseponse', response);
     if (response.ok) {
+      console.log('ok!');
       let maybeCardDoc = await response.json();
       if (isSingleCardDocument(maybeCardDoc)) {
         let card = await this.cardService.createFromSerialized(
@@ -181,9 +192,16 @@ export default class SearchSheet extends Component<Signature> {
 
   @action
   onSearchFieldUpdated() {
+    console.log('onSFU');
     if (this.searchKey) {
-      this.searchCardResults.splice(0, this.searchCardResults.length);
-      this.searchCard.perform(this.searchKey);
+      console.log('search key');
+      if (this.searchKeyIsURL) {
+        console.log('is url');
+        this.getCard.perform(this.searchKey);
+      } else {
+        this.searchCardResults.splice(0, this.searchCardResults.length);
+        this.searchCard.perform(this.searchKey);
+      }
     }
   }
 
@@ -268,6 +286,8 @@ export default class SearchSheet extends Component<Signature> {
           (or (gt this.searchCardResults.length 0) this.isSearchKeyNotEmpty)
         }}
           <div class='search-result-section'>
+            url?
+            {{this.searchKeyIsURL}}
             {{#if this.isSearching}}
               <Label data-test-search-label>Searching for "{{this.searchKey}}"</Label>
             {{else}}
@@ -321,7 +341,7 @@ export default class SearchSheet extends Component<Signature> {
           >Cancel</Button>
           <Button
             data-test-go-button
-            @disabled={{this.isGoDisabled}}
+            {{!-- @disabled={{this.isGoDisabled}} --}}
             @kind='primary'
             {{on 'click' this.onGo}}
           >Go</Button>
