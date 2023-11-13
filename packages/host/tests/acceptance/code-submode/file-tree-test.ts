@@ -191,7 +191,7 @@ const realmInfo = {
   iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
 };
 
-module('Acceptance | code submode tests', function (hooks) {
+module('Acceptance | code submode | file-tree tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
 

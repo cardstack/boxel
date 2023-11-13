@@ -26,6 +26,7 @@ import {
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
+  waitForCodeEditor,
   type TestContextWithSSE,
 } from '../../helpers';
 
@@ -716,7 +717,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
       JSON.stringify([[testRealmURL, 'Pet/vangogh.json']]),
@@ -801,7 +802,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
       JSON.stringify([
@@ -822,7 +823,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         await click('[data-test-confirm-delete-button]');
       },
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);

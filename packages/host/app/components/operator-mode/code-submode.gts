@@ -28,9 +28,10 @@ import {
 } from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
-import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
+import { getCard } from '@cardstack/host/resources/card-resource';
 import {
   isReady,
   type Ready,
@@ -54,10 +55,8 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
-import SubmodeLayout from './submode-layout';
 import NewFileButton from './new-file-button';
-
-import { getCard } from '@cardstack/host/resources/card-resource';
+import SubmodeLayout from './submode-layout';
 
 interface Signature {
   Args: {

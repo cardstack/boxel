@@ -24,6 +24,7 @@ import {
   getMonacoContent,
   setMonacoContent,
   waitForSyntaxHighlighting,
+  waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
   sourceFetchRedirectHandle,
@@ -287,7 +288,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {
@@ -350,7 +351,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       )}`,
     );
 
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert
       .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
       .containsText('Mango');
@@ -428,7 +429,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     this.onSave((json) => {
       if (typeof json === 'string') {
@@ -470,7 +471,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     this.onSave((content) => {
       if (typeof content !== 'string') {
@@ -498,7 +499,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     this.onSave((content) => {
       if (typeof content !== 'string') {
@@ -535,7 +536,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           operatorModeStateParam,
         )}`,
       );
-      await waitFor('[data-test-editor]');
+      await waitForCodeEditor();
 
       this.onSave((json) => {
         if (typeof json === 'string') {
@@ -577,7 +578,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     this.onSave(() => {
       assert.ok(false, `save should never happen`);
@@ -649,7 +650,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     await this.expectEvents(
       assert,

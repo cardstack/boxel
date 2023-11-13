@@ -4,6 +4,7 @@ import {
   waitFor,
   fillIn,
   triggerKeyEvent,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
@@ -32,6 +33,7 @@ import {
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
+  waitForCodeEditor,
   type TestContextWithSSE,
 } from '../helpers';
 
@@ -791,7 +793,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
 
     // The card appears in the editor
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {
@@ -823,7 +825,7 @@ module('Acceptance | code submode tests', function (hooks) {
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     //default is the 1st index
     let elementName = 'AClassWithExportName (LocalClass) class';
     assert
@@ -941,7 +943,7 @@ module('Acceptance | code submode tests', function (hooks) {
           operatorModeStateParam,
         )}`,
       );
-      await waitFor('[data-test-editor]');
+      await waitForCodeEditor();
 
       let originalPosition: MonacoSDK.Position | undefined | null;
       await this.expectEvents(
@@ -972,5 +974,72 @@ module('Acceptance | code submode tests', function (hooks) {
       // set this back correctly regardless of test outcome
       monacoService.serverEchoDebounceMs = 0;
     }
+  });
+
+  test('cursor is placed at the correct declaration when user opens definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+
+    await waitFor(`[data-boxel-selector-item-text="Employee"]`);
+    await click(`[data-boxel-selector-item-text="Employee"]`);
+    let lineCursorOn = monacoService.getLineCursorOn();
+    assert.true(
+      lineCursorOn?.includes('Employee'),
+      'cursor is at Employee declaration',
+    );
+
+    await click(`[data-test-definition-container="${testRealmURL}person"]`);
+    await waitFor(`[data-boxel-selector-item-text="Person"]`);
+    await waitUntil(() => monacoService.hasFocus);
+    lineCursorOn = monacoService.getLineCursorOn();
+    assert.true(
+      lineCursorOn?.includes('Person'),
+      'cursor is at Person declaration',
+    );
+  });
+
+  test('cursor must not be in editor if user focuses on other elements', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+
+    await waitFor(`[data-boxel-selector-item-text="Employee"]`);
+    await click(`[data-boxel-selector-item-text="Employee"]`);
+    assert.true(monacoService.hasFocus);
+
+    await fillIn('[data-test-card-url-bar] input', `${testRealmURL}person.gts`);
+    assert.false(monacoService.hasFocus);
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor(`[data-boxel-selector-item-text="Person"]`);
+    assert.true(monacoService.hasFocus);
+
+    await fillIn(
+      '[data-test-card-url-bar] input',
+      `${testRealmURL}person.gts-test`,
+    );
+    assert.false(monacoService.hasFocus);
   });
 });

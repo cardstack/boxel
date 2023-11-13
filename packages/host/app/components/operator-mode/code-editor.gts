@@ -110,14 +110,13 @@ export default class CodeEditor extends Component<Signature> {
     );
   }
 
-  @action
-  private initializeMonacoCursorPosition() {
+  @cached
+  private get initialMonacoCursorPosition() {
     if (this.args.selectedDeclaration?.path?.node.loc) {
       let { start } = this.args.selectedDeclaration.path.node.loc;
-      this.monacoService.updateCursorPosition(
-        new Position(start.line, start.column),
-      );
+      return new Position(start.line, start.column);
     }
+    return undefined;
   }
 
   @action
@@ -282,7 +281,7 @@ export default class CodeEditor extends Component<Signature> {
             contentChanged=(perform this.contentChangedTask)
             monacoSDK=this.monacoSDK
             language=this.language
-            initializeCursorPosition=this.initializeMonacoCursorPosition
+            initialCursorPosition=this.initialMonacoCursorPosition
             onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
           }}
         ></div>
