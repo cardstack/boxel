@@ -381,6 +381,7 @@ export default class CodeSubmode extends Component<Signature> {
     return this.card;
   }
 
+  @cached
   private get initialMonacoCursorPosition() {
     if (this.selectedDeclaration?.path?.node.loc) {
       let { start } = this.selectedDeclaration.path.node.loc;

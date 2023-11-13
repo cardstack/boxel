@@ -4,6 +4,7 @@ import {
   waitFor,
   fillIn,
   triggerKeyEvent,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
@@ -984,6 +985,7 @@ module('Acceptance | code submode tests', function (hooks) {
     await click(`[data-test-definition-container="${testRealmURL}person"]`);
     await waitFor(`[data-boxel-selector-item-text="Person"]`);
     lineCursorOn = monacoService.getLineCursorOn();
+    await waitUntil(() => monacoService.hasFocus);
     assert.true(lineCursorOn?.includes('Person'));
   });
 
@@ -1004,22 +1006,22 @@ module('Acceptance | code submode tests', function (hooks) {
 
     await waitFor(`[data-boxel-selector-item-text="Employee"]`);
     await click(`[data-boxel-selector-item-text="Employee"]`);
-    assert.true(monacoService.isFocus);
+    assert.true(monacoService.hasFocus);
 
     await fillIn('[data-test-card-url-bar] input', `${testRealmURL}person.gts`);
-    assert.false(monacoService.isFocus);
+    assert.false(monacoService.hasFocus);
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
       'keypress',
       'Enter',
     );
     await waitFor(`[data-boxel-selector-item-text="Person"]`);
-    assert.true(monacoService.isFocus);
+    assert.true(monacoService.hasFocus);
 
     await fillIn(
       '[data-test-card-url-bar] input',
       `${testRealmURL}person.gts-test`,
     );
-    assert.false(monacoService.isFocus);
+    assert.false(monacoService.hasFocus);
   });
 });

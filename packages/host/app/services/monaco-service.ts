@@ -26,7 +26,7 @@ const { serverEchoDebounceMs } = config;
 export default class MonacoService extends Service {
   #ready: Promise<MonacoSDK>;
   @tracked editor: _MonacoSDK.editor.ICodeEditor | null = null;
-  @tracked isFocus = false;
+  @tracked hasFocus = false;
   @service declare cardService: CardService;
   // this is in the service so that we can manipulate it in our tests
   serverEchoDebounceMs = serverEchoDebounceMs;
@@ -47,10 +47,10 @@ export default class MonacoService extends Service {
     monaco.editor.onDidCreateEditor((editor: _MonacoSDK.editor.ICodeEditor) => {
       this.editor = editor;
       this.editor.onDidFocusEditorText(() => {
-        this.isFocus = true;
+        this.hasFocus = true;
       });
       this.editor.onDidBlurEditorText(() => {
-        this.isFocus = false;
+        this.hasFocus = false;
       });
     });
     await Promise.all(promises);
