@@ -718,6 +718,7 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
 
@@ -829,10 +830,10 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
-    await waitForCodeEditor();
     //default is the 1st index
     let elementName = 'AClassWithExportName (LocalClass) class';
     assert
