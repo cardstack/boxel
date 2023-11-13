@@ -31,8 +31,8 @@ import {
   humanReadable,
   maybeURL,
   maybeRelativeURL,
-  getLiveCard,
-  trackLiveCard,
+  getCard,
+  trackCard,
   type Meta,
   type CardFields,
   type Relationship,
@@ -880,10 +880,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     if (value?.links?.self == null) {
       return null;
     }
+    let loader = Loader.getLoaderFor(this.card)!;
+    let cardResource = getCard(new URL(value.links.self, relativeTo), {
+      cachedOnly: true,
+      loader,
+    });
+    await cardResource.loaded;
     let cachedInstance =
-      (await getLiveCard(doc, new URL(value.links.self, relativeTo), {
-        cachedOnly: true,
-      })) ?? identityContext.identities.get(value.links.self);
+      cardResource.card ?? identityContext.identities.get(value.links.self);
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -901,7 +905,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     }
 
     let clazz = await cardClassFromResource(resource, this.card, relativeTo);
-    let loader = Loader.getLoaderFor(clazz)!;
     let deserialized = await clazz[deserialize](
       resource,
       relativeTo,
@@ -909,9 +912,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       identityContext,
     );
     deserialized[isSavedInstance] = true;
-    deserialized = trackLiveCard(
+    deserialized = trackCard(
       loader,
       deserialized,
+      deserialized[realmURL]!,
     ) as BaseInstanceType<CardT>;
     return deserialized;
   }
@@ -1203,10 +1207,14 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (value.links.self == null) {
           return null;
         }
+        let loader = Loader.getLoaderFor(this.card)!;
+        let cardResource = getCard(new URL(value.links.self, relativeTo), {
+          cachedOnly: true,
+          loader,
+        });
+        await cardResource.loaded;
         let cachedInstance =
-          (await getLiveCard(doc, new URL(value.links.self, relativeTo), {
-            cachedOnly: true,
-          })) ?? identityContext.identities.get(value.links.self);
+          cardResource.card ?? identityContext.identities.get(value.links.self);
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -1232,7 +1240,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
           this.card,
           relativeTo,
         );
-        let loader = Loader.getLoaderFor(clazz)!;
         let deserialized = await clazz[deserialize](
           resource,
           relativeTo,
@@ -1240,9 +1247,10 @@ class LinksToMany<FieldT extends CardDefConstructor>
           identityContext,
         );
         deserialized[isSavedInstance] = true;
-        deserialized = trackLiveCard(
+        deserialized = trackCard(
           loader,
           deserialized,
+          deserialized[realmURL]!,
         ) as BaseInstanceType<FieldT>;
         return deserialized;
       });
@@ -2329,9 +2337,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
     ).map(async ([fieldName, value]) => {
       let field = getField(card, fieldName);
       if (!field) {
-        throw new Error(
-          `could not find field '${fieldName}' in card '${card.name}'`,
-        );
+        // This happens when the instance has a field that is not in the definition. It can happen when
+        // instance or definition is updated and the other is not. In this case we will just ignore the
+        // mismatch and try to serialize it anyway so that the client can see still see the instance data
+        // and have a chance to fix it so that it adheres to the definiton
+        return [];
       }
       let relativeToVal = instance[relativeTo];
       return [

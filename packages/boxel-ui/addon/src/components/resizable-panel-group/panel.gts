@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { scheduleOnce } from '@ember/runloop';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -7,23 +8,26 @@ import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
 export type PanelContext = {
-  defaultLength: string;
-  length: string;
-  minLength?: string;
+  defaultLengthFraction?: number;
+  lengthPx: number;
+  minLengthPx?: number;
 };
 
 interface Signature {
   Args: {
-    defaultLength: string;
+    defaultLengthFraction: number;
     hideHandle: boolean;
     isLastPanel: (panelId: number) => boolean;
-    length?: string;
-    minLength?: string;
+    lengthPx?: number;
+    minLengthPx?: number;
     onResizeHandlerDblClick: (event: MouseEvent) => void;
     onResizeHandlerMouseDown: (event: MouseEvent) => void;
     orientation: 'horizontal' | 'vertical';
     panelContext: (panelId: number) => PanelContext | undefined;
-    registerPanel: (context: PanelContext) => number;
+    registerPanel: (context: {
+      defaultLengthFraction: number | undefined;
+      lengthPx: number | undefined;
+    }) => number;
     reverseHandlerArrow: boolean;
   };
   Blocks: {
@@ -40,16 +44,12 @@ export default class Panel extends Component<Signature> {
       style={{if
         (eq @orientation 'horizontal')
         (cssVars
-          boxel-panel-width=this.panelContext.length
-          boxel-panel-min-width=(if
-            this.panelContext.minLength this.panelContext.minLength @minLength
-          )
+          boxel-panel-width=this.lengthCssValue
+          boxel-panel-min-width=this.minLengthCssValue
         )
         (cssVars
-          boxel-panel-height=this.panelContext.length
-          boxel-panel-min-height=(if
-            this.panelContext.minLength this.panelContext.minLength @minLength
-          )
+          boxel-panel-height=this.lengthCssValue
+          boxel-panel-min-height=this.minLengthCssValue
         )
       }}
     >
@@ -61,6 +61,7 @@ export default class Panel extends Component<Signature> {
           id={{this.resizeHandlerId}}
           class='resize-handler {{@orientation}} {{if @hideHandle "hidden"}}'
           aria-label={{this.resizeHandlerId}}
+          data-test-resize-handler={{this.resizeHandlerId}}
           {{on 'mousedown' @onResizeHandlerMouseDown}}
           {{on 'dblclick' @onResizeHandlerDblClick}}
         ><div class={{this.arrowResizeHandlerClass}} /></button>
@@ -93,7 +94,9 @@ export default class Panel extends Component<Signature> {
         --boxel-panel-resize-handler-height: 100px;
         --boxel-panel-resize-handler-width: 5px;
         --boxel-panel-resize-handler-background-color: var(--boxel-450);
-        --boxel-panel-resize-handler-hover-background-color: var(--boxel-highlight);
+        --boxel-panel-resize-handler-hover-background-color: var(
+          --boxel-highlight
+        );
 
         padding: var(--boxel-sp-xxxs);
       }
@@ -104,7 +107,9 @@ export default class Panel extends Component<Signature> {
         --boxel-panel-resize-handler-width: 100px;
         --boxel-panel-resize-handler-height: 5px;
         --boxel-panel-resize-handler-background-color: var(--boxel-450);
-        --boxel-panel-resize-handler-hover-background-color: var(--boxel-highlight);
+        --boxel-panel-resize-handler-hover-background-color: var(
+          --boxel-highlight
+        );
 
         padding: var(--boxel-sp-xxxs);
       }
@@ -123,7 +128,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler:hover {
-        background-color: var(--boxel-panel-resize-handler-hover-background-color);
+        background-color: var(
+          --boxel-panel-resize-handler-hover-background-color
+        );
       }
 
       .resize-handler.horizontal {
@@ -157,7 +164,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler:hover .arrow.right {
-        border-left-color: var(--boxel-panel-resize-handler-hover-background-color);
+        border-left-color: var(
+          --boxel-panel-resize-handler-hover-background-color
+        );
       }
 
       .arrow.left {
@@ -171,7 +180,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler:hover .arrow.left {
-        border-right-color: var(--boxel-panel-resize-handler-hover-background-color);
+        border-right-color: var(
+          --boxel-panel-resize-handler-hover-background-color
+        );
       }
 
       .arrow.top {
@@ -185,7 +196,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler:hover .arrow.top {
-        border-bottom-color: var(--boxel-panel-resize-handler-hover-background-color);
+        border-bottom-color: var(
+          --boxel-panel-resize-handler-hover-background-color
+        );
       }
 
       .arrow.bottom {
@@ -199,7 +212,9 @@ export default class Panel extends Component<Signature> {
       }
 
       .resize-handler:hover .arrow.bottom {
-        border-top-color: var(--boxel-panel-resize-handler-hover-background-color);
+        border-top-color: var(
+          --boxel-panel-resize-handler-hover-background-color
+        );
       }
     </style>
   </template>
@@ -213,24 +228,46 @@ export default class Panel extends Component<Signature> {
 
   private registerPanel() {
     this.id = this.args.registerPanel({
-      length: this.args.length ?? this.args.defaultLength,
-      defaultLength: this.args.defaultLength,
+      lengthPx: this.args.lengthPx,
+      defaultLengthFraction: this.args.defaultLengthFraction,
     });
   }
 
   get panelContext() {
     if (!this.id) {
       return {
-        length: this.args.defaultLength,
-        defaultLength: this.args.defaultLength,
-        minLength: undefined,
+        lengthPx: undefined,
+        defaultLengthFraction: this.args.defaultLengthFraction,
+        minLengthPx: undefined,
       };
     }
     return this.args.panelContext(this.id);
   }
 
+  get minLengthCssValue() {
+    if (this.panelContext?.minLengthPx !== undefined) {
+      return htmlSafe(`${this.panelContext.minLengthPx}px`);
+    } else if (this.args.minLengthPx !== undefined) {
+      return htmlSafe(`${this.args.minLengthPx}px`);
+    }
+    return undefined;
+  }
+
+  get lengthCssValue() {
+    let lengthPx = this.panelContext?.lengthPx;
+    let defaultLengthFraction = this.panelContext?.defaultLengthFraction;
+    if (lengthPx === -1 && defaultLengthFraction) {
+      return htmlSafe(`${defaultLengthFraction * 100}%`);
+    } else if (lengthPx !== -1 && lengthPx !== undefined) {
+      return htmlSafe(`${lengthPx}px`);
+    }
+    return undefined;
+  }
+
   get resizeHandlerId() {
-    return `resize-handler-${this.args.orientation}-${this.id}`;
+    let { id } = this;
+    let { orientation } = this.args;
+    return `resize-handler-${orientation}-${id}`;
   }
 
   get isLastPanel() {
@@ -248,11 +285,11 @@ export default class Panel extends Component<Signature> {
     let toward: string | null = null;
 
     let isFirstPanel = this.id === 1;
-    let isCollapsed = this.panelContext?.length === '0px';
+    let isCollapsed = this.panelContext?.lengthPx === 0;
 
     let nextPanelIsLast = this.args.isLastPanel(this.id + 1);
     let nextPanelIsCollapsed =
-      this.args.panelContext(this.id + 1)?.length === '0px';
+      this.args.panelContext(this.id + 1)?.lengthPx === 0;
 
     if (isFirstPanel && !isCollapsed) {
       if (nextPanelIsLast && nextPanelIsCollapsed) {

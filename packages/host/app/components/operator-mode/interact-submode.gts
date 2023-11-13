@@ -32,6 +32,7 @@ import {
   codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common/code-ref';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -47,14 +48,6 @@ import SubmodeLayout from './submode-layout';
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
 export type Stack = StackItem[];
-
-export interface StackItem {
-  format: Format;
-  request?: Deferred<CardDef | undefined>;
-  stackIndex: number;
-  card: CardDef;
-  isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
-}
 
 const SearchSheetTriggers = {
   DropCardToLeftNeighborStackButton: 'drop-card-to-left-neighbor-stack-button',
@@ -173,22 +166,30 @@ export default class InteractSubmode extends Component<Signature> {
           doc,
           relativeTo,
         );
-        let newItem: StackItem = {
+        let newItem = new StackItem({
+          owner: here,
           card: newCard,
           format: 'edit',
           request: new Deferred(),
           isLinkedCard: opts?.isLinkedCard,
           stackIndex,
-        };
+        });
+        await newItem.ready();
         here.addToStack(newItem);
         return await newItem.request?.promise;
       },
-      viewCard: async (card: CardDef, format: Format = 'isolated') => {
-        here.addToStack({
+      viewCard: async (
+        card: CardDef,
+        format: Format = 'isolated',
+      ): Promise<void> => {
+        let newItem = new StackItem({
+          owner: here,
           card,
           format,
           stackIndex,
         });
+        await newItem.ready();
+        here.addToStack(newItem);
       },
       createCardDirectly: async (
         doc: LooseSingleCardDocument,
@@ -200,11 +201,13 @@ export default class InteractSubmode extends Component<Signature> {
           relativeTo ?? here.cardService.defaultURL,
         );
         await here.cardService.saveModel(here, newCard);
-        let newItem: StackItem = {
+        let newItem = new StackItem({
+          owner: here,
           card: newCard,
           format: 'isolated',
           stackIndex,
-        };
+        });
+        await newItem.ready();
         here.addToStack(newItem);
         return;
       },
@@ -214,7 +217,7 @@ export default class InteractSubmode extends Component<Signature> {
       ): Promise<void> => {
         let stackItem: StackItem | undefined;
         for (let stack of here.stacks) {
-          stackItem = stack.find((item) => item.card === card);
+          stackItem = stack.find((item: StackItem) => item.card === card);
           if (stackItem) {
             let doWithStableScroll =
               stackItemScrollers.get(stackItem)?.stableScroll;
@@ -278,11 +281,13 @@ export default class InteractSubmode extends Component<Signature> {
     });
 
     if (chosenCard) {
-      let newItem: StackItem = {
+      let newItem = new StackItem({
+        owner: this,
         card: chosenCard,
         format: 'isolated',
         stackIndex: 0, // This is called when there are no cards in the stack left, so we can assume the stackIndex is 0
-      };
+      });
+      await newItem.ready();
       this.addToStack(newItem);
     }
   });
@@ -311,10 +316,7 @@ export default class InteractSubmode extends Component<Signature> {
         // if this is a newly created card from auto-save then we
         // need to replace the stack item to account for the new card's ID
         if (!item.card.id && updatedCard.id) {
-          this.operatorModeStateService.replaceItemInStack(item, {
-            ...item,
-            card: updatedCard,
-          });
+          await item.setCardURL(new URL(updatedCard.id));
         }
         return;
       }
@@ -325,23 +327,27 @@ export default class InteractSubmode extends Component<Signature> {
         if (!item.card.id && updatedCard.id) {
           this.operatorModeStateService.trimItemsFromStack(item);
         } else {
-          this.operatorModeStateService.replaceItemInStack(item, {
-            ...item,
-            card: updatedCard,
-            request,
-            format: 'isolated',
-          });
+          this.operatorModeStateService.replaceItemInStack(
+            item,
+            item.clone({
+              request,
+              format: 'isolated',
+            }),
+          );
         }
       }
     }
   });
 
-  @action private edit(item: StackItem) {
-    this.operatorModeStateService.replaceItemInStack(item, {
-      ...item,
-      request: new Deferred(),
-      format: 'edit',
-    });
+  @action
+  edit(item: StackItem) {
+    this.operatorModeStateService.replaceItemInStack(
+      item,
+      item.clone({
+        request: new Deferred(),
+        format: 'edit',
+      }),
+    );
   }
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
@@ -487,74 +493,90 @@ export default class InteractSubmode extends Component<Signature> {
     return this.allStackItems.length > 0 && this.stacks.length === 1;
   }
 
-  @action private openSelectedSearchResultInStack(card: CardDef) {
-    let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
+  private openSelectedSearchResultInStack = restartableTask(
+    async (card: CardDef) => {
+      let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
 
-    // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
-    // and the card will be added to stack with index 0. shiftStack executes this logic.
-    if (
-      searchSheetTrigger ===
-      SearchSheetTriggers.DropCardToLeftNeighborStackButton
-    ) {
-      for (
-        let stackIndex = this.stacks.length - 1;
-        stackIndex >= 0;
-        stackIndex--
-      ) {
-        this.operatorModeStateService.shiftStack(
-          this.stacks[stackIndex],
-          stackIndex + 1,
-        );
-      }
-
-      let stackItem: StackItem = {
-        card,
-        format: 'isolated',
-        stackIndex: 0,
-      };
-      this.operatorModeStateService.addItemToStack(stackItem);
-
-      // In case the right button was clicked, the card will be added to stack with index 1.
-    } else if (
-      searchSheetTrigger ===
-      SearchSheetTriggers.DropCardToRightNeighborStackButton
-    ) {
-      this.operatorModeStateService.addItemToStack({
-        card,
-        format: 'isolated',
-        stackIndex: this.stacks.length,
-      });
-    } else {
-      // In case, that the search was accessed directly without clicking right and left buttons,
-      // the rightmost stack will be REPLACED by the selection
-      let numberOfStacks = this.operatorModeStateService.numberOfStacks();
-      let stackIndex = numberOfStacks - 1;
-      let stack: Stack | undefined;
-
+      // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
+      // and the card will be added to stack with index 0. shiftStack executes this logic.
       if (
-        numberOfStacks === 0 ||
-        this.operatorModeStateService.stackIsEmpty(stackIndex)
+        searchSheetTrigger ===
+        SearchSheetTriggers.DropCardToLeftNeighborStackButton
       ) {
-        this.operatorModeStateService.addItemToStack({
+        for (
+          let stackIndex = this.stacks.length - 1;
+          stackIndex >= 0;
+          stackIndex--
+        ) {
+          this.operatorModeStateService.shiftStack(
+            this.stacks[stackIndex],
+            stackIndex + 1,
+          );
+        }
+
+        let stackItem = new StackItem({
+          owner: this,
+          card,
           format: 'isolated',
           stackIndex: 0,
-          card,
         });
+        await stackItem.ready();
+        this.operatorModeStateService.addItemToStack(stackItem);
+
+        // In case the right button was clicked, the card will be added to stack with index 1.
+      } else if (
+        searchSheetTrigger ===
+        SearchSheetTriggers.DropCardToRightNeighborStackButton
+      ) {
+        let stackItem = new StackItem({
+          owner: this,
+          card,
+          format: 'isolated',
+          stackIndex: this.stacks.length,
+        });
+        await stackItem.ready();
+        this.operatorModeStateService.addItemToStack(stackItem);
       } else {
-        stack = this.operatorModeStateService.rightMostStack();
-        if (stack) {
-          let bottomMostItem = stack[0];
-          if (bottomMostItem) {
-            this.operatorModeStateService.clearStackAndAdd(stackIndex, {
-              card,
-              format: 'isolated',
-              stackIndex,
-            });
+        // In case, that the search was accessed directly without clicking right and left buttons,
+        // the rightmost stack will be REPLACED by the selection
+        let numberOfStacks = this.operatorModeStateService.numberOfStacks();
+        let stackIndex = numberOfStacks - 1;
+        let stack: Stack | undefined;
+
+        if (
+          numberOfStacks === 0 ||
+          this.operatorModeStateService.stackIsEmpty(stackIndex)
+        ) {
+          let stackItem = new StackItem({
+            owner: this,
+            format: 'isolated',
+            stackIndex: 0,
+            card,
+          });
+          await stackItem.ready();
+          this.operatorModeStateService.addItemToStack(stackItem);
+        } else {
+          stack = this.operatorModeStateService.rightMostStack();
+          if (stack) {
+            let bottomMostItem = stack[0];
+            if (bottomMostItem) {
+              let stackItem = new StackItem({
+                owner: this,
+                card,
+                format: 'isolated',
+                stackIndex,
+              });
+              await stackItem.ready();
+              this.operatorModeStateService.clearStackAndAdd(
+                stackIndex,
+                stackItem,
+              );
+            }
           }
         }
       }
-    }
-  }
+    },
+  );
 
   @action private clearSearchSheetTrigger() {
     this.searchSheetTrigger = null;
@@ -578,7 +600,7 @@ export default class InteractSubmode extends Component<Signature> {
   <template>
     <SubmodeLayout
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
-      @onCardSelectFromSearch={{this.openSelectedSearchResultInStack}}
+      @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |openSearch|
     >
       <div class='operator-mode__main' style={{this.backgroundImageStyle}}>

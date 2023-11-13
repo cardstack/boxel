@@ -12,7 +12,7 @@ import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { Button, SearchInput } from '@cardstack/boxel-ui/components';
+import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
 import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
@@ -93,7 +93,8 @@ export default class CardCatalogModal extends Component<Signature> {
         data-test-card-catalog-modal
       >
         <:header>
-          <SearchInput
+          <BoxelInput
+            @type='search'
             @variant='large'
             @value={{this.state.searchKey}}
             @onInput={{this.setSearchKey}}

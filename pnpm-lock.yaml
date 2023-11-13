@@ -885,7 +885,7 @@ importers:
         version: 1.2.1(typescript@5.1.6)
       '@glint/environment-ember-template-imports':
         specifier: ^1.2.1
-        version: 1.2.1(@glint/environment-ember-loose@1.2.1)(@glint/template@1.2.1)(ember-template-imports@3.4.2)
+        version: 1.2.1(@glint/environment-ember-loose@1.2.1)(@glint/template@1.2.1)(ember-template-imports@3.1.2)
       '@glint/template':
         specifier: ^1.2.1
         version: 1.2.1
@@ -979,6 +979,9 @@ importers:
       ember-source-channel-url:
         specifier: ^3.0.0
         version: 3.0.0
+      ember-template-imports:
+        specifier: ^3.1.2
+        version: 3.1.2(ember-cli-htmlbars@6.3.0)
       ember-template-lint:
         specifier: ^5.7.2
         version: 5.11.2
@@ -10153,9 +10156,9 @@ packages:
     dependencies:
       '@types/parse-json': 4.0.1
       import-fresh: 3.3.0
-      parse-json: 5.1.0
+      parse-json: 5.2.0
       path-type: 4.0.0
-      yaml: 1.10.0
+      yaml: 1.10.2
     dev: true
 
   /cosmiconfig@8.2.0:

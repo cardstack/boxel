@@ -19,8 +19,8 @@ import { TrackedArray } from 'tracked-built-ins';
 import {
   Button,
   Label,
-  SearchInput,
-  SearchInputBottomTreatments,
+  BoxelInput,
+  BoxelInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
 
 import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
@@ -80,8 +80,8 @@ export default class SearchSheet extends Component<Signature> {
 
   get inputBottomTreatment() {
     return this.args.mode == SearchSheetModes.Closed
-      ? SearchInputBottomTreatments.Rounded
-      : SearchInputBottomTreatments.Flat;
+      ? BoxelInputBottomTreatments.Rounded
+      : BoxelInputBottomTreatments.Flat;
   }
 
   get sheetSize() {
@@ -270,7 +270,8 @@ export default class SearchSheet extends Component<Signature> {
       data-test-search-sheet={{@mode}}
       {{onClickOutside @onBlur exceptSelector='.add-card-to-neighbor-stack'}}
     >
-      <SearchInput
+      <BoxelInput
+        @type='search'
         @variant={{if (eq @mode 'closed') 'default' 'large'}}
         @bottomTreatment={{this.inputBottomTreatment}}
         @value={{this.searchKey}}
@@ -279,6 +280,7 @@ export default class SearchSheet extends Component<Signature> {
         @onInput={{this.setSearchKey}}
         {{on 'keydown' this.onSearchInputKeyDown}}
         class='search-sheet__search-input-group'
+        data-test-search-field
       />
       <div class='search-sheet-content'>
         {{! @glint-ignore Argument of type 'string' is not assignable to parameter of type 'boolean' }}

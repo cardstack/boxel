@@ -9,6 +9,7 @@ import ENV from '@cardstack/host/config/environment';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type CardService from '../services/card-service';
 
@@ -62,7 +63,9 @@ export default class RenderCard extends Route<Model | null> {
       : new URL('./', ownRealmURL);
 
     try {
-      let model = await this.cardService.loadModel(this, url);
+      let cardResource = getCard(this, () => url.href);
+      await cardResource.loaded;
+      let model = cardResource.card;
       if (!model) {
         throw new Error(`Could not find ${url}`);
       }

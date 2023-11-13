@@ -27,7 +27,7 @@ import {
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
-  setupServerSentEvents,
+  waitForCodeEditor,
 } from '../../helpers';
 
 const indexCardSource = `
@@ -192,13 +192,12 @@ const realmInfo = {
   iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
 };
 
-module('Acceptance | code submode tests', function (hooks) {
+module('Acceptance | code submode | file-tree tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupWindowMock(hooks);
 
   hooks.afterEach(async function () {
@@ -325,6 +324,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -372,6 +372,7 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -410,6 +411,7 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -456,6 +458,7 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -487,6 +490,7 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -521,6 +525,7 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -577,6 +582,7 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -643,7 +649,7 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
-
+    await waitForCodeEditor();
     await waitFor('[data-test-file="cards-grid.gts"]');
 
     await click('[data-test-file="cards-grid.gts"]');

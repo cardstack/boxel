@@ -26,6 +26,7 @@ import {
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
+  waitForCodeEditor,
   type TestContextWithSSE,
 } from '../../helpers';
 
@@ -471,6 +472,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-card-module-definition]');
@@ -529,7 +531,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-
+    await waitForCodeEditor();
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-card-module-definition]');
 
@@ -576,6 +578,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
@@ -666,7 +669,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} function`);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
-    assert.dom('[data-test-schema-editor-incompatible-item]').exists();
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
+      );
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
   });
 
@@ -712,7 +719,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
       JSON.stringify([[testRealmURL, 'Pet/vangogh.json']]),
@@ -797,7 +804,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
       JSON.stringify([
@@ -818,7 +825,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         await click('[data-test-confirm-delete-button]');
       },
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);
@@ -860,6 +867,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     // clicking on normal card
     let elementName = 'ChildCard1';
@@ -962,6 +970,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     elementName = 'ChildCard5';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -988,6 +997,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     elementName = 'ChildField1';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -1020,6 +1030,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     //click card type
     await visit(
@@ -1027,6 +1038,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     let elementName = 'AncestorCard2';
     await waitFor(
       `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
@@ -1059,6 +1071,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     elementName = 'AncestorField1';
     await waitFor(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
@@ -1090,6 +1103,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     elementName = 'AncestorCard2';
     await waitFor(
@@ -1122,6 +1136,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     elementName = 'ChildCard2';
     await waitFor(
@@ -1154,6 +1169,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     elementName = 'AncestorCard2';
     await waitFor(

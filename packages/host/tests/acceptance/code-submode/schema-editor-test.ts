@@ -27,8 +27,11 @@ import {
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
+  setupOnSave,
   getMonacoContent,
+  waitForCodeEditor,
   type TestContextWithSSE,
+  type TestContextWithSave,
 } from '../../helpers';
 
 const indexCardSource = `
@@ -230,6 +233,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   }
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
+  setupOnSave(hooks);
   setupServerSentEvents(hooks);
   setupWindowMock(hooks);
 
@@ -356,6 +360,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
@@ -481,6 +486,35 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
   });
 
+  test('when selecting card definition from a card instance in code mode, the right hand panel changes from card preview to schema mode', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-code-mode-card-preview-body]');
+    assert
+      .dom('[data-test-code-mode-card-preview-body]')
+      .containsText('Hassan');
+    await waitFor(
+      `button[data-test-definition-container="${testRealmURL}person"]`,
+    );
+    await click(
+      `button[data-test-definition-container="${testRealmURL}person"]`,
+    );
+    await waitFor('[data-test-card-schema]');
+    assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    assert.dom('[data-test-total-fields]').containsText('8 Fields');
+  });
+
   test('shows displayName of CardResource when field refers to itself', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
@@ -494,6 +528,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     assert
@@ -519,6 +554,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor(
       '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
     );
@@ -552,7 +588,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
-    assert.expect(16);
+    assert.expect(18);
     let expectedEvents = [
       {
         type: 'index',
@@ -578,6 +614,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
     assert.dom('[data-test-add-field-button]').exists({ count: 1 }); // Only top level card has an option to add a field
 
@@ -589,6 +626,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await click('[data-test-add-field-button]');
     assert.dom('[data-test-add-field-modal]').exists();
+
+    await waitFor('[data-test-selected-field-display-name]');
+    assert.dom('[data-test-selected-field-display-name]').hasText('String'); // String field selected by default
 
     await click('[data-test-choose-card-button]');
     await waitFor(
@@ -624,6 +664,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Field names must start with a lowercase letter');
+    await fillIn('[data-test-field-name-input]', 'birth-date');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .hasText(
+        'Field names can only contain letters, numbers, and underscores',
+      );
 
     await fillIn('[data-test-field-name-input]', 'firstName');
     await click('[data-test-save-field-button]');
@@ -681,6 +727,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
 
     // Field is a card descending from FieldDef
@@ -718,9 +765,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-add-field-button]');
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
-    +(await waitFor(
-      '[data-test-select="http://test-realm/test/person-entry"]',
-    ));
+    await waitFor('[data-test-select="http://test-realm/test/person-entry"]');
     await click('[data-test-select="http://test-realm/test/person-entry"]');
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'favPerson');
@@ -769,7 +814,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     );
   });
 
-  test('deleting a field from schema editor', async function (assert) {
+  test<TestContextWithSave>('deleting a field from schema editor', async function (assert) {
+    assert.expect(7);
     let operatorModeStateParam = stringify({
       stacks: [],
       submode: 'code',
@@ -782,6 +828,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     await click(
@@ -796,6 +843,15 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       getMonacoContent().includes('firstName = contains(StringCard)'),
     );
 
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.false(
+        content.includes('firstName = contains(StringCard)'),
+        'firstName field removed from saved module',
+      );
+    });
     await click('[data-test-boxel-menu-item-text="Remove Field"]');
 
     assert.dom('[data-test-remove-field-modal]').exists();
@@ -817,15 +873,65 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
       .containsText('+ 4 Fields'); // One field less
 
-    assert.false(
-      getMonacoContent().includes('firstName = contains(StringCard)'),
-    );
-
     assert
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="firstName"]`,
       )
       .doesNotExist();
+  });
+
+  test<TestContextWithSave>('editing a field from schema editor', async function (assert) {
+    assert.expect(2);
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-schema]');
+
+    // Let's edit a "linksToMany" Friend field, named friends
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-field-types]`,
+      )
+      .hasText('Link, Collection');
+
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-schema-editor-field-contextual-button]',
+    );
+    await click('[data-test-boxel-menu-item-text="Edit Field Settings"]');
+
+    // Edit the field to be a "contains" BigInteger field, named friendCount
+    await click('[data-test-choose-card-button]');
+    await waitFor(
+      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+    );
+    await click(
+      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+    await fillIn('[data-test-field-name-input]', 'friendCount');
+    await click('[data-test-boxel-radio-option-id="one"]');
+
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.ok(content.includes('friendCount = contains(BigIntegerCard)'));
+    });
+    await click('[data-test-save-field-button]');
+
+    await waitFor(
+      '[data-test-card-schema="Person"] [data-test-field-name="friendCount"] [data-test-card-display-name="BigInteger"]',
+    );
   });
 
   test('tooltip is displayed when hovering over a pill', async function (assert) {
@@ -840,6 +946,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor(`[data-test-boxel-selector-item-text="BlogPost"]`);
     await click(`[data-test-boxel-selector-item-text="BlogPost"]`);
 

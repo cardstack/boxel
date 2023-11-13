@@ -7,6 +7,7 @@ import merge from 'lodash/merge';
 
 import { type SingleCardDocument } from '@cardstack/runtime-common';
 
+import config from '@cardstack/host/config/environment';
 import CardService from '@cardstack/host/services/card-service';
 import {
   type MonacoLanguageConfig,
@@ -20,10 +21,15 @@ import type * as _MonacoSDK from 'monaco-editor';
 export type MonacoSDK = typeof _MonacoSDK;
 export type IStandaloneCodeEditor = _MonacoSDK.editor.IStandaloneCodeEditor;
 
+const { serverEchoDebounceMs } = config;
+
 export default class MonacoService extends Service {
   #ready: Promise<MonacoSDK>;
   @tracked editor: _MonacoSDK.editor.ICodeEditor | null = null;
+  @tracked hasFocus = false;
   @service declare cardService: CardService;
+  // this is in the service so that we can manipulate it in our tests
+  serverEchoDebounceMs = serverEchoDebounceMs;
 
   constructor(properties: object) {
     super(properties);
@@ -40,6 +46,12 @@ export default class MonacoService extends Service {
     );
     monaco.editor.onDidCreateEditor((editor: _MonacoSDK.editor.ICodeEditor) => {
       this.editor = editor;
+      this.editor.onDidFocusEditorText(() => {
+        this.hasFocus = true;
+      });
+      this.editor.onDidBlurEditorText(() => {
+        this.hasFocus = false;
+      });
     });
     await Promise.all(promises);
     return monaco;
@@ -151,5 +163,18 @@ export default class MonacoService extends Service {
     return currentPosition
       ? model.getLineContent(currentPosition.lineNumber)
       : null;
+  }
+
+  getCursorPosition() {
+    return this.editor?.getPosition();
+  }
+
+  updateCursorPosition(cursorPosition: _MonacoSDK.Position) {
+    if (!this.editor) {
+      return;
+    }
+    this.editor.focus();
+    this.editor.setPosition(cursorPosition);
+    this.editor.revealLineInCenter(cursorPosition.lineNumber);
   }
 }

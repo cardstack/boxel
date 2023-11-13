@@ -36,8 +36,8 @@
   /* Modular scale for spacing */
   --boxel-spacing: 1.25rem; /* base size (20px) */
   --boxel-ratio: 1.333; /* scale (based on "Perfect Fourth" scale) */
-  --boxel-sp-xxxxxs: calc(var(--boxel-sp-xxxxs) / var(--boxel-ratio)); /* 3.57px */
-  --boxel-sp-xxxxs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio)); /* 4.75px */
+  --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio)); /* 3.57px */
+  --boxel-sp-4xs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio)); /* 4.75px */
   --boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio)); /* 6.33px */
   --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio)); /* 8.44px */
   --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio)); /* 11.26px */

@@ -26,12 +26,12 @@
       },
       "trips.countriesVisited.0": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/1"
+          "self": "../Country/1"
         }
       },
       "trips.countriesVisited.1": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/2"
+          "self": "../Country/2"
         }
       }
     },

@@ -4,12 +4,14 @@ import {
   waitFor,
   fillIn,
   triggerKeyEvent,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
@@ -19,16 +21,20 @@ import { baseRealm } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   TestRealm,
   TestRealmAdapter,
   getMonacoContent,
+  setMonacoContent,
   setupLocalIndexing,
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
+  waitForCodeEditor,
+  type TestContextWithSSE,
 } from '../helpers';
 
 const indexCardSource = `
@@ -228,6 +234,7 @@ const friendCardSource = `
 module('Acceptance | code submode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
+  let monacoService: MonacoService;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -240,6 +247,9 @@ module('Acceptance | code submode tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
+    monacoService = this.owner.lookup(
+      'service:monaco-service',
+    ) as MonacoService;
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -407,6 +417,8 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
+    await waitFor('[data-test-file-view-header]');
 
     assert
       .dom('[data-test-file-view-header]')
@@ -453,6 +465,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-file-definition]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.json');
@@ -461,7 +474,11 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
 
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
+      );
   });
 
   test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
@@ -484,6 +501,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-file-definition]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.json');
@@ -491,8 +509,11 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
-
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
+      );
   });
 
   test('empty state displays default realm info', async function (assert) {
@@ -589,8 +610,11 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-binary-info] [data-test-last-modified]')
       .containsText('Last modified');
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
-
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
+      );
     await percySnapshot(assert);
   });
 
@@ -615,6 +639,7 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -650,6 +675,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-resource-loaded]');
 
     assert.dom('[data-test-code-mode-card-preview-header]').hasText('Person');
@@ -692,6 +718,7 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
 
@@ -704,9 +731,9 @@ module('Acceptance | code submode tests', function (hooks) {
       )
       .hasText('isHourly function');
     assert
-      .dom('[data-test-schema-editor-incompatible-item]')
+      .dom('[data-test-file-incompatibility-message]')
       .hasText(
-        'Schema Editor cannot be used for selected function "isHourly".',
+        'No tools are available for the selected item: function "isHourly". Select a card or field definition in the inspector.',
       );
 
     await click('[data-test-boxel-selector-item-text="Isolated"]');
@@ -718,8 +745,10 @@ module('Acceptance | code submode tests', function (hooks) {
       )
       .hasText('Isolated class');
     assert
-      .dom('[data-test-schema-editor-incompatible-item]')
-      .hasText('Schema Editor cannot be used for selected class "Isolated".');
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available for the selected item: class "Isolated". Select a card or field definition in the inspector.',
+      );
 
     operatorModeStateParam = stringify({
       stacks: [],
@@ -734,7 +763,7 @@ module('Acceptance | code submode tests', function (hooks) {
     );
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
-    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
+    assert.dom('[data-test-file-incompatibility-message]').exists();
   });
 
   test('Clicking card in search panel opens card JSON in editor', async function (assert) {
@@ -749,15 +778,16 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
     // Click on search-input
-    await click('[data-test-search-input] input');
+    await click('[data-test-search-field]');
 
     assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
-    await fillIn('[data-test-search-input] input', 'Mango');
+    await fillIn('[data-test-search-field]', 'Mango');
 
     assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
 
@@ -771,7 +801,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
 
     // The card appears in the editor
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {
@@ -785,5 +815,239 @@ module('Acceptance | code submode tests', function (hooks) {
         },
       },
     });
+  });
+
+  test('changes cursor position when selected module declaration is changed', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    //default is the 1st index
+    let elementName = 'AClassWithExportName (LocalClass) class';
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(elementName);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert.true(
+      monacoService.getLineCursorOn()?.includes('LocalClass'),
+      'cursor is on LocalClass line',
+    );
+
+    // clicking on a card
+    elementName = 'ExportedCard';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.true(
+      monacoService.getLineCursorOn()?.includes(elementName),
+      'cursor is on ExportedCard line',
+    );
+
+    // clicking on a field
+    elementName = 'ExportedField';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.true(
+      monacoService.getLineCursorOn()?.includes(elementName),
+      'cursor is on ExportedField line',
+    );
+
+    // clicking on an exported function
+    elementName = 'exportedFunction';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.true(
+      monacoService.getLineCursorOn()?.includes(elementName),
+      'cursor is on exportedFunction line',
+    );
+  });
+
+  test('changes selected module declaration when cursor position is changed', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    //default is the 1st index
+    let elementName = 'AClassWithExportName (LocalClass) class';
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(elementName);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
+
+    elementName = 'ExportedFieldInheritLocalField';
+    let position = new MonacoSDK.Position(45, 0);
+    monacoService.updateCursorPosition(position);
+    await waitFor(
+      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
+
+    elementName = 'LocalField';
+    position = new MonacoSDK.Position(38, 0);
+    monacoService.updateCursorPosition(position);
+    await waitFor(
+      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
+
+    elementName = 'ExportedCard';
+    position = new MonacoSDK.Position(31, 0);
+    monacoService.updateCursorPosition(position);
+    await waitFor(
+      `[data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="${elementName}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+  });
+
+  test<TestContextWithSSE>('the monaco cursor position is maintained during an auto-save', async function (assert) {
+    assert.expect(3);
+    // we only want to change this for this particular test so we emulate what the non-test env sees
+    monacoService.serverEchoDebounceMs = 5000;
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}in-this-file.gts`],
+        },
+      },
+    ];
+
+    try {
+      let operatorModeStateParam = stringify({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}in-this-file.gts`,
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+      await waitForCodeEditor();
+
+      let originalPosition: MonacoSDK.Position | undefined | null;
+      await this.expectEvents(
+        assert,
+        realm,
+        adapter,
+        expectedEvents,
+        async () => {
+          setMonacoContent(`// This is a change \n${inThisFileSource}`);
+          monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
+          originalPosition = monacoService.getCursorPosition();
+        },
+      );
+      await waitFor('[data-test-saved]');
+      await waitFor('[data-test-save-idle]');
+      let currentPosition = monacoService.getCursorPosition();
+      assert.strictEqual(
+        originalPosition!.lineNumber,
+        currentPosition?.lineNumber,
+        'cursor position line number has not changed',
+      );
+      assert.strictEqual(
+        originalPosition!.column,
+        currentPosition?.column,
+        'cursor position column has not changed',
+      );
+    } finally {
+      // set this back correctly regardless of test outcome
+      monacoService.serverEchoDebounceMs = 0;
+    }
+  });
+
+  test('cursor is placed at the correct declaration when user opens definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+
+    await waitFor(`[data-boxel-selector-item-text="Employee"]`);
+    await click(`[data-boxel-selector-item-text="Employee"]`);
+    let lineCursorOn = monacoService.getLineCursorOn();
+    assert.true(
+      lineCursorOn?.includes('Employee'),
+      'cursor is at Employee declaration',
+    );
+
+    await click(`[data-test-definition-container="${testRealmURL}person"]`);
+    await waitFor(`[data-boxel-selector-item-text="Person"]`);
+    await waitUntil(() => monacoService.hasFocus);
+    lineCursorOn = monacoService.getLineCursorOn();
+    assert.true(
+      lineCursorOn?.includes('Person'),
+      'cursor is at Person declaration',
+    );
+  });
+
+  test('cursor must not be in editor if user focuses on other elements', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+
+    await waitFor(`[data-boxel-selector-item-text="Employee"]`);
+    await click(`[data-boxel-selector-item-text="Employee"]`);
+    assert.true(monacoService.hasFocus);
+
+    await fillIn('[data-test-card-url-bar] input', `${testRealmURL}person.gts`);
+    assert.false(monacoService.hasFocus);
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor(`[data-boxel-selector-item-text="Person"]`);
+    assert.true(monacoService.hasFocus);
+
+    await fillIn(
+      '[data-test-card-url-bar] input',
+      `${testRealmURL}person.gts-test`,
+    );
+    assert.false(monacoService.hasFocus);
   });
 });

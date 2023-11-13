@@ -316,11 +316,11 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // Click on search-input
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
-      await fillIn('[data-test-search-input] input', 'Mango');
+      await fillIn('[data-test-search-field]', 'Mango');
 
       assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
 
@@ -345,7 +345,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
-      assert.dom('[data-test-search-input] input').hasValue('');
+      assert.dom('[data-test-search-field]').hasValue('');
     });
 
     test('Can open a recent card in empty stack', async function (assert) {
@@ -360,8 +360,9 @@ module('Acceptance | interact submode tests', function (hooks) {
       await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
 
-      await click('[data-test-search-input] input');
-      await fillIn('[data-test-search-input] input', `${testRealmURL}index`);
+      await waitFor('[data-test-url-field]');
+      await click('[data-test-url-field]');
+      await fillIn('[data-test-url-field]', `${testRealmURL}index`);
 
       // Why is go button needed in this test when it auto-navigates IRL?
       await waitFor('[data-test-card-catalog-go-button][disabled]', {
@@ -387,7 +388,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       assert.dom('[data-test-add-card-button]').exists('stack is empty');
 
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
       await waitFor(`[data-test-search-result="${testRealmURL}index"]`);
@@ -625,7 +626,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Replace the current stack by interacting with search prompt directly
       // Click on search-input
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -673,7 +674,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // Click on search-input
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -706,7 +707,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           operatorModeStateParam,
         )}`,
       );
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
@@ -892,7 +893,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
 
       // Click on search-input
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 

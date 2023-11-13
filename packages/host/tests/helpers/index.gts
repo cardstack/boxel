@@ -76,6 +76,11 @@ export function setMonacoContent(content: string): string {
   return (window as any).monaco.editor.getModels()[0].setValue(content);
 }
 
+export async function waitForCodeEditor() {
+  // need a moment for the monaco SDK to load
+  return await waitFor('[data-test-editor]', { timeout: 3000 });
+}
+
 export async function waitForSyntaxHighlighting(
   textContent: string,
   color: string,

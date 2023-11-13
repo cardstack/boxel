@@ -21,4 +21,7 @@ declare const config: {
   logLevels: string;
   resolvedOwnRealmURL: string;
   autoSaveDelayMs: number;
+  monacoDebounceMs: number;
+  monacoCursorDebounceMs: number;
+  serverEchoDebounceMs: number;
 };

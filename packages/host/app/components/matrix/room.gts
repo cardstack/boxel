@@ -1,12 +1,16 @@
+import { Input } from '@ember/component';
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
+
 import { restartableTask, task, timeout, all } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
@@ -18,15 +22,17 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
+import { not, and, eq } from '@cardstack/boxel-ui/helpers';
+
 import {
   isMatrixCardError,
   chooseCard,
   baseCardRef,
   catalogEntryRef,
+  apiFor,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
-import { not, and, eq } from '@cardstack/boxel-ui/helpers';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -37,6 +43,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { getRoom } from '../../resources/room';
 
@@ -51,6 +58,7 @@ interface RoomArgs {
 }
 
 export default class Room extends Component<RoomArgs> {
+  helperId = guidFor(this);
   <template>
     <div>Number of cards: {{this.totalCards}}</div>
     <div class='room-members'>
@@ -151,7 +159,7 @@ export default class Room extends Component<RoomArgs> {
       <BoxelInput
         data-test-message-field={{this.room.name}}
         type='text'
-        @multiline={{true}}
+        @type='textarea'
         @value={{this.messageToSend}}
         @onInput={{this.setMessage}}
         rows='4'
@@ -173,12 +181,15 @@ export default class Room extends Component<RoomArgs> {
           @disabled={{this.doChooseCard.isRunning}}
           {{on 'click' this.chooseCard}}
         >Choose Card</Button>
-        <Button
-          data-test-send-open-cards-btn
-          @loading={{this.doSendMessage.isRunning}}
-          @disabled={{this.doSendMessage.isRunning}}
-          {{on 'click' this.sendOpenCards}}
-        >Send open cards</Button>
+
+        <label for='share-checkbox'>Allow access to the cards you can see at the
+          top of your stacks</label>
+        <Input
+          id={{(concat 'helper-text-' this.helperId)}}
+          data-test-share-context
+          @type='checkbox'
+          @checked={{this.shareCurrentContext}}
+        />
       {{/if}}
       <Button
         data-test-send-message-btn
@@ -299,11 +310,14 @@ export default class Room extends Component<RoomArgs> {
   @tracked private membersToInvite: string[] = [];
   @tracked private allowedToSetObjective: boolean | undefined;
   @tracked private subscribedRoom: FieldDef | undefined;
+
+  private shareCurrentContext = false;
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, CardDef | undefined> =
     new TrackedMap();
   private roomResource = getRoom(this, () => this.args.roomId);
+  private api: typeof CardAPI | undefined;
 
   constructor(owner: Owner, args: RoomArgs['Args']) {
     super(owner, args);
@@ -338,14 +352,18 @@ export default class Room extends Component<RoomArgs> {
   };
 
   private subscribeToRoomChanges = task(async () => {
-    await this.cardService.ready;
     while (true) {
       if (this.room && this.subscribedRoom !== this.room) {
         if (this.subscribedRoom) {
-          this.cardService.unsubscribe(this.subscribedRoom, this.onCardChange);
+          this.api = await apiFor(this.subscribedRoom);
+          this.api.unsubscribeFromChanges(
+            this.subscribedRoom,
+            this.onCardChange,
+          );
         }
         this.subscribedRoom = this.room;
-        this.cardService.subscribe(this.subscribedRoom, this.onCardChange);
+        this.api = await apiFor(this.subscribedRoom);
+        this.api.subscribeToChanges(this.subscribedRoom, this.onCardChange);
       }
       await timeout(50);
     }
@@ -360,8 +378,8 @@ export default class Room extends Component<RoomArgs> {
   });
 
   private cleanup = () => {
-    if (this.subscribedRoom) {
-      this.cardService.unsubscribe(this.subscribedRoom, this.onCardChange);
+    if (this.subscribedRoom && this.api) {
+      this.api.unsubscribeFromChanges(this.subscribedRoom, this.onCardChange);
     }
   };
 
@@ -460,13 +478,6 @@ export default class Room extends Component<RoomArgs> {
   }
 
   @action
-  private sendOpenCards() {
-    for (let stackItem of this.operatorModeStateService.topMostStackItems()) {
-      this.doSendMessage.perform(undefined, stackItem.card);
-    }
-  }
-
-  @action
   private showInviteMode() {
     this.isInviteMode = true;
   }
@@ -505,7 +516,21 @@ export default class Room extends Component<RoomArgs> {
     async (message: string | undefined, card?: CardDef) => {
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
-      await this.matrixService.sendMessage(this.args.roomId, message, card);
+      let context = undefined;
+      if (this.shareCurrentContext) {
+        context = {
+          submode: this.operatorModeStateService.state.submode,
+          openCards: this.operatorModeStateService
+            .topMostStackItems()
+            .map((stackItem) => stackItem.card),
+        };
+      }
+      await this.matrixService.sendMessage(
+        this.args.roomId,
+        message,
+        card,
+        context,
+      );
     },
   );
 
