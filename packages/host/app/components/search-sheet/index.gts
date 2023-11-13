@@ -102,6 +102,14 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
+  get inputValidationState() {
+    if (this.searchKeyIsURL && !this.searchCardResults.length) {
+      return 'invalid';
+    } else {
+      return 'initial';
+    }
+  }
+
   get sheetSize() {
     switch (this.args.mode) {
       case SearchSheetModes.Closed:
@@ -299,6 +307,7 @@ export default class SearchSheet extends Component<Signature> {
         @variant={{if (eq @mode 'closed') 'default' 'large'}}
         @bottomTreatment={{this.inputBottomTreatment}}
         @value={{this.searchKey}}
+        @state={{this.inputValidationState}}
         @placeholder={{this.placeholderText}}
         @onFocus={{@onFocus}}
         @onInput={{this.setSearchKey}}

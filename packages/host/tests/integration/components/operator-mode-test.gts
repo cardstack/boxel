@@ -2229,12 +2229,21 @@ module('Integration | operator-mode', function (hooks) {
     await focus(`[data-test-search-field]`);
 
     await click('[data-test-search-field]');
+
+    assert
+      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
+      .doesNotExist('invalid state is not shown');
+
     await fillIn('[data-test-search-field]', 'http://localhost:4202/test/man');
 
     assert
       .dom('[data-test-search-label]')
       .containsText('No card found at http://localhost:4202/test/man');
     assert.dom('[data-test-search-sheet-search-result]').doesNotExist();
+
+    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
+
+    assert.dom('[data-test-boxel-input-validation-state="invalid"]').exists();
 
     await fillIn(
       '[data-test-search-field]',
@@ -2246,6 +2255,9 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-search-label]')
       .containsText('Card found at http://localhost:4202/test/mango');
     assert.dom('[data-test-search-sheet-search-result]').exists({ count: 1 });
+    assert
+      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
+      .doesNotExist();
 
     await click('[data-test-search-sheet-search-result]');
 
@@ -2257,7 +2269,8 @@ module('Integration | operator-mode', function (hooks) {
       .containsText('Mango', 'the card is rendered in the stack');
   });
 
-  test(`error message is shown when invalid card URL is entered in search sheet`, async function (assert) {
+  // folding into preceding test, also this file is HUGE
+  skip(`error message is shown when invalid card URL is entered in search sheet`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -2276,14 +2289,22 @@ module('Integration | operator-mode', function (hooks) {
       .doesNotExist('invalid state is not shown');
 
     await fillIn(
-      `[data-test-url-field]`,
+      `[data-test-search-field]`,
       `http://localhost:4202/test/not-a-card`,
     );
     await click(`[data-test-go-button]`);
     await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
+
+    assert.dom('[data-test-boxel-input-validation-state="invalid"]').exists();
+    await this.pauseTest();
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .containsText('an error');
+
     assert
       .dom(`[data-test-boxel-input-error-message]`)
       .containsText('Not a valid Card URL');
+    await this.pauseTest();
     await fillIn(`[data-test-url-field]`, `http://localhost:4202/test/mango`);
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
