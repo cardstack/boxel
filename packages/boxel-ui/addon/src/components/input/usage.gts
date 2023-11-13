@@ -11,6 +11,16 @@ import {
 
 import cssVar from '../../helpers/css-var.ts';
 import BoxelInput from './index.gts';
+import {
+  type InputValidationState,
+  InputBottomTreatments,
+  InputTypes,
+  InputValidationStates,
+} from './index.gts';
+
+const validTypes = Object.values(InputTypes);
+const validBottomTreatments = Object.values(InputBottomTreatments);
+const validStates = Object.values(InputValidationStates);
 
 export default class InputUsage extends Component {
   @tracked id = 'sample-input';
@@ -18,10 +28,17 @@ export default class InputUsage extends Component {
   @tracked disabled = false;
   @tracked required = false;
   @tracked optional = false;
-  @tracked invalid = false;
-  @tracked multiline = false;
+  @tracked placeholder = '';
   @tracked errorMessage = '';
   @tracked helperText = '';
+  @tracked state: InputValidationState = 'initial';
+  @tracked variant: 'large' | 'default' = 'default';
+
+  defaultType = InputTypes.Text;
+  @tracked type = this.defaultType;
+
+  defaultBottomTreatment = InputBottomTreatments.Rounded;
+  @tracked bottomTreatment = this.defaultBottomTreatment;
 
   @cssVariable({ cssClassName: 'boxel-input' })
   declare boxelInputHeight: CSSVariableInfo;
@@ -39,7 +56,7 @@ export default class InputUsage extends Component {
   @action validate(ev: Event): void {
     let target = ev.target as HTMLInputElement;
     if (!target.validity?.valid) {
-      this.invalid = true;
+      this.state = 'invalid';
       if (target.validity?.valueMissing) {
         this.errorMessage = 'This is a required field';
       } else {
@@ -47,7 +64,7 @@ export default class InputUsage extends Component {
       }
       return;
     }
-    this.invalid = false;
+    this.state = 'valid';
     this.errorMessage = '';
   }
 
@@ -63,8 +80,11 @@ export default class InputUsage extends Component {
           @disabled={{this.disabled}}
           @required={{this.required}}
           @optional={{this.optional}}
-          @invalid={{this.invalid}}
-          @multiline={{this.multiline}}
+          @type={{this.type}}
+          @state={{this.state}}
+          @placeholder={{this.placeholder}}
+          @bottomTreatment={{this.bottomTreatment}}
+          @variant={{this.variant}}
           @errorMessage={{this.errorMessage}}
           @helperText={{this.helperText}}
           style={{cssVar boxel-input-height=this.boxelInputHeight.value}}
@@ -80,9 +100,23 @@ export default class InputUsage extends Component {
           @onInput={{fn (mut this.id)}}
         />
         <Args.String
+          @name='type'
+          @options={{validTypes}}
+          @defaultValue={{this.defaultType}}
+          @onInput={{fn (mut this.type)}}
+          @value={{this.type}}
+        />
+        <Args.String
           @name='value'
           @value={{this.value}}
           @onInput={{fn (mut this.value)}}
+        />
+        <Args.String
+          @name='state'
+          @description='The validation state of the input'
+          @options={{validStates}}
+          @onInput={{fn (mut this.state)}}
+          @value={{this.state}}
         />
         <Args.Bool
           @name='disabled'
@@ -98,32 +132,44 @@ export default class InputUsage extends Component {
           @name='optional'
           @value={{this.optional}}
           @onInput={{fn (mut this.optional)}}
-          @description="Displays 'optional' label, unless the '@required' arg is also true"
-        />
-        <Args.Bool
-          @name='invalid'
-          @value={{this.invalid}}
-          @onInput={{fn (mut this.invalid)}}
-        />
-        <Args.Bool
-          @name='multiline'
-          @value={{this.multiline}}
-          @onInput={{fn (mut this.multiline)}}
+          @description='Displays optional label, unless @required=true'
         />
         <Args.String
           @name='errorMessage'
           @value={{this.errorMessage}}
           @onInput={{fn (mut this.errorMessage)}}
-          @description="This will only show up if the '@invalid' arg returns true"
+          @description="Only shows with @state='invalid'"
         />
         <Args.String
           @name='helperText'
           @value={{this.helperText}}
           @onInput={{fn (mut this.helperText)}}
         />
+        <Args.String
+          @name='placeholder'
+          @description='Placeholder text'
+          @onInput={{fn (mut this.placeholder)}}
+          @value={{this.placeholder}}
+        />
+        <Args.String
+          @name='bottomTreatment'
+          @description='The visual shape of the bottom of the input'
+          @onInput={{fn (mut this.bottomTreatment)}}
+          @options={{validBottomTreatments}}
+          @value={{this.bottomTreatment}}
+          @defaultValue={{this.defaultBottomTreatment}}
+        />
+        <Args.String
+          @name='variant'
+          @description='Optional larger size'
+          @onInput={{fn (mut this.variant)}}
+          @options={{Array 'default' 'large'}}
+          @value={{this.variant}}
+          @defaultValue={{this.variant}}
+        />
         <Args.Action
           @name='onInput'
-          @description='Function to update the passed in value. This receives the changed value as a string.'
+          @description='Receives the changed value as a string'
         />
         <Args.Action @name='onKeyPress' @description='Action on key press' />
         <Args.Action @name='onFocus' @description='Action on focus' />
@@ -150,7 +196,7 @@ export default class InputUsage extends Component {
         <BoxelInput
           @id='multilineExample'
           @value=''
-          @multiline={{true}}
+          @type='textarea'
           rows='10'
           cols='20'
         />

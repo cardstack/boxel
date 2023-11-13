@@ -774,11 +774,11 @@ module('Acceptance | code submode tests', function (hooks) {
     assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
     // Click on search-input
-    await click('[data-test-search-input] input');
+    await click('[data-test-search-field]');
 
     assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
-    await fillIn('[data-test-search-input] input', 'Mango');
+    await fillIn('[data-test-search-field]', 'Mango');
 
     assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
 

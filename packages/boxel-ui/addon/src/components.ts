@@ -10,13 +10,12 @@ import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
 import Header from './components/header/index.gts';
 import IconButton from './components/icon-button/index.gts';
-import BoxelInput from './components/input/index.gts';
-import SearchInput, {
-  type SearchInputBottomTreatment,
-  SearchInputBottomTreatments,
-} from './components/input/search-input/index.gts';
-import type { InputValidationState } from './components/input/validation-state/index.gts';
-import BoxelInputValidationState from './components/input/validation-state/index.gts';
+import BoxelInput, {
+  type InputBottomTreatment as BoxelInputBottomTreatment,
+  type InputValidationState as BoxelInputValidationState,
+  InputBottomTreatments as BoxelInputBottomTreatments,
+  InputValidationStates as BoxelInputValidationStates,
+} from './components/input/index.gts';
 import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import Menu from './components/menu/index.gts';
@@ -35,7 +34,10 @@ export {
   BoxelDropdown,
   BoxelHeader,
   BoxelInput,
+  BoxelInputBottomTreatment,
+  BoxelInputBottomTreatments,
   BoxelInputValidationState,
+  BoxelInputValidationStates,
   BoxelMessage,
   Button,
   CardContainer,
@@ -44,7 +46,6 @@ export {
   GridContainer,
   Header,
   IconButton,
-  InputValidationState,
   Label,
   LoadingIndicator,
   Menu,
@@ -53,8 +54,5 @@ export {
   PanelContext,
   RadioInput,
   ResizablePanelGroup,
-  SearchInput,
-  SearchInputBottomTreatment,
-  SearchInputBottomTreatments,
   Tooltip,
 };

@@ -16,7 +16,6 @@ import { TrackedMap } from 'tracked-built-ins';
 import {
   Button,
   BoxelHeader,
-  BoxelInputValidationState,
   BoxelInput,
   FieldContainer,
   LoadingIndicator,
@@ -77,7 +76,7 @@ export default class RoomsManager extends Component {
             @tag='label'
             class='create-room__field'
           >
-            <BoxelInputValidationState
+            <BoxelInput
               data-test-room-name-field
               @id=''
               @state={{this.roomNameInputState}}

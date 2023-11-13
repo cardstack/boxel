@@ -6,8 +6,10 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
 
-import { BoxelInputValidationState } from '@cardstack/boxel-ui/components';
-import type { InputValidationState } from '@cardstack/boxel-ui/components';
+import {
+  BoxelInput,
+  type BoxelInputValidationState,
+} from '@cardstack/boxel-ui/components';
 
 import {
   isSingleCardDocument,
@@ -29,7 +31,7 @@ export default class UrlSearch extends Component<Signature> {
   <template>
     <label class='url-search'>
       <span>Enter Card URL:</span>
-      <BoxelInputValidationState
+      <BoxelInput
         data-test-url-field
         placeholder='https://'
         @value={{this.cardURL}}
@@ -71,7 +73,7 @@ export default class UrlSearch extends Component<Signature> {
     return this.displayErrorState ? 'Not a valid Card URL' : undefined;
   }
 
-  get cardURLFieldState(): InputValidationState {
+  get cardURLFieldState(): BoxelInputValidationState {
     return this.displayErrorState ? 'invalid' : 'initial';
   }
 
