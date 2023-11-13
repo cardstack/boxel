@@ -33,6 +33,7 @@ import {
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupServerSentEvents,
+  waitForCodeEditor,
   type TestContextWithSSE,
 } from '../helpers';
 
@@ -416,6 +417,8 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
+    await waitFor('[data-test-file-view-header]');
 
     assert
       .dom('[data-test-file-view-header]')
@@ -462,6 +465,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-file-definition]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.json');
@@ -497,6 +501,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-file-definition]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.json');
@@ -634,6 +639,7 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -669,6 +675,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-resource-loaded]');
 
     assert.dom('[data-test-code-mode-card-preview-header]').hasText('Person');
@@ -711,6 +718,7 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
 
@@ -770,6 +778,7 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -792,7 +801,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
 
     // The card appears in the editor
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {
@@ -821,6 +830,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
@@ -830,22 +840,34 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
-    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
+    assert.true(
+      monacoService.getLineCursorOn()?.includes('LocalClass'),
+      'cursor is on LocalClass line',
+    );
 
     // clicking on a card
     elementName = 'ExportedCard';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+    assert.true(
+      monacoService.getLineCursorOn()?.includes(elementName),
+      'cursor is on ExportedCard line',
+    );
 
     // clicking on a field
     elementName = 'ExportedField';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+    assert.true(
+      monacoService.getLineCursorOn()?.includes(elementName),
+      'cursor is on ExportedField line',
+    );
 
     // clicking on an exported function
     elementName = 'exportedFunction';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+    assert.true(
+      monacoService.getLineCursorOn()?.includes(elementName),
+      'cursor is on exportedFunction line',
+    );
   });
 
   test('changes selected module declaration when cursor position is changed', async function (assert) {
@@ -860,7 +882,7 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-
+    await waitForCodeEditor();
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
@@ -929,7 +951,7 @@ module('Acceptance | code submode tests', function (hooks) {
           operatorModeStateParam,
         )}`,
       );
-      await waitFor('[data-test-editor]');
+      await waitForCodeEditor();
 
       let originalPosition: MonacoSDK.Position | undefined | null;
       await this.expectEvents(
@@ -962,8 +984,7 @@ module('Acceptance | code submode tests', function (hooks) {
     }
   });
 
-  test<TestContextWithSSE>('cursor must be on the right declaration when user open definition', async function (assert) {
-    assert.expect(2);
+  test('cursor is placed at the correct declaration when user opens definition', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',
@@ -975,22 +996,27 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     await waitFor(`[data-boxel-selector-item-text="Employee"]`);
     await click(`[data-boxel-selector-item-text="Employee"]`);
     let lineCursorOn = monacoService.getLineCursorOn();
-    assert.true(lineCursorOn?.includes('Employee'));
+    assert.true(
+      lineCursorOn?.includes('Employee'),
+      'cursor is at Employee declaration',
+    );
 
     await click(`[data-test-definition-container="${testRealmURL}person"]`);
     await waitFor(`[data-boxel-selector-item-text="Person"]`);
-    lineCursorOn = monacoService.getLineCursorOn();
     await waitUntil(() => monacoService.hasFocus);
-    assert.true(lineCursorOn?.includes('Person'));
+    lineCursorOn = monacoService.getLineCursorOn();
+    assert.true(
+      lineCursorOn?.includes('Person'),
+      'cursor is at Person declaration',
+    );
   });
 
-  test<TestContextWithSSE>('cursor must not be in editor if user focus on other elements', async function (assert) {
-    assert.expect(4);
+  test('cursor must not be in editor if user focuses on other elements', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',
@@ -1002,7 +1028,7 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     await waitFor(`[data-boxel-selector-item-text="Employee"]`);
     await click(`[data-boxel-selector-item-text="Employee"]`);

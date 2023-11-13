@@ -54,12 +54,13 @@ export default class Monaco extends Modifier<Signature> {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
       if (
-        content !== this.lastContent &&
+        content !== this.model.getValue() &&
         // ignore SSE server echoes of our own saves by not processing content changes
         // within serverEchoDebounceMs of the last monaco change in memory
         Date.now() >=
           this.lastModified + this.monacoService.serverEchoDebounceMs
       ) {
+        this.lastContent = content;
         this.model.setValue(content);
       }
     } else {
@@ -111,6 +112,10 @@ export default class Monaco extends Modifier<Signature> {
 
   private onContentChanged = restartableTask(
     async (contentChanged: (text: string) => void) => {
+      let content = this.model?.getValue();
+      if (this.lastContent === content) {
+        return;
+      }
       this.lastModified = Date.now();
       await timeout(monacoDebounceMs);
       if (this.model) {

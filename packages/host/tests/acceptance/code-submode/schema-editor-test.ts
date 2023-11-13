@@ -29,6 +29,7 @@ import {
   setupServerSentEvents,
   setupOnSave,
   getMonacoContent,
+  waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
@@ -359,6 +360,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
@@ -497,6 +499,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-code-mode-card-preview-body]');
     assert
       .dom('[data-test-code-mode-card-preview-body]')
@@ -525,6 +528,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     assert
@@ -550,6 +554,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor(
       '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
     );
@@ -609,6 +614,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
     assert.dom('[data-test-add-field-button]').exists({ count: 1 }); // Only top level card has an option to add a field
 
@@ -721,6 +727,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
 
     // Field is a card descending from FieldDef
@@ -821,6 +828,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     await click(
@@ -886,6 +894,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     // Let's edit a "linksToMany" Friend field, named friends
@@ -937,6 +946,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor(`[data-test-boxel-selector-item-text="BlogPost"]`);
     await click(`[data-test-boxel-selector-item-text="BlogPost"]`);
 
