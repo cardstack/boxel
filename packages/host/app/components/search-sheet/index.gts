@@ -84,6 +84,24 @@ export default class SearchSheet extends Component<Signature> {
       : BoxelInputBottomTreatments.Flat;
   }
 
+  get searchLabel() {
+    if (this.getCard.isRunning) {
+      return `Fetching ${this.searchKey}`;
+    } else if (this.searchKeyIsURL) {
+      if (this.searchCardResults.length) {
+        return `Card found at ${this.searchKey}`;
+      } else {
+        return `No card found at ${this.searchKey}`;
+      }
+    } else if (this.isSearching) {
+      return `Searching for “${this.searchKey}”`;
+    } else {
+      return `Result${this.searchCardResults.length != 1 ? 's' : ''} for “${
+        this.searchKey
+      }”`;
+    }
+  }
+
   get sheetSize() {
     switch (this.args.mode) {
       case SearchSheetModes.Closed:
@@ -140,7 +158,9 @@ export default class SearchSheet extends Component<Signature> {
           maybeCardDoc,
           new URL(maybeCardDoc.data.id),
         );
-        this.handleCardSelect(card);
+
+        this.clearSearchCardResults();
+        this.searchCardResults.push(card);
       }
     }
   });
@@ -292,16 +312,7 @@ export default class SearchSheet extends Component<Signature> {
           (or (gt this.searchCardResults.length 0) this.isSearchKeyNotEmpty)
         }}
           <div class='search-result-section'>
-            url?
-            {{this.searchKeyIsURL}}
-            {{#if this.isSearching}}
-              <Label data-test-search-label>Searching for "{{this.searchKey}}"</Label>
-            {{else}}
-              <Label
-                data-test-search-result-label
-              >{{this.searchCardResults.length}}
-                Results for "{{this.searchKey}}"</Label>
-            {{/if}}
+            <Label data-test-search-label>{{this.searchLabel}}</Label>
             <div class='search-result-section__body'>
               <div class='search-result-section__cards'>
                 {{#each this.searchCardResults as |card i|}}

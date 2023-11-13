@@ -1769,9 +1769,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-label]`).containsText('Searching for "Ma"');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert
-      .dom(`[data-test-search-result-label]`)
-      .containsText('2 Results for "Ma"');
+    assert.dom(`[data-test-search-label]`).containsText('2 Results for "Ma"');
     assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 2 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
@@ -1794,10 +1792,10 @@ module('Integration | operator-mode', function (hooks) {
     await waitUntil(
       () =>
         !document.querySelector('[data-test-search-sheet-search-result]') &&
-        document.querySelector('[data-test-search-result-label]'),
+        document.querySelector('[data-test-search-label]'),
     );
     assert
-      .dom(`[data-test-search-result-label]`)
+      .dom(`[data-test-search-label]`)
       .containsText('0 Results for "No Cards"');
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
   });
@@ -2230,11 +2228,27 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await focus(`[data-test-search-field]`);
 
-    await click('[data-test-url-field]');
-    await fillIn('[data-test-url-field]', 'http://localhost:4202/test/mango');
+    await click('[data-test-search-field]');
+    await fillIn('[data-test-search-field]', 'http://localhost:4202/test/man');
 
-    // It goes automatically, should it?
-    // await click(`[data-test-go-button]`);
+    assert
+      .dom('[data-test-search-label]')
+      .containsText('No card found at http://localhost:4202/test/man');
+    assert.dom('[data-test-search-sheet-search-result]').doesNotExist();
+
+    await fillIn(
+      '[data-test-search-field]',
+      'http://localhost:4202/test/mango',
+    );
+    await waitFor('[data-test-search-sheet-search-result]');
+
+    assert
+      .dom('[data-test-search-label]')
+      .containsText('Card found at http://localhost:4202/test/mango');
+    assert.dom('[data-test-search-sheet-search-result]').exists({ count: 1 });
+
+    await click('[data-test-search-sheet-search-result]');
+
     await waitFor(`[data-test-stack-card="http://localhost:4202/test/mango"]`);
     assert
       .dom(
