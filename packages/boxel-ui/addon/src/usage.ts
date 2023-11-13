@@ -12,9 +12,7 @@ import FieldContainerUsage from './components/field-container/usage.gts';
 import GridContainerUsage from './components/grid-container/usage.gts';
 import HeaderUsage from './components/header/usage.gts';
 import IconButtonUsage from './components/icon-button/usage.gts';
-import InputSearchInputUsage from './components/input/search-input/usage.gts';
 import InputUsage from './components/input/usage.gts';
-import InputValidationStateUsage from './components/input/validation-state/usage.gts';
 import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
 import MessageUsage from './components/message/usage.gts';
@@ -35,9 +33,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['GridContainer', GridContainerUsage],
   ['Header', HeaderUsage],
   ['IconButton', IconButtonUsage],
-  ['InputSearchInput', InputSearchInputUsage],
   ['Input', InputUsage],
-  ['InputValidationState', InputValidationStateUsage],
   ['LoadingIndicator', LoadingIndicatorUsage],
   ['Menu', MenuUsage],
   ['Message', MessageUsage],

@@ -55,7 +55,7 @@ class Edit extends Component<typeof EthereumAddressField> {
       @value={{this.textInputFilter.asString}}
       @onInput={{this.textInputFilter.onInput}}
       @errorMessage={{this.textInputFilter.errorMessage}}
-      @invalid={{this.textInputFilter.isInvalid}}
+      @state={{if this.textInputFilter.isInvalid 'invalid' 'none'}}
     />
   </template>
 

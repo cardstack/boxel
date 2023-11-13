@@ -10,7 +10,7 @@ export default class TextAreaCard extends StringField {
         class='boxel-text-area'
         @value={{@model}}
         @onInput={{@set}}
-        @multiline={{true}}
+        @type='textarea'
       />
     </template>
   };
