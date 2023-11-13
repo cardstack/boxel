@@ -103,7 +103,11 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   get inputValidationState() {
-    if (this.searchKeyIsURL && !this.searchCardResults.length) {
+    if (
+      this.searchKeyIsURL &&
+      !this.getCard.isRunning &&
+      !this.searchCardResults.length
+    ) {
       return 'invalid';
     } else {
       return 'initial';
@@ -151,6 +155,8 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   getCard = restartableTask(async (cardURL: string) => {
+    this.clearSearchCardResults();
+
     let response = await this.loaderService.loader.fetch(cardURL, {
       headers: {
         Accept: 'application/vnd.card+json',

@@ -2235,14 +2235,12 @@ module('Integration | operator-mode', function (hooks) {
       .doesNotExist('invalid state is not shown');
 
     await fillIn('[data-test-search-field]', 'http://localhost:4202/test/man');
+    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
 
     assert
       .dom('[data-test-search-label]')
       .containsText('No card found at http://localhost:4202/test/man');
     assert.dom('[data-test-search-sheet-search-result]').doesNotExist();
-
-    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
-
     assert.dom('[data-test-boxel-input-validation-state="invalid"]').exists();
 
     await fillIn(
@@ -2258,6 +2256,21 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist();
+
+    await fillIn('[data-test-search-field]', 'http://localhost:4202/test/man');
+    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
+
+    assert
+      .dom('[data-test-search-label]')
+      .containsText('No card found at http://localhost:4202/test/man');
+    assert.dom('[data-test-search-sheet-search-result]').doesNotExist();
+    assert.dom('[data-test-boxel-input-validation-state="invalid"]').exists();
+
+    await fillIn(
+      '[data-test-search-field]',
+      'http://localhost:4202/test/mango',
+    );
+    await waitFor('[data-test-search-sheet-search-result]');
 
     await click('[data-test-search-sheet-search-result]');
 
