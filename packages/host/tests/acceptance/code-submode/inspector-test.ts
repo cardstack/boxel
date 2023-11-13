@@ -472,6 +472,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-card-module-definition]');
@@ -530,7 +531,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-
+    await waitForCodeEditor();
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-card-module-definition]');
 
@@ -577,6 +578,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
@@ -865,6 +867,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     // clicking on normal card
     let elementName = 'ChildCard1';
@@ -967,6 +970,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     elementName = 'ChildCard5';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -993,6 +997,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     elementName = 'ChildField1';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -1025,6 +1030,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     //click card type
     await visit(
@@ -1032,6 +1038,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     let elementName = 'AncestorCard2';
     await waitFor(
       `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
@@ -1064,6 +1071,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     elementName = 'AncestorField1';
     await waitFor(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
@@ -1095,6 +1103,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     elementName = 'AncestorCard2';
     await waitFor(
@@ -1127,6 +1136,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     elementName = 'ChildCard2';
     await waitFor(
@@ -1159,6 +1169,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     elementName = 'AncestorCard2';
     await waitFor(
