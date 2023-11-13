@@ -12,7 +12,11 @@ import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
+import {
+  Button,
+  BoxelInput,
+  BoxelInputValidationState,
+} from '@cardstack/boxel-ui/components';
 import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
@@ -99,7 +103,6 @@ export default class CardCatalogModal extends Component<Signature> {
             @value={{this.state.searchKey}}
             @onInput={{this.setSearchKey}}
             @onKeyPress={{this.onSearchFieldKeypress}}
-            @hasValidation={{true}}
             @state={{this.cardURLFieldState}}
             @errorMessage={{this.cardURLErrorMessage}}
             @placeholder='Search for a card'
@@ -277,7 +280,7 @@ export default class CardCatalogModal extends Component<Signature> {
     return this.displayErrorState ? 'Not a valid Card URL' : undefined;
   }
 
-  get cardURLFieldState(): InputValidationState {
+  get cardURLFieldState(): BoxelInputValidationState {
     return this.displayErrorState ? 'invalid' : 'initial';
   }
 
