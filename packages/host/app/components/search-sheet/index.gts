@@ -172,7 +172,7 @@ export default class SearchSheet extends Component<Signature> {
   resetState() {
     this.searchKey = '';
     this.cardURL = '';
-    this.searchCardResults.splice(0, this.searchCardResults.length);
+    this.clearSearchCardResults();
   }
 
   @cached
@@ -183,7 +183,7 @@ export default class SearchSheet extends Component<Signature> {
 
   debouncedSearchFieldUpdate = debounce(() => {
     if (!this.searchKey) {
-      this.searchCardResults.splice(0, this.searchCardResults.length);
+      this.clearSearchCardResults();
       this.isSearching = false;
       return;
     }
@@ -199,7 +199,7 @@ export default class SearchSheet extends Component<Signature> {
         console.log('is url');
         this.getCard.perform(this.searchKey);
       } else {
-        this.searchCardResults.splice(0, this.searchCardResults.length);
+        this.clearSearchCardResults();
         this.searchCard.perform(this.searchKey);
       }
     }
@@ -211,6 +211,10 @@ export default class SearchSheet extends Component<Signature> {
     this.isSearching = true;
     this.debouncedSearchFieldUpdate();
     this.args.onSearch?.(searchKey);
+  }
+
+  private clearSearchCardResults() {
+    this.searchCardResults.splice(0, this.searchCardResults.length);
   }
 
   private searchCard = restartableTask(async (searchKey: string) => {
@@ -246,7 +250,7 @@ export default class SearchSheet extends Component<Signature> {
     if (cards.length > 0) {
       this.searchCardResults.push(...cards);
     } else {
-      this.searchCardResults.splice(0, this.searchCardResults.length);
+      this.clearSearchCardResults();
     }
 
     this.isSearching = false;
