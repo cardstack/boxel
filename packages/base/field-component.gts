@@ -16,6 +16,7 @@ import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
+import { concat } from '@ember/helper';
 
 interface BoxComponentSignature {
   Args: { Named: { format?: Format } };
@@ -110,6 +111,7 @@ export function getBoxComponent(
           </CardContainer>
         {{else if (isCompoundField model.value)}}
           <div
+            class='compound-field {{f.format}}-format'
             data-test-compound-field-format={{f.format}}
             data-test-compound-field-component
             {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
@@ -152,6 +154,10 @@ export function getBoxComponent(
           letter-spacing: var(--boxel-lsp-xs);
           padding: 4px var(--boxel-sp-sm);
           background-color: var(--boxel-light);
+        }
+
+        .compound-field.atom-format {
+          display: inline-block;
         }
       </style>
     </template>;
