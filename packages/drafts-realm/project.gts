@@ -12,6 +12,7 @@ import {
   CardDef,
   FieldDef,
   linksToMany,
+  Component,
 } from 'https://cardstack.com/base/card-api';
 class ResourceAllocation extends FieldDef {
   static displayName = 'ResourceAllocation';
@@ -21,6 +22,17 @@ class ResourceAllocation extends FieldDef {
   dayRate = contains(AmountField);
   @field
   perDay = contains(NumberField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <div>
+        <@fields.role />
+        (<@fields.dayRate @format='atom' />
+        per day) @
+        <@fields.perDay />
+      </div>
+    </template>
+  };
 }
 export class Project extends CardDef {
   static displayName = 'Project';
@@ -50,7 +62,7 @@ export class Project extends CardDef {
       if (this.resourceAllocations.length === 0) {
         return undefined;
       }
-      let estimateQuantity = this.resourceAllocations.reduce(
+      let perDayEstimate = this.resourceAllocations.reduce(
         (estimateSoFar, currentResourceAllocation) => {
           let quantityPerDay =
             currentResourceAllocation?.dayRate?.quantity || 0;
@@ -62,7 +74,7 @@ export class Project extends CardDef {
       );
       let firstCurrency = this.resourceAllocations[0].dayRate.currency;
       return new AmountField({
-        quantity: estimateQuantity,
+        quantity: perDayEstimate * this.duration,
         currency: firstCurrency,
       });
     },

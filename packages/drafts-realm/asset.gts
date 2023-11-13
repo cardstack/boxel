@@ -136,4 +136,14 @@ export class AmountField extends FieldDef {
   static displayName = 'Amount';
   @field currency = linksTo(Currency);
   @field quantity = contains(NumberField);
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{@model.currency.sign}}{{@model.quantity}}
+    </template>
+  };
+  static embedded = class Atom extends Component<typeof this> {
+    <template>
+      {{@model.currency.sign}}{{@model.quantity}}
+    </template>
+  };
 }
