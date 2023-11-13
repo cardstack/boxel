@@ -2,8 +2,6 @@ import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 
-import { parse } from 'qs';
-
 import ENV from '@cardstack/host/config/environment';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -14,7 +12,6 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import type CardService from '../services/card-service';
 
 const { ownRealmURL } = ENV;
-const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
 
 export type Model = CardDef | null;
 
@@ -31,25 +28,6 @@ export default class RenderCard extends Route<Model | null> {
   @service declare cardService: CardService;
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
-
-  beforeModel(transition: any) {
-    let queryParams = parse(
-      new URL(transition.intent.url, 'http://anywhere').search,
-      { ignoreQueryPrefix: true },
-    );
-    if ('schema' in queryParams) {
-      let {
-        params: { path },
-      } = transition.routeInfos[transition.routeInfos.length - 1];
-      path = path || '';
-      path = path.slice(rootPath.length);
-      let segments = path.split('/');
-      segments.pop();
-      let dir = segments.join('/');
-      let openDirs = segments.length > 0 ? [`${dir}/`] : [];
-      this.router.transitionTo('code', { queryParams: { path, openDirs } });
-    }
-  }
 
   async model(params: {
     path: string;
