@@ -4,6 +4,7 @@ import {
   waitFor,
   fillIn,
   triggerKeyEvent,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
@@ -959,5 +960,68 @@ module('Acceptance | code submode tests', function (hooks) {
       // set this back correctly regardless of test outcome
       monacoService.serverEchoDebounceMs = 0;
     }
+  });
+
+  test<TestContextWithSSE>('cursor must be on the right declaration when user open definition', async function (assert) {
+    assert.expect(2);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-editor]');
+
+    await waitFor(`[data-boxel-selector-item-text="Employee"]`);
+    await click(`[data-boxel-selector-item-text="Employee"]`);
+    let lineCursorOn = monacoService.getLineCursorOn();
+    assert.true(lineCursorOn?.includes('Employee'));
+
+    await click(`[data-test-definition-container="${testRealmURL}person"]`);
+    await waitFor(`[data-boxel-selector-item-text="Person"]`);
+    lineCursorOn = monacoService.getLineCursorOn();
+    await waitUntil(() => monacoService.hasFocus);
+    assert.true(lineCursorOn?.includes('Person'));
+  });
+
+  test<TestContextWithSSE>('cursor must not be in editor if user focus on other elements', async function (assert) {
+    assert.expect(4);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-editor]');
+
+    await waitFor(`[data-boxel-selector-item-text="Employee"]`);
+    await click(`[data-boxel-selector-item-text="Employee"]`);
+    assert.true(monacoService.hasFocus);
+
+    await fillIn('[data-test-card-url-bar] input', `${testRealmURL}person.gts`);
+    assert.false(monacoService.hasFocus);
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor(`[data-boxel-selector-item-text="Person"]`);
+    assert.true(monacoService.hasFocus);
+
+    await fillIn(
+      '[data-test-card-url-bar] input',
+      `${testRealmURL}person.gts-test`,
+    );
+    assert.false(monacoService.hasFocus);
   });
 });

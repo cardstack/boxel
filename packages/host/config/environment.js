@@ -27,6 +27,7 @@ module.exports = function (environment) {
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
     autoSaveDelayMs: 500,
     monacoDebounceMs: 500,
+    monacoCursorDebounceMs: 200,
     serverEchoDebounceMs: 5000,
 
     // the fields below may be rewritten by the realm server
@@ -70,6 +71,7 @@ module.exports = function (environment) {
     ENV.APP.experimentalAIEnabled = true;
     ENV.autoSaveDelayMs = 0;
     ENV.monacoDebounceMs = 0;
+    ENV.monacoCursorDebounceMs = 0;
     ENV.serverEchoDebounceMs = 0;
   }
 
