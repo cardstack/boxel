@@ -276,7 +276,8 @@ export default class SearchSheet extends Component<Signature> {
               <Label
                 data-test-search-result-label
               >{{this.searchCardResults.length}}
-                Results for "{{this.searchKey}}"</Label>
+                Result{{unless (eq this.searchCardResults.length 1) 's'}}
+                for "{{this.searchKey}}"</Label>
             {{/if}}
             <div class='search-result-section__body'>
               <div class='search-result-section__cards'>
