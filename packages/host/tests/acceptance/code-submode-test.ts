@@ -417,6 +417,7 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     assert
       .dom('[data-test-file-view-header]')
@@ -463,6 +464,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-file-definition]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.json');
@@ -498,6 +500,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-file-definition]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.json');
@@ -525,6 +528,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-file]');
 
     assert.dom('[data-test-file]').exists();
@@ -559,6 +563,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-file]');
 
     assert.dom('[data-test-file]').exists();
@@ -591,6 +596,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-file-definition]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.png');
@@ -635,6 +641,7 @@ module('Acceptance | code submode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -670,6 +677,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-resource-loaded]');
 
     assert.dom('[data-test-code-mode-card-preview-header]').hasText('Person');
@@ -771,6 +779,7 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
 
     assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
