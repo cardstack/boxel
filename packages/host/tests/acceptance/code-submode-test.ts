@@ -418,6 +418,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
     await waitForCodeEditor();
+    await waitFor('[data-test-file-view-header]');
 
     assert
       .dom('[data-test-file-view-header]')
