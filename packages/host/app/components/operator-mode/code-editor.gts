@@ -112,8 +112,9 @@ export default class CodeEditor extends Component<Signature> {
 
   @cached
   private get initialMonacoCursorPosition() {
-    if (this.args.selectedDeclaration?.path?.node.loc) {
-      let { start } = this.args.selectedDeclaration.path.node.loc;
+    let loc =  this.args.selectedDeclaration?.path?.node.loc;
+    if (loc) {
+      let { start } = loc;
       return new Position(start.line, start.column);
     }
     return undefined;
