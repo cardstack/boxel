@@ -747,17 +747,10 @@ export class Realm {
       name = 'cards';
     }
 
-    let localPath: LocalPath | undefined;
-    let fileURL: URL | undefined;
-    while (!fileURL || !localPath || (await this.#adapter.exists(localPath))) {
-      let pathname = `/${join(
-        new URL(this.url).pathname,
-        name,
-        uuidV4() + '.json',
-      )}`;
-      fileURL = this.paths.fileURL(pathname);
-      localPath = this.paths.local(fileURL);
-    }
+    let fileURL = this.paths.fileURL(
+      `/${join(new URL(this.url).pathname, name, uuidV4() + '.json')}`,
+    );
+    let localPath = this.paths.local(fileURL);
     let { lastModified } = await this.write(
       localPath,
       JSON.stringify(

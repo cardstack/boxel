@@ -147,7 +147,9 @@ export interface TestContextWithSSE extends TestContext {
     assert: Assert;
     realm: Realm;
     adapter: TestRealmAdapter;
-    expectedEvents: { type: string; data: Record<string, any> }[];
+    expectedEvents?: { type: string; data: Record<string, any> }[];
+    expectedNumberOfEvents?: number;
+    onEvents?: (events: { type: string; data: Record<string, any> }[]) => void;
     callback: () => Promise<any>;
   }) => Promise<any>;
   subscribers: ((e: { type: string; data: string }) => void)[];
@@ -324,16 +326,28 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       realm,
       adapter,
       expectedEvents,
+      expectedNumberOfEvents,
+      onEvents,
       callback,
     }: {
       assert: Assert;
       realm: Realm;
       adapter: TestRealmAdapter;
-      expectedEvents: { type: string; data: Record<string, any> }[];
+      expectedEvents?: { type: string; data: Record<string, any> }[];
+      expectedNumberOfEvents?: number;
+      onEvents?: (
+        events: { type: string; data: Record<string, any> }[],
+      ) => void;
       callback: () => Promise<T>;
     }): Promise<T> => {
       let defer = new Deferred();
       let events: { type: string; data: Record<string, any> }[] = [];
+      let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
+      if (numOfEvents == null) {
+        throw new Error(
+          `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
+        );
+      }
       let response = await realm.handle(
         new Request(`${realm.url}_message`, {
           method: 'GET',
@@ -357,13 +371,15 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       );
       let result = await callback();
       let decoder = new TextDecoder();
-      while (events.length < expectedEvents.length) {
+      while (events.length < numOfEvents) {
         let { done, value } = await Promise.race([
           reader.read(),
           defer.promise as any, // this one always throws so type is not important
         ]);
         if (done) {
-          throw new Error('expected more events');
+          throw new Error(
+            `expected ${numOfEvents} events, saw ${events.length} events`,
+          );
         }
         if (value) {
           let ev = getEventData(decoder.decode(value, { stream: true }));
@@ -379,7 +395,12 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           }
         }
       }
-      assert.deepEqual(events, expectedEvents, 'sse response is correct');
+      if (expectedEvents) {
+        assert.deepEqual(events, expectedEvents, 'sse response is correct');
+      }
+      if (onEvents) {
+        onEvents(events);
+      }
       clearTimeout(timeout);
       adapter.unsubscribe();
       return result;

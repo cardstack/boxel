@@ -1536,6 +1536,9 @@ importers:
       '@types/tmp':
         specifier: ^0.2.3
         version: 0.2.3
+      '@types/uuid':
+        specifier: ^9.0.4
+        version: 9.0.4
       '@types/yargs':
         specifier: ^17.0.10
         version: 17.0.10
@@ -1623,6 +1626,9 @@ importers:
       typescript-memoize:
         specifier: ^1.1.1
         version: 1.1.1
+      uuid:
+        specifier: ^9.0.1
+        version: 9.0.1
       yargs:
         specifier: ^17.5.1
         version: 17.5.1
@@ -11187,7 +11193,7 @@ packages:
       '@babel/plugin-proposal-decorators': 7.22.10(@babel/core@7.22.11)
       '@babel/plugin-proposal-private-methods': 7.18.6(@babel/core@7.22.11)
       '@babel/plugin-proposal-private-property-in-object': 7.21.11(@babel/core@7.22.11)
-      '@babel/plugin-transform-modules-amd': 7.13.0(@babel/core@7.22.11)
+      '@babel/plugin-transform-modules-amd': 7.23.0(@babel/core@7.22.11)
       '@babel/plugin-transform-runtime': 7.23.2(@babel/core@7.22.11)
       '@babel/plugin-transform-typescript': 7.22.15(@babel/core@7.22.11)
       '@babel/polyfill': 7.12.1
