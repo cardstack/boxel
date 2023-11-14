@@ -257,6 +257,7 @@ export default class CardCatalogModal extends Component<Signature> {
       });
 
       if (response.ok) {
+        // FIXME only successful if catalog entry, might be that name = CatalogEntry? or…?
         let maybeCardDoc = await response.json();
         if (isSingleCardDocument(maybeCardDoc)) {
           let card = await this.cardService.createFromSerialized(
