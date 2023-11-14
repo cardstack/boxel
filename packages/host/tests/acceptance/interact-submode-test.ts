@@ -947,12 +947,12 @@ module('Acceptance | interact submode tests', function (hooks) {
     assert
       .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
       .hasText('Fadhlan');
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await realm.write(
           'Person/fadhlan.json',
           JSON.stringify({
@@ -971,7 +971,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           } as LooseSingleCardDocument),
         );
       },
-    );
+    });
     await waitUntil(
       () =>
         document
@@ -1013,12 +1013,12 @@ module('Acceptance | interact submode tests', function (hooks) {
       )}`,
     );
     await waitFor('[data-test-card-resource-loaded]');
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await realm.write(
           'Person/fadhlan.json',
           JSON.stringify({
@@ -1037,7 +1037,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           } as LooseSingleCardDocument),
         );
       },
-    );
+    });
     await waitUntil(
       () =>
         document

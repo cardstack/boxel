@@ -729,15 +729,15 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click('[data-test-action-button="Delete"]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
     await percySnapshot(assert);
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await click('[data-test-confirm-delete-button]');
       },
-    );
+    });
     await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
       'Acceptance | operator mode tests | Can delete a card instance from code submode with no recent files - empty code submode',
@@ -816,15 +816,15 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-action-button="Delete"]`);
     await click('[data-test-action-button="Delete"]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await click('[data-test-confirm-delete-button]');
       },
-    );
+    });
     await waitForCodeEditor();
     assert
       .dom('[data-test-card-url-bar-input]')

@@ -969,17 +969,17 @@ module('Acceptance | code submode tests', function (hooks) {
       await waitForCodeEditor();
 
       let originalPosition: MonacoSDK.Position | undefined | null;
-      await this.expectEvents(
+      await this.expectEvents({
         assert,
         realm,
         adapter,
         expectedEvents,
-        async () => {
+        callback: async () => {
           setMonacoContent(`// This is a change \n${inThisFileSource}`);
           monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
           originalPosition = monacoService.getCursorPosition();
         },
-      );
+      });
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
       let currentPosition = monacoService.getCursorPosition();
