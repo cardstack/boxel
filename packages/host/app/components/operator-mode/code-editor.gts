@@ -176,21 +176,9 @@ export default class CodeEditor extends Component<Signature> {
     if (!isReady(this.args.file) || content === this.args.file?.content) {
       return;
     }
-    let isJSON = this.args.file.name.endsWith('.json');
-    let validJSON = isJSON && this.safeJSONParse(content);
 
-    if (validJSON && isSingleCardDocument(validJSON)) {
-      // Does not perform the save using the card api service because that
-      // will perform a patch request, which will would not work in case the
-      // card instance has an indexing error. Instead, we save the validated card instance data
-      // directly to the file, similar to how we save the card source code
-      await this.saveCardJson.perform(content);
-    } else if (!isJSON || validJSON) {
-      // writes source code and non-card instance valid JSON,
-      // then updates the state of the file resource
-      this.writeSourceCodeToFile(this.args.file, content);
-      this.waitForSourceCodeWrite.perform();
-    }
+    this.writeSourceCodeToFile(this.args.file, content);
+    this.waitForSourceCodeWrite.perform();
     this.hasUnsavedSourceChanges = false;
   });
 
