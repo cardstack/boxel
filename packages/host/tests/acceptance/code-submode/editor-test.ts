@@ -251,6 +251,30 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
         iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
       },
+      'Person/john-with-bad-pet-link.json': {
+        data: {
+          attributes: {
+            firstName: 'John',
+            address: {
+              city: 'Ljubljana',
+              country: 'Slovenia',
+            },
+          },
+          relationships: {
+            pet: {
+              links: {
+                self: `http://badlink.com/nonexisting-pet`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      },
     });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -304,6 +328,92 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
     await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
     await percySnapshot(assert);
+  });
+
+  test<
+    TestContextWithSave & TestContextWithSSE
+  >('allows fixing broken cards', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/john-with-bad-pet-link.json`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/john-with-bad-pet-link.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-editor]');
+    await waitFor('[data-test-file-incompatibility-message]');
+
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .containsText(
+        'No tools are available to inspect this file or its contents.',
+      );
+
+    let editedCard: LooseSingleCardDocument = {
+      data: {
+        attributes: {
+          firstName: 'John',
+          address: {
+            city: 'Ljubljana',
+            country: 'Slovenia',
+          },
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: `${testRealmURL}Pet/mango`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
+        },
+      },
+    };
+
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/john-with-bad-pet-link`],
+        },
+      },
+    ];
+
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        setMonacoContent(JSON.stringify(editedCard));
+        await waitFor('[data-test-save-idle]');
+      },
+    );
+
+    let fileRef = await adapter.openFile('Person/john-with-bad-pet-link.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      fileRef.content as string,
+      JSON.stringify(editedCard),
+      'Person/john-with-bad-pet-link.json changes were saved',
+    );
   });
 
   test<
