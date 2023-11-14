@@ -13,11 +13,7 @@ import { Position } from 'monaco-editor';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import {
-  logger,
-  isSingleCardDocument,
-  RealmPaths,
-} from '@cardstack/runtime-common';
+import { logger, RealmPaths } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
@@ -213,48 +209,6 @@ export default class CodeEditor extends Component<Signature> {
       return;
     }
   }
-
-  private saveCardJson = task(async (content: string) => {
-    if (!this.codePath) {
-      return;
-    }
-    let json = this.safeJSONParse(content);
-    let realmPath = new RealmPaths(this.cardService.defaultURL);
-    let url = realmPath.fileURL(this.codePath.href.replace(/\.json$/, ''));
-    let realmURL = this.readyFile.realmURL;
-    if (!realmURL) {
-      throw new Error(`cannot determine realm for ${this.codePath}`);
-    }
-
-    let doc = this.monacoService.reverseFileSerialization(
-      json,
-      url.href,
-      realmURL,
-    );
-
-    try {
-      // Check if the card instance data conforms to the card definition
-      await this.cardService.createFromSerialized(doc.data, doc, url);
-    } catch (e) {
-      // TODO probably we should show a message in the UI that the card
-      // instance JSON is not actually a valid card
-      console.error(
-        'JSON is not a valid card--TODO this should be an error message in the code editor',
-      );
-      return;
-    }
-
-    try {
-      // these saves can happen so fast that we'll make sure to wait at
-      // least 500ms for human consumption
-      this.args.onFileSave('started');
-      let writePromise = this.writeSourceCodeToFile(this.readyFile, content);
-      await all([writePromise, timeout(500)]);
-      this.args.onFileSave('finished');
-    } catch (e) {
-      console.error('Failed to save single card document', e);
-    }
-  });
 
   private get language(): string | undefined {
     if (this.codePath) {
