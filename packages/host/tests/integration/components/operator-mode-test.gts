@@ -15,7 +15,11 @@ import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
 
-import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  cardTypeDisplayName,
+  Deferred,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -1093,7 +1097,7 @@ module('Integration | operator-mode', function (hooks) {
       .exists('pet-room catalog-entry instance is displayed on cards-grid');
   });
 
-  test('can create a card using the cards-grid', async function (assert) {
+  test<TestContextWithSave>('can create a card using the cards-grid', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1103,6 +1107,15 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
+    let saved = new Deferred<void>();
+    let savedCards = new Set<string>();
+    this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      savedCards.add(json.data.id);
+      saved.fulfill();
+    });
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
@@ -1126,12 +1139,12 @@ module('Integration | operator-mode', function (hooks) {
       .exists();
 
     await fillIn(`[data-test-field="title"] input`, 'New Post');
-    await setCardInOperatorModeState(`${testRealmURL}PublishingPacket/1`);
+    await saved.promise;
+    let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
+    await setCardInOperatorModeState(packetId);
 
-    await waitFor(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`);
-    assert
-      .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
-      .exists();
+    await waitFor(`[data-test-stack-card="${packetId}"]`);
+    assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
   });
 
   test('can open a card from the cards-grid and close it', async function (assert) {
@@ -1172,6 +1185,14 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
+
+    let savedCards = new Set<string>();
+    this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      savedCards.add(json.data.id);
+    });
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
@@ -1226,8 +1247,9 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-field="firstName"] [data-test-boxel-input]',
       'Alice',
     );
+    let authorId = [...savedCards].find((k) => k.includes('Author'))!;
     await waitFor(
-      `[data-test-stack-card-index="3"][data-test-stack-card="${testRealmURL}Author/3"]`,
+      `[data-test-stack-card-index="3"][data-test-stack-card="${authorId}"]`,
     );
     await fillIn(
       '[data-test-field="lastName"] [data-test-boxel-input]',
@@ -1243,8 +1265,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
+    let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
     await waitFor(
-      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}PublishingPacket/1"]`,
+      `[data-test-stack-card-index="1"][data-test-stack-card="${packetId}"]`,
     );
     await fillIn(
       '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
@@ -1266,7 +1289,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
     assert
-      .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
+      .dom(`[data-test-stack-card="${packetId}"]`)
       .containsText(
         'Everyone knows that Alice ran the show in the Brady household.',
       );
@@ -1349,7 +1372,7 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('Beginnings by R2-D2');
   });
 
-  test('can create a new card to populate a linksTo field', async function (assert) {
+  test<TestContextWithSave>('can create a new card to populate a linksTo field', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1359,6 +1382,13 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
+    let savedCards = new Set<string>();
+    this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      savedCards.add(json.data.id);
+    });
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
@@ -1377,8 +1407,9 @@ module('Integration | operator-mode', function (hooks) {
       'Alice',
     );
 
+    let authorId = [...savedCards].find((k) => k.includes('Author'))!;
     await waitFor(
-      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Author/3"]`,
+      `[data-test-stack-card-index="1"][data-test-stack-card="${authorId}"]`,
     );
 
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
@@ -1496,7 +1527,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="friends"]').containsText('Mango');
   });
 
-  test('can create a new card to add to a linksToMany field from card chooser', async function (assert) {
+  test<TestContextWithSave>('can create a new card to add to a linksToMany field from card chooser', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1506,6 +1537,13 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
+    let savedCards = new Set<string>();
+    this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      savedCards.add(json.data.id);
+    });
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
@@ -1524,8 +1562,9 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="1"] [data-test-field="name"] [data-test-boxel-input]',
       'Woodster',
     );
+    let petId = [...savedCards].find((k) => k.includes('Pet'))!;
     await waitFor(
-      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Pet/1"]`,
+      `[data-test-stack-card-index="1"][data-test-stack-card="${petId}"]`,
     );
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
@@ -1534,7 +1573,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="friends"]').containsText('Woodster');
   });
 
-  test('does not create a new card to add to a linksToMany field from card chooser, if user cancel the edit view', async function (assert) {
+  test<TestContextWithSave>('does not create a new card to add to a linksToMany field from card chooser, if user cancel the edit view', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1544,6 +1583,13 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
+    let savedCards = new Set<string>();
+    this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      savedCards.add(json.data.id);
+    });
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     await click('[data-test-edit-button]');
@@ -1562,8 +1608,9 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="1"] [data-test-field="name"] [data-test-boxel-input]',
       'Woodster',
     );
+    let petId = [...savedCards].find((k) => k.includes('Pet'))!;
     await waitFor(
-      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Pet/1"]`,
+      `[data-test-stack-card-index="1"][data-test-stack-card="${petId}"]`,
     );
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
