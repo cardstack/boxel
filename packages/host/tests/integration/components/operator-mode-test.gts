@@ -1776,6 +1776,15 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
       .exists();
 
+    await click(`[data-test-search-sheet-cancel-button]`);
+
+    await focus(`[data-test-search-field]`);
+    await typeIn(`[data-test-search-field]`, 'Mar');
+    await waitFor(`[data-test-search-sheet-search-result]`);
+    assert
+      .dom(`[data-test-search-result-label]`)
+      .containsText('1 Result for "Mar"');
+
     //Ensures that there is no cards when reopen the search sheet
     await click(`[data-test-search-sheet-cancel-button]`);
     await focus(`[data-test-search-field]`);
