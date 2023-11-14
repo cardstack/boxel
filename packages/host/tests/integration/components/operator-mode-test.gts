@@ -1766,7 +1766,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await focus(`[data-test-search-field]`);
     await typeIn(`[data-test-search-field]`, 'Ma');
-    assert.dom(`[data-test-search-label]`).containsText('Searching for "Ma"');
+    assert.dom(`[data-test-search-label]`).containsText('Searching for “Ma”');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
     assert.dom(`[data-test-search-label]`).containsText('2 Results for "Ma"');
@@ -1796,7 +1796,7 @@ module('Integration | operator-mode', function (hooks) {
     await typeIn(`[data-test-search-field]`, 'No Cards');
     assert
       .dom(`[data-test-search-label]`)
-      .containsText('Searching for "No Cards"');
+      .containsText('Searching for “No Cards”');
 
     await waitUntil(
       () =>
@@ -1805,7 +1805,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     assert
       .dom(`[data-test-search-label]`)
-      .containsText('0 Results for "No Cards"');
+      .containsText('0 Results for “No Cards”');
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
   });
 
