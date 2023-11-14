@@ -1769,7 +1769,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-label]`).containsText('Searching for “Ma”');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert.dom(`[data-test-search-label]`).containsText('2 Results for "Ma"');
+    assert.dom(`[data-test-search-label]`).containsText('2 Results for “Ma”');
     assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 2 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
@@ -1781,9 +1781,7 @@ module('Integration | operator-mode', function (hooks) {
     await focus(`[data-test-search-field]`);
     await typeIn(`[data-test-search-field]`, 'Mar');
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert
-      .dom(`[data-test-search-result-label]`)
-      .containsText('1 Result for "Mar"');
+    assert.dom(`[data-test-search-label]`).containsText('1 Result for “Mar”');
 
     //Ensures that there is no cards when reopen the search sheet
     await click(`[data-test-search-sheet-cancel-button]`);
@@ -1800,8 +1798,12 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitUntil(
       () =>
-        !document.querySelector('[data-test-search-sheet-search-result]') &&
-        document.querySelector('[data-test-search-label]'),
+        document
+          .querySelector('[data-test-search-label]')
+          .innerText.includes('0'),
+      {
+        timeoutMessage: 'timed out waiting for search label to show 0 results',
+      },
     );
     assert
       .dom(`[data-test-search-label]`)
