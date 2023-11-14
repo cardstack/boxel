@@ -3559,7 +3559,7 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
-  test('can deserialize a card with contains many of a compound card field', async function (assert) {
+  test('can deserialize a card with contains many of a compound field', async function (assert) {
     let {
       field,
       contains,
@@ -3672,6 +3672,295 @@ module('Integration | serialization', function (hooks) {
             },
           },
         },
+      },
+      'card serialization is correct',
+    );
+  });
+
+  test('can deserialize a card with contains many of a compound field including a linksTo', async function (assert) {
+    let {
+      field,
+      contains,
+      containsMany,
+      linksTo,
+      serializeCard,
+      CardDef,
+      FieldDef,
+      createFromSerialized,
+    } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+    let { default: DateField } = date;
+
+    class Certificate extends CardDef {
+      @field earnedOn = contains(DateField);
+      @field level = contains(NumberField);
+    }
+
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field certificate = linksTo(Certificate);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+      @field description = contains(StringField, {
+        computeVia: () => 'A person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
+    }
+    class Post extends FieldDef {
+      @field title = contains(StringField);
+      @field author = contains(Person);
+      @field description = contains(StringField, {
+        computeVia: () => 'A post',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
+    }
+    class Blog extends CardDef {
+      @field posts = containsMany(Post);
+      @field _metadata = contains(StringField, { computeVia: () => 'Blog' });
+      @field description = contains(StringField, {
+        computeVia: () => 'A blog post',
+      });
+      @field editor = contains(Person);
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
+    }
+    await shimModule(
+      `${realmURL}test-cards`,
+      { Certificate, Person, Post, Blog },
+      loader,
+    );
+
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: {
+          editor: {
+            firstName: 'Bob',
+          },
+          posts: [
+            {
+              title: 'Things I Want to Chew',
+              author: {
+                firstName: 'Mango',
+              },
+            },
+            {
+              title: 'When Mango Steals My Bone',
+              author: {
+                firstName: 'Van Gogh',
+              },
+            },
+          ],
+        },
+        relationships: {
+          'editor.certificate': {
+            links: {
+              self: `${realmURL}Certificate/0`,
+            },
+          },
+          'posts.0.author.certificate': {
+            links: {
+              self: `${realmURL}Certificate/1`,
+            },
+          },
+          'posts.1.author.certificate': {
+            links: {
+              self: `${realmURL}Certificate/2`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Blog',
+          },
+        },
+      },
+      included: [
+        {
+          id: `${realmURL}Certificate/0`,
+          type: 'card',
+          attributes: {
+            level: 25,
+            earnedOn: '2022-05-01',
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Certificate',
+            },
+          },
+        },
+        {
+          id: `${realmURL}Certificate/1`,
+          type: 'card',
+          attributes: {
+            level: 20,
+            earnedOn: '2023-11-05',
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Certificate',
+            },
+          },
+        },
+        {
+          id: `${realmURL}Certificate/2`,
+          type: 'card',
+          attributes: {
+            level: 18,
+            earnedOn: '2023-10-01',
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Certificate',
+            },
+          },
+        },
+      ],
+    };
+    let blog = await createFromSerialized<typeof Blog>(
+      doc.data,
+      doc,
+      new URL(realmURL),
+      loader,
+    );
+    let posts = blog.posts;
+    assert.strictEqual(
+      blog.editor.certificate.level,
+      25,
+      'editor certificate is correct',
+    );
+    assert.strictEqual(posts.length, 2, 'number of posts is correct');
+    assert.strictEqual(posts[0].title, 'Things I Want to Chew');
+    assert.strictEqual(posts[0].author.firstName, 'Mango');
+    assert.strictEqual(posts[0].author.certificate.level, 20);
+    assert.strictEqual(posts[1].title, 'When Mango Steals My Bone');
+    assert.strictEqual(posts[1].author.firstName, 'Van Gogh');
+    assert.strictEqual(posts[1].author.certificate.level, 18);
+
+    assert.deepEqual(
+      serializeCard(blog, { includeUnrenderedFields: true }),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            editor: {
+              firstName: 'Bob',
+            },
+            posts: [
+              {
+                title: 'Things I Want to Chew',
+                author: {
+                  firstName: 'Mango',
+                },
+              },
+              {
+                title: 'When Mango Steals My Bone',
+                author: {
+                  firstName: 'Van Gogh',
+                },
+              },
+            ],
+            title: null,
+          },
+          relationships: {
+            'editor.certificate': {
+              data: {
+                id: 'https://test-realm/Certificate/0',
+                type: 'card',
+              },
+              links: {
+                self: 'https://test-realm/Certificate/0',
+              },
+            },
+            'posts.0.author.certificate': {
+              data: {
+                id: 'https://test-realm/Certificate/1',
+                type: 'card',
+              },
+              links: {
+                self: 'https://test-realm/Certificate/1',
+              },
+            },
+            'posts.1.author.certificate': {
+              data: {
+                id: 'https://test-realm/Certificate/2',
+                type: 'card',
+              },
+              links: {
+                self: 'https://test-realm/Certificate/2',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `./test-cards`,
+              name: 'Blog',
+            },
+          },
+        },
+        included: [
+          {
+            attributes: {
+              description: null,
+              earnedOn: '2023-11-05',
+              level: 20,
+              thumbnailURL: null,
+              title: null,
+            },
+            id: 'https://test-realm/Certificate/1',
+            meta: {
+              adoptsFrom: {
+                module: 'https://test-realm/test-cards',
+                name: 'Certificate',
+              },
+            },
+            type: 'card',
+          },
+          {
+            attributes: {
+              description: null,
+              earnedOn: '2023-10-01',
+              level: 18,
+              thumbnailURL: null,
+              title: null,
+            },
+            id: 'https://test-realm/Certificate/2',
+            meta: {
+              adoptsFrom: {
+                module: 'https://test-realm/test-cards',
+                name: 'Certificate',
+              },
+            },
+            type: 'card',
+          },
+          {
+            attributes: {
+              description: null,
+              earnedOn: '2022-05-01',
+              level: 25,
+              thumbnailURL: null,
+              title: null,
+            },
+            id: 'https://test-realm/Certificate/0',
+            meta: {
+              adoptsFrom: {
+                module: 'https://test-realm/test-cards',
+                name: 'Certificate',
+              },
+            },
+            type: 'card',
+          },
+        ],
       },
       'card serialization is correct',
     );
