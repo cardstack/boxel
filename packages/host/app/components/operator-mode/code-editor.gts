@@ -5,26 +5,33 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 //@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
+
 import { task, restartableTask, timeout, all } from 'ember-concurrency';
+
 import perform from 'ember-concurrency/helpers/perform';
 import { Position } from 'monaco-editor';
+
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+
 import {
   logger,
   isSingleCardDocument,
   RealmPaths,
-  type SingleCardDocument,
 } from '@cardstack/runtime-common';
+
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
+
+import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
+
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import BinaryFileInfo from './binary-file-info';
-import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
