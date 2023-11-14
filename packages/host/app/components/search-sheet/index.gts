@@ -36,8 +36,6 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import UrlSearch from '../url-search';
-
 import SearchResult from './search-result';
 
 import type CardService from '../../services/card-service';
