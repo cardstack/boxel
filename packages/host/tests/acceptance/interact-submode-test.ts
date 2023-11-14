@@ -360,9 +360,9 @@ module('Acceptance | interact submode tests', function (hooks) {
       await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
 
-      await waitFor('[data-test-url-field]');
-      await click('[data-test-url-field]');
-      await fillIn('[data-test-url-field]', `${testRealmURL}index`);
+      await waitFor('[data-test-search-field]');
+      await click('[data-test-search-field]');
+      await fillIn('[data-test-search-field]', `${testRealmURL}index`);
 
       // Why is go button needed in this test when it auto-navigates IRL?
       await waitFor('[data-test-card-catalog-go-button][disabled]', {

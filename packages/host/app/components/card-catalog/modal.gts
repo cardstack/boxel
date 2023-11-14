@@ -266,9 +266,9 @@ export default class CardCatalogModal extends Component<Signature> {
           );
           this.setSelectedCard(card);
         }
+      } else {
+        this.hasCardURLError = true;
       }
-
-      this.hasCardURLError = true;
     }
   });
 
