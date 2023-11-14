@@ -111,6 +111,7 @@ const petCardSource = `
     }
     static isolated = class Isolated extends Component<typeof this> {
       <template>
+        <h1>{{@model.title}}</h1>
         <h2 data-test-pet={{@model.name}}>
           <@fields.name/>
         </h2>
