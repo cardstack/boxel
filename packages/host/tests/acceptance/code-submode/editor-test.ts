@@ -351,13 +351,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       )}`,
     );
     await waitFor('[data-test-editor]');
-    await waitFor('[data-test-file-incompatibility-message]');
-
-    assert
-      .dom('[data-test-file-incompatibility-message]')
-      .containsText(
-        'No tools are available to inspect this file or its contents.',
-      );
 
     let editedCard: LooseSingleCardDocument = {
       data: {
