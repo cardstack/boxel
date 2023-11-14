@@ -1,83 +1,91 @@
-import type { Icon } from '@cardstack/boxel-ui/icons/types';
-import { array, fn } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-
-import menuDivider from '../..//helpers/menu-divider.ts';
-import menuItem from '../../helpers/menu-item.ts';
-import ThreeDotsHorizontal from '../../icons/three-dots-horizontal.gts';
+import {
+  type BoxelButtonSize,
+  type BoxelButtonKind,
+} from '../button/index.gts';
 import BoxelDropdownButton from './index.gts';
 
 export default class DropdownButtonUsageComponent extends Component {
-  @tracked label = 'Label';
-  @tracked icon: Icon = ThreeDotsHorizontal;
-  @tracked size = 30;
-  @tracked iconSize = 16;
+  items = [{ name: 'USA' }, { name: 'Chile' }, { name: 'Brazil' }];
+  sizeVariants: BoxelButtonSize[] = [
+    'extra-small',
+    'small',
+    'base',
+    'tall',
+    'touch',
+  ];
+  kindVariants: BoxelButtonKind[] = [
+    'primary',
+    'primary-dark',
+    'secondary-light',
+    'secondary-dark',
+    'danger',
+  ];
+  defaultSize: BoxelButtonSize = 'base';
+  defaultKind: BoxelButtonKind = 'secondary-light';
+  @tracked size = this.defaultSize;
+  @tracked kind = this.defaultKind;
+  @tracked isDisabled = false;
+  @tracked selectedItem = this.items[0];
 
-  @action log(message: string): void {
+  @action onSelect(item: { name: string }): void {
     // eslint-disable-next-line no-console
-    console.log(message);
+    console.log(`Selected ${item}`);
   }
 
   <template>
     <FreestyleUsage @name='DropdownButton'>
       <:example>
         <BoxelDropdownButton
-          @label={{this.label}}
-          @icon={{this.icon}}
+          @items={{this.items}}
+          @onSelect={{this.onSelect}}
+          @selectedItem={{this.selectedItem}}
+          @kind={{this.kind}}
           @size={{this.size}}
-          @iconSize={{this.iconSize}}
-          as |ddb|
+          @disabled={{this.isDisabled}}
         >
-          <ddb.Menu
-            @items={{array
-              (menuItem 'Duplicate' (fn this.log 'Duplicate menu item clicked'))
-              (menuItem 'Share' (fn this.log 'Share menu item clicked'))
-              (menuDivider)
-              (menuItem
-                'Remove' (fn this.log 'Remove menu item clicked') dangerous=true
-              )
-            }}
-          />
+          Select a country
         </BoxelDropdownButton>
       </:example>
       <:api as |Args|>
-        <Args.String
-          @name='button'
-          @description='the name to use as the aria-label and added on the trigger element as a css class. If @icon is not specified, this value is also used to specify an svg to use.'
-          @value={{this.label}}
+        <Args.Object
           @required={{true}}
-          @onInput={{fn (mut this.label)}}
+          @name='items'
+          @description="An array of objects with at minimum a 'name' property OR an array of MenuItem components"
+        />
+        <Args.Action
+          @name='onSelect'
+          @description='Action to be called when an item is selected from the dropdown'
+        />
+        <Args.Object
+          @name='selectedItem'
+          @description="The currently selected item from the 'items' array"
         />
         <Args.String
-          @name='icon'
-          @description='the name of the svg to show'
-          @value={{this.icon}}
-          @required={{true}}
-          @onInput={{fn (mut this.icon)}}
+          @name='kind'
+          @description='Controls the kind variants of the button'
+          @defaultValue={{this.defaultKind}}
+          @options={{this.kindVariants}}
+          @onInput={{fn (mut this.kind)}}
+          @value={{this.kind}}
         />
-        <Args.Number
+        <Args.String
           @name='size'
-          @description='the size of the button'
-          @value={{this.size}}
-          @defaultValue={{30}}
-          @min={{20}}
-          @max={{80}}
+          @description='Controls the size variants of the button'
+          @defaultValue={{this.defaultSize}}
+          @options={{this.sizeVariants}}
           @onInput={{fn (mut this.size)}}
+          @value={{this.size}}
         />
-        <Args.Number
-          @name='iconSize'
-          @description='the size of the icon'
-          @value={{this.iconSize}}
-          @defaultValue={{16}}
-          @min={{8}}
-          @max={{36}}
-          @onInput={{fn (mut this.iconSize)}}
-        />
-        <Args.Yield
-          @description="The provided block is rendered when the button is triggered. Yields a 'Menu' component (instance of Boxel::Menu that is preconfigured with @closeMenu defined) and the 'dropdown' object documented in Boxel::Dropdown"
+        <Args.Bool
+          @name='disabled'
+          @description='Controls whether the button is disabled'
+          @onInput={{fn (mut this.isDisabled)}}
+          @value={{this.isDisabled}}
         />
       </:api>
     </FreestyleUsage>
