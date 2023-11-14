@@ -1798,9 +1798,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitUntil(
       () =>
-        document
-          .querySelector('[data-test-search-label]')
-          .innerText.includes('0'),
+        (
+          document.querySelector('[data-test-search-label]') as HTMLElement
+        ).innerText.includes('0'),
       {
         timeoutMessage: 'timed out waiting for search label to show 0 results',
       },
