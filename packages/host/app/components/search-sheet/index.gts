@@ -96,9 +96,9 @@ export default class SearchSheet extends Component<Signature> {
     } else if (this.isSearching) {
       return `Searching for “${this.searchKey}”`;
     } else {
-      return `Result${this.searchCardResults.length != 1 ? 's' : ''} for “${
-        this.searchKey
-      }”`;
+      return `${this.searchCardResults.length} Result${
+        this.searchCardResults.length != 1 ? 's' : ''
+      } for “${this.searchKey}”`;
     }
   }
 
