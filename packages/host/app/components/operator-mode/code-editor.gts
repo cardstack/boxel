@@ -112,7 +112,7 @@ export default class CodeEditor extends Component<Signature> {
 
   @cached
   private get initialMonacoCursorPosition() {
-    let loc =  this.args.selectedDeclaration?.path?.node.loc;
+    let loc = this.args.selectedDeclaration?.path?.node.loc;
     if (loc) {
       let { start } = loc;
       return new Position(start.line, start.column);
@@ -171,12 +171,13 @@ export default class CodeEditor extends Component<Signature> {
     }
     let isJSON = this.args.file.name.endsWith('.json');
     let validJSON = isJSON && this.safeJSONParse(content);
-    // Here lies the difference in how json files and other source code files
-    // are treated during editing in the code editor
+
     if (validJSON && isSingleCardDocument(validJSON)) {
-      // writes json instance but doesn't update state of the file resource
-      // relies on message service subscription to update state
-      await this.saveFileSerializedCard.perform(validJSON);
+      // Does not perform the save using the card api service because that
+      // will perform a patch request, which will would not work in case the
+      // card instance has an indexing error. Instead, we save the validated card instance data
+      // directly to the file, similar to how we save the card source code
+      await this.saveCardJson.perform(content);
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
@@ -218,10 +219,11 @@ export default class CodeEditor extends Component<Signature> {
     }
   }
 
-  private saveFileSerializedCard = task(async (json: SingleCardDocument) => {
+  private saveCardJson = task(async (content: string) => {
     if (!this.codePath) {
       return;
     }
+    let json = this.safeJSONParse(content);
     let realmPath = new RealmPaths(this.cardService.defaultURL);
     let url = realmPath.fileURL(this.codePath.href.replace(/\.json$/, ''));
     let realmURL = this.readyFile.realmURL;
@@ -234,9 +236,10 @@ export default class CodeEditor extends Component<Signature> {
       url.href,
       realmURL,
     );
-    let card: CardDef | undefined;
+
     try {
-      card = await this.cardService.createFromSerialized(doc.data, doc, url);
+      // Check if the card instance data conforms to the card definition
+      await this.cardService.createFromSerialized(doc.data, doc, url);
     } catch (e) {
       // TODO probably we should show a message in the UI that the card
       // instance JSON is not actually a valid card
@@ -250,7 +253,8 @@ export default class CodeEditor extends Component<Signature> {
       // these saves can happen so fast that we'll make sure to wait at
       // least 500ms for human consumption
       this.args.onFileSave('started');
-      await all([this.cardService.saveModel(this, card), timeout(500)]);
+      let writePromise = this.writeSourceCodeToFile(this.readyFile, content);
+      await all([writePromise, timeout(500)]);
       this.args.onFileSave('finished');
     } catch (e) {
       console.error('Failed to save single card document', e);
