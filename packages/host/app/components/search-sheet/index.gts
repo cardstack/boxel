@@ -360,6 +360,14 @@ export default class SearchSheet extends Component<Signature> {
           </div>
         {{/if}}
       </div>
+      <div class='footer'>
+        <div class='buttons'>
+          <Button
+            {{on 'click' this.onCancel}}
+            data-test-search-sheet-cancel-button
+          >Cancel</Button>
+        </div>
+      </div>
     </div>
     <style>
       :global(:root) {
