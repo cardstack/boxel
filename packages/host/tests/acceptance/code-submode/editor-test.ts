@@ -363,15 +363,15 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
     });
 
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         setMonacoContent(JSON.stringify(expected));
       },
-    );
+    });
 
     await waitFor('[data-test-save-idle]');
 
@@ -447,15 +447,15 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
 
     await click('[data-test-preview-card-footer-button-edit]');
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await fillIn('[data-test-field="name"] input', 'MangoXXX');
       },
-    );
+    });
     await waitFor('[data-test-save-idle]');
   });
 
@@ -652,16 +652,16 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     );
     await waitForCodeEditor();
 
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         setMonacoContent(expected);
         await waitFor('[data-test-save-idle]');
       },
-    );
+    });
 
     await percySnapshot(assert);
 

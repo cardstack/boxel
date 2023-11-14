@@ -14,6 +14,7 @@ import {
   badRequest,
   CardError,
 } from './error';
+import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
 import { md5 } from 'super-fast-md5';
 import {
@@ -746,24 +747,17 @@ export class Realm {
       name = 'cards';
     }
 
-    let dirName = `/${join(new URL(this.url).pathname, name)}/`;
-    let entries = await this.directoryEntries(new URL(dirName, this.url));
-    let index = 0;
-    if (entries) {
-      for (let { name, kind } of entries) {
-        if (kind === 'directory') {
-          continue;
-        }
-        if (!/^[\d]+\.json$/.test(name)) {
-          continue;
-        }
-        let num = parseInt(name.replace('.json', ''));
-        index = Math.max(index, num);
-      }
+    let localPath: LocalPath | undefined;
+    let fileURL: URL | undefined;
+    while (!fileURL || !localPath || (await this.#adapter.exists(localPath))) {
+      let pathname = `/${join(
+        new URL(this.url).pathname,
+        name,
+        uuidV4() + '.json',
+      )}`;
+      fileURL = this.paths.fileURL(pathname);
+      localPath = this.paths.local(fileURL);
     }
-    let pathname = `${dirName}${++index}.json`;
-    let fileURL = this.paths.fileURL(pathname);
-    let localPath: LocalPath = this.paths.local(fileURL);
     let { lastModified } = await this.write(
       localPath,
       JSON.stringify(

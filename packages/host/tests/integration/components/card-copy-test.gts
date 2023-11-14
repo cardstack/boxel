@@ -614,6 +614,8 @@ module('Integration | card-copy', function (hooks) {
       .containsText('Copy 1 Card', 'button text is correct');
   });
 
+  // HASSAN START HERE ON TUES
+
   test<TestContextForCopy>('can copy a card', async function (assert) {
     assert.expect(11);
     let expectedEvents = [
@@ -649,12 +651,12 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
     });
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
-      realm2,
-      adapter2,
+      realm: realm2,
+      adapter: adapter2,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await waitFor(
           '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
         );
@@ -674,7 +676,7 @@ module('Integration | card-copy', function (hooks) {
           .doesNotExist('card does not initially exist in destiation realm');
         await click('[data-test-copy-button]');
       },
-    );
+    });
     await waitUntil(
       () =>
         document.querySelectorAll(
@@ -745,12 +747,12 @@ module('Integration | card-copy', function (hooks) {
       }
       savedCards.push(json);
     });
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
-      realm2,
-      adapter2,
+      realm: realm2,
+      adapter: adapter2,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await waitFor(
           '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
         );
@@ -776,7 +778,7 @@ module('Integration | card-copy', function (hooks) {
           .doesNotExist('card does not initially exist in destiation realm');
         await click('[data-test-copy-button]');
       },
-    );
+    });
     await waitUntil(
       () =>
         document.querySelectorAll(
@@ -870,12 +872,12 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.deepEqual(included.meta.realmURL, testRealmURL);
     });
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
-      realm2,
-      adapter2,
+      realm: realm2,
+      adapter: adapter2,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await waitFor(
           '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
         );
@@ -893,7 +895,7 @@ module('Integration | card-copy', function (hooks) {
           .doesNotExist('card does not initially exist in destiation realm');
         await click('[data-test-copy-button]');
       },
-    );
+    });
     await waitUntil(
       () =>
         document.querySelectorAll(
@@ -978,12 +980,12 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.deepEqual(included.meta.realmURL, testRealm2URL);
     });
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
-      realm2,
-      adapter2,
+      realm: realm2,
+      adapter: adapter2,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await waitFor(
           '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
         );
@@ -1001,7 +1003,7 @@ module('Integration | card-copy', function (hooks) {
           .doesNotExist('card does not initially exist in destiation realm');
         await click('[data-test-copy-button]');
       },
-    );
+    });
     await waitUntil(
       () =>
         document.querySelectorAll(

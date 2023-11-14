@@ -143,13 +143,13 @@ export interface TestContextWithSave extends TestContext {
 }
 
 export interface TestContextWithSSE extends TestContext {
-  expectEvents: (
-    assert: Assert,
-    realm: Realm,
-    adapter: TestRealmAdapter,
-    expectedContents: { type: string; data: Record<string, any> }[],
-    callback: () => Promise<any>,
-  ) => Promise<any>;
+  expectEvents: (args: {
+    assert: Assert;
+    realm: Realm;
+    adapter: TestRealmAdapter;
+    expectedEvents: { type: string; data: Record<string, any> }[];
+    callback: () => Promise<any>;
+  }) => Promise<any>;
   subscribers: ((e: { type: string; data: string }) => void)[];
 }
 
@@ -319,13 +319,19 @@ export function setupServerSentEvents(hooks: NestedHooks) {
     ) as MessageService;
     messageService.register();
 
-    this.expectEvents = async <T,>(
-      assert: Assert,
-      realm: Realm,
-      adapter: TestRealmAdapter,
-      expectedContents: { type: string; data: Record<string, any> }[],
-      callback: () => Promise<T>,
-    ): Promise<T> => {
+    this.expectEvents = async <T,>({
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      callback,
+    }: {
+      assert: Assert;
+      realm: Realm;
+      adapter: TestRealmAdapter;
+      expectedEvents: { type: string; data: Record<string, any> }[];
+      callback: () => Promise<T>;
+    }): Promise<T> => {
       let defer = new Deferred();
       let events: { type: string; data: Record<string, any> }[] = [];
       let response = await realm.handle(
@@ -351,7 +357,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       );
       let result = await callback();
       let decoder = new TextDecoder();
-      while (events.length < expectedContents.length) {
+      while (events.length < expectedEvents.length) {
         let { done, value } = await Promise.race([
           reader.read(),
           defer.promise as any, // this one always throws so type is not important
@@ -373,7 +379,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           }
         }
       }
-      assert.deepEqual(events, expectedContents, 'sse response is correct');
+      assert.deepEqual(events, expectedEvents, 'sse response is correct');
       clearTimeout(timeout);
       adapter.unsubscribe();
       return result;
