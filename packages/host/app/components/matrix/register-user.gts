@@ -15,7 +15,7 @@ import { type IAuthData, type IRequestTokenResponse } from 'matrix-js-sdk';
 
 import {
   BoxelHeader,
-  BoxelInputValidationState,
+  BoxelInput,
   Button,
   FieldContainer,
   LoadingIndicator,
@@ -86,7 +86,7 @@ export default class RegisterUser extends Component<Signature> {
         <LoadingIndicator />
       {{else if (eq this.state.type 'askForToken')}}
         <FieldContainer @label='Registration Token:' @tag='label'>
-          <BoxelInputValidationState
+          <BoxelInput
             data-test-token-field
             @state={{this.tokenInputState}}
             @value={{this.token}}
@@ -112,7 +112,7 @@ export default class RegisterUser extends Component<Signature> {
           @tag='label'
           class='registration-field'
         >
-          <BoxelInputValidationState
+          <BoxelInput
             data-test-username-field
             @state={{this.usernameInputState}}
             @value={{this.username}}
@@ -125,7 +125,7 @@ export default class RegisterUser extends Component<Signature> {
           @tag='label'
           class='registration-field'
         >
-          <BoxelInputValidationState
+          <BoxelInput
             data-test-password-field
             @type='password'
             @value={{this.password}}
@@ -139,7 +139,7 @@ export default class RegisterUser extends Component<Signature> {
           @tag='label'
           class='registration-field'
         >
-          <BoxelInputValidationState
+          <BoxelInput
             data-test-confirm-password-field
             @type='password'
             @value={{this.confirmPassword}}
@@ -161,7 +161,7 @@ export default class RegisterUser extends Component<Signature> {
         </div>
       {{else if (eq this.state.type 'initial')}}
         <FieldContainer @label='Email:' @tag='label' class='registration-field'>
-          <BoxelInputValidationState
+          <BoxelInput
             data-test-email-field
             @state={{this.emailInputState}}
             @value={{this.email}}

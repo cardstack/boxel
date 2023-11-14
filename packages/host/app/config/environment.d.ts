@@ -22,5 +22,6 @@ declare const config: {
   resolvedOwnRealmURL: string;
   autoSaveDelayMs: number;
   monacoDebounceMs: number;
+  monacoCursorDebounceMs: number;
   serverEchoDebounceMs: number;
 };

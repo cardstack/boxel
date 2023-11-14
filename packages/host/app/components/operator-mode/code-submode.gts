@@ -10,83 +10,53 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 //@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
-
-import {
-  dropTask,
-  task,
-  restartableTask,
-  timeout,
-  all,
-} from 'ember-concurrency';
+import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-import { Position } from 'monaco-editor';
-
 import {
   Button,
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
-
 import {
-  type SingleCardDocument,
-  RealmPaths,
   Deferred,
-  logger,
   isCardDocumentString,
-  isSingleCardDocument,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
-
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
-
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
-import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
-
-import monacoModifier from '@cardstack/host/modifiers/monaco';
-
+import { getCard } from '@cardstack/host/resources/card-resource';
 import {
   isReady,
   type Ready,
   type FileResource,
 } from '@cardstack/host/resources/file';
-
 import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
-
 import type CardService from '@cardstack/host/services/card-service';
-
 import type LoaderService from '@cardstack/host/services/loader-service';
-
 import type MessageService from '@cardstack/host/services/message-service';
-import type MonacoService from '@cardstack/host/services/monaco-service';
-import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
-
-import { CardDef } from 'https://cardstack.com/base/card-api';
-
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import FileTree from '../editor/file-tree';
-
-import BinaryFileInfo from './binary-file-info';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
+import CodeEditor from './code-editor';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
-import SubmodeLayout from './submode-layout';
 import NewFileButton from './new-file-button';
-
-import { getCard } from '@cardstack/host/resources/card-resource';
+import SubmodeLayout from './submode-layout';
 
 interface Signature {
   Args: {
@@ -94,41 +64,42 @@ interface Signature {
     saveCardOnClose: (card: CardDef) => void;
   };
 }
-const log = logger('component:code-submode');
 const { autoSaveDelayMs } = config;
 
 type PanelWidths = {
-  rightPanel: string;
-  codeEditorPanel: string;
-  leftPanel: string;
-  emptyCodeModePanel: string;
+  rightPanel: number;
+  codeEditorPanel: number;
+  leftPanel: number;
+  emptyCodeModePanel: number;
 };
 
 type PanelHeights = {
-  filePanel: string;
-  recentPanel: string;
+  filePanel: number;
+  recentPanel: number;
 };
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
 const defaultPanelWidths: PanelWidths = {
-  leftPanel: 'var(--operator-mode-left-column)',
-  codeEditorPanel: '48%',
-  rightPanel: '32%',
-  emptyCodeModePanel: '80%',
+  // 14rem as a fraction of the layout width
+  leftPanel:
+    (14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
+    (document.documentElement.clientWidth - 40 - 36),
+  codeEditorPanel: 0.48,
+  rightPanel: 0.32,
+  emptyCodeModePanel: 0.8,
 };
 
 const CodeModePanelHeights = 'code-mode-panel-heights';
+const ApproximateRecentPanelDefaultFraction =
+  (50 + 43 * 3.5) / (document.documentElement.clientHeight - 430); // room for about 3.5 recent files
 const defaultPanelHeights: PanelHeights = {
-  filePanel: '60%',
-  recentPanel: '40%',
+  filePanel: 1 - ApproximateRecentPanelDefaultFraction,
+  recentPanel: ApproximateRecentPanelDefaultFraction,
 };
-
-const cardEditorSaveTimes = new Map<string, number>();
 
 const waiter = buildWaiter('code-submode:waiter');
 
 export default class CodeSubmode extends Component<Signature> {
-  @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -136,14 +107,16 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare loaderService: LoaderService;
 
   @tracked private loadFileError: string | null = null;
-  @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
+  @tracked private sourceFileIsSaving = false;
 
-  private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
+  private updateCursorByDeclaration:
+    | ((declaration: ModuleDeclaration) => void)
+    | undefined;
   #currentCard: CardDef | undefined;
 
   private deleteModal: DeleteModal | undefined;
@@ -169,26 +142,19 @@ export default class CodeSubmode extends Component<Signature> {
     this.panelWidths = localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
-      : defaultPanelWidths;
+      : {};
 
     this.panelHeights = localStorage.getItem(CodeModePanelHeights)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelHeights))
-      : defaultPanelHeights;
+      : {};
 
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
       // which is async, we leverage an EC task that is running in a
       // parent component (EC task lifetimes are bound to their context)
       // that is not being destroyed.
-      if (this.codePath && this.hasUnsavedSourceChanges) {
-        // we let the monaco changes win if there are unsaved changes both
-        // monaco and the card preview (an arbitrary choice)
-        let monacoContent = this.monacoService.getMonacoContent();
-        if (monacoContent) {
-          this.args.saveSourceOnClose(this.codePath, monacoContent);
-        }
-      } else if (this.hasUnsavedCardChanges && this.#currentCard) {
+      if (this.hasUnsavedCardChanges && this.#currentCard) {
         // we use this.#currentCard here instead of this.card because in
         // the destructor we no longer have access to resources bound to
         // this component since they are destroyed first, so this.#currentCard
@@ -198,7 +164,6 @@ export default class CodeSubmode extends Component<Signature> {
       }
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
-    this.loadMonaco.perform();
   }
 
   private get card() {
@@ -236,14 +201,13 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isLoading() {
     return (
-      this.loadMonaco.isRunning ||
       this.currentOpenFile?.state === 'loading' ||
       this.moduleContentsResource?.isLoading
     );
   }
 
   private get isReady() {
-    return this.maybeMonacoSDK && isReady(this.currentOpenFile);
+    return isReady(this.currentOpenFile);
   }
 
   private get isIncompatibleFile() {
@@ -295,7 +259,7 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
-      return "No tools are available to inspect this file or it's contents.";
+      return 'No tools are available to inspect this file or its contents.';
     }
 
     // TODO: handle card preview errors (when json is valid but card returns error)
@@ -309,10 +273,6 @@ export default class CodeSubmode extends Component<Signature> {
     return null;
   }
 
-  private loadMonaco = task(async () => {
-    this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
-  });
-
   private get readyFile() {
     if (isReady(this.currentOpenFile)) {
       return this.currentOpenFile;
@@ -320,13 +280,6 @@ export default class CodeSubmode extends Component<Signature> {
     throw new Error(
       `cannot access file contents ${this.codePath} before file is open`,
     );
-  }
-
-  private get monacoSDK() {
-    if (this.maybeMonacoSDK) {
-      return this.maybeMonacoSDK;
-    }
-    throw new Error(`cannot use monaco SDK before it has loaded`);
   }
 
   private get codePath() {
@@ -377,35 +330,6 @@ export default class CodeSubmode extends Component<Signature> {
     return this.card;
   }
 
-  @action
-  private initializeMonacoCursorPosition() {
-    if (this.selectedDeclaration?.path?.node.loc) {
-      let { start } = this.selectedDeclaration.path.node.loc;
-      this.monacoService.updateCursorPosition(
-        new Position(start.line, start.column),
-      );
-    }
-  }
-
-  @action
-  private updateMonacoCursorPositionByDeclaration(
-    declaration: ModuleDeclaration,
-  ) {
-    if (declaration.path?.node.loc) {
-      let { start, end } = declaration.path?.node.loc;
-      let currentCursorPosition = this.monacoService.getCursorPosition();
-      if (
-        currentCursorPosition &&
-        (currentCursorPosition.lineNumber < start.line ||
-          currentCursorPosition.lineNumber > end.line)
-      ) {
-        this.monacoService.updateCursorPosition(
-          new Position(start.line, start.column),
-        );
-      }
-    }
-  }
-
   private get declarations() {
     return this.moduleContentsResource?.declarations || [];
   }
@@ -453,31 +377,9 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private selectDeclarationByMonacoCursorPosition(position: Position) {
-    let declarationCursorOn = this.declarations.find(
-      (declaration: ModuleDeclaration) => {
-        if (declaration.path?.node.loc) {
-          let { start, end } = declaration.path?.node.loc;
-          return (
-            position.lineNumber >= start.line && position.lineNumber <= end.line
-          );
-        }
-        return false;
-      },
-    );
-
-    if (
-      declarationCursorOn &&
-      declarationCursorOn !== this.selectedDeclaration
-    ) {
-      this.selectDeclaration(declarationCursorOn);
-    }
-  }
-
-  @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this.operatorModeStateService.updateLocalNameSelection(dec.localName);
-    this.updateMonacoCursorPositionByDeclaration(dec);
+    this.updateCursorByDeclaration?.(dec);
   }
 
   @action
@@ -496,7 +398,6 @@ export default class CodeSubmode extends Component<Signature> {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
       await timeout(autoSaveDelayMs);
-      cardEditorSaveTimes.set(this.card.id, Date.now());
       await this.saveCard.perform(this.card);
       this.hasUnsavedCardChanges = false;
     }
@@ -508,134 +409,28 @@ export default class CodeSubmode extends Component<Signature> {
     await all([this.cardService.saveModel(this, card), timeout(500)]);
   });
 
-  private contentChangedTask = restartableTask(async (content: string) => {
-    this.hasUnsavedSourceChanges = true;
-    // note that there is already a debounce in the monaco modifier so there
-    // is no need to delay further for auto save initiation
-    if (
-      !isReady(this.currentOpenFile) ||
-      content === this.currentOpenFile?.content
-    ) {
-      return;
-    }
-
-    let isJSON = this.currentOpenFile.name.endsWith('.json');
-    let validJSON = isJSON && this.safeJSONParse(content);
-    // Here lies the difference in how json files and other source code files
-    // are treated during editing in the code editor
-    if (validJSON && isSingleCardDocument(validJSON)) {
-      // writes json instance but doesn't update state of the file resource
-      // relies on message service subscription to update state
-      await this.saveFileSerializedCard.perform(validJSON);
-    } else if (!isJSON || validJSON) {
-      // writes source code and non-card instance valid JSON,
-      // then updates the state of the file resource
-      this.writeSourceCodeToFile(this.currentOpenFile, content);
-      this.waitForSourceCodeWrite.perform();
-    }
-    this.hasUnsavedSourceChanges = false;
-  });
-
-  // these saves can happen so fast that we'll make sure to wait at
-  // least 500ms for human consumption
-  private waitForSourceCodeWrite = restartableTask(async () => {
-    if (isReady(this.currentOpenFile)) {
-      await all([this.currentOpenFile.writing, timeout(500)]);
-    }
-  });
-
-  // We use this to write non-cards to the realm--so it doesn't make
-  // sense to go thru the card-service for this
-  private writeSourceCodeToFile(file: FileResource, content: string) {
-    if (file.state !== 'ready') {
-      throw new Error('File is not ready to be written to');
-    }
-
-    // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
-    return file.write(content, true);
-  }
-
-  private safeJSONParse(content: string) {
-    try {
-      return JSON.parse(content);
-    } catch (err) {
-      log.warn(
-        `content for ${this.codePath} is not valid JSON, skipping write`,
-      );
-      return;
-    }
-  }
-
-  private saveFileSerializedCard = task(async (json: SingleCardDocument) => {
-    if (!this.codePath) {
-      return;
-    }
-    let realmPath = new RealmPaths(this.cardService.defaultURL);
-    let url = realmPath.fileURL(this.codePath.href.replace(/\.json$/, ''));
-    let realmURL = this.readyFile.realmURL;
-    if (!realmURL) {
-      throw new Error(`cannot determine realm for ${this.codePath}`);
-    }
-
-    let doc = this.monacoService.reverseFileSerialization(
-      json,
-      url.href,
-      realmURL,
-    );
-    let card: CardDef | undefined;
-    try {
-      card = await this.cardService.createFromSerialized(doc.data, doc, url);
-    } catch (e) {
-      // TODO probably we should show a message in the UI that the card
-      // instance JSON is not actually a valid card
-      console.error(
-        'JSON is not a valid card--TODO this should be an error message in the code editor',
-      );
-      return;
-    }
-
-    try {
-      // these saves can happen so fast that we'll make sure to wait at
-      // least 500ms for human consumption
-      await all([this.cardService.saveModel(this, card), timeout(500)]);
-    } catch (e) {
-      console.error('Failed to save single card document', e);
-    }
-  });
-
-  private get language(): string | undefined {
-    if (this.codePath) {
-      const editorLanguages = this.monacoSDK.languages.getLanguages();
-      let extension = '.' + this.codePath.href.split('.').pop();
-      let language = editorLanguages.find((lang) =>
-        lang.extensions?.find((ext) => ext === extension),
-      );
-      return language?.id ?? 'plaintext';
-    }
-    return undefined;
-  }
-
   private get isSaving() {
-    return (
-      this.waitForSourceCodeWrite.isRunning ||
-      this.saveFileSerializedCard.isRunning ||
-      this.saveCard.isRunning
-    );
+    return this.sourceFileIsSaving || this.saveCard.isRunning;
+  }
+
+  @action
+  private onSourceFileSave(status: 'started' | 'finished') {
+    this.sourceFileIsSaving = status === 'started';
   }
 
   @action
   private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.leftPanel = listPanelContext[0]?.length;
-    this.panelWidths.codeEditorPanel = listPanelContext[1]?.length;
-    this.panelWidths.rightPanel = listPanelContext[2]?.length;
+    this.panelWidths.leftPanel = listPanelContext[0]?.lengthPx;
+    this.panelWidths.codeEditorPanel = listPanelContext[1]?.lengthPx;
+    this.panelWidths.rightPanel = listPanelContext[2]?.lengthPx;
 
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
   @action
   private onFilePanelContextChange(filePanelContext: PanelContext[]) {
-    this.panelHeights.filePanel = filePanelContext[0]?.length;
-    this.panelHeights.recentPanel = filePanelContext[1]?.length;
+    this.panelHeights.filePanel = filePanelContext[0]?.lengthPx;
+    this.panelHeights.recentPanel = filePanelContext[1]?.lengthPx;
 
     localStorage.setItem(
       CodeModePanelHeights,
@@ -714,6 +509,12 @@ export default class CodeSubmode extends Component<Signature> {
     this.deleteModal = deleteModal;
   };
 
+  private setupCodeEditor = (
+    updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
+  ) => {
+    this.updateCursorByDeclaration = updateCursorByDeclaration;
+  };
+
   @action private openSearchResultInEditor(card: CardDef) {
     let codePath = new URL(card.id + '.json');
     this.operatorModeStateService.updateCodePath(codePath);
@@ -743,7 +544,7 @@ export default class CodeSubmode extends Component<Signature> {
         class='code-mode'
         data-test-code-mode
         data-test-save-idle={{and
-          this.contentChangedTask.isIdle
+          (not this.sourceFileIsSaving)
           this.doWhenCardChanges.isIdle
         }}
       >
@@ -754,8 +555,8 @@ export default class CodeSubmode extends Component<Signature> {
           as |ResizablePanel|
         >
           <ResizablePanel
-            @defaultLength={{defaultPanelWidths.leftPanel}}
-            @length='var(--operator-mode-left-column)'
+            @defaultLengthFraction={{defaultPanelWidths.leftPanel}}
+            @lengthPx={{this.panelWidths.leftPanel}}
           >
             <div class='column'>
               <ResizablePanelGroup
@@ -765,8 +566,8 @@ export default class CodeSubmode extends Component<Signature> {
                 as |VerticallyResizablePanel|
               >
                 <VerticallyResizablePanel
-                  @defaultLength={{defaultPanelHeights.filePanel}}
-                  @length={{this.panelHeights.filePanel}}
+                  @defaultLengthFraction={{defaultPanelHeights.filePanel}}
+                  @lengthPx={{this.panelHeights.filePanel}}
                 >
 
                   {{! Move each container and styles to separate component }}
@@ -832,9 +633,9 @@ export default class CodeSubmode extends Component<Signature> {
                   </div>
                 </VerticallyResizablePanel>
                 <VerticallyResizablePanel
-                  @defaultLength={{defaultPanelHeights.recentPanel}}
-                  @length={{this.panelHeights.recentPanel}}
-                  @minLength='100px'
+                  @defaultLengthFraction={{defaultPanelHeights.recentPanel}}
+                  @lengthPx={{this.panelHeights.recentPanel}}
+                  @minLengthPx={{100}}
                 >
                   <aside class='inner-container recent-files'>
                     <header
@@ -853,55 +654,44 @@ export default class CodeSubmode extends Component<Signature> {
           </ResizablePanel>
           {{#if this.codePath}}
             <ResizablePanel
-              @defaultLength={{defaultPanelWidths.codeEditorPanel}}
-              @length={{this.panelWidths.codeEditorPanel}}
-              @minLength='300px'
+              @defaultLengthFraction={{defaultPanelWidths.codeEditorPanel}}
+              @lengthPx={{this.panelWidths.codeEditorPanel}}
+              @minLengthPx={{300}}
             >
               <div class='inner-container'>
                 {{#if this.isReady}}
-                  {{#if this.readyFile.isBinary}}
-                    <BinaryFileInfo @readyFile={{this.readyFile}} />
-                  {{else}}
-                    <div
-                      class='monaco-container'
-                      data-test-editor
-                      {{monacoModifier
-                        content=this.readyFile.content
-                        contentChanged=(perform this.contentChangedTask)
-                        monacoSDK=this.monacoSDK
-                        language=this.language
-                        initializeCursorPosition=this.initializeMonacoCursorPosition
-                        onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
-                      }}
-                    ></div>
-                  {{/if}}
-                  <div class='save-indicator {{if this.isSaving "visible"}}'>
-                    {{#if this.isSaving}}
-                      <span class='saving-msg'>
-                        Now Saving
-                      </span>
-                      <span class='save-spinner'>
-                        <span class='save-spinner-inner'>
-                          <LoadingIndicator />
-                        </span>
-                      </span>
-                    {{else}}
-                      <span data-test-saved class='saved-msg'>
-                        Saved
-                      </span>
-                      <CheckMark width='27' height='27' />
-                    {{/if}}
-                  </div>
-                {{else if this.isLoading}}
-                  <div class='loading'>
-                    <LoadingIndicator />
-                  </div>
+                  <CodeEditor
+                    @file={{this.currentOpenFile}}
+                    @moduleContentsResource={{this.moduleContentsResource}}
+                    @selectedDeclaration={{this.selectedDeclaration}}
+                    @saveSourceOnClose={{@saveSourceOnClose}}
+                    @selectDeclaration={{this.selectDeclaration}}
+                    @onFileSave={{this.onSourceFileSave}}
+                    @onSetup={{this.setupCodeEditor}}
+                  />
                 {{/if}}
+                <div class='save-indicator {{if this.isSaving "visible"}}'>
+                  {{#if this.isSaving}}
+                    <span class='saving-msg'>
+                      Now Saving
+                    </span>
+                    <span class='save-spinner'>
+                      <span class='save-spinner-inner'>
+                        <LoadingIndicator />
+                      </span>
+                    </span>
+                  {{else}}
+                    <span data-test-saved class='saved-msg'>
+                      Saved
+                    </span>
+                    <CheckMark width='27' height='27' />
+                  {{/if}}
+                </div>
               </div>
             </ResizablePanel>
             <ResizablePanel
-              @defaultLength={{defaultPanelWidths.rightPanel}}
-              @length={{this.panelWidths.rightPanel}}
+              @defaultLengthFraction={{defaultPanelWidths.rightPanel}}
+              @lengthPx={{this.panelWidths.rightPanel}}
             >
               <div class='inner-container'>
                 {{#if this.isLoading}}
@@ -935,8 +725,8 @@ export default class CodeSubmode extends Component<Signature> {
             </ResizablePanel>
           {{else}}
             <ResizablePanel
-              @defaultLength={{defaultPanelWidths.emptyCodeModePanel}}
-              @length={{this.panelWidths.emptyCodeModePanel}}
+              @defaultLengthFraction={{defaultPanelWidths.emptyCodeModePanel}}
+              @lengthPx={{this.panelWidths.emptyCodeModePanel}}
             >
               <div
                 class='inner-container inner-container--empty'
@@ -1085,14 +875,6 @@ export default class CodeSubmode extends Component<Signature> {
           var(--code-mode-top-bar-padding-left);
         display: flex;
         z-index: 2;
-      }
-
-      .monaco-container {
-        height: 100%;
-        min-height: 100%;
-        width: 100%;
-        min-width: 100%;
-        padding: var(--boxel-sp) 0;
       }
 
       .loading {

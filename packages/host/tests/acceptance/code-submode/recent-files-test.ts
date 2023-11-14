@@ -27,6 +27,7 @@ import {
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
+  waitForCodeEditor,
 } from '../../helpers';
 
 const indexCardSource = `
@@ -331,6 +332,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
@@ -421,6 +423,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
@@ -458,6 +461,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-module-definition]');
 
     assert
@@ -538,6 +542,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 

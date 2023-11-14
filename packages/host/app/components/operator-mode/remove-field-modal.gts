@@ -31,15 +31,9 @@ interface Signature {
 export default class RemoveFieldModal extends Component<Signature> {
   private removeFieldTask = restartableTask(async () => {
     let { field, card, file, moduleSyntax } = this.args;
-    let identifiedCard = identifyCard(card) as {
-      module: string;
-      name: string;
-    };
+    let identifiedCard = identifyCard(card)!;
 
-    this.args.moduleSyntax.removeField(
-      { type: 'exportedName', name: identifiedCard.name },
-      field.name,
-    );
+    this.args.moduleSyntax.removeField(identifiedCard, field.name);
 
     await file.write(moduleSyntax.code(), true);
     this.args.onClose();
