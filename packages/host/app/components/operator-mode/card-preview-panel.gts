@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import Modifier from 'ember-modifier';
 
 import { task } from 'ember-concurrency';
 
@@ -19,6 +20,7 @@ import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import { IconLink, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import { registerDestructor } from '@ember/destroyable';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import Preview from '@cardstack/host/components/preview';
@@ -36,14 +38,24 @@ interface Signature {
 }
 
 export default class CardPreviewPanel extends Component<Signature> {
-  copyToClipboard = task(async () => {
+  private scrollPositions = new Map<string, number>();
+  private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.args.card.id);
   });
 
-  @tracked previewFormat: Format = 'isolated';
+  @tracked private previewFormat: Format = 'isolated';
 
-  @action setPreviewFormat(format: Format) {
+  @action private setPreviewFormat(format: Format) {
     this.previewFormat = format;
+  }
+
+  private onScroll = (event: Event) => {
+    let scrollPosition = (event.target as HTMLElement).scrollTop;
+    this.scrollPositions.set(this.previewFormat, scrollPosition);
+  };
+
+  private get scrollPosition() {
+    return this.scrollPositions.get(this.previewFormat);
   }
 
   <template>
@@ -100,7 +112,14 @@ export default class CardPreviewPanel extends Component<Signature> {
       </div>
     </div>
 
-    <div class='preview-body' data-test-code-mode-card-preview-body>
+    <div
+      class='preview-body'
+      data-test-code-mode-card-preview-body
+      {{ScrollModifier
+        initialScrollPosition=this.scrollPosition
+        onScroll=this.onScroll
+      }}
+    >
       <Preview @card={{@card}} @format={{this.previewFormat}} />
     </div>
 
@@ -226,4 +245,32 @@ export default class CardPreviewPanel extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+interface ScrollSignature {
+  Args: {
+    Named: {
+      initialScrollPosition?: number;
+      onScroll?: (event: Event) => void;
+    };
+  };
+}
+
+class ScrollModifier extends Modifier<ScrollSignature> {
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    { initialScrollPosition = 0, onScroll }: ScrollSignature['Args']['Named'],
+  ) {
+    // note that when testing make sure "disable cache" in chrome network settings is unchecked,
+    // as this assumes that previously loaded images will be cached. otherwise the scroll will
+    // happen *before* the geometry is altered by images that haven't completed loading yet.
+    element.scrollTop = initialScrollPosition;
+    if (onScroll) {
+      element.addEventListener('scroll', onScroll);
+      registerDestructor(this, () => {
+        element.removeEventListener('scroll', onScroll);
+      });
+    }
+  }
 }
