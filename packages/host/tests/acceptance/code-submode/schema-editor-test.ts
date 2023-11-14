@@ -221,15 +221,15 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert: Assert,
     expectedEvents: { type: string; data: Record<string, any> }[],
   ) {
-    await context.expectEvents(
+    await context.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await click('[data-test-save-field-button]');
       },
-    );
+    });
   }
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
