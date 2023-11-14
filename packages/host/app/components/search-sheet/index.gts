@@ -360,25 +360,6 @@ export default class SearchSheet extends Component<Signature> {
           </div>
         {{/if}}
       </div>
-      <div class='footer'>
-        <UrlSearch
-          @cardURL={{this.cardURL}}
-          @setCardURL={{this.setCardURL}}
-          @setSelectedCard={{this.handleCardSelect}}
-        />
-        <div class='buttons'>
-          <Button
-            {{on 'click' this.onCancel}}
-            data-test-search-sheet-cancel-button
-          >Cancel</Button>
-          <Button
-            data-test-go-button
-            {{!-- @disabled={{this.isGoDisabled}} --}}
-            @kind='primary'
-            {{on 'click' this.onGo}}
-          >Go</Button>
-        </div>
-      </div>
     </div>
     <style>
       :global(:root) {
