@@ -1,4 +1,4 @@
-import Modifier, { type PositionalArgs } from 'ember-modifier';
+import Modifier, { PositionalArgs } from 'ember-modifier';
 
 interface ScrollIntoViewModifierArgs {
   Positional: [boolean];
@@ -10,17 +10,20 @@ interface ScrollIntoViewModifierSignature {
 }
 
 export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModifierSignature> {
+  element!: Element;
   #didSetup = false;
 
   modify(
     element: Element,
     [shouldScrollIntoView]: PositionalArgs<ScrollIntoViewModifierSignature>,
   ): void {
+    this.element = element;
+
     if (!this.#didSetup) {
       this.#didSetup = true;
 
       if (shouldScrollIntoView) {
-        element.scrollIntoView({ block: 'center' });
+        this.element.scrollIntoView({ block: 'center' });
       }
     }
   }
