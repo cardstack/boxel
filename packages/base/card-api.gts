@@ -1783,7 +1783,10 @@ export class FieldDef extends BaseDef {
     typeof this
   > {
     <template>
-      <!-- Inherited from FieldDef embedded view. Did your field forget to specify its embedded component? -->
+      <div>
+        Missing embedded component for FieldDef:
+        {{@model.constructor.displayName}}.
+      </div>
     </template>
   };
   static edit: BaseDefComponent = FieldDefEditTemplate;
@@ -1866,7 +1869,10 @@ export class CardDef extends BaseDef {
     typeof this
   > {
     <template>
-      <!-- Inherited from CardDef embedded view. Did your card forget to specify its embedded component? -->
+      <div>
+        Missing embedded component for CardDef:
+        {{@model.constructor.displayName}}.
+      </div>
     </template>
   };
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
