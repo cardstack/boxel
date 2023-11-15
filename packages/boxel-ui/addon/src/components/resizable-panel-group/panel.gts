@@ -27,6 +27,7 @@ interface Signature {
     registerPanel: (context: {
       defaultLengthFraction: number | undefined;
       lengthPx: number | undefined;
+      minLengthPx: number | undefined;
     }) => number;
     reverseHandlerArrow: boolean;
   };
@@ -230,6 +231,7 @@ export default class Panel extends Component<Signature> {
     this.id = this.args.registerPanel({
       lengthPx: this.args.lengthPx,
       defaultLengthFraction: this.args.defaultLengthFraction,
+      minLengthPx: this.args.minLengthPx,
     });
   }
 
