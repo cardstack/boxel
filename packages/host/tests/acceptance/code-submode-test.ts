@@ -68,7 +68,7 @@ const personCardSource = `
       },
     });
     @field pet = linksTo(Pet);
-    @field friends = linksToMany(() => Friend);
+    @field friends = linksToMany(Friend);
     @field address = containsMany(StringCard);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
