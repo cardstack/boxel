@@ -1,4 +1,5 @@
 import Service, { service } from '@ember/service';
+
 import { restartableTask } from 'ember-concurrency';
 
 import {
@@ -7,11 +8,10 @@ import {
   RealmPaths,
 } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
+
 import LoaderService from '@cardstack/host/services/loader-service';
 
-// This is temporary until we have a better way of discovering the realms that
-// are available for a user to search from
-import ENV from '@cardstack/host/config/environment';
 const { ownRealmURL, otherRealmURLs } = ENV;
 
 export default class RealmInfoService extends Service {
