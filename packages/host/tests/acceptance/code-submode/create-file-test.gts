@@ -43,7 +43,7 @@ const realmFiles = {
   },
 };
 
-module('Acceptance | code submode | create-new-file tests', function (hooks) {
+module('Acceptance | code submode | create-file tests', function (hooks) {
   let loader: Loader;
   let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
 
@@ -153,10 +153,8 @@ module('Acceptance | code submode | create-new-file tests', function (hooks) {
 
     await click(`[data-test-realm-dropdown]`);
     await waitFor(
-      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]',
-      { count: 4 },
+      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
     );
-    assert.dom('[data-test-boxel-menu-item-text="Base Workspace"]').exists();
     assert
       .dom(
         '[data-test-boxel-menu-item-selected] [data-test-boxel-menu-item-text="Test Workspace A"]',
