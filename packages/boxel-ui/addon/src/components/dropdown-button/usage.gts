@@ -10,7 +10,7 @@ import {
 import BoxelDropdownButton from './index.gts';
 
 export default class DropdownButtonUsageComponent extends Component {
-  items = [{ name: 'USA' }, { name: 'Chile' }, { name: 'Brazil' }];
+  items = ['USA', 'Chile', 'Brazil', 'Argentina', 'Peru', 'Colombia'];
   sizeVariants: BoxelButtonSize[] = [
     'extra-small',
     'small',
@@ -32,7 +32,7 @@ export default class DropdownButtonUsageComponent extends Component {
   @tracked isDisabled = false;
   @tracked selectedItem = this.items[0];
 
-  @action onSelect(item: { name: string }): void {
+  @action onSelect(item: string): void {
     // eslint-disable-next-line no-console
     console.log(`Selected ${item}`);
   }
@@ -56,6 +56,10 @@ export default class DropdownButtonUsageComponent extends Component {
           @required={{true}}
           @name='items'
           @description="An array of objects with at minimum a 'name' property OR an array of MenuItem components"
+        />
+        <Args.Yield
+          @required={{true}}
+          @description='Content to be yielded on the trigger button.'
         />
         <Args.Action
           @name='onSelect'

@@ -6,15 +6,11 @@ import {
   type BoxelButtonKind,
 } from '../button/index.gts';
 
-type DropdownItem = {
-  name: string;
-};
-
 interface Signature {
   Args: {
-    items: DropdownItem[] | MenuItem[] | [];
-    onSelect?: (item: DropdownItem) => void;
-    selectedItem?: DropdownItem | undefined;
+    items: string[] | MenuItem[] | [];
+    onSelect?: (item: string) => void;
+    selectedItem?: string | undefined;
     disabled?: boolean;
     kind?: BoxelButtonKind;
     size?: BoxelButtonSize;
@@ -52,7 +48,7 @@ export default class DropdownButton extends Component<Signature> {
         return item;
       }
 
-      return new MenuItem(item.name, 'action', {
+      return new MenuItem(item, 'action', {
         action: () => {
           if (!this.args.onSelect) {
             throw new Error(
@@ -61,7 +57,7 @@ export default class DropdownButton extends Component<Signature> {
           }
           this.args.onSelect(item);
         },
-        selected: item.name === this.args.selectedItem?.name,
+        selected: item === this.args.selectedItem,
       });
     });
   }

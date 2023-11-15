@@ -9,7 +9,9 @@ import {
   logger,
   Relationship,
   SupportedMimeType,
+  RealmPaths,
 } from '@cardstack/runtime-common';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
@@ -26,7 +28,7 @@ interface Args {
 export interface Entry {
   name: string;
   kind: 'directory' | 'file';
-  path: string;
+  path: LocalPath;
 }
 
 export class DirectoryResource extends Resource<Args> {
@@ -48,10 +50,11 @@ export class DirectoryResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    this.directoryURL = new URL(named.relativePath, named.realmURL);
+    let realmPaths = new RealmPaths(named.realmURL);
+    this.directoryURL = realmPaths.directoryURL(named.relativePath);
     this.readdir.perform();
 
-    let path = `${named.realmURL}_message`;
+    let path = `${realmPaths.url}_message`;
 
     if (this.subscription && this.subscription.url !== path) {
       this.subscription.unsubscribe();

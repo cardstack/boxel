@@ -1,8 +1,18 @@
 import Service, { service } from '@ember/service';
 
-import { RealmInfo, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  RealmInfo,
+  SupportedMimeType,
+  baseRealm,
+  RealmPaths,
+} from '@cardstack/runtime-common';
 
 import LoaderService from '@cardstack/host/services/loader-service';
+
+// This is temporary until we have a better way of discovering the realms that
+// are available for a user to search from
+import ENV from '@cardstack/host/config/environment';
+const { ownRealmURL, otherRealmURLs } = ENV;
 
 export default class RealmInfoService extends Service {
   @service declare loaderService: LoaderService;
@@ -55,5 +65,11 @@ export default class RealmInfoService extends Service {
       this.cachedRealmInfos.set(realmURLString, realmInfo);
       return realmInfo;
     }
+  }
+
+  getAllKnownRealmPaths(): URL[] {
+    return [...new Set([ownRealmURL, baseRealm.url])].map(
+      (path) => new URL(new RealmPaths(path).url),
+    );
   }
 }
