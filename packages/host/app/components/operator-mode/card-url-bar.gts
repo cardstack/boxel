@@ -16,7 +16,6 @@ import {
   IconGlobe,
   Warning as IconWarning,
 } from '@cardstack/boxel-ui/icons';
-import type { RealmPaths } from '@cardstack/runtime-common';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -32,7 +31,7 @@ interface Signature {
     userHasDismissedError: boolean; // user driven state that indicates if we should show error message
     resetLoadFileError: () => void; // callback to reset upstream error state -- perform on keypress
     dismissURLError: () => void; // callback allow user to dismiss the error message
-    realmURL: RealmPaths;
+    realmURL: URL;
   };
 }
 

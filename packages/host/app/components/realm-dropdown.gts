@@ -7,7 +7,7 @@ import type RealmInfoService from '../services/realm-info-service';
 interface Signature {
   Args: {
     selectedRealm: string | undefined;
-    onSelect: (value: string) => void;
+    onSelect: (path: string) => void;
     disabled?: boolean;
   };
   Element: HTMLElement;

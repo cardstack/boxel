@@ -5,12 +5,11 @@ import { tracked } from '@glimmer/tracking';
 import { DropdownButton } from '@cardstack/boxel-ui/components';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
-import { type RealmPaths } from '@cardstack/runtime-common';
 import CreateFileModal from './create-file-modal';
 
 interface Signature {
   Args: {
-    realmPaths: RealmPaths;
+    realmURL: URL;
   };
 }
 
@@ -36,7 +35,7 @@ export default class NewFileButton extends Component<Signature> {
 
     {{#if this.newFileModalShown}}
       <CreateFileModal
-        @realm={{@realmPaths}}
+        @realmURL={{@realmURL}}
         @onClose={{this.toggleNewFileModal}}
       />
     {{/if}}

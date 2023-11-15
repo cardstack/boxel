@@ -25,7 +25,6 @@ import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
-  RealmPaths,
 } from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
@@ -196,8 +195,8 @@ export default class CodeSubmode extends Component<Signature> {
     return this.isFileTreeShowing ? 'File Browser' : 'Inheritance';
   }
 
-  private get realmPaths() {
-    return new RealmPaths(this.operatorModeStateService.realmURL);
+  private get realmURL() {
+    return this.operatorModeStateService.realmURL;
   }
 
   private get isLoading() {
@@ -483,8 +482,9 @@ export default class CodeSubmode extends Component<Signature> {
     let recentFile = this.recentFilesService.recentFiles[0];
 
     if (recentFile) {
-      let recentFileUrl = recentFile.realmPaths.fileURL(recentFile.filePath);
-      this.operatorModeStateService.updateCodePath(recentFileUrl);
+      let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
+
+      this.operatorModeStateService.updateCodePath(new URL(recentFileUrl));
     } else {
       this.operatorModeStateService.updateCodePath(null);
     }
@@ -521,7 +521,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   <template>
-    <RealmInfoProvider @realmURL={{this.realmPaths}}>
+    <RealmInfoProvider @realmURL={{this.realmURL}}>
       <:ready as |realmInfo|>
         <div
           class='code-mode-background'
@@ -535,9 +535,9 @@ export default class CodeSubmode extends Component<Signature> {
         @resetLoadFileError={{this.resetLoadFileError}}
         @userHasDismissedError={{this.userHasDismissedURLError}}
         @dismissURLError={{this.dismissURLError}}
-        @realmURL={{this.realmPaths}}
+        @realmURL={{this.realmURL}}
       />
-      <NewFileButton @realmPaths={{this.realmPaths}} />
+      <NewFileButton @realmURL={{this.realmURL}} />
     </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
       <div
@@ -614,7 +614,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </header>
                     <section class='inner-container__content'>
                       {{#if this.isFileTreeShowing}}
-                        <FileTree @realmPaths={{this.realmPaths}} />
+                        <FileTree @realmURL={{this.realmURL}} />
                       {{else}}
                         {{#if this.isReady}}
                           <DetailPanel
@@ -709,7 +709,7 @@ export default class CodeSubmode extends Component<Signature> {
                   {{else if this.card}}
                     <CardPreviewPanel
                       @card={{this.loadedCard}}
-                      @realmPaths={{this.realmPaths}}
+                      @realmURL={{this.realmURL}}
                       data-test-card-resource-loaded
                     />
                   {{else if this.selectedCardOrField}}

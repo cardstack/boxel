@@ -4,6 +4,8 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { RealmPaths } from '@cardstack/runtime-common';
+
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import { RecentFile } from '@cardstack/host/services/recent-files-service';
@@ -53,19 +55,15 @@ class File extends Component<FileArgs> {
   }
 
   get realmPaths() {
-    return this.args.recentFile.realmPaths;
+    return new RealmPaths(this.args.recentFile.realmURL);
   }
 
   get fullUrl() {
-    return this.args.recentFile.realmPaths.fileURL(
-      this.args.recentFile.filePath,
-    );
+    return `${this.args.recentFile.realmURL}${this.args.recentFile.filePath}`;
   }
 
   get isSelected() {
-    return (
-      this.operatorModeStateService.state.codePath?.href === this.fullUrl.href
-    );
+    return this.operatorModeStateService.state.codePath?.href === this.fullUrl;
   }
 
   <template>
@@ -74,11 +72,11 @@ class File extends Component<FileArgs> {
       {{! template-lint-disable require-presentational-children }}
       <li
         class='recent-file'
-        data-test-recent-file={{this.fullUrl.href}}
+        data-test-recent-file={{this.fullUrl}}
         role='button'
         {{on 'click' (fn this.openFile this.fullUrl)}}
       >
-        <RealmInfoProvider @realmURL={{@recentFile.realmPaths}}>
+        <RealmInfoProvider @realmURL={{@recentFile.realmURL}}>
           <:ready as |realmInfo|>
             <RealmIcon
               @realmIconURL={{realmInfo.iconURL}}

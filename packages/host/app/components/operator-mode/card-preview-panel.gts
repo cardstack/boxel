@@ -18,7 +18,7 @@ import {
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import { IconLink, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
-import { cardTypeDisplayName, RealmPaths } from '@cardstack/runtime-common';
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import Preview from '@cardstack/host/components/preview';
@@ -30,7 +30,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     card: CardDef;
-    realmPaths: RealmPaths;
+    realmURL: URL;
   };
   Blocks: {};
 }
@@ -53,7 +53,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       ...attributes
     >
       <div class='header-icon'>
-        <RealmInfoProvider @realmURL={{@realmPaths}}>
+        <RealmInfoProvider @realmURL={{@realmURL}}>
           <:ready as |realmInfo|>
             <RealmIcon
               @realmIconURL={{realmInfo.iconURL}}

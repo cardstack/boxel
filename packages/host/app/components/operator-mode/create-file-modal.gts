@@ -1,16 +1,12 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
-
 import { FieldContainer, Button } from '@cardstack/boxel-ui/components';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
-import { type RealmPaths } from '@cardstack/runtime-common';
+import { RealmPaths } from '@cardstack/runtime-common';
 
 import ModalContainer from '../modal-container';
 import RealmDropdown from '../realm-dropdown';
@@ -21,7 +17,7 @@ import Pill from '../pill';
 interface Signature {
   Args: {
     onClose: () => void;
-    realm?: RealmPaths;
+    realmURL?: URL;
   };
 }
 
@@ -70,8 +66,7 @@ export default class CreateFileModal extends Component<Signature> {
             {{/if}}
             <RealmDropdown
               class='change-trigger'
-              @disabled={{this.create.isRunning}}
-              @selectedRealm={{this.selectedRealm}}
+              @selectedRealm={{this.selectedRealm.href}}
               @onSelect={{this.onSelectRealm}}
             />
           </div>
@@ -87,10 +82,8 @@ export default class CreateFileModal extends Component<Signature> {
             Cancel
           </Button>
           <Button
-            {{on 'click' (fn (perform this.create))}}
             @kind='primary'
             @size='tall'
-            @loading={{this.create.isRunning}}
             @disabled={{true}}
             data-test-create-file
           >
@@ -138,18 +131,14 @@ export default class CreateFileModal extends Component<Signature> {
     </style>
   </template>
 
-  @tracked selectedRealm: RealmPaths | undefined = this.args.realm;
+  @tracked selectedRealm: URL | undefined = this.args.realmURL;
 
-  @action onSelectRealm(realm: RealmPaths) {
-    this.selectedRealm = realm;
+  @action onSelectRealm(path: string) {
+    let realmPaths = new RealmPaths(path);
+    this.selectedRealm = new URL(realmPaths.url);
   }
 
   @action removeSelectedRealm() {
     this.selectedRealm = undefined;
   }
-
-  private create = restartableTask(async () => {
-    //  TODO: create via CardService
-    this.args.onClose();
-  });
 }

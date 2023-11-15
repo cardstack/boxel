@@ -7,14 +7,14 @@ import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
 
 import { RealmPaths } from '@cardstack/runtime-common';
-import { type LocalPath } from '@cardstack/runtime-common/paths';
+import { LocalPath } from '@cardstack/runtime-common/paths';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 type SerialRecentFile = [URL, string];
 
 export interface RecentFile {
-  realmPaths: RealmPaths;
+  realmURL: URL;
   filePath: LocalPath;
 }
 
@@ -68,7 +68,7 @@ export default class RecentFilesService extends Service {
     }
 
     this.recentFiles.unshift({
-      realmPaths: new RealmPaths(currentRealmUrl),
+      realmURL: new URL(currentRealmUrl),
       filePath: file,
     });
 
@@ -84,7 +84,7 @@ export default class RecentFilesService extends Service {
       'recent-files',
       JSON.stringify(
         this.recentFiles.map((recentFile) => [
-          recentFile.realmPaths.url,
+          recentFile.realmURL.toString(),
           recentFile.filePath,
         ]),
       ),
@@ -95,8 +95,8 @@ export default class RecentFilesService extends Service {
     let currentRealmUrl = this.operatorModeStateService.realmURL;
 
     return this.recentFiles.findIndex(
-      ({ realmPaths, filePath }) =>
-        realmPaths.url === currentRealmUrl.href && filePath === path,
+      ({ realmURL, filePath }) =>
+        realmURL.href === currentRealmUrl.href && filePath === path,
     );
   }
 
@@ -111,10 +111,8 @@ export default class RecentFilesService extends Service {
             [realmUrl, filePath]: SerialRecentFile,
           ) {
             try {
-              recentFiles.push({
-                realmPaths: new RealmPaths(realmUrl),
-                filePath,
-              });
+              let url = new URL(realmUrl);
+              recentFiles.push({ realmURL: url, filePath });
             } catch (e) {
               console.log(
                 `Ignoring non-URL recent file from storage: ${realmUrl}`,

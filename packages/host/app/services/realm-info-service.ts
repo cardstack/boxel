@@ -67,9 +67,10 @@ export default class RealmInfoService extends Service {
     }
   }
 
-  getAllKnownRealmPaths(): URL[] {
-    return [...new Set([ownRealmURL, baseRealm.url])].map(
-      (path) => new URL(new RealmPaths(path).url),
+  getAllKnownRealmPaths(): string[] {
+    console.log('here');
+    return [...new Set([ownRealmURL, baseRealm.url, ...otherRealmURLs])].map(
+      (path) => new RealmPaths(path).url,
     );
   }
 }
