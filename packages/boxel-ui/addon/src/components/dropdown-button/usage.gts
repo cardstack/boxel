@@ -3,9 +3,10 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+
 import {
-  type BoxelButtonSize,
   type BoxelButtonKind,
+  type BoxelButtonSize,
 } from '../button/index.gts';
 import BoxelDropdownButton from './index.gts';
 

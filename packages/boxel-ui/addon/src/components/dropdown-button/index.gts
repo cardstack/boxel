@@ -1,29 +1,30 @@
-import Component from '@glimmer/component';
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
+import Component from '@glimmer/component';
+
 import {
-  type BoxelButtonSize,
   type BoxelButtonKind,
+  type BoxelButtonSize,
 } from '../button/index.gts';
 
 type DropdownItem = {
-  name: string;
   iconURL?: string;
+  name: string;
 };
 
 interface Signature {
   Args: {
+    disabled?: boolean;
     items: DropdownItem[] | MenuItem[] | [];
+    kind?: BoxelButtonKind;
     onSelect?: (item: DropdownItem) => void;
     selectedItem?: DropdownItem | undefined;
-    disabled?: boolean;
-    kind?: BoxelButtonKind;
     size?: BoxelButtonSize;
   };
-  Element: HTMLElement;
   Blocks: {
     default: [];
   };
+  Element: HTMLElement;
 }
 
 export default class DropdownButton extends Component<Signature> {
