@@ -160,9 +160,7 @@ export default class SearchSheet extends Component<Signature> {
         Accept: 'application/vnd.card+json',
       },
     });
-    console.log('rseponse', response);
     if (response.ok) {
-      console.log('ok!');
       let maybeCardDoc = await response.json();
       if (isSingleCardDocument(maybeCardDoc)) {
         let card = await this.cardService.createFromSerialized(
@@ -224,11 +222,8 @@ export default class SearchSheet extends Component<Signature> {
 
   @action
   onSearchFieldUpdated() {
-    console.log('onSFU');
     if (this.searchKey) {
-      console.log('search key');
       if (this.searchKeyIsURL) {
-        console.log('is url');
         this.getCard.perform(this.searchKey);
       } else {
         this.clearSearchCardResults();
