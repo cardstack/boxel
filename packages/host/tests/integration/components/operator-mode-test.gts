@@ -1929,7 +1929,6 @@ module('Integration | operator-mode', function (hooks) {
       `https://cardstack.com/base/types/room-objective`,
     );
 
-    // FIXME this fails but even when I try it in the old search field the error doesn’t disappear…??? so confused
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist('invalid state is not shown');
