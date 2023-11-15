@@ -7,23 +7,18 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import {
-  Button,
-  BoxelInput,
-  BoxelInputValidationState,
-} from '@cardstack/boxel-ui/components';
+import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
 import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   createNewCard,
   baseRealm,
-  isSingleCardDocument,
   type CodeRef,
   type CreateNewCard,
   Deferred,
@@ -103,8 +98,6 @@ export default class CardCatalogModal extends Component<Signature> {
             @value={{this.state.searchKey}}
             @onInput={{this.setSearchKey}}
             @onKeyPress={{this.onSearchFieldKeypress}}
-            @state={{this.cardURLFieldState}}
-            @errorMessage={{this.cardURLErrorMessage}}
             @placeholder='Search for a card'
             data-test-search-field
           />
@@ -217,8 +210,6 @@ export default class CardCatalogModal extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 
-  @tracked hasCardURLError = false;
-
   constructor(owner: Owner, args: {}) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CARD_CHOOSER = this;
@@ -236,53 +227,6 @@ export default class CardCatalogModal extends Component<Signature> {
         }
       ).name ?? 'Card'
     );
-  }
-  get searchKeyIsURL() {
-    try {
-      new URL(this.state.searchKey);
-      return true;
-    } catch (_e) {
-      return false;
-    }
-  }
-
-  // FIXME copied from SearchSheet
-  getCard = restartableTask(async (cardURL: string) => {
-    if (this.searchKeyIsURL) {
-      this.hasCardURLError = false;
-      let response = await this.loaderService.loader.fetch(cardURL, {
-        headers: {
-          Accept: 'application/vnd.card+json',
-        },
-      });
-
-      if (response.ok) {
-        // FIXME only successful if catalog entry, might be that name = CatalogEntry? or…?
-        let maybeCardDoc = await response.json();
-        if (isSingleCardDocument(maybeCardDoc)) {
-          let card = await this.cardService.createFromSerialized(
-            maybeCardDoc.data,
-            maybeCardDoc,
-            new URL(maybeCardDoc.data.id),
-          );
-          this.setSelectedCard(card);
-        }
-      } else {
-        this.hasCardURLError = true;
-      }
-    }
-  });
-
-  get displayErrorState() {
-    return this.hasCardURLError;
-  }
-
-  get cardURLErrorMessage() {
-    return this.displayErrorState ? 'Not a valid Card URL' : undefined;
-  }
-
-  get cardURLFieldState(): BoxelInputValidationState {
-    return this.displayErrorState ? 'invalid' : 'initial';
   }
 
   get availableRealms(): RealmCards[] {
@@ -426,28 +370,23 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state.searchKey && !this.state.selectedRealms.length) {
       return this.resetState();
     }
-
-    if (this.searchKeyIsURL) {
-      this.getCard.perform(this.state.searchKey);
-    } else {
-      let results: RealmCards[] = [];
-      for (let { url, realmInfo, cards } of this.displayedRealms) {
-        let filteredCards = cards.filter((c) => {
-          return c.title
-            ?.trim()
-            .toLowerCase()
-            .includes(this.state.searchKey.trim().toLowerCase());
+    let results: RealmCards[] = [];
+    for (let { url, realmInfo, cards } of this.displayedRealms) {
+      let filteredCards = cards.filter((c) => {
+        return c.title
+          ?.trim()
+          .toLowerCase()
+          .includes(this.state.searchKey.trim().toLowerCase());
+      });
+      if (filteredCards.length) {
+        results.push({
+          url,
+          realmInfo,
+          cards: filteredCards,
         });
-        if (filteredCards.length) {
-          results.push({
-            url,
-            realmInfo,
-            cards: filteredCards,
-          });
-        }
       }
-      this.state.searchResults = results;
     }
+    this.state.searchResults = results;
   }
 
   @action toggleSelect(card?: CardDef): void {
