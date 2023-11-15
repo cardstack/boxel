@@ -250,6 +250,44 @@ module('Integration | operator-mode', function (hooks) {
           }
         }
       `,
+      // this field explodes when serialized (saved)
+      'boom-field.gts': `
+        import {
+          Component,
+          primitive,
+          serialize,
+        } from 'https://cardstack.com/base/card-api';
+        import StringCard from "https://cardstack.com/base/string";
+        export class BoomField extends StringCard {
+          static [serialize](boom: any) {
+            throw new Error('Boom!');
+          }
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              {{@model}}
+            </template>
+          };
+        }
+      `,
+      'boom-pet.gts': `
+        import { contains, field, Component } from "https://cardstack.com/base/card-api";
+        import { Pet } from './pet';
+        import { BoomField } from './boom-field';
+
+        export class BoomPet extends Pet {
+          static displayName = 'Boom Pet';
+          @field boom = contains(BoomField);
+
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h2 data-test-pet={{@model.name}}>
+                <@fields.name/>
+                <@fields.boom/>
+              </h2>
+            </template>
+          }
+        }
+      `,
       'Pet/mango.json': {
         data: {
           type: 'card',
@@ -261,6 +299,21 @@ module('Integration | operator-mode', function (hooks) {
             adoptsFrom: {
               module: `${testRealmURL}pet`,
               name: 'Pet',
+            },
+          },
+        },
+      },
+      'BoomPet/paper.json': {
+        data: {
+          type: 'card',
+          id: `${testRealmURL}BoomPet/paper`,
+          attributes: {
+            name: 'Paper',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}boom-pet`,
+              name: 'BoomPet',
             },
           },
         },
@@ -1014,6 +1067,28 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person="EditedName"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
+  });
+
+  // TODO CS-6268 visual indicator for failed auto-save should build off of this test
+  test('an error in auto-save is handled gracefully', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-pet]');
+    await click('[data-test-edit-button]');
+    await fillIn('[data-test-field="boom"] input', 'Bad cat!');
+    await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
+
+    await waitFor('[data-test-pet]');
+    // Card still runs despite save error
+    assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
   });
 
   test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
