@@ -238,8 +238,8 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get emptyOrNotFound() {
-    return !this.codePath || this.currentOpenFile?.state === 'not-found';
+  private get isFileOpen() {
+    return this.codePath && this.currentOpenFile?.state !== 'not-found';
   }
 
   private get fileIncompatibilityMessage() {
@@ -439,7 +439,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get isFileTreeShowing() {
-    return this.fileView === 'browser' || this.emptyOrNotFound;
+    return this.fileView === 'browser' || !this.isFileOpen;
   }
 
   onStateChange(state: FileResource['state']) {
@@ -581,7 +581,7 @@ export default class CodeSubmode extends Component<Signature> {
                       data-test-file-view-header
                     >
                       <Button
-                        @disabled={{this.emptyOrNotFound}}
+                        @disabled={{not this.isFileOpen}}
                         @kind={{if
                           (not this.isFileTreeShowing)
                           'primary-dark'
