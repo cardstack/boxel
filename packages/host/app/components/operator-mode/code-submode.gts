@@ -84,8 +84,8 @@ const defaultPanelWidths: PanelWidths = {
   leftPanel:
     (14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
     (document.documentElement.clientWidth - 40 - 36),
-  codeEditorPanel: 0.48,
-  rightPanel: 0.32,
+  codeEditorPanel: 0.4,
+  rightPanel: 0.4,
   emptyCodeModePanel: 0.8,
 };
 

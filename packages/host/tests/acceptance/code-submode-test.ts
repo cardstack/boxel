@@ -702,6 +702,15 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-preview-card-footer-button-isolated]')
       .hasClass('active');
 
+    await click('[data-test-preview-card-footer-button-atom]');
+    assert
+      .dom('[data-test-preview-card-footer-button-atom]')
+      .hasClass('active');
+    assert.dom('[data-test-code-mode-card-preview-body ] .atom-card').exists();
+    assert
+      .dom('[data-test-code-mode-card-preview-body] .atom-card')
+      .includesText('Fadhlan');
+
     await click('[data-test-preview-card-footer-button-embedded]');
     assert
       .dom('[data-test-preview-card-footer-button-embedded]')
