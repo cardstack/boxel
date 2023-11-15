@@ -308,6 +308,7 @@ export default class SearchSheet extends Component<Signature> {
     >
       <BoxelInput
         @type='search'
+        autocomplete='off'
         @variant={{if (eq @mode 'closed') 'default' 'large'}}
         @bottomTreatment={{this.inputBottomTreatment}}
         @value={{this.searchKey}}
