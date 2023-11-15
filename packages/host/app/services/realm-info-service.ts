@@ -1,9 +1,9 @@
 import Service, { service } from '@ember/service';
+import { restartableTask } from 'ember-concurrency';
 
 import {
   RealmInfo,
   SupportedMimeType,
-  baseRealm,
   RealmPaths,
 } from '@cardstack/runtime-common';
 
@@ -67,10 +67,15 @@ export default class RealmInfoService extends Service {
     }
   }
 
-  getAllKnownRealmPaths(): string[] {
-    console.log('here');
-    return [...new Set([ownRealmURL, baseRealm.url, ...otherRealmURLs])].map(
+  fetchAllKnownRealmInfos = restartableTask(async () => {
+    let paths = [...new Set([ownRealmURL, ...otherRealmURLs])].map(
       (path) => new RealmPaths(path).url,
     );
-  }
+
+    await Promise.all(
+      paths.map(
+        async (path) => await this.fetchRealmInfo({ realmURL: new URL(path) }),
+      ),
+    );
+  });
 }

@@ -10,7 +10,12 @@ import {
 import BoxelDropdownButton from './index.gts';
 
 export default class DropdownButtonUsageComponent extends Component {
-  items = ['USA', 'Chile', 'Brazil', 'Argentina', 'Peru', 'Colombia'];
+  items = [
+    { name: 'USA' },
+    { name: 'Chile' },
+    { name: 'Brazil' },
+    { name: 'Argentina' },
+  ];
   sizeVariants: BoxelButtonSize[] = [
     'extra-small',
     'small',
@@ -32,9 +37,9 @@ export default class DropdownButtonUsageComponent extends Component {
   @tracked isDisabled = false;
   @tracked selectedItem = this.items[0];
 
-  @action onSelect(item: string): void {
+  @action onSelect(item: { name: string }): void {
     // eslint-disable-next-line no-console
-    console.log(`Selected ${item}`);
+    console.log(`Selected ${item.name}`);
   }
 
   <template>
