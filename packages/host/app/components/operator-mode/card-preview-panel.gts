@@ -132,6 +132,12 @@ export default class CardPreviewPanel extends Component<Signature> {
           data-test-preview-card-footer-button-isolated
         >Isolated</button>
         <button
+          class='footer-button {{if (eq this.previewFormat "atom") "active"}}'
+          {{on 'click' (fn this.setPreviewFormat 'atom')}}
+          data-test-preview-card-footer-button-atom
+        >
+          Atom</button>
+        <button
           class='footer-button
             {{if (eq this.previewFormat "embedded") "active"}}'
           {{on 'click' (fn this.setPreviewFormat 'embedded')}}
