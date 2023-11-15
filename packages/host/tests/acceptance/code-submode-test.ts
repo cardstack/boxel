@@ -702,12 +702,23 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-preview-card-footer-button-isolated]')
       .hasClass('active');
 
+    await click('[data-test-preview-card-footer-button-atom]');
+    assert
+      .dom('[data-test-preview-card-footer-button-atom]')
+      .hasClass('active');
+    assert.dom('[data-test-code-mode-card-preview-body ] .atom-card').exists();
+    assert
+      .dom('[data-test-code-mode-card-preview-body] .atom-card')
+      .includesText('Fadhlan');
+
     await click('[data-test-preview-card-footer-button-embedded]');
     assert
       .dom('[data-test-preview-card-footer-button-embedded]')
       .hasClass('active');
     assert
-      .dom('[data-test-code-mode-card-preview-body ] .embedded-card')
+      .dom(
+        '[data-test-code-mode-card-preview-body ] .field-component-card.embedded-format',
+      )
       .exists();
 
     await click('[data-test-preview-card-footer-button-edit]');
@@ -715,7 +726,11 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-preview-card-footer-button-edit]')
       .hasClass('active');
 
-    assert.dom('[data-test-code-mode-card-preview-body ] .edit-card').exists();
+    assert
+      .dom(
+        '[data-test-code-mode-card-preview-body ] .field-component-card.edit-format',
+      )
+      .exists();
 
     // Only preview is shown in the right column when viewing an instance, no schema editor
     assert.dom('[data-test-card-schema]').doesNotExist();
