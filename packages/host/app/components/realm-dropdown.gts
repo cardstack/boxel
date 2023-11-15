@@ -60,12 +60,12 @@ export default class RealmDropdown extends Component<Signature> {
   }
 
   get selectedRealm(): RealmDropdownItem | undefined {
-    let { selectedRealmURL } = this.args;
-    if (!selectedRealmURL) {
+    if (!this.args.selectedRealmURL) {
       return;
     }
     return this.realms.find(
-      (realm) => realm.path === new RealmPaths(selectedRealmURL as URL).url,
+      (realm) =>
+        realm.path === new RealmPaths(this.args.selectedRealmURL as URL).url,
     );
   }
 }

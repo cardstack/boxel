@@ -35,7 +35,11 @@ export default class CreateFileModal extends Component<Signature> {
             {{#if this.selectedRealmURL}}
               <RealmInfoProvider @realmURL={{this.selectedRealmURL}}>
                 <:ready as |realmInfo|>
-                  <Pill class='pill' {{on 'click' this.removeSelectedRealm}}>
+                  <Pill
+                    class='pill'
+                    {{on 'click' this.removeSelectedRealm}}
+                    data-test-realm-pill
+                  >
                     <:icon>
                       <RealmIcon
                         class='icon'
