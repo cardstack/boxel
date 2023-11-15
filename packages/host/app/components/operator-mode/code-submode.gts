@@ -192,7 +192,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   get fileViewTitle() {
-    return this.isFileTreeShowing ? 'File Browser' : 'inspector';
+    return this.isFileTreeShowing ? 'File Browser' : 'Inspector';
   }
 
   private get realmURL() {
