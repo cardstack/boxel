@@ -2,18 +2,19 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 
 import { DropdownButton } from '@cardstack/boxel-ui/components';
-import { type RealmInfo } from '@cardstack/runtime-common';
+import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
 
 import type RealmInfoService from '../services/realm-info-service';
 
 export interface RealmDropdownItem extends RealmInfo {
   path: string;
+  iconURL: string | null;
 }
 
 interface Signature {
   Args: {
-    selectedRealm: RealmDropdownItem | undefined;
     onSelect: (item: RealmDropdownItem) => void;
+    selectedRealmURL: URL | undefined;
     disabled?: boolean;
   };
   Element: HTMLElement;
@@ -25,14 +26,14 @@ export default class RealmDropdown extends Component<Signature> {
       class='realm-dropdown-button'
       @items={{this.realms}}
       @onSelect={{@onSelect}}
-      @selectedItem={{@selectedRealm}}
+      @selectedItem={{this.selectedRealm}}
       @disabled={{@disabled}}
       @kind='secondary-light'
       @size='small'
       data-test-realm-dropdown
       ...attributes
     >
-      {{if @selectedRealm 'Change' 'Select'}}
+      {{if this.selectedRealm 'Change' 'Select'}}
     </DropdownButton>
   </template>
 
@@ -56,5 +57,15 @@ export default class RealmDropdown extends Component<Signature> {
       items = [item, ...items];
     }
     return items;
+  }
+
+  get selectedRealm(): RealmDropdownItem | undefined {
+    let { selectedRealmURL } = this.args;
+    if (!selectedRealmURL) {
+      return;
+    }
+    return this.realms.find(
+      (realm) => realm.path === new RealmPaths(selectedRealmURL as URL).url,
+    );
   }
 }

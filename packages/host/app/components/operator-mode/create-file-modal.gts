@@ -9,6 +9,7 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 import ModalContainer from '../modal-container';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 import RealmIcon from './realm-icon';
+import RealmInfoProvider from './realm-info-provider';
 import Pill from '../pill';
 
 interface Signature {
@@ -31,35 +32,41 @@ export default class CreateFileModal extends Component<Signature> {
       <:content>
         <FieldContainer @label='Realm'>
           <div class='field'>
-            {{#if this.selectedRealm}}
-              <Pill class='pill' {{on 'click' this.removeSelectedRealm}}>
-                <:icon>
-                  <RealmIcon
-                    class='icon'
-                    width='20'
-                    height='20'
-                    @realmIconURL={{this.selectedRealm.iconURL}}
-                    @realmName={{this.selectedRealm.name}}
-                  />
-                </:icon>
-                <:default>
-                  <div class='pill-inner'>
-                    <span data-test-realm-name={{this.selectedRealm.name}}>
-                      {{this.selectedRealm.name}}
-                    </span>
-                    <IconX
-                      class='remove-icon'
-                      width='20'
-                      height='20'
-                      alt='Remove'
-                    />
-                  </div>
-                </:default>
-              </Pill>
+            {{#if this.selectedRealmURL}}
+              <RealmInfoProvider @realmURL={{this.selectedRealmURL}}>
+                <:ready as |realmInfo|>
+                  <Pill class='pill' {{on 'click' this.removeSelectedRealm}}>
+                    <:icon>
+                      <RealmIcon
+                        class='icon'
+                        width='20'
+                        height='20'
+                        @realmIconURL={{realmInfo.iconURL}}
+                        @realmName={{realmInfo.name}}
+                      />
+                    </:icon>
+                    <:default>
+                      <div class='pill-inner'>
+                        <span data-test-realm-name={{realmInfo.name}}>
+                          {{realmInfo.name}}
+                        </span>
+                        <IconX
+                          class='remove-icon'
+                          width='20'
+                          height='20'
+                          alt='Remove'
+                        />
+                      </div>
+                    </:default>
+                  </Pill>
+                </:ready>
+              </RealmInfoProvider>
+            {{else}}
+              No realm selected
             {{/if}}
             <RealmDropdown
               class='change-trigger'
-              @selectedRealm={{this.selectedRealm}}
+              @selectedRealmURL={{this.selectedRealmURL}}
               @onSelect={{this.onSelectRealm}}
             />
           </div>
@@ -124,13 +131,13 @@ export default class CreateFileModal extends Component<Signature> {
     </style>
   </template>
 
-  @tracked selectedRealm: RealmDropdownItem | undefined = undefined;
+  @tracked selectedRealmURL: URL | undefined = this.args.realmURL;
 
-  @action onSelectRealm(item: RealmDropdownItem) {
-    this.selectedRealm = item;
+  @action onSelectRealm({ path }: RealmDropdownItem) {
+    this.selectedRealmURL = new URL(path);
   }
 
   @action removeSelectedRealm() {
-    this.selectedRealm = undefined;
+    this.selectedRealmURL = undefined;
   }
 }

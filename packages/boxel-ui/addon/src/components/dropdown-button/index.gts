@@ -8,6 +8,7 @@ import {
 
 type DropdownItem = {
   name: string;
+  iconURL?: string;
 };
 
 interface Signature {
@@ -62,6 +63,7 @@ export default class DropdownButton extends Component<Signature> {
           this.args.onSelect(item);
         },
         selected: item.name === this.args.selectedItem?.name,
+        iconURL: item.iconURL ?? '',
       });
     });
   }
