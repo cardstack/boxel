@@ -138,7 +138,7 @@ export default class SearchSheet extends Component<Signature> {
       mode == SearchSheetModes.SearchPrompt ||
       mode == SearchSheetModes.ChoosePrompt
     ) {
-      return 'Search for cards';
+      return 'Search for cards or enter card URL';
     }
     return 'Search for…';
   }
