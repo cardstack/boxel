@@ -222,6 +222,7 @@ export default class BoxelInput extends Component<Signature> {
           'pre-icon input post-icon'
           'error error error'
           'helper helper helper';
+        width: 100%;
       }
 
       .boxel-input {

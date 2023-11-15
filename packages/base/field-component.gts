@@ -88,7 +88,7 @@ export function getBoxComponent(
         {{#if (isCard model.value)}}
           <CardContainer
             @displayBoundaries={{true}}
-            class='field-component-card {{f.format}}-card'
+            class='field-component-card {{f.format}}-format'
             {{cardComponentModifier
               card=model.value
               format=f.format
@@ -138,16 +138,16 @@ export function getBoxComponent(
           padding: var(--boxel-sp);
         }
 
-        .isolated-card {
+        .field-component-card.isolated-format {
           padding: var(--boxel-sp-xl);
         }
 
-        .edit-card {
+        .field-component-card.edit-format {
           padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
             var(--boxel-sp-xl);
         }
 
-        .atom-card {
+        .field-component-card.atom-format {
           font: 700 var(--boxel-font-sm);
           letter-spacing: var(--boxel-lsp-xs);
           padding: 4px var(--boxel-sp-sm);

@@ -590,10 +590,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         box-shadow: none;
       }
 
-      .edit .content {
-        margin-bottom: var(--stack-card-footer-height);
-      }
-
       .card {
         overflow: hidden;
       }

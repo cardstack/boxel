@@ -99,9 +99,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
               as |Item|
             }}
               <div class='boxel-pills-container' data-test-pill-item={{i}}>
-                <div
-                  class='boxel-pill'
-                >
+                <div class='boxel-pill'>
                   <Item />
                 </div>
                 <IconButton
@@ -173,7 +171,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         position: relative;
         height: fit-content;
       }
-      .boxel-pill .atom-card {
+      .boxel-pill .atom-format {
         display: flex;
         justify-content: center;
         align-items: center;
@@ -194,7 +192,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       }
     </style>
   </template>
-  
+
   add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
