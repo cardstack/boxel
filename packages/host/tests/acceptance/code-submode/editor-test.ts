@@ -387,16 +387,16 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       },
     ];
 
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         setMonacoContent(JSON.stringify(editedCard));
         await waitFor('[data-test-save-idle]');
       },
-    );
+    });
 
     let fileRef = await adapter.openFile('Person/john-with-bad-pet-link.json');
     if (!fileRef) {
