@@ -1087,7 +1087,9 @@ module('Integration | operator-mode', function (hooks) {
     await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
 
     await waitFor('[data-test-pet]');
-    // Card still runs despite save error
+    // Card still runs (our error was designed to only fire during save)
+    // despite save error and there are no uncaught exceptions (which QUnit
+    // fails as a "Global" error)
     assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
   });
 
