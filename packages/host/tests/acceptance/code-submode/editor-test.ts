@@ -459,11 +459,11 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
       .containsText('Mango');
 
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
       }
-      assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+      assert.strictEqual(JSON.parse(content).data.attributes?.name, 'MangoXXX');
     });
 
     await this.expectEvents(
@@ -731,6 +731,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
             `${testRealmURL}Pet/mango`,
             `${testRealmURL}Pet/vangogh`,
             `${testRealmURL}Person/fadhlan`,
+            `${testRealmURL}Person/john-with-bad-pet-link`,
             `${testRealmURL}person`,
           ],
         },
