@@ -391,10 +391,10 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private onCardChange = () => {
-    this.doWhenCardChanges.perform();
+    this.initiateAutoSaveTask.perform();
   };
 
-  private doWhenCardChanges = restartableTask(async () => {
+  private initiateAutoSaveTask = restartableTask(async () => {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
       await timeout(autoSaveDelayMs);
@@ -545,7 +545,7 @@ export default class CodeSubmode extends Component<Signature> {
         data-test-code-mode
         data-test-save-idle={{and
           (not this.sourceFileIsSaving)
-          this.doWhenCardChanges.isIdle
+          this.initiateAutoSaveTask.isIdle
         }}
       >
         <ResizablePanelGroup
