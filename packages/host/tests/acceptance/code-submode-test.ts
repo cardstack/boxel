@@ -5,6 +5,7 @@ import {
   fillIn,
   triggerKeyEvent,
   waitUntil,
+  scrollTo,
 } from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
@@ -106,6 +107,20 @@ const petCardSource = `
         <h3 data-test-pet={{@model.name}}>
           <@fields.name/>
         </h3>
+      </template>
+    }
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <h1>{{@model.title}}</h1>
+        <h2 data-test-pet={{@model.name}}>
+          <@fields.name/>
+        </h2>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
       </template>
     }
   }
@@ -687,6 +702,15 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-preview-card-footer-button-isolated]')
       .hasClass('active');
 
+    await click('[data-test-preview-card-footer-button-atom]');
+    assert
+      .dom('[data-test-preview-card-footer-button-atom]')
+      .hasClass('active');
+    assert.dom('[data-test-code-mode-card-preview-body ] .atom-card').exists();
+    assert
+      .dom('[data-test-code-mode-card-preview-body] .atom-card')
+      .includesText('Fadhlan');
+
     await click('[data-test-preview-card-footer-button-embedded]');
     assert
       .dom('[data-test-preview-card-footer-button-embedded]')
@@ -1049,5 +1073,33 @@ module('Acceptance | code submode tests', function (hooks) {
       `${testRealmURL}person.gts-test`,
     );
     assert.false(monacoService.hasFocus);
+  });
+
+  test('scroll position persists when changing card preview format', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-test-code-mode-card-preview-body]');
+
+    await scrollTo('[data-test-code-mode-card-preview-body]', 0, 100);
+    await click('[data-test-preview-card-footer-button-edit]');
+    await click('[data-test-preview-card-footer-button-isolated]');
+    let element = document.querySelector(
+      '[data-test-code-mode-card-preview-body]',
+    )!;
+    assert.strictEqual(
+      element.scrollTop,
+      100,
+      'the scroll position is correct',
+    );
   });
 });
