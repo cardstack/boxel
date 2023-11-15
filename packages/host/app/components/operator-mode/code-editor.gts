@@ -13,7 +13,7 @@ import { Position } from 'monaco-editor';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import { logger, RealmPaths } from '@cardstack/runtime-common';
+import { logger } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
@@ -193,6 +193,16 @@ export default class CodeEditor extends Component<Signature> {
   private writeSourceCodeToFile(file: FileResource, content: string) {
     if (file.state !== 'ready') {
       throw new Error('File is not ready to be written to');
+    }
+
+    let isJSON = file.name.endsWith('.json');
+    let validJSON = isJSON && this.safeJSONParse(content);
+
+    if (isJSON && !validJSON) {
+      log.warn(
+        `content for ${this.codePath} is not valid JSON, skipping write`,
+      );
+      return;
     }
 
     // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
