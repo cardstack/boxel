@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
@@ -74,6 +75,7 @@ export class ModuleContentsResource extends Resource<Args> {
   }
 
   private load = restartableTask(async (executableFile: Ready) => {
+    console.log('u loading here');
     //==loading module
     let moduleResource = importResource(this, () => executableFile.url);
     await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
@@ -81,6 +83,7 @@ export class ModuleContentsResource extends Resource<Args> {
       moduleResource?.module || {},
     ).filter(isBaseDef);
 
+    console.log(executableFile.url);
     //==building declaration structure
     // This loop
     // - adds card type (not necessarily loaded)
@@ -118,18 +121,14 @@ export class ModuleContentsResource extends Resource<Args> {
           } else {
             if (localCardsOrFields.has(value)) {
               let cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
-              let loader = Loader.getLoaderFor(cardOrField);
-              if (cardOrField && loader !== undefined) {
+              // we don't check for loader here because cards or fields not defined in module will not have a loader
+              if (cardOrField) {
                 return [
                   ...acc,
                   {
                     ...value,
                     cardOrField,
-                    cardType: getCardType(
-                      this,
-                      () => cardOrField,
-                      () => loader as Loader,
-                    ),
+                    cardType: getCardType(this, () => cardOrField),
                   } as CardOrField & Partial<PossibleCardOrFieldClass>,
                 ];
               }
