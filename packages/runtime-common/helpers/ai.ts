@@ -32,6 +32,28 @@ type Schema =
   | DateSchema
   | PrimitiveSchema;
 
+function getPrimitiveType(def: typeof CardAPI.BaseDef) {
+  console.log("Getting primitive type for", def);
+  if (!def.isFieldDef) {
+    return undefined
+  }
+  switch (def.name) {
+    case 'NumberField':
+      return { type: 'number' };
+    case 'StringField':
+      return { type: 'string' };
+    case 'BooleanField':
+      return { type: 'boolean' };
+    case 'DateField':
+      return { type: 'string', format: 'date' };
+    case 'DateTimeField':
+      return { type: 'string', format: 'date-time' };
+    default:
+      return getPrimitiveType(Object.getPrototypeOf(def));
+    // Any case not explicitly known about should be skipped
+  }
+}
+
 /**
  * From a card definition, generate a JSON Schema that can be used to
  *  define the shape of a patch call. Fields that cannot be automatically
@@ -42,28 +64,14 @@ type Schema =
  * @param def - The BaseDef to generate the patch call specification for.
  * @returns The generated patch call specification as JSON schema
  */
-export function generatePatchCallSpecification(
-  def: typeof CardAPI.BaseDef,
+export function generatePatchCallSpecification<T extends typeof CardAPI.BaseDef>(
+  def: T,
   cardApi: typeof CardAPI,
 ) {
   console.log("Looking at", def);
   // An explicit list of types that we will support in the patch call
   if (primitive in def) {
-    switch (def.name) {
-      case 'NumberField':
-        return { type: 'number' };
-      case 'StringField':
-        return { type: 'string' };
-      case 'BooleanField':
-        return { type: 'boolean' };
-      case 'DateField':
-        return { type: 'string', format: 'date' };
-      case 'DateTimeField':
-        return { type: 'string', format: 'date-time' };
-      default:
-        // Any case not explicitly known about should be skipped
-        return undefined;
-    }
+    return getPrimitiveType(def);
   }
 
   // If it's not a primitive, it contains other fields

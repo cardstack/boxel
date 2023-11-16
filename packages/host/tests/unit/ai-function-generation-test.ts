@@ -197,4 +197,29 @@ module('Unit | ai-function-generation-test', function (hooks) {
       },
     });
   });
+
+  test(`handles subclasses`, async function (assert) {
+    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
+    class NewField extends StringField {
+      static displayName = 'NewField';
+    }
+
+    class TestCard extends CardDef {
+      static displayName = 'TestCard';
+      @field keepField = contains(NewField);
+    }
+
+    let schema = generatePatchCallSpecification(TestCard, cardApi);
+    assert.deepEqual(schema, {
+      type: 'object',
+      properties: {
+        thumbnailURL: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        keepField: { type: 'string' },
+      },
+    });
+  });
 });
