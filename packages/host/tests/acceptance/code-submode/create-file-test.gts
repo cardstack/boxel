@@ -147,9 +147,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor('[data-test-create-file-modal]');
     await waitFor(`[data-test-realm-name="Test Workspace A"]`);
     assert
-      .dom('[data-test-realm-name]')
+      .dom('[data-test-realm-dropdown]')
       .hasText('Test Workspace A', 'current realm is selected');
-    assert.dom('[data-test-realm-dropdown]').hasText('Change');
 
     await click(`[data-test-realm-dropdown]`);
     await waitFor(
@@ -160,16 +159,12 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         '[data-test-boxel-menu-item-selected] [data-test-boxel-menu-item-text="Test Workspace A"]',
       )
       .exists('current realm is selected');
+    await percySnapshot(assert);
 
     await click('[data-test-boxel-menu-item-text="Base Workspace"]');
     assert.dom('[data-test-realm-name="Base Workspace"]').exists();
     assert
       .dom('[data-test-boxel-dropdown-content]')
       .doesNotExist('dropdown menu is closed');
-    await percySnapshot(assert);
-
-    await click('[data-test-realm-pill]');
-    assert.dom('[data-test-realm-pill]').doesNotExist('can remove selection');
-    assert.dom('[data-test-realm-dropdown]').hasText('Select');
   });
 });
