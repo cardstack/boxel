@@ -1,4 +1,3 @@
-import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';

@@ -318,7 +318,6 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get declarations() {
-    console.log(this.moduleContentsResource.declarations);
     return this.moduleContentsResource?.declarations || [];
   }
 
