@@ -4,6 +4,7 @@ import {
   waitFor,
   fillIn,
   triggerEvent,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -869,13 +870,19 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-remove-field-button]');
     await waitFor('[data-test-card-schema]');
 
+    await waitUntil(() => {
+      return document
+        .querySelector(
+          '[data-test-card-schema="Person"] [data-test-total-fields]',
+        )
+        ?.textContent?.includes('4');
+    });
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
       .containsText('+ 4 Fields'); // One field less
-
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="firstName"]`,
+        '[data-test-card-schema="Person"] [data-test-field-name="firstName"]',
       )
       .doesNotExist();
   });
