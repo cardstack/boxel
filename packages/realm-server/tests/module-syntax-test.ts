@@ -171,7 +171,7 @@ module('module-syntax', function () {
         import StringCard from "https://cardstack.com/base/string";
         export class Pet extends CardDef {
           @field petName = contains(StringCard);
-          @field bestFriend = linksTo(() => PersonCard);
+          @field bestFriend = linksTo(PersonCard);
         }
       `,
     );
@@ -209,7 +209,7 @@ module('module-syntax', function () {
         import StringCard from "https://cardstack.com/base/string";
         export class Pet extends CardDef {
           @field petName = contains(StringCard);
-          @field bestFriend = linksTo(() => PersonCard);
+          @field bestFriend = linksTo(PersonCard);
         }
       `,
     );
@@ -524,7 +524,7 @@ module('module-syntax', function () {
         import StringCard from "https://cardstack.com/base/string";
         export class Person extends CardDef {
           @field firstName = contains(StringCard);
-          @field pet = linksTo(() => PetCard);
+          @field pet = linksTo(PetCard);
         }
       `,
     );
