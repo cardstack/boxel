@@ -434,6 +434,7 @@ module('Acceptance | code submode tests', function (hooks) {
     );
     await waitForCodeEditor();
     await waitFor('[data-test-file-view-header]');
+    await waitFor('[data-test-inheritance-toggle]');
 
     assert
       .dom('[data-test-file-view-header]')
@@ -447,6 +448,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert.dom('[data-test-file]').doesNotExist();
 
     await click('[data-test-file-browser-toggle]');
+    await waitFor('[data-test-inheritance-toggle]');
 
     assert
       .dom('[data-test-file-view-header]')
@@ -545,6 +547,7 @@ module('Acceptance | code submode tests', function (hooks) {
     );
 
     await waitFor('[data-test-file]');
+    await waitFor('[data-test-inheritance-toggle]');
 
     assert.dom('[data-test-file]').exists();
     assert.dom('[data-test-file-browser-toggle]').hasClass('active');
@@ -579,6 +582,7 @@ module('Acceptance | code submode tests', function (hooks) {
     );
 
     await waitFor('[data-test-file]');
+    await waitFor('[data-test-inheritance-toggle]');
 
     assert.dom('[data-test-file]').exists();
     assert.dom('[data-test-file-browser-toggle]').hasClass('active');
