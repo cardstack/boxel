@@ -12,7 +12,6 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { use, resource } from 'ember-resources';
 import {
   Button,
   LoadingIndicator,
@@ -32,11 +31,7 @@ import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-in
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import {
-  isReady,
-  type Ready,
-  type FileResource,
-} from '@cardstack/host/resources/file';
+import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
@@ -207,13 +202,6 @@ export default class CodeSubmode extends Component<Signature> {
     return this.operatorModeStateService.realmURL;
   }
 
-  private get isLoading() {
-    return (
-      this.currentOpenFile?.state === 'loading' ||
-      this.moduleContentsResource?.isLoading
-    );
-  }
-
   private get isReady() {
     return isReady(this.currentOpenFile);
   }
@@ -330,6 +318,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get declarations() {
+    console.log(this.moduleContentsResource.declarations);
     return this.moduleContentsResource?.declarations || [];
   }
 
