@@ -192,7 +192,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   get fileViewTitle() {
-    return this.isFileTreeShowing ? 'File Browser' : 'Inheritance';
+    return this.isFileTreeShowing ? 'File Browser' : 'Inspector';
   }
 
   private get realmURL() {
@@ -592,8 +592,8 @@ export default class CodeSubmode extends Component<Signature> {
                           'file-view__header-btn'
                           active=(not this.isFileTreeShowing)
                         }}
-                        {{on 'click' (fn this.setFileView 'inheritance')}}
-                        data-test-inheritance-toggle
+                        {{on 'click' (fn this.setFileView 'inspector')}}
+                        data-test-inspector-toggle
                       >
                         Inspector</Button>
                       <Button
@@ -625,7 +625,7 @@ export default class CodeSubmode extends Component<Signature> {
                             @selectDeclaration={{this.selectDeclaration}}
                             @delete={{perform this.delete}}
                             @openDefinition={{this.openDefinition}}
-                            data-test-card-inheritance-panel
+                            data-test-card-inspector-panel
                           />
                         {{/if}}
                       {{/if}}

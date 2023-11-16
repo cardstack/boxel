@@ -53,7 +53,7 @@ interface CardItem {
   format: 'isolated' | 'edit';
 }
 
-export type FileView = 'inheritance' | 'browser';
+export type FileView = 'inspector' | 'browser';
 
 type SerializedItem = CardItem;
 type SerializedStack = SerializedItem[];
@@ -407,7 +407,7 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
-      fileView: rawState.fileView ?? 'inheritance',
+      fileView: rawState.fileView ?? 'inspector',
       openDirs,
       codeSelection: rawState.codeSelection ?? {},
     });
