@@ -6,6 +6,7 @@ import {
   RealmInfo,
   SupportedMimeType,
   RealmPaths,
+  baseRealm,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -68,9 +69,9 @@ export default class RealmInfoService extends Service {
   }
 
   fetchAllKnownRealmInfos = restartableTask(async () => {
-    let paths = [...new Set([ownRealmURL, ...otherRealmURLs])].map(
-      (path) => new RealmPaths(path).url,
-    );
+    let paths = [
+      ...new Set([ownRealmURL, baseRealm.url, ...otherRealmURLs]),
+    ].map((path) => new RealmPaths(path).url);
 
     await Promise.all(
       paths.map(
