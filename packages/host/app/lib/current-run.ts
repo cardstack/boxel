@@ -540,11 +540,17 @@ export class CurrentRun {
     let types: string[] = [];
     let fullRef: CodeRef = ref;
     while (fullRef) {
-      let loadedCard = await loadCard(fullRef, { loader: this.loader });
-      let loadedCardRef = identifyCard(loadedCard);
-      if (!loadedCardRef) {
-        throw new Error(`could not identify card ${loadedCard.name}`);
+      let loadedCard, loadedCardRef;
+      try {
+        loadedCard = await loadCard(fullRef, { loader: this.loader });
+        loadedCardRef = identifyCard(loadedCard);
+        if (!loadedCardRef) {
+          throw new Error(`could not identify card ${loadedCard.name}`);
+        }
+      } catch (error) {
+        return { type: 'error', error: serializableError(error) };
       }
+
       types.push(internalKeyFor(loadedCardRef, undefined));
       if (!isEqual(loadedCardRef, baseCardRef)) {
         fullRef = {

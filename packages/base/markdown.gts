@@ -40,7 +40,7 @@ export default class MarkdownField extends FieldDef {
     <template>
       <BoxelInput
         class='boxel-text-area'
-        @multiline={{true}}
+        @type='textarea'
         @value={{@model}}
         @onInput={{@set}}
       />

@@ -76,6 +76,11 @@ export function setMonacoContent(content: string): string {
   return (window as any).monaco.editor.getModels()[0].setValue(content);
 }
 
+export async function waitForCodeEditor() {
+  // need a moment for the monaco SDK to load
+  return await waitFor('[data-test-editor]', { timeout: 3000 });
+}
+
 export async function waitForSyntaxHighlighting(
   textContent: string,
   color: string,
@@ -138,13 +143,15 @@ export interface TestContextWithSave extends TestContext {
 }
 
 export interface TestContextWithSSE extends TestContext {
-  expectEvents: (
-    assert: Assert,
-    realm: Realm,
-    adapter: TestRealmAdapter,
-    expectedContents: { type: string; data: Record<string, any> }[],
-    callback: () => Promise<any>,
-  ) => Promise<any>;
+  expectEvents: (args: {
+    assert: Assert;
+    realm: Realm;
+    adapter: TestRealmAdapter;
+    expectedEvents?: { type: string; data: Record<string, any> }[];
+    expectedNumberOfEvents?: number;
+    onEvents?: (events: { type: string; data: Record<string, any> }[]) => void;
+    callback: () => Promise<any>;
+  }) => Promise<any>;
   subscribers: ((e: { type: string; data: string }) => void)[];
 }
 
@@ -314,15 +321,33 @@ export function setupServerSentEvents(hooks: NestedHooks) {
     ) as MessageService;
     messageService.register();
 
-    this.expectEvents = async <T,>(
-      assert: Assert,
-      realm: Realm,
-      adapter: TestRealmAdapter,
-      expectedContents: { type: string; data: Record<string, any> }[],
-      callback: () => Promise<T>,
-    ): Promise<T> => {
+    this.expectEvents = async <T,>({
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      expectedNumberOfEvents,
+      onEvents,
+      callback,
+    }: {
+      assert: Assert;
+      realm: Realm;
+      adapter: TestRealmAdapter;
+      expectedEvents?: { type: string; data: Record<string, any> }[];
+      expectedNumberOfEvents?: number;
+      onEvents?: (
+        events: { type: string; data: Record<string, any> }[],
+      ) => void;
+      callback: () => Promise<T>;
+    }): Promise<T> => {
       let defer = new Deferred();
       let events: { type: string; data: Record<string, any> }[] = [];
+      let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
+      if (numOfEvents == null) {
+        throw new Error(
+          `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
+        );
+      }
       let response = await realm.handle(
         new Request(`${realm.url}_message`, {
           method: 'GET',
@@ -346,13 +371,15 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       );
       let result = await callback();
       let decoder = new TextDecoder();
-      while (events.length < expectedContents.length) {
+      while (events.length < numOfEvents) {
         let { done, value } = await Promise.race([
           reader.read(),
           defer.promise as any, // this one always throws so type is not important
         ]);
         if (done) {
-          throw new Error('expected more events');
+          throw new Error(
+            `expected ${numOfEvents} events, saw ${events.length} events`,
+          );
         }
         if (value) {
           let ev = getEventData(decoder.decode(value, { stream: true }));
@@ -368,7 +395,12 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           }
         }
       }
-      assert.deepEqual(events, expectedContents, 'sse response is correct');
+      if (expectedEvents) {
+        assert.deepEqual(events, expectedEvents, 'sse response is correct');
+      }
+      if (onEvents) {
+        onEvents(events);
+      }
       clearTimeout(timeout);
       adapter.unsubscribe();
       return result;

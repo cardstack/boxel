@@ -316,11 +316,11 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // Click on search-input
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
-      await fillIn('[data-test-search-input] input', 'Mango');
+      await fillIn('[data-test-search-field]', 'Mango');
 
       assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
 
@@ -345,7 +345,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
-      assert.dom('[data-test-search-input] input').hasValue('');
+      assert.dom('[data-test-search-field]').hasValue('');
     });
 
     test('Can open a recent card in empty stack', async function (assert) {
@@ -361,7 +361,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-add-card-button]');
 
       await waitFor('[data-test-url-field]');
-      await fillIn('[data-test-url-field] input', `${testRealmURL}index`);
+      await fillIn('[data-test-url-field]', `${testRealmURL}index`);
 
       await waitFor('[data-test-card-catalog-go-button][disabled]', {
         count: 0,
@@ -381,7 +381,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       assert.dom('[data-test-add-card-button]').exists('stack is empty');
 
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
       await waitFor(`[data-test-search-result="${testRealmURL}index"]`);
@@ -619,7 +619,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Replace the current stack by interacting with search prompt directly
       // Click on search-input
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -667,7 +667,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // Click on search-input
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -700,7 +700,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           operatorModeStateParam,
         )}`,
       );
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
@@ -886,7 +886,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
 
       // Click on search-input
-      await click('[data-test-search-input] input');
+      await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -947,12 +947,12 @@ module('Acceptance | interact submode tests', function (hooks) {
     assert
       .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
       .hasText('Fadhlan');
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await realm.write(
           'Person/fadhlan.json',
           JSON.stringify({
@@ -971,7 +971,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           } as LooseSingleCardDocument),
         );
       },
-    );
+    });
     await waitUntil(
       () =>
         document
@@ -1013,12 +1013,12 @@ module('Acceptance | interact submode tests', function (hooks) {
       )}`,
     );
     await waitFor('[data-test-card-resource-loaded]');
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await realm.write(
           'Person/fadhlan.json',
           JSON.stringify({
@@ -1037,7 +1037,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           } as LooseSingleCardDocument),
         );
       },
-    );
+    });
     await waitUntil(
       () =>
         document

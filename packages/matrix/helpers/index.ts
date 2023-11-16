@@ -96,7 +96,7 @@ export async function validateEmail(
 ) {
   let sendAttempts = opts?.sendAttempts ?? 1;
   await expect(page.locator('[data-test-validate-btn]')).toBeDisabled();
-  await page.locator('[data-test-email-field] input').fill(email);
+  await page.locator('[data-test-email-field]').fill(email);
   await expect(page.locator('[data-test-validate-btn]')).toBeEnabled();
   await page.locator('[data-test-validate-btn]').click();
   await expect(page.locator('[data-test-email-validation]')).toContainText(

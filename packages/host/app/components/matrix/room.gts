@@ -10,6 +10,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
+
 import { restartableTask, task, timeout, all } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
@@ -21,6 +22,8 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
+import { not, and, eq } from '@cardstack/boxel-ui/helpers';
+
 import {
   isMatrixCardError,
   chooseCard,
@@ -30,7 +33,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
-import { not, and, eq } from '@cardstack/boxel-ui/helpers';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -157,7 +159,7 @@ export default class Room extends Component<RoomArgs> {
       <BoxelInput
         data-test-message-field={{this.room.name}}
         type='text'
-        @multiline={{true}}
+        @type='textarea'
         @value={{this.messageToSend}}
         @onInput={{this.setMessage}}
         rows='4'

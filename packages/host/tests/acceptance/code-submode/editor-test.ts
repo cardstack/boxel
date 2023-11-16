@@ -24,6 +24,7 @@ import {
   getMonacoContent,
   setMonacoContent,
   waitForSyntaxHighlighting,
+  waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
   sourceFetchRedirectHandle,
@@ -287,7 +288,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {
@@ -350,7 +351,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       )}`,
     );
 
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
     assert
       .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
       .containsText('Mango');
@@ -362,15 +363,15 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
     });
 
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         setMonacoContent(JSON.stringify(expected));
       },
-    );
+    });
 
     await waitFor('[data-test-save-idle]');
 
@@ -428,7 +429,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     this.onSave((json) => {
       if (typeof json === 'string') {
@@ -446,15 +447,15 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
 
     await click('[data-test-preview-card-footer-button-edit]');
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await fillIn('[data-test-field="name"] input', 'MangoXXX');
       },
-    );
+    });
     await waitFor('[data-test-save-idle]');
   });
 
@@ -470,7 +471,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     this.onSave((content) => {
       if (typeof content !== 'string') {
@@ -498,7 +499,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     this.onSave((content) => {
       if (typeof content !== 'string') {
@@ -535,7 +536,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           operatorModeStateParam,
         )}`,
       );
-      await waitFor('[data-test-editor]');
+      await waitForCodeEditor();
 
       this.onSave((json) => {
         if (typeof json === 'string') {
@@ -577,7 +578,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
     this.onSave(() => {
       assert.ok(false, `save should never happen`);
@@ -649,18 +650,18 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-editor]');
+    await waitForCodeEditor();
 
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         setMonacoContent(expected);
         await waitFor('[data-test-save-idle]');
       },
-    );
+    });
 
     await percySnapshot(assert);
 

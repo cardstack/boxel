@@ -2139,23 +2139,13 @@ module('Integration | card-basics', function (hooks) {
       .dom(
         '[data-test-links-to-many="countriesVisited"] [data-test-pills] [data-test-pill-item] [data-test-card-format="atom"]',
       )
-      .hasClass('atom-card', 'field has correct class');
+      .hasClass('atom-format', 'field has correct class');
 
     assert
-      .dom(
-        '[data-test-field="countriesVisited"] [data-test-pill-item]',
-      )
+      .dom('[data-test-field="countriesVisited"] [data-test-pill-item]')
       .exists({ count: 3 });
-    assert
-      .dom(
-        '[data-test-pill-item="0"]',
-      )
-      .hasText('🇺🇸 United States');
-    assert
-      .dom(
-        '[data-test-pill-item="1"]',
-      )
-      .hasText('🇨🇦 Canada');
+    assert.dom('[data-test-pill-item="0"]').hasText('🇺🇸 United States');
+    assert.dom('[data-test-pill-item="1"]').hasText('🇨🇦 Canada');
 
     assert
       .dom(

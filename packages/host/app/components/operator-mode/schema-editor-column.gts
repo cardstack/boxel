@@ -76,7 +76,10 @@ export default class SchemaEditorColumn extends Component<Signature> {
 
   @cached
   get moduleSyntax() {
-    return new ModuleSyntax(this.args.file.content);
+    return new ModuleSyntax(
+      this.args.file.content,
+      new URL(this.args.file.url),
+    );
   }
 
   <template>

@@ -87,7 +87,10 @@ export class ModuleContentsResource extends Resource<Args> {
     // - includes card/field, either
     //   - an exported card/field
     //   - a card/field that was local but related to another card/field which was exported, e.g. inherited OR a field of the exported card/field
-    let moduleSyntax = new ModuleSyntax(executableFile.content);
+    let moduleSyntax = new ModuleSyntax(
+      executableFile.content,
+      new URL(executableFile.url),
+    );
     let localCardsOrFields = collectLocalCardsOrFields(
       moduleSyntax,
       exportedCardsOrFields,

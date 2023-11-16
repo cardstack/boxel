@@ -103,7 +103,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     assert
       .dom('[data-test-field-component-card]')
       .exists({ count: 1 })
-      .hasClass('edit-card', 'edit card is rendered');
+      .hasClass('edit-format', 'edit card is rendered');
     assert
       .dom('[data-test-field="firstName"]')
       .hasText('First Name', 'non-nested primitive field label is rendered');

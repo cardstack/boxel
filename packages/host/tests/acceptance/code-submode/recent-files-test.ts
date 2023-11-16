@@ -27,6 +27,7 @@ import {
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
+  waitForCodeEditor,
 } from '../../helpers';
 
 const indexCardSource = `
@@ -331,16 +332,23 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
     assert.dom('[data-test-recent-file]').exists({ count: 2 });
 
+    await waitFor(
+      '[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]',
+    );
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
       .hasAttribute('alt', 'Icon for realm Test Workspace B');
 
+    await waitFor(
+      '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
+    );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
@@ -421,6 +429,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
@@ -458,6 +467,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       )}`,
     );
 
+    await waitForCodeEditor();
     await waitFor('[data-test-card-module-definition]');
 
     assert
@@ -538,6 +548,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 

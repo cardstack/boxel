@@ -12,7 +12,6 @@ import { ALL_ICON_COMPONENTS } from '../../icons.gts';
 import Profile from '../../icons/profile.gts';
 import type { Icon } from '../../icons/types.ts';
 import BoxelInput from '../input/index.gts';
-import BoxelInputValidationState from '../input/validation-state/index.gts';
 import BoxelFieldContainer from './index.gts';
 
 export default class FieldUsage extends Component {
@@ -132,9 +131,7 @@ export default class FieldUsage extends Component {
       </:example>
     </FreestyleUsage>
 
-    <FreestyleUsage
-      @name='Usage with Boxel::Input::ValidationState (invalid state)'
-    >
+    <FreestyleUsage @name='Usage with Boxel::Input (invalid state)'>
       <:example>
         <BoxelFieldContainer
           @tag='label'
@@ -143,7 +140,7 @@ export default class FieldUsage extends Component {
           @horizontalLabelSize={{this.horizontalLabelSize2}}
           @icon={{this.icon2}}
         >
-          <BoxelInputValidationState
+          <BoxelInput
             @id=''
             @state='invalid'
             @value=''

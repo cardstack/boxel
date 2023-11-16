@@ -4,6 +4,8 @@ import { setupRenderingTest } from 'ember-qunit';
 import { stringify } from 'qs';
 import { module, test } from 'qunit';
 
+import { validate as uuidValidate } from 'uuid';
+
 import { baseRealm, CodeRef } from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/card-document';
 import {
@@ -393,154 +395,52 @@ module('Integration | realm', function (hooks) {
     }
   });
 
-  test<TestContextWithSSE>('realm can serve create card requests', async function (assert) {
+  test('realm can serve create card requests', async function (assert) {
     let adapter = new TestRealmAdapter({});
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
-    let expected = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}CardDef/1`],
+    let response = await realm.handle(
+      new Request(testRealmURL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+json',
         },
-      },
-    ];
-    let response = await this.expectEvents(
-      assert,
-      realm,
-      adapter,
-      expected,
-      async () => {
-        let response = realm.handle(
-          new Request(testRealmURL, {
-            method: 'POST',
-            headers: {
-              Accept: 'application/vnd.card+json',
-            },
-            body: JSON.stringify(
-              {
-                data: {
-                  type: 'card',
-                  meta: {
-                    adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
-                      name: 'CardDef',
-                    },
-                  },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
                 },
               },
-              null,
-              2,
-            ),
-          }),
-        );
-        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
-        return await response;
-      },
-    );
-    assert.strictEqual((await response).status, 201, 'successful http status');
-    let json = await response.json();
-    if (isSingleCardDocument(json)) {
-      assert.strictEqual(
-        json.data.id,
-        `${testRealmURL}CardDef/1`,
-        'the id is correct',
-      );
-      assert.ok(
-        (await adapter.openFile('CardDef/1.json'))?.content,
-        'file contents exist',
-      );
-    } else {
-      assert.ok(false, 'response body is not a card document');
-    }
-
-    let searchIndex = realm.searchIndex;
-    let result = await searchIndex.card(new URL(json.data.links.self));
-    if (result?.type === 'error') {
-      throw new Error(
-        `unexpected error when getting card from index: ${result.error.detail}`,
-      );
-    }
-    assert.strictEqual(
-      result?.doc.data.id,
-      `${testRealmURL}CardDef/1`,
-      'found card in index',
-    );
-  });
-
-  test<TestContextWithSSE>('new cards are assigned sequential IDs', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'CardDef/1.json': {
-        data: {
-          type: 'card',
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
-              name: 'CardDef',
             },
           },
-        },
-      },
-    });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
-    let expected = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}CardDef/2`],
-        },
-      },
-    ];
-    let response = await this.expectEvents(
-      assert,
-      realm,
-      adapter,
-      expected,
-      async () => {
-        let response = realm.handle(
-          new Request(testRealmURL, {
-            method: 'POST',
-            headers: {
-              Accept: 'application/vnd.card+json',
-            },
-            body: JSON.stringify(
-              {
-                data: {
-                  type: 'card',
-                  meta: {
-                    adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
-                      name: 'CardDef',
-                    },
-                  },
-                },
-              },
-              null,
-              2,
-            ),
-          }),
-        );
-        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
-        return await response;
-      },
+          null,
+          2,
+        ),
+      }),
     );
-    assert.strictEqual((await response).status, 201, 'successful http status');
     let json = await response.json();
+    let id: string | undefined;
     if (isSingleCardDocument(json)) {
+      id = json.data.id.split('/').pop()!;
+      assert.true(uuidValidate(id), 'card ID is a UUID');
       assert.strictEqual(
         json.data.id,
-        `${testRealmURL}CardDef/2`,
-        'the id is correct',
+        `${testRealmURL}CardDef/${id}`,
+        'the card URL is correct',
       );
       assert.ok(
-        (await adapter.openFile('CardDef/2.json'))?.content,
+        (await adapter.openFile(`CardDef/${id}.json`))?.content,
         'file contents exist',
       );
     } else {
       assert.ok(false, 'response body is not a card document');
+    }
+    if (!id) {
+      assert.ok(false, 'card document is missing an ID');
     }
 
     let searchIndex = realm.searchIndex;
@@ -552,7 +452,7 @@ module('Integration | realm', function (hooks) {
     }
     assert.strictEqual(
       result?.doc.data.id,
-      `${testRealmURL}CardDef/2`,
+      `${testRealmURL}CardDef/${id}`,
       'found card in index',
     );
   });
@@ -611,10 +511,12 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 201, 'successful http status');
     let json = await response.json();
+    let id = json.data.id.split('/').pop()!;
+    assert.ok(uuidValidate(id), 'card ID is a UUID');
     assert.deepEqual(json, {
       data: {
         type: 'card',
-        id: `${testRealmURL}Pet/1`,
+        id: `${testRealmURL}Pet/${id}`,
         attributes: {
           firstName: 'Mango',
           title: 'Mango',
@@ -637,12 +539,14 @@ module('Integration | realm', function (hooks) {
             module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
-          lastModified: adapter.lastModified.get(`${testRealmURL}Pet/1.json`),
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}Pet/${id}.json`,
+          ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
         links: {
-          self: `${testRealmURL}Pet/1`,
+          self: `${testRealmURL}Pet/${id}`,
         },
       },
       included: [
@@ -674,7 +578,7 @@ module('Integration | realm', function (hooks) {
         },
       ],
     });
-    let fileRef = await adapter.openFile('Pet/1.json');
+    let fileRef = await adapter.openFile(`Pet/${id}.json`);
     if (!fileRef) {
       throw new Error('file not found');
     }
@@ -726,7 +630,7 @@ module('Integration | realm', function (hooks) {
     });
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
-    let expected = [
+    let expectedEvents = [
       {
         type: 'index',
         data: {
@@ -735,12 +639,12 @@ module('Integration | realm', function (hooks) {
         },
       },
     ];
-    let response = await this.expectEvents(
+    let response = await this.expectEvents({
       assert,
       realm,
       adapter,
-      expected,
-      async () => {
+      expectedEvents,
+      callback: async () => {
         let response = realm.handle(
           new Request(`${testRealmURL}dir/card`, {
             method: 'PATCH',
@@ -770,7 +674,7 @@ module('Integration | realm', function (hooks) {
         await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         return await response;
       },
-    );
+    });
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
     if (isSingleCardDocument(json)) {
@@ -2019,7 +1923,7 @@ module('Integration | realm', function (hooks) {
       'found card in index',
     );
 
-    let expected = [
+    let expectedEvents = [
       {
         type: 'index',
         data: {
@@ -2028,12 +1932,12 @@ module('Integration | realm', function (hooks) {
         },
       },
     ];
-    let response = await this.expectEvents(
+    let response = await this.expectEvents({
       assert,
       realm,
       adapter,
-      expected,
-      async () => {
+      expectedEvents,
+      callback: async () => {
         let response = realm.handle(
           new Request(`${testRealmURL}cards/2`, {
             method: 'DELETE',
@@ -2045,7 +1949,7 @@ module('Integration | realm', function (hooks) {
         await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         return await response;
       },
-    );
+    });
     assert.strictEqual(response.status, 204, 'status was 204');
 
     result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
@@ -2135,7 +2039,7 @@ module('Integration | realm', function (hooks) {
     await realm.ready;
 
     {
-      let expected = [
+      let expectedEvents = [
         {
           type: 'index',
           data: {
@@ -2144,12 +2048,12 @@ module('Integration | realm', function (hooks) {
           },
         },
       ];
-      let response = await this.expectEvents(
+      let response = await this.expectEvents({
         assert,
         realm,
         adapter,
-        expected,
-        async () => {
+        expectedEvents,
+        callback: async () => {
           let response = realm.handle(
             new Request(`${testRealmURL}dir/person.gts`, {
               method: 'POST',
@@ -2165,7 +2069,7 @@ module('Integration | realm', function (hooks) {
           ]);
           return await response;
         },
-      );
+      });
 
       assert.strictEqual(response.status, 204, 'HTTP status is 204');
       assert.ok(
@@ -2202,7 +2106,7 @@ module('Integration | realm', function (hooks) {
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
-    let expected = [
+    let expectedEvents = [
       {
         type: 'index',
         data: {
@@ -2211,12 +2115,12 @@ module('Integration | realm', function (hooks) {
         },
       },
     ];
-    let response = await this.expectEvents(
+    let response = await this.expectEvents({
       assert,
       realm,
       adapter,
-      expected,
-      async () => {
+      expectedEvents,
+      callback: async () => {
         let response = realm.handle(
           new Request(`${testRealmURL}person`, {
             headers: {
@@ -2238,7 +2142,7 @@ module('Integration | realm', function (hooks) {
         await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         return await response;
       },
-    );
+    });
     assert.strictEqual(response.status, 204, 'file is deleted');
 
     response = await realm.handle(
@@ -2806,6 +2710,32 @@ posts/ignore-me.gts
         },
       },
       '/_info response is correct',
+    );
+  });
+
+  test('realm does not crash when indexing a broken instance', async function (assert) {
+    let realm = await TestRealm.create(
+      loader,
+      {
+        'FieldDef/1.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'FieldDef',
+              },
+            },
+          },
+        },
+      },
+      this.owner,
+    ); // this is an example of a card that where loadCard will throw an error
+
+    await realm.ready;
+    assert.ok(
+      true,
+      'realm did not crash when trying to index a broken instance',
     );
   });
 });
