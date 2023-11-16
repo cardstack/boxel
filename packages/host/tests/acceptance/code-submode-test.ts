@@ -437,8 +437,8 @@ module('Acceptance | code submode tests', function (hooks) {
 
     assert
       .dom('[data-test-file-view-header]')
-      .hasAttribute('aria-label', 'Inheritance');
-    assert.dom('[data-test-inheritance-toggle]').hasClass('active');
+      .hasAttribute('aria-label', 'Inspector');
+    assert.dom('[data-test-inspector-toggle]').hasClass('active');
     assert.dom('[data-test-file-browser-toggle]').doesNotHaveClass('active');
 
     await waitFor('[data-test-card-inspector-panel]');
@@ -451,7 +451,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-file-view-header]')
       .hasAttribute('aria-label', 'File Browser');
-    assert.dom('[data-test-inheritance-toggle]').doesNotHaveClass('active');
+    assert.dom('[data-test-inspector-toggle]').doesNotHaveClass('active');
     assert.dom('[data-test-file-browser-toggle]').hasClass('active');
 
     await waitFor('[data-test-file]');
@@ -552,7 +552,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-file-view-header]')
       .hasAttribute('aria-label', 'File Browser');
-    assert.dom('[data-test-inheritance-toggle]').isDisabled();
+    assert.dom('[data-test-inspector-toggle]').isDisabled();
 
     assert.dom('[data-test-empty-code-mode]').exists();
     assert
@@ -586,7 +586,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-file-view-header]')
       .hasAttribute('aria-label', 'File Browser');
-    assert.dom('[data-test-inheritance-toggle]').isDisabled();
+    assert.dom('[data-test-inspector-toggle]').isDisabled();
 
     assert.dom('[data-test-empty-code-mode]').doesNotExist();
     assert
@@ -610,7 +610,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
-    await waitFor('[data-test-file-definition]');
+    await waitFor('[data-test-binary-info]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.png');
     await waitFor('[data-test-definition-realm-name]');
