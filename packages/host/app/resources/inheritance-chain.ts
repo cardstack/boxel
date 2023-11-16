@@ -1,10 +1,11 @@
-import { service } from '@ember/service';
+import { getOwner } from '@ember/owner';
+
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
-import { loadCard } from '@cardstack/runtime-common';
+import { type Loader, loadCard } from '@cardstack/runtime-common';
 
 import { CardType, Type } from '@cardstack/host/resources/card-type';
 
@@ -16,6 +17,7 @@ interface Args {
   named: {
     url: string;
     card: typeof BaseDef;
+    loader: Loader;
     cardTypeResource?: CardType;
   };
 }
@@ -26,14 +28,13 @@ export type CardInheritance = {
 };
 
 export class InheritanceChainResource extends Resource<Args> {
-  #loaded!: Promise<void>; // modifier runs at init so we will always have a value
+  #loaded!: Promise<void>;
   @tracked private _value: CardInheritance[] = [];
-  @service declare loaderService: LoaderService;
 
   modify(_positional: never[], named: Args['named']) {
-    let { cardTypeResource, card, url } = named;
+    let { cardTypeResource, card, url, loader } = named;
     if (cardTypeResource) {
-      this.#loaded = this.load.perform(url, card, cardTypeResource);
+      this.#loaded = this.load.perform(url, card, loader, cardTypeResource);
     }
   }
 
@@ -46,7 +47,12 @@ export class InheritanceChainResource extends Resource<Args> {
   }
 
   private load = task(
-    async (url: string, card: typeof BaseDef, cardTypeResource?: CardType) => {
+    async (
+      url: string,
+      card: typeof BaseDef,
+      loader: Loader,
+      cardTypeResource?: CardType,
+    ) => {
       await cardTypeResource!.ready;
       let cardType = cardTypeResource!.type;
 
@@ -66,7 +72,7 @@ export class InheritanceChainResource extends Resource<Args> {
         cardType = cardType.super;
 
         let superCard = await loadCard(cardType.codeRef, {
-          loader: this.loaderService.loader,
+          loader: loader,
           relativeTo: new URL(url), // because the module can be relative
         });
 
@@ -85,11 +91,19 @@ export function inheritanceChain(
   url: () => string,
   card: () => typeof BaseDef,
   cardTypeResource: () => CardType | undefined,
+  loader?: () => Loader,
 ) {
   return InheritanceChainResource.from(parent, () => ({
     named: {
       url: url(),
       card: card(),
+      loader: loader
+        ? loader()
+        : (
+            (getOwner(parent) as any).lookup(
+              'service:loader-service',
+            ) as LoaderService
+          ).loader,
       cardTypeResource: cardTypeResource(),
     },
   })) as InheritanceChainResource;
