@@ -74,7 +74,6 @@ export class ModuleContentsResource extends Resource<Args> {
   }
 
   private load = restartableTask(async (executableFile: Ready) => {
-    console.log('u loading here');
     //==loading module
     let moduleResource = importResource(this, () => executableFile.url);
     await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
@@ -82,7 +81,6 @@ export class ModuleContentsResource extends Resource<Args> {
       moduleResource?.module || {},
     ).filter(isBaseDef);
 
-    console.log(executableFile.url);
     //==building declaration structure
     // This loop
     // - adds card type (not necessarily loaded)
