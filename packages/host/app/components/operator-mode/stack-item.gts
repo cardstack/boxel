@@ -272,10 +272,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
   };
 
   private onCardChange = () => {
-    this.doWhenCardChanges.perform();
+    this.initiateAutoSaveTask.perform();
   };
 
-  private doWhenCardChanges = restartableTask(async () => {
+  private initiateAutoSaveTask = restartableTask(async () => {
     await timeout(autoSaveDelayMs);
     this.isSaving = true;
     this.args.save(this.args.item, false);

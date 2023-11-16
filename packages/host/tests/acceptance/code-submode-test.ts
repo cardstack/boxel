@@ -68,7 +68,7 @@ const personCardSource = `
       },
     });
     @field pet = linksTo(Pet);
-    @field friends = linksToMany(() => Friend);
+    @field friends = linksToMany(Friend);
     @field address = containsMany(StringCard);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -437,13 +437,13 @@ module('Acceptance | code submode tests', function (hooks) {
 
     assert
       .dom('[data-test-file-view-header]')
-      .hasAttribute('aria-label', 'Inheritance');
-    assert.dom('[data-test-inheritance-toggle]').hasClass('active');
+      .hasAttribute('aria-label', 'Inspector');
+    assert.dom('[data-test-inspector-toggle]').hasClass('active');
     assert.dom('[data-test-file-browser-toggle]').doesNotHaveClass('active');
 
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
 
-    assert.dom('[data-test-card-inheritance-panel]').exists();
+    assert.dom('[data-test-card-inspector-panel]').exists();
     assert.dom('[data-test-file]').doesNotExist();
 
     await click('[data-test-file-browser-toggle]');
@@ -451,7 +451,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-file-view-header]')
       .hasAttribute('aria-label', 'File Browser');
-    assert.dom('[data-test-inheritance-toggle]').doesNotHaveClass('active');
+    assert.dom('[data-test-inspector-toggle]').doesNotHaveClass('active');
     assert.dom('[data-test-file-browser-toggle]').hasClass('active');
 
     await waitFor('[data-test-file]');
@@ -548,11 +548,11 @@ module('Acceptance | code submode tests', function (hooks) {
 
     assert.dom('[data-test-file]').exists();
     assert.dom('[data-test-file-browser-toggle]').hasClass('active');
-    assert.dom('[data-test-card-inheritance-panel]').doesNotExist();
+    assert.dom('[data-test-card-inspector-panel]').doesNotExist();
     assert
       .dom('[data-test-file-view-header]')
       .hasAttribute('aria-label', 'File Browser');
-    assert.dom('[data-test-inheritance-toggle]').isDisabled();
+    assert.dom('[data-test-inspector-toggle]').isDisabled();
 
     assert.dom('[data-test-empty-code-mode]').exists();
     assert
@@ -582,11 +582,11 @@ module('Acceptance | code submode tests', function (hooks) {
 
     assert.dom('[data-test-file]').exists();
     assert.dom('[data-test-file-browser-toggle]').hasClass('active');
-    assert.dom('[data-test-card-inheritance-panel]').doesNotExist();
+    assert.dom('[data-test-card-inspector-panel]').doesNotExist();
     assert
       .dom('[data-test-file-view-header]')
       .hasAttribute('aria-label', 'File Browser');
-    assert.dom('[data-test-inheritance-toggle]').isDisabled();
+    assert.dom('[data-test-inspector-toggle]').isDisabled();
 
     assert.dom('[data-test-empty-code-mode]').doesNotExist();
     assert
@@ -610,7 +610,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
-    await waitFor('[data-test-file-definition]');
+    await waitFor('[data-test-binary-info]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.png');
     await waitFor('[data-test-definition-realm-name]');
@@ -706,15 +706,9 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-preview-card-footer-button-atom]')
       .hasClass('active');
+    assert.dom('[data-test-code-mode-card-preview-body] .atom-format').exists();
     assert
-      .dom(
-        '[data-test-code-mode-card-preview-body ] [data-test-card-format="atom"]',
-      )
-      .exists();
-    assert
-      .dom(
-        '[data-test-code-mode-card-preview-body] [data-test-card-format="atom"]',
-      )
+      .dom('[data-test-code-mode-card-preview-body] .atom-format')
       .includesText('Fadhlan');
 
     await click('[data-test-preview-card-footer-button-embedded]');
@@ -867,7 +861,7 @@ module('Acceptance | code submode tests', function (hooks) {
     );
 
     await waitForCodeEditor();
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
@@ -919,7 +913,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
     await waitForCodeEditor();
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
