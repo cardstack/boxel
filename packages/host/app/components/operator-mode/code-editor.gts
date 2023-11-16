@@ -5,26 +5,29 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 //@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
+
 import { task, restartableTask, timeout, all } from 'ember-concurrency';
+
 import perform from 'ember-concurrency/helpers/perform';
 import { Position } from 'monaco-editor';
+
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-import {
-  logger,
-  isSingleCardDocument,
-  RealmPaths,
-  type SingleCardDocument,
-} from '@cardstack/runtime-common';
+
+import { logger } from '@cardstack/runtime-common';
+
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
+
+import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
+
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import BinaryFileInfo from './binary-file-info';
-import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -112,7 +115,7 @@ export default class CodeEditor extends Component<Signature> {
 
   @cached
   private get initialMonacoCursorPosition() {
-    let loc =  this.args.selectedDeclaration?.path?.node.loc;
+    let loc = this.args.selectedDeclaration?.path?.node.loc;
     if (loc) {
       let { start } = loc;
       return new Position(start.line, start.column);
@@ -169,20 +172,9 @@ export default class CodeEditor extends Component<Signature> {
     if (!isReady(this.args.file) || content === this.args.file?.content) {
       return;
     }
-    let isJSON = this.args.file.name.endsWith('.json');
-    let validJSON = isJSON && this.safeJSONParse(content);
-    // Here lies the difference in how json files and other source code files
-    // are treated during editing in the code editor
-    if (validJSON && isSingleCardDocument(validJSON)) {
-      // writes json instance but doesn't update state of the file resource
-      // relies on message service subscription to update state
-      await this.saveFileSerializedCard.perform(validJSON);
-    } else if (!isJSON || validJSON) {
-      // writes source code and non-card instance valid JSON,
-      // then updates the state of the file resource
-      this.writeSourceCodeToFile(this.args.file, content);
-      this.waitForSourceCodeWrite.perform();
-    }
+
+    this.writeSourceCodeToFile(this.args.file, content);
+    this.waitForSourceCodeWrite.perform();
     this.hasUnsavedSourceChanges = false;
   });
 
@@ -203,6 +195,16 @@ export default class CodeEditor extends Component<Signature> {
       throw new Error('File is not ready to be written to');
     }
 
+    let isJSON = file.name.endsWith('.json');
+    let validJSON = isJSON && this.safeJSONParse(content);
+
+    if (isJSON && !validJSON) {
+      log.warn(
+        `content for ${this.codePath} is not valid JSON, skipping write`,
+      );
+      return;
+    }
+
     // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
     return file.write(content, true);
   }
@@ -217,45 +219,6 @@ export default class CodeEditor extends Component<Signature> {
       return;
     }
   }
-
-  private saveFileSerializedCard = task(async (json: SingleCardDocument) => {
-    if (!this.codePath) {
-      return;
-    }
-    let realmPath = new RealmPaths(this.cardService.defaultURL);
-    let url = realmPath.fileURL(this.codePath.href.replace(/\.json$/, ''));
-    let realmURL = this.readyFile.realmURL;
-    if (!realmURL) {
-      throw new Error(`cannot determine realm for ${this.codePath}`);
-    }
-
-    let doc = this.monacoService.reverseFileSerialization(
-      json,
-      url.href,
-      realmURL,
-    );
-    let card: CardDef | undefined;
-    try {
-      card = await this.cardService.createFromSerialized(doc.data, doc, url);
-    } catch (e) {
-      // TODO probably we should show a message in the UI that the card
-      // instance JSON is not actually a valid card
-      console.error(
-        'JSON is not a valid card--TODO this should be an error message in the code editor',
-      );
-      return;
-    }
-
-    try {
-      // these saves can happen so fast that we'll make sure to wait at
-      // least 500ms for human consumption
-      this.args.onFileSave('started');
-      await all([this.cardService.saveModel(this, card), timeout(500)]);
-      this.args.onFileSave('finished');
-    } catch (e) {
-      console.error('Failed to save single card document', e);
-    }
-  });
 
   private get language(): string | undefined {
     if (this.codePath) {
