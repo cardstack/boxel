@@ -1,9 +1,20 @@
+import { RenderingTestContext } from '@ember/test-helpers';
+
 import { setupRenderingTest } from 'ember-qunit';
+
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { generatePatchCallSpecification } from '@cardstack/runtime-common/helpers/ai';
+import {
+  generatePatchCallSpecification,
+  basicMappings,
+} from '@cardstack/runtime-common/helpers/ai';
 import { Loader } from '@cardstack/runtime-common/loader';
+
+import { shimExternals } from '@cardstack/host/lib/externals';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import { primitive as primitiveType } from 'https://cardstack.com/base/card-api';
 
 import {
   setupLocalIndexing,
@@ -12,26 +23,14 @@ import {
   setupCardLogs,
 } from '../helpers';
 
-import { RenderingTestContext } from '@ember/test-helpers';
-
-import { shimExternals } from '@cardstack/host/lib/externals';
-import type LoaderService from '@cardstack/host/services/loader-service';
-
-import {
-  primitive as primitiveType,
-  queryableValue as queryableValueType,
-} from 'https://cardstack.com/base/card-api';
-
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
 let number: typeof import('https://cardstack.com/base/number');
 let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
 let boolean: typeof import('https://cardstack.com/base/boolean');
-let codeRef: typeof import('https://cardstack.com/base/code-ref');
-let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
 let primitive: typeof primitiveType;
-let queryableValue: typeof queryableValueType;
+let mappings: Map<typeof cardApi.FieldDef, any>;
 
 let loader: Loader;
 
@@ -46,14 +45,12 @@ module('Unit | ai-function-generation-test', function (hooks) {
     shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     primitive = cardApi.primitive;
-    queryableValue = cardApi.queryableValue;
     string = await loader.import(`${baseRealm.url}string`);
     number = await loader.import(`${baseRealm.url}number`);
     date = await loader.import(`${baseRealm.url}date`);
     datetime = await loader.import(`${baseRealm.url}datetime`);
     boolean = await loader.import(`${baseRealm.url}boolean`);
-    codeRef = await loader.import(`${baseRealm.url}code-ref`);
-    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
+    mappings = await basicMappings(loader);
   });
 
   setupLocalIndexing(hooks);
@@ -72,12 +69,18 @@ module('Unit | ai-function-generation-test', function (hooks) {
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
+    let { default: BooleanField } = boolean;
+    let { default: DateField } = date;
+    let { default: DateTimeField } = datetime;
     class BasicCard extends CardDef {
       @field stringField = contains(StringField);
       @field numberField = contains(NumberField);
+      @field booleanField = contains(BooleanField);
+      @field dateField = contains(DateField);
+      @field dateTimeField = contains(DateTimeField);
     }
 
-    let schema = generatePatchCallSpecification(BasicCard, cardApi);
+    let schema = generatePatchCallSpecification(BasicCard, cardApi, mappings);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -86,6 +89,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
         description: { type: 'string' },
         stringField: { type: 'string' },
         numberField: { type: 'number' },
+        booleanField: { type: 'boolean' },
+        dateField: { type: 'string', format: 'date' },
+        dateTimeField: { type: 'string', format: 'date-time' },
       },
     });
   });
@@ -101,7 +107,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field containerField = contains(InternalField);
     }
 
-    let schema = generatePatchCallSpecification(BasicCard, cardApi);
+    let schema = generatePatchCallSpecification(BasicCard, cardApi, mappings);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -129,7 +135,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field containerField = contains(InternalField);
     }
 
-    let schema = generatePatchCallSpecification(TestCard, cardApi);
+    let schema = generatePatchCallSpecification(TestCard, cardApi, mappings);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -159,7 +165,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field simpleField = contains(StringField);
     }
 
-    let schema = generatePatchCallSpecification(TestCard, cardApi);
+    let schema = generatePatchCallSpecification(TestCard, cardApi, mappings);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -186,7 +192,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field skipField = contains(NewField);
     }
 
-    let schema = generatePatchCallSpecification(TestCard, cardApi);
+    let schema = generatePatchCallSpecification(TestCard, cardApi, mappings);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -199,7 +205,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`handles subclasses`, async function (assert) {
-    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;
 
     class NewField extends StringField {
@@ -211,7 +217,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field keepField = contains(NewField);
     }
 
-    let schema = generatePatchCallSpecification(TestCard, cardApi);
+    let schema = generatePatchCallSpecification(TestCard, cardApi, mappings);
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -219,6 +225,41 @@ module('Unit | ai-function-generation-test', function (hooks) {
         title: { type: 'string' },
         description: { type: 'string' },
         keepField: { type: 'string' },
+      },
+    });
+  });
+
+  test(`handles subclasses within nested fields`, async function (assert) {
+    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
+    class NewField extends StringField {
+      static displayName = 'NewField';
+    }
+
+    class ContainingField extends FieldDef {
+      @field keepField = containsMany(NewField);
+    }
+
+    class TestCard extends CardDef {
+      static displayName = 'TestCard';
+      @field containingField = contains(ContainingField);
+    }
+
+    let schema = generatePatchCallSpecification(TestCard, cardApi, mappings);
+
+    assert.deepEqual(schema, {
+      type: 'object',
+      properties: {
+        thumbnailURL: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        containingField: {
+          type: 'object',
+          properties: {
+            keepField: { type: 'array', items: { type: 'string' } },
+          },
+        },
       },
     });
   });

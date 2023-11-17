@@ -1,12 +1,15 @@
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import { primitive } from '../constants';
+import { Loader } from '../loader';
 
 type EmptySchema = {};
 
 type ArraySchema = {
   type: 'array';
   items: Schema;
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
 };
 
 type ObjectSchema = {
@@ -14,6 +17,7 @@ type ObjectSchema = {
   properties: {
     [fieldName: string]: Schema;
   };
+  required?: string[];
 };
 
 type DateSchema = {
@@ -21,8 +25,29 @@ type DateSchema = {
   format: 'date' | 'date-time';
 };
 
-type PrimitiveSchema = {
-  type: 'string' | 'number' | 'boolean';
+type NumberSchema = {
+  type: 'number' | 'integer';
+  exclusiveMinimum?: number;
+  minimum?: number;
+  exclusiveMaximum?: number;
+  maximum?: number;
+  multipleOf?: number;
+};
+
+type StringSchema = {
+  type: 'string';
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+};
+
+type BooleanSchema = {
+  type: 'boolean';
+};
+
+type EnumSchema = {
+  // JSON Schema allows a mix of any types in an enum
+  enum: any[];
 };
 
 type Schema =
@@ -30,27 +55,67 @@ type Schema =
   | ArraySchema
   | ObjectSchema
   | DateSchema
-  | PrimitiveSchema;
+  | NumberSchema
+  | StringSchema
+  | EnumSchema
+  | BooleanSchema;
 
-function getPrimitiveType(def: typeof CardAPI.BaseDef) {
-  console.log("Getting primitive type for", def);
+/**
+ * A map of the most common field definitions to their JSON Schema
+ * representations.
+ *
+ * @param loader
+ * @returns
+ */
+export async function basicMappings(loader: Loader) {
+  let mappings = new Map<typeof CardAPI.FieldDef, Schema>();
+
+  const { default: StringField } = await loader.import(
+    'https://cardstack.com/base/string',
+  );
+  const { default: NumberField } = await loader.import(
+    'https://cardstack.com/base/number',
+  );
+  const { default: DateField } = await loader.import(
+    'https://cardstack.com/base/date',
+  );
+  const { default: DateTimeField } = await loader.import(
+    'https://cardstack.com/base/datetime',
+  );
+  const { default: BooleanField } = await loader.import(
+    'https://cardstack.com/base/boolean',
+  );
+  mappings.set(StringField, {
+    type: 'string',
+  });
+  mappings.set(NumberField, {
+    type: 'number',
+  });
+  mappings.set(DateField, {
+    type: 'string',
+    format: 'date',
+  });
+  mappings.set(DateTimeField, {
+    type: 'string',
+    format: 'date-time',
+  });
+  mappings.set(BooleanField, {
+    type: 'boolean',
+  });
+  return mappings;
+}
+
+function getPrimitiveType(
+  def: typeof CardAPI.BaseDef,
+  mappings: Map<typeof CardAPI.FieldDef, Schema>,
+) {
   if (!def.isFieldDef) {
-    return undefined
+    return undefined;
   }
-  switch (def.name) {
-    case 'NumberField':
-      return { type: 'number' };
-    case 'StringField':
-      return { type: 'string' };
-    case 'BooleanField':
-      return { type: 'boolean' };
-    case 'DateField':
-      return { type: 'string', format: 'date' };
-    case 'DateTimeField':
-      return { type: 'string', format: 'date-time' };
-    default:
-      return getPrimitiveType(Object.getPrototypeOf(def));
-    // Any case not explicitly known about should be skipped
+  if (mappings.has(def)) {
+    return mappings.get(def);
+  } else {
+    return getPrimitiveType(Object.getPrototypeOf(def), mappings);
   }
 }
 
@@ -62,16 +127,18 @@ function getPrimitiveType(def: typeof CardAPI.BaseDef) {
  *  This is a subset of JSON Schema.
  *
  * @param def - The BaseDef to generate the patch call specification for.
+ * @param cardApi - The card API to use to generate the patch call specification
+ * @param mappings - A map of field definitions to JSON schema
  * @returns The generated patch call specification as JSON schema
  */
-export function generatePatchCallSpecification<T extends typeof CardAPI.BaseDef>(
-  def: T,
+export function generatePatchCallSpecification(
+  def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
+  mappings: Map<typeof CardAPI.FieldDef, Schema>,
 ) {
-  console.log("Looking at", def);
   // An explicit list of types that we will support in the patch call
   if (primitive in def) {
-    return getPrimitiveType(def);
+    return getPrimitiveType(def, mappings);
   }
 
   // If it's not a primitive, it contains other fields
@@ -81,18 +148,27 @@ export function generatePatchCallSpecification<T extends typeof CardAPI.BaseDef>
     properties: {},
   };
 
-  let { id: removedIdField, ...fields } = cardApi.getFields(def, {
+  const { id: removedIdField, ...fields } = cardApi.getFields(def, {
     usedFieldsOnly: false,
   });
 
   //
   for (let [fieldName, field] of Object.entries(fields)) {
     // We're generating patch data, so computeds should be skipped
-    if (field.computeVia || field.fieldType == "linksTo" || field.fieldType == 'linksToMany') {
+    // as should any linksTo or linksToMany fields
+    if (
+      field.computeVia ||
+      field.fieldType == 'linksTo' ||
+      field.fieldType == 'linksToMany'
+    ) {
       continue;
     }
-    console.log("Dropping into field", field, field.card);
-    let fieldSchema = generatePatchCallSpecification(field.card, cardApi);
+    const fieldSchema = generatePatchCallSpecification(
+      field.card,
+      cardApi,
+      mappings,
+    );
+    // This happens when we have no known schema for the field type
     if (fieldSchema == undefined) {
       continue;
     }
