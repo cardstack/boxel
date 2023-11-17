@@ -185,6 +185,7 @@ jobs:
           echo Installed chromium version: ${{ steps.setup-chrome.outputs.chrome-version }}
           ${{ steps.setup-chrome.outputs.chrome-path }} --version
           echo $(which chrome)
+          echo "/opt/hostedtoolcache/chromium/1115501/x64/" >> $GITHUB_PATH
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
       - name: Build boxel-ui
