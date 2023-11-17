@@ -6,18 +6,32 @@ import cn from '../../helpers/cn.ts';
 import { eq, not, or } from '../../helpers/truth-helpers.ts';
 import LoadingIndicator from '../loading-indicator/index.gts';
 
+export type BoxelButtonKind =
+  | 'primary'
+  | 'secondary-dark'
+  | 'secondary-light'
+  | 'danger'
+  | 'primary-dark';
+
+export type BoxelButtonSize =
+  | 'extra-small'
+  | 'small'
+  | 'base'
+  | 'tall'
+  | 'touch';
+
 interface Signature {
   Args: {
     as?: string;
     class?: string;
     disabled?: boolean;
     href?: string;
-    kind?: string;
+    kind?: BoxelButtonKind;
     loading?: boolean;
     models?: any;
     query?: any;
     route?: any;
-    size?: string;
+    size?: BoxelButtonSize;
   };
   Blocks: {
     default: [];
@@ -25,8 +39,8 @@ interface Signature {
   Element: HTMLButtonElement | HTMLAnchorElement;
 }
 export default class ButtonComponent extends Component<Signature> {
-  defaultSize = 'base';
-  defaultKind = 'secondary-light';
+  defaultSize: BoxelButtonSize = 'base';
+  defaultKind: BoxelButtonKind = 'secondary-light';
 
   <template>
     {{#let
