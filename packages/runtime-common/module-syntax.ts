@@ -1,8 +1,9 @@
-import generate from '@babel/generator';
 import * as Babel from '@babel/core';
+import { parse as babelParse } from '@babel/parser';
+import { parse, print } from 'recast';
 import {
   schemaAnalysisPlugin,
-  Options,
+  type Options,
   type PossibleCardOrFieldClass,
   type Declaration,
   type BaseDeclaration,
@@ -33,6 +34,8 @@ import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-syntax-typescript';
 
+import { getBabelOptions } from './babel-options';
+
 import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
@@ -58,9 +61,20 @@ export class ModuleSyntax {
     };
     let preprocessedSrc = preprocessTemplateTags(src);
 
-    let r = Babel.transformSync(preprocessedSrc, {
+    let ast: Babel.types.Node = parse(preprocessedSrc, {
+      parser: {
+        parse(source: string) {
+          const options =
+            getBabelOptions(/*optionally pass in option overrides*/);
+          return babelParse(source, options);
+        },
+      },
+    });
+
+    let r = Babel.transformFromAstSync(ast, preprocessedSrc, {
       code: false,
       ast: true,
+      cloneInputAst: false,
       plugins: [
         typescriptPlugin,
         [decoratorsPlugin, { legacy: true }],
@@ -74,9 +88,9 @@ export class ModuleSyntax {
   }
 
   code(): string {
-    let preprocessedSrc = generate(this.ast).code;
+    let preprocessedSrc: string = print(this.ast).code;
     return preprocessedSrc.replace(
-      /\[templte\(`([^`].*?)`\)\];/gs,
+      /\[templte\(`([^`].*?)`\)\]/gs,
       `<template>$1</template>`,
     );
   }
@@ -180,9 +194,24 @@ export class ModuleSyntax {
       .map((f) => f[0])
       .indexOf(fieldName);
 
-    this.ast = Babel.transformFromAstSync(this.ast, undefined, {
+    // we need to re-parse the AST with recast before we transform it again so
+    // that we don't lose the decorations that recast performs on the AST in
+    // order to track Node provenance. basically every babel transform needs to
+    // be fed an AST from a recast parse
+    let ast: Babel.types.Node = parse(this.code(), {
+      parser: {
+        parse(source: string) {
+          const options =
+            getBabelOptions(/*optionally pass in option overrides*/);
+          return babelParse(source, options);
+        },
+      },
+    });
+
+    this.ast = Babel.transformFromAstSync(ast, undefined, {
       code: false,
       ast: true,
+      cloneInputAst: false,
       plugins: [
         typescriptPlugin,
         [decoratorsPlugin, { legacy: true }],
