@@ -67,21 +67,22 @@ type Schema =
 export async function basicMappings(loader: Loader) {
   let mappings = new Map<typeof CardAPI.FieldDef, Schema>();
 
-  const { default: StringField } = await loader.import(
-    'https://cardstack.com/base/string',
-  );
-  const { default: NumberField } = await loader.import(
-    'https://cardstack.com/base/number',
-  );
-  const { default: DateField } = await loader.import(
-    'https://cardstack.com/base/date',
-  );
-  const { default: DateTimeField } = await loader.import(
-    'https://cardstack.com/base/datetime',
-  );
-  const { default: BooleanField } = await loader.import(
-    'https://cardstack.com/base/boolean',
-  );
+  let string: typeof import('https://cardstack.com/base/string') =
+    await loader.import('https://cardstack.com/base/string');
+  let number: typeof import('https://cardstack.com/base/number') =
+    await loader.import('https://cardstack.com/base/number');
+  let date: typeof import('https://cardstack.com/base/date') =
+    await loader.import('https://cardstack.com/base/date');
+  let datetime: typeof import('https://cardstack.com/base/datetime') =
+    await loader.import('https://cardstack.com/base/datetime');
+  let boolean: typeof import('https://cardstack.com/base/boolean') =
+    await loader.import('https://cardstack.com/base/boolean');
+
+  const { default: StringField } = string;
+  const { default: NumberField } = number;
+  const { default: DateField } = date;
+  const { default: DateTimeField } = datetime;
+  const { default: BooleanField } = boolean;
   mappings.set(StringField, {
     type: 'string',
   });
