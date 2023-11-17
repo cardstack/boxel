@@ -1,8 +1,19 @@
 import Service, { service } from '@ember/service';
 
-import { RealmInfo, SupportedMimeType } from '@cardstack/runtime-common';
+import { restartableTask } from 'ember-concurrency';
+
+import {
+  RealmInfo,
+  SupportedMimeType,
+  RealmPaths,
+  baseRealm,
+} from '@cardstack/runtime-common';
+
+import ENV from '@cardstack/host/config/environment';
 
 import LoaderService from '@cardstack/host/services/loader-service';
+
+const { ownRealmURL, otherRealmURLs } = ENV;
 
 export default class RealmInfoService extends Service {
   @service declare loaderService: LoaderService;
@@ -56,4 +67,16 @@ export default class RealmInfoService extends Service {
       return realmInfo;
     }
   }
+
+  fetchAllKnownRealmInfos = restartableTask(async () => {
+    let paths = [
+      ...new Set([ownRealmURL, baseRealm.url, ...otherRealmURLs]),
+    ].map((path) => new RealmPaths(path).url);
+
+    await Promise.all(
+      paths.map(
+        async (path) => await this.fetchRealmInfo({ realmURL: new URL(path) }),
+      ),
+    );
+  });
 }
