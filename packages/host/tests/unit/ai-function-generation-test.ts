@@ -26,6 +26,7 @@ import {
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
 let number: typeof import('https://cardstack.com/base/number');
+let biginteger: typeof import('https://cardstack.com/base/big-integer');
 let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
 let boolean: typeof import('https://cardstack.com/base/boolean');
@@ -46,6 +47,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
     primitive = cardApi.primitive;
     string = await loader.import(`${baseRealm.url}string`);
     number = await loader.import(`${baseRealm.url}number`);
+    biginteger = await loader.import(`${baseRealm.url}big-integer`);
     date = await loader.import(`${baseRealm.url}date`);
     datetime = await loader.import(`${baseRealm.url}datetime`);
     boolean = await loader.import(`${baseRealm.url}boolean`);
@@ -67,12 +69,14 @@ module('Unit | ai-function-generation-test', function (hooks) {
     let { default: BooleanField } = boolean;
     let { default: DateField } = date;
     let { default: DateTimeField } = datetime;
+    let { default: BigIntegerField } = biginteger;
     class BasicCard extends CardDef {
       @field stringField = contains(StringField);
       @field numberField = contains(NumberField);
       @field booleanField = contains(BooleanField);
       @field dateField = contains(DateField);
       @field dateTimeField = contains(DateTimeField);
+      @field bigIntegerField = contains(BigIntegerField);
     }
 
     let schema = generatePatchCallSpecification(BasicCard, cardApi, mappings);
@@ -87,6 +91,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         booleanField: { type: 'boolean' },
         dateField: { type: 'string', format: 'date' },
         dateTimeField: { type: 'string', format: 'date-time' },
+        bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
       },
     });
   });

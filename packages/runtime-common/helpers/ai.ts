@@ -71,6 +71,8 @@ export async function basicMappings(loader: Loader) {
     await loader.import('https://cardstack.com/base/string');
   let number: typeof import('https://cardstack.com/base/number') =
     await loader.import('https://cardstack.com/base/number');
+  let biginteger: typeof import('https://cardstack.com/base/big-integer') =
+    await loader.import('https://cardstack.com/base/big-integer');
   let date: typeof import('https://cardstack.com/base/date') =
     await loader.import('https://cardstack.com/base/date');
   let datetime: typeof import('https://cardstack.com/base/datetime') =
@@ -80,6 +82,7 @@ export async function basicMappings(loader: Loader) {
 
   const { default: StringField } = string;
   const { default: NumberField } = number;
+  const { default: BigIntegerField } = biginteger;
   const { default: DateField } = date;
   const { default: DateTimeField } = datetime;
   const { default: BooleanField } = boolean;
@@ -88,6 +91,10 @@ export async function basicMappings(loader: Loader) {
   });
   mappings.set(NumberField, {
     type: 'number',
+  });
+  mappings.set(BigIntegerField, {
+    type: 'string',
+    pattern: '^-?[0-9]+$',
   });
   mappings.set(DateField, {
     type: 'string',
@@ -107,12 +114,14 @@ function getPrimitiveType(
   def: typeof CardAPI.FieldDef,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
 ) {
+  // If we go beyond fieldDefs there are no matching mappings to use
   if (!def.isFieldDef) {
     return undefined;
   }
   if (mappings.has(def)) {
     return mappings.get(def);
   } else {
+    // Try the parent class, recurse up until we hit a type recognised
     return getPrimitiveType(Object.getPrototypeOf(def), mappings);
   }
 }
@@ -134,7 +143,7 @@ export function generatePatchCallSpecification(
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
 ) {
-  // An explicit list of types that we will support in the patch call
+  // If we're looking at a primitive field
   if ('isFieldDef' in def && primitive in def) {
     // glint-ignore-next-line
     return getPrimitiveType(def, mappings);
