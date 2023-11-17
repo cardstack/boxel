@@ -198,7 +198,8 @@ export class ModuleSyntax {
     // that we don't lose the decorations that recast performs on the AST in
     // order to track Node provenance. basically every babel transform needs to
     // be fed an AST from a recast parse
-    let ast: Babel.types.Node = parse(this.code(), {
+    let preprocessedSrc = preprocessTemplateTags(this.code());
+    let ast: Babel.types.Node = parse(preprocessedSrc, {
       parser: {
         parse(source: string) {
           const options =
