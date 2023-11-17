@@ -63,9 +63,6 @@ type Schema =
 /**
  * A map of the most common field definitions to their JSON Schema
  * representations.
- *
- * @param loader
- * @returns
  */
 export async function basicMappings(loader: Loader) {
   let mappings = new Map<typeof CardAPI.FieldDef, Schema>();
@@ -106,7 +103,7 @@ export async function basicMappings(loader: Loader) {
 }
 
 function getPrimitiveType(
-  def: typeof CardAPI.BaseDef,
+  def: typeof CardAPI.FieldDef,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
 ) {
   if (!def.isFieldDef) {
@@ -126,7 +123,7 @@ function getPrimitiveType(
  *
  *  This is a subset of JSON Schema.
  *
- * @param def - The BaseDef to generate the patch call specification for.
+ * @param def - The card to generate the patch call specification for.
  * @param cardApi - The card API to use to generate the patch call specification
  * @param mappings - A map of field definitions to JSON schema
  * @returns The generated patch call specification as JSON schema
@@ -137,7 +134,7 @@ export function generatePatchCallSpecification(
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
 ) {
   // An explicit list of types that we will support in the patch call
-  if (primitive in def) {
+  if ('isFieldDef' in def && primitive in def) {
     return getPrimitiveType(def, mappings);
   }
 
