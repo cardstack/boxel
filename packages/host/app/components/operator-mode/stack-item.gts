@@ -33,7 +33,7 @@ import {
   Tooltip,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { cn, eq, menuItem, optional } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, menuItem, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type Actions,
@@ -442,33 +442,19 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <:content as |dd|>
                     <BoxelMenu
                       @closeMenu={{dd.close}}
-                      @items={{if
-                        (eq @item.format 'edit')
-                        (array
-                          (menuItem
-                            'Copy Card URL'
-                            (perform this.copyToClipboard)
-                            icon=IconLink
-                          )
-                          (menuItem
-                            'Delete'
-                            (fn @delete this.card)
-                            icon=IconTrash
-                            dangerous=true
-                          )
+                      @items={{array
+                        (menuItem
+                          'Copy Card URL'
+                          (perform this.copyToClipboard)
+                          icon=IconLink
+                          disabled=(not this.card.id)
                         )
-                        (array
-                          (menuItem
-                            'Copy Card URL'
-                            (perform this.copyToClipboard)
-                            icon=IconLink
-                          )
-                          (menuItem
-                            'Delete'
-                            (fn @delete this.card)
-                            icon=IconTrash
-                            dangerous=true
-                          )
+                        (menuItem
+                          'Delete'
+                          (fn @delete this.card)
+                          icon=IconTrash
+                          dangerous=true
+                          disabled=(not this.card.id)
                         )
                       }}
                     />
