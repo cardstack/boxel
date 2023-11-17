@@ -192,7 +192,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   get fileViewTitle() {
-    return this.isFileTreeShowing ? 'File Browser' : 'Inheritance';
+    return this.isFileTreeShowing ? 'File Browser' : 'Inspector';
   }
 
   private get realmURL() {
@@ -238,8 +238,8 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get emptyOrNotFound() {
-    return !this.codePath || this.currentOpenFile?.state === 'not-found';
+  private get isFileOpen() {
+    return this.codePath && this.currentOpenFile?.state !== 'not-found';
   }
 
   private get fileIncompatibilityMessage() {
@@ -391,10 +391,10 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private onCardChange = () => {
-    this.doWhenCardChanges.perform();
+    this.initiateAutoSaveTask.perform();
   };
 
-  private doWhenCardChanges = restartableTask(async () => {
+  private initiateAutoSaveTask = restartableTask(async () => {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
       await timeout(autoSaveDelayMs);
@@ -439,7 +439,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get isFileTreeShowing() {
-    return this.fileView === 'browser' || this.emptyOrNotFound;
+    return this.fileView === 'browser' || !this.isFileOpen;
   }
 
   onStateChange(state: FileResource['state']) {
@@ -545,7 +545,7 @@ export default class CodeSubmode extends Component<Signature> {
         data-test-code-mode
         data-test-save-idle={{and
           (not this.sourceFileIsSaving)
-          this.doWhenCardChanges.isIdle
+          this.initiateAutoSaveTask.isIdle
         }}
       >
         <ResizablePanelGroup
@@ -581,7 +581,7 @@ export default class CodeSubmode extends Component<Signature> {
                       data-test-file-view-header
                     >
                       <Button
-                        @disabled={{this.emptyOrNotFound}}
+                        @disabled={{not this.isFileOpen}}
                         @kind={{if
                           (not this.isFileTreeShowing)
                           'primary-dark'
@@ -592,8 +592,8 @@ export default class CodeSubmode extends Component<Signature> {
                           'file-view__header-btn'
                           active=(not this.isFileTreeShowing)
                         }}
-                        {{on 'click' (fn this.setFileView 'inheritance')}}
-                        data-test-inheritance-toggle
+                        {{on 'click' (fn this.setFileView 'inspector')}}
+                        data-test-inspector-toggle
                       >
                         Inspector</Button>
                       <Button
@@ -625,7 +625,7 @@ export default class CodeSubmode extends Component<Signature> {
                             @selectDeclaration={{this.selectDeclaration}}
                             @delete={{perform this.delete}}
                             @openDefinition={{this.openDefinition}}
-                            data-test-card-inheritance-panel
+                            data-test-card-inspector-panel
                           />
                         {{/if}}
                       {{/if}}
