@@ -111,11 +111,11 @@ export async function basicMappings(loader: Loader) {
 }
 
 function getPrimitiveType(
-  def: typeof CardAPI.FieldDef,
-  mappings: Map<typeof CardAPI.FieldDef, Schema>,
+  def: typeof CardAPI.BaseDef,
+  mappings: Map<typeof CardAPI.BaseDef, Schema>,
 ) {
   // If we go beyond fieldDefs there are no matching mappings to use
-  if (!def.isFieldDef) {
+  if (!('isFieldDef' in def) || !def.isFieldDef) {
     return undefined;
   }
   if (mappings.has(def)) {
@@ -143,9 +143,8 @@ export function generatePatchCallSpecification(
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
 ) {
-  // If we're looking at a primitive field
-  if ('isFieldDef' in def && primitive in def) {
-    // glint-ignore-next-line
+  // If we're looking at a primitive field we can get the schema
+  if (primitive in def) {
     return getPrimitiveType(def, mappings);
   }
 
