@@ -248,3 +248,17 @@ Note that the `linksTo` and `linksToMany` fields (named `currentLocation` and `p
 The `trips` field contains the `Trips` field definition, which has the nested `linksToMany` field with country instances from item 7. The country instances render in `atom` format, and they are editable.
 
 <img width="750" alt="card-def-links-to-card-def" src="./card-field-relationships-assets/example-8.png">
+
+## A note about self-referential relationships
+
+```typescript
+class Person extends CardDef {
+  static displayName = 'Person';
+  @field firstName = contains(StringField);
+
+  // Self-referential relationship must use a "thunk"
+  @field nextOfKin = linksTo(() => Person);
+}
+```
+
+Due to the syntax rules of Javascript/TypeScript, we must use an alternate approach to define a self-referential relationship. In this example, a `Person` has a `nextOfKin` field, whose type is also `Person`. We use a function returning `Person` in leiu of referencing `Person` directly within the `Person` class definition. This pattern is colloquially known as a "thunk" in many programming communities.
