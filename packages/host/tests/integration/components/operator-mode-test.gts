@@ -1214,6 +1214,9 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .exists();
+    await click(
+      '[data-test-stack-card-index="1"] [data-test-more-options-button]',
+    );
     assert
       .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
       .hasAttribute('disabled');
