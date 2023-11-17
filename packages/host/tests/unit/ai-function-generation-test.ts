@@ -35,7 +35,6 @@ let mappings: Map<typeof cardApi.FieldDef, any>;
 let loader: Loader;
 
 module('Unit | ai-function-generation-test', function (hooks) {
-  let owner: any;
   setupRenderingTest(hooks);
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -60,10 +59,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-
-  hooks.beforeEach(async function () {
-    owner = this.owner;
-  });
 
   test(`generates a simple compliant schema for basic types`, async function (assert) {
     let { field, contains, CardDef } = cardApi;

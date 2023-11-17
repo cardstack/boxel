@@ -136,6 +136,7 @@ export function generatePatchCallSpecification(
 ) {
   // An explicit list of types that we will support in the patch call
   if ('isFieldDef' in def && primitive in def) {
+    // glint-ignore-next-line
     return getPrimitiveType(def, mappings);
   }
 
