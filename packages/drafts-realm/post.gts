@@ -1,5 +1,4 @@
-
-      import {
+import {
   contains,
   linksTo,
   field,
@@ -18,7 +17,7 @@ class BasicCard extends FieldDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       Title: <@fields.title />
-    </template>                
+    </template>
   };
 }
 
@@ -31,7 +30,7 @@ class VeryBasicCard extends BasicCard {
       <@fields.title />
       Description:
       <@fields.description />
-    </template>                
+    </template>
   };
 }
 
@@ -41,14 +40,12 @@ export class Post extends CardDef {
   @field title = contains(StringCard);
   @field body = contains(TextAreaCard);
   @field titleRef = contains(VeryBasicCard);
-      @field testField = contains(StringCard);
-      
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <h1><@fields.title /><img src='{{imageURL}}' /></h1>
       <h3>by <@fields.author.firstName /> <@fields.author.lastName /></h3>
       <p><@fields.body /></p>
-    </template>                
+    </template>
   };
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -56,8 +53,6 @@ export class Post extends CardDef {
       by
       <@fields.author.firstName />
       <@fields.author.lastName />
-    </template>                
+    </template>
   };
 }
-
-    
