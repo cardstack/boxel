@@ -58,7 +58,7 @@ const personCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
-    @field friends = linksToMany(() => Friend);
+    @field friends = linksToMany(Friend);
     @field address = containsMany(StringCard);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -474,7 +474,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
     await waitForCodeEditor();
 
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-card-module-definition]');
     await waitFor('[data-test-card-instance-definition]');
 
@@ -532,7 +532,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       )}`,
     );
     await waitForCodeEditor();
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-card-module-definition]');
 
     assert.dom('[data-test-card-module-definition]').includesText('Card');
@@ -579,7 +579,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
 
     await waitForCodeEditor();
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
@@ -729,15 +729,15 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click('[data-test-action-button="Delete"]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
     await percySnapshot(assert);
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await click('[data-test-confirm-delete-button]');
       },
-    );
+    });
     await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
       'Acceptance | operator mode tests | Can delete a card instance from code submode with no recent files - empty code submode',
@@ -816,15 +816,15 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-action-button="Delete"]`);
     await click('[data-test-action-button="Delete"]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
-    await this.expectEvents(
+    await this.expectEvents({
       assert,
       realm,
       adapter,
       expectedEvents,
-      async () => {
+      callback: async () => {
         await click('[data-test-confirm-delete-button]');
       },
-    );
+    });
     await waitForCodeEditor();
     assert
       .dom('[data-test-card-url-bar-input]')
@@ -878,7 +878,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -904,7 +904,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -929,7 +929,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -954,7 +954,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -980,7 +980,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -1007,7 +1007,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -1054,7 +1054,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           name: elementName,
         },
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [],
       submode: Submodes.Code,
@@ -1087,7 +1087,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           name: elementName,
         },
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [],
       submode: Submodes.Code,
@@ -1121,7 +1121,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           name: elementName,
         },
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [],
       submode: Submodes.Code,
@@ -1153,7 +1153,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           name: elementName,
         },
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [],
       submode: Submodes.Code,
@@ -1187,7 +1187,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           name: elementName,
         },
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [],
       submode: Submodes.Code,

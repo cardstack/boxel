@@ -5,6 +5,7 @@ import {
   fillIn,
   triggerKeyEvent,
   waitUntil,
+  scrollTo,
 } from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
@@ -67,7 +68,7 @@ const personCardSource = `
       },
     });
     @field pet = linksTo(Pet);
-    @field friends = linksToMany(() => Friend);
+    @field friends = linksToMany(Friend);
     @field address = containsMany(StringCard);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -106,6 +107,20 @@ const petCardSource = `
         <h3 data-test-pet={{@model.name}}>
           <@fields.name/>
         </h3>
+      </template>
+    }
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <h1>{{@model.title}}</h1>
+        <h2 data-test-pet={{@model.name}}>
+          <@fields.name/>
+        </h2>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
+        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
       </template>
     }
   }
@@ -422,13 +437,13 @@ module('Acceptance | code submode tests', function (hooks) {
 
     assert
       .dom('[data-test-file-view-header]')
-      .hasAttribute('aria-label', 'Inheritance');
-    assert.dom('[data-test-inheritance-toggle]').hasClass('active');
+      .hasAttribute('aria-label', 'Inspector');
+    assert.dom('[data-test-inspector-toggle]').hasClass('active');
     assert.dom('[data-test-file-browser-toggle]').doesNotHaveClass('active');
 
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
 
-    assert.dom('[data-test-card-inheritance-panel]').exists();
+    assert.dom('[data-test-card-inspector-panel]').exists();
     assert.dom('[data-test-file]').doesNotExist();
 
     await click('[data-test-file-browser-toggle]');
@@ -436,7 +451,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-file-view-header]')
       .hasAttribute('aria-label', 'File Browser');
-    assert.dom('[data-test-inheritance-toggle]').doesNotHaveClass('active');
+    assert.dom('[data-test-inspector-toggle]').doesNotHaveClass('active');
     assert.dom('[data-test-file-browser-toggle]').hasClass('active');
 
     await waitFor('[data-test-file]');
@@ -533,11 +548,11 @@ module('Acceptance | code submode tests', function (hooks) {
 
     assert.dom('[data-test-file]').exists();
     assert.dom('[data-test-file-browser-toggle]').hasClass('active');
-    assert.dom('[data-test-card-inheritance-panel]').doesNotExist();
+    assert.dom('[data-test-card-inspector-panel]').doesNotExist();
     assert
       .dom('[data-test-file-view-header]')
       .hasAttribute('aria-label', 'File Browser');
-    assert.dom('[data-test-inheritance-toggle]').isDisabled();
+    assert.dom('[data-test-inspector-toggle]').isDisabled();
 
     assert.dom('[data-test-empty-code-mode]').exists();
     assert
@@ -567,11 +582,11 @@ module('Acceptance | code submode tests', function (hooks) {
 
     assert.dom('[data-test-file]').exists();
     assert.dom('[data-test-file-browser-toggle]').hasClass('active');
-    assert.dom('[data-test-card-inheritance-panel]').doesNotExist();
+    assert.dom('[data-test-card-inspector-panel]').doesNotExist();
     assert
       .dom('[data-test-file-view-header]')
       .hasAttribute('aria-label', 'File Browser');
-    assert.dom('[data-test-inheritance-toggle]').isDisabled();
+    assert.dom('[data-test-inspector-toggle]').isDisabled();
 
     assert.dom('[data-test-empty-code-mode]').doesNotExist();
     assert
@@ -595,7 +610,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
 
-    await waitFor('[data-test-file-definition]');
+    await waitFor('[data-test-binary-info]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.png');
     await waitFor('[data-test-definition-realm-name]');
@@ -687,12 +702,23 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-preview-card-footer-button-isolated]')
       .hasClass('active');
 
+    await click('[data-test-preview-card-footer-button-atom]');
+    assert
+      .dom('[data-test-preview-card-footer-button-atom]')
+      .hasClass('active');
+    assert.dom('[data-test-code-mode-card-preview-body] .atom-format').exists();
+    assert
+      .dom('[data-test-code-mode-card-preview-body] .atom-format')
+      .includesText('Fadhlan');
+
     await click('[data-test-preview-card-footer-button-embedded]');
     assert
       .dom('[data-test-preview-card-footer-button-embedded]')
       .hasClass('active');
     assert
-      .dom('[data-test-code-mode-card-preview-body ] .embedded-card')
+      .dom(
+        '[data-test-code-mode-card-preview-body ] .field-component-card.embedded-format',
+      )
       .exists();
 
     await click('[data-test-preview-card-footer-button-edit]');
@@ -700,7 +726,11 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-preview-card-footer-button-edit]')
       .hasClass('active');
 
-    assert.dom('[data-test-code-mode-card-preview-body ] .edit-card').exists();
+    assert
+      .dom(
+        '[data-test-code-mode-card-preview-body ] .field-component-card.edit-format',
+      )
+      .exists();
 
     // Only preview is shown in the right column when viewing an instance, no schema editor
     assert.dom('[data-test-card-schema]').doesNotExist();
@@ -831,7 +861,7 @@ module('Acceptance | code submode tests', function (hooks) {
     );
 
     await waitForCodeEditor();
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
@@ -883,7 +913,7 @@ module('Acceptance | code submode tests', function (hooks) {
       )}`,
     );
     await waitForCodeEditor();
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
@@ -954,17 +984,17 @@ module('Acceptance | code submode tests', function (hooks) {
       await waitForCodeEditor();
 
       let originalPosition: MonacoSDK.Position | undefined | null;
-      await this.expectEvents(
+      await this.expectEvents({
         assert,
         realm,
         adapter,
         expectedEvents,
-        async () => {
+        callback: async () => {
           setMonacoContent(`// This is a change \n${inThisFileSource}`);
           monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
           originalPosition = monacoService.getCursorPosition();
         },
-      );
+      });
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
       let currentPosition = monacoService.getCursorPosition();
@@ -1049,5 +1079,33 @@ module('Acceptance | code submode tests', function (hooks) {
       `${testRealmURL}person.gts-test`,
     );
     assert.false(monacoService.hasFocus);
+  });
+
+  test('scroll position persists when changing card preview format', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-test-code-mode-card-preview-body]');
+
+    await scrollTo('[data-test-code-mode-card-preview-body]', 0, 100);
+    await click('[data-test-preview-card-footer-button-edit]');
+    await click('[data-test-preview-card-footer-button-isolated]');
+    let element = document.querySelector(
+      '[data-test-code-mode-card-preview-body]',
+    )!;
+    assert.strictEqual(
+      element.scrollTop,
+      100,
+      'the scroll position is correct',
+    );
   });
 });

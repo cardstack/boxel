@@ -14,6 +14,7 @@ import {
   badRequest,
   CardError,
 } from './error';
+import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
 import { md5 } from 'super-fast-md5';
 import {
@@ -216,6 +217,14 @@ export class Realm {
     return this.paths.url;
   }
 
+  get writableFileExtensions(): string[] {
+    // We include .json (card instance data) because we want to allow the
+    // card instance data to be overwritten directly (by the code editor) and not go
+    // through the card API which tries to fetch the instance data from the index and patch it.
+    // The card instance in the index could be broken so we want to have a way to overwrite it directly.
+    return [...executableExtensions, '.json'];
+  }
+
   constructor(
     url: string,
     adapter: RealmAdapter,
@@ -259,7 +268,7 @@ export class Realm {
         this.removeCard.bind(this),
       )
       .post(
-        `/.+(${executableExtensions.map((e) => '\\' + e).join('|')})`,
+        `/.+(${this.writableFileExtensions.map((e) => '\\' + e).join('|')})`,
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
       )
@@ -746,24 +755,10 @@ export class Realm {
       name = 'cards';
     }
 
-    let dirName = `/${join(new URL(this.url).pathname, name)}/`;
-    let entries = await this.directoryEntries(new URL(dirName, this.url));
-    let index = 0;
-    if (entries) {
-      for (let { name, kind } of entries) {
-        if (kind === 'directory') {
-          continue;
-        }
-        if (!/^[\d]+\.json$/.test(name)) {
-          continue;
-        }
-        let num = parseInt(name.replace('.json', ''));
-        index = Math.max(index, num);
-      }
-    }
-    let pathname = `${dirName}${++index}.json`;
-    let fileURL = this.paths.fileURL(pathname);
-    let localPath: LocalPath = this.paths.local(fileURL);
+    let fileURL = this.paths.fileURL(
+      `/${join(new URL(this.url).pathname, name, uuidV4() + '.json')}`,
+    );
+    let localPath = this.paths.local(fileURL);
     let { lastModified } = await this.write(
       localPath,
       JSON.stringify(

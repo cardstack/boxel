@@ -58,7 +58,7 @@ const personCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
-    @field friends = linksToMany(() => Friend);
+    @field friends = linksToMany(Friend);
     @field address = containsMany(StringCard);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -338,11 +338,17 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
     assert.dom('[data-test-recent-file]').exists({ count: 2 });
 
+    await waitFor(
+      '[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]',
+    );
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
       .hasAttribute('alt', 'Icon for realm Test Workspace B');
 
+    await waitFor(
+      '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
+    );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
@@ -548,11 +554,17 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
     assert.dom('[data-test-recent-file]').exists({ count: 2 });
 
+    await waitFor(
+      '[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]',
+    );
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png')
       .hasAttribute('alt', 'Icon for realm Base Workspace');
 
+    await waitFor(
+      '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
+    );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');

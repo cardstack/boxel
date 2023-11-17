@@ -33,7 +33,7 @@ import {
   Tooltip,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { cn, eq, menuItem, optional } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, menuItem, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type Actions,
@@ -272,10 +272,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
   };
 
   private onCardChange = () => {
-    this.doWhenCardChanges.perform();
+    this.initiateAutoSaveTask.perform();
   };
 
-  private doWhenCardChanges = restartableTask(async () => {
+  private initiateAutoSaveTask = restartableTask(async () => {
     await timeout(autoSaveDelayMs);
     this.isSaving = true;
     this.args.save(this.args.item, false);
@@ -442,33 +442,19 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <:content as |dd|>
                     <BoxelMenu
                       @closeMenu={{dd.close}}
-                      @items={{if
-                        (eq @item.format 'edit')
-                        (array
-                          (menuItem
-                            'Copy Card URL'
-                            (perform this.copyToClipboard)
-                            icon=IconLink
-                          )
-                          (menuItem
-                            'Delete'
-                            (fn @delete this.card)
-                            icon=IconTrash
-                            dangerous=true
-                          )
+                      @items={{array
+                        (menuItem
+                          'Copy Card URL'
+                          (perform this.copyToClipboard)
+                          icon=IconLink
+                          disabled=(not this.card.id)
                         )
-                        (array
-                          (menuItem
-                            'Copy Card URL'
-                            (perform this.copyToClipboard)
-                            icon=IconLink
-                          )
-                          (menuItem
-                            'Delete'
-                            (fn @delete this.card)
-                            icon=IconTrash
-                            dangerous=true
-                          )
+                        (menuItem
+                          'Delete'
+                          (fn @delete this.card)
+                          icon=IconTrash
+                          dangerous=true
+                          disabled=(not this.card.id)
                         )
                       }}
                     />
@@ -588,10 +574,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       :global(.content > .boxel-card-container.boundaries) {
         box-shadow: none;
-      }
-
-      .edit .content {
-        margin-bottom: var(--stack-card-footer-height);
       }
 
       .card {

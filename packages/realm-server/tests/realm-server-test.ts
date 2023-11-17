@@ -3,6 +3,7 @@ import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve } from 'path';
 import { Server } from 'http';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
+import { validate as uuidValidate } from 'uuid';
 import {
   copySync,
   existsSync,
@@ -60,17 +61,32 @@ module('Realm Server', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  async function expectEvent<T>(
-    assert: Assert,
-    expectedContents: Record<string, any>[],
-    callback: () => Promise<T>,
-  ): Promise<T> {
+  async function expectEvent<T>({
+    assert,
+    expected,
+    expectedNumberOfEvents,
+    onEvents,
+    callback,
+  }: {
+    assert: Assert;
+    expected?: Record<string, any>[];
+    expectedNumberOfEvents?: number;
+    onEvents?: (events: Record<string, any>[]) => void;
+    callback: () => Promise<T>;
+  }): Promise<T> {
     let defer = new Deferred<Record<string, any>[]>();
     let events: Record<string, any>[] = [];
+    let maybeNumEvents = expected?.length ?? expectedNumberOfEvents;
+    if (maybeNumEvents == null) {
+      throw new Error(
+        `expectEvent() must specify either 'expected' or 'expectedNumberOfEvents'`,
+      );
+    }
+    let numEvents = maybeNumEvents;
     let es = new eventSource(`${testRealmHref}_message`);
     es.addEventListener('index', (ev: MessageEvent) => {
       events.push(JSON.parse(ev.data));
-      if (events.length >= expectedContents.length) {
+      if (events.length >= numEvents) {
         defer.fulfill(events);
       }
     });
@@ -84,7 +100,13 @@ module('Realm Server', function (hooks) {
     }, 5000);
     await new Promise((resolve) => es.addEventListener('open', resolve));
     let result = await callback();
-    assert.deepEqual(await defer.promise, expectedContents);
+    let actualEvents = await defer.promise;
+    if (expected) {
+      assert.deepEqual(actualEvents, expected);
+    }
+    if (onEvents) {
+      onEvents(actualEvents);
+    }
     clearTimeout(timeout);
     es.close();
     return result;
@@ -174,29 +196,49 @@ module('Realm Server', function (hooks) {
   });
 
   test('serves a card POST request', async function (assert) {
-    let expected = [
-      {
-        type: 'incremental',
-        invalidations: [`${testRealmURL}CardDef/1`],
+    assert.expect(8);
+    let id: string | undefined;
+    let response = await expectEvent({
+      assert,
+      expectedNumberOfEvents: 1,
+      onEvents: ([event]) => {
+        if (event.type === 'incremental') {
+          id = event.invalidations[0].split('/').pop()!;
+          assert.true(uuidValidate(id!), 'card identifier is a UUID');
+          assert.strictEqual(
+            event.invalidations[0],
+            `${testRealmURL}CardDef/${id}`,
+          );
+        } else {
+          assert.ok(
+            false,
+            `expect to receive 'incremental' event, but saw ${JSON.stringify(
+              event,
+            )} `,
+          );
+        }
       },
-    ];
-    let response = await expectEvent(assert, expected, async () => {
-      return await request
-        .post('/')
-        .send({
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+      callback: async () => {
+        return await request
+          .post('/')
+          .send({
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
               },
             },
-          },
-        })
-        .set('Accept', 'application/vnd.card+json');
+          })
+          .set('Accept', 'application/vnd.card+json');
+      },
     });
+    if (!id) {
+      assert.ok(false, 'new card identifier was undefined');
+    }
     assert.strictEqual(response.status, 201, 'HTTP 201 status');
     assert.strictEqual(
       response.get('X-boxel-realm-url'),
@@ -208,11 +250,11 @@ module('Realm Server', function (hooks) {
     if (isSingleCardDocument(json)) {
       assert.strictEqual(
         json.data.id,
-        `${testRealmHref}CardDef/1`,
+        `${testRealmHref}CardDef/${id}`,
         'the id is correct',
       );
       assert.ok(json.data.meta.lastModified, 'lastModified is populated');
-      let cardFile = join(dir.name, 'CardDef', '1.json');
+      let cardFile = join(dir.name, 'CardDef', `${id}.json`);
       assert.ok(existsSync(cardFile), 'card json exists');
       let card = readJSONSync(cardFile);
       assert.deepEqual(
@@ -248,24 +290,28 @@ module('Realm Server', function (hooks) {
         invalidations: [`${testRealmURL}person-1`],
       },
     ];
-    let response = await expectEvent(assert, expected, async () => {
-      return await request
-        .patch('/person-1')
-        .send({
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './person.gts',
-                name: 'Person',
+    let response = await expectEvent({
+      assert,
+      expected,
+      callback: async () => {
+        return await request
+          .patch('/person-1')
+          .send({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person.gts',
+                  name: 'Person',
+                },
               },
             },
-          },
-        })
-        .set('Accept', 'application/vnd.card+json');
+          })
+          .set('Accept', 'application/vnd.card+json');
+      },
     });
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -340,10 +386,14 @@ module('Realm Server', function (hooks) {
         invalidations: [`${testRealmURL}person-1`],
       },
     ];
-    let response = await expectEvent(assert, expected, async () => {
-      return await request
-        .delete('/person-1')
-        .set('Accept', 'application/vnd.card+json');
+    let response = await expectEvent({
+      assert,
+      expected,
+      callback: async () => {
+        return await request
+          .delete('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+      },
     });
 
     assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -365,10 +415,14 @@ module('Realm Server', function (hooks) {
       },
     ];
 
-    let response = await expectEvent(assert, expected, async () => {
-      return await request
-        .delete('/person-1.json')
-        .set('Accept', 'application/vnd.card+json');
+    let response = await expectEvent({
+      assert,
+      expected,
+      callback: async () => {
+        return await request
+          .delete('/person-1.json')
+          .set('Accept', 'application/vnd.card+json');
+      },
     });
 
     assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -447,10 +501,14 @@ module('Realm Server', function (hooks) {
         invalidations: [`${testRealmURL}unused-card.gts`],
       },
     ];
-    let response = await expectEvent(assert, expected, async () => {
-      return await request
-        .delete('/unused-card.gts')
-        .set('Accept', 'application/vnd.card+source');
+    let response = await expectEvent({
+      assert,
+      expected,
+      callback: async () => {
+        return await request
+          .delete('/unused-card.gts')
+          .set('Accept', 'application/vnd.card+source');
+      },
     });
 
     assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -475,10 +533,14 @@ module('Realm Server', function (hooks) {
         invalidations: [`${testRealmURL}person-1`],
       },
     ];
-    let response = await expectEvent(assert, expected, async () => {
-      return await request
-        .delete('/person-1')
-        .set('Accept', 'application/vnd.card+source');
+    let response = await expectEvent({
+      assert,
+      expected,
+      callback: async () => {
+        return await request
+          .delete('/person-1')
+          .set('Accept', 'application/vnd.card+source');
+      },
     });
 
     assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -503,11 +565,15 @@ module('Realm Server', function (hooks) {
         invalidations: [`${testRealmURL}unused-card.gts`],
       },
     ];
-    let response = await expectEvent(assert, expected, async () => {
-      return await request
-        .post('/unused-card.gts')
-        .set('Accept', 'application/vnd.card+source')
-        .send(`//TEST UPDATE\n${cardSrc}`);
+    let response = await expectEvent({
+      assert,
+      expected,
+      callback: async () => {
+        return await request
+          .post('/unused-card.gts')
+          .set('Accept', 'application/vnd.card+source')
+          .send(`//TEST UPDATE\n${cardSrc}`);
+      },
     });
 
     assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -752,20 +818,24 @@ module('Realm Server', function (hooks) {
         invalidations: [`${testRealmURL}new-card`],
       },
     ];
-    await expectEvent(assert, expected, async () => {
-      writeJSONSync(join(dir.name, 'new-card.json'), {
-        data: {
-          attributes: {
-            firstName: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person',
-              name: 'Person',
+    await expectEvent({
+      assert,
+      expected,
+      callback: async () => {
+        writeJSONSync(join(dir.name, 'new-card.json'), {
+          data: {
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
             },
           },
-        },
-      } as LooseSingleCardDocument);
+        } as LooseSingleCardDocument);
+      },
     });
 
     {
@@ -829,21 +899,25 @@ module('Realm Server', function (hooks) {
         invalidations: [`${testRealmURL}person-1`],
       },
     ];
-    await expectEvent(assert, expected, async () => {
-      writeJSONSync(join(dir.name, 'person-1.json'), {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person.gts',
-              name: 'Person',
+    await expectEvent({
+      assert,
+      expected,
+      callback: async () => {
+        writeJSONSync(join(dir.name, 'person-1.json'), {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person.gts',
+                name: 'Person',
+              },
             },
           },
-        },
-      } as LooseSingleCardDocument);
+        } as LooseSingleCardDocument);
+      },
     });
 
     {
@@ -873,8 +947,12 @@ module('Realm Server', function (hooks) {
         invalidations: [`${testRealmURL}person-1`],
       },
     ];
-    await expectEvent(assert, expected, async () => {
-      removeSync(join(dir.name, 'person-1.json'));
+    await expectEvent({
+      assert,
+      expected,
+      callback: async () => {
+        removeSync(join(dir.name, 'person-1.json'));
+      },
     });
 
     {
