@@ -177,6 +177,13 @@ jobs:
       group: realm-server-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
+      - uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: 1215500
+        id: setup-chrome
+      - run: |
+          echo Installed chromium version: ${{ steps.setup-chrome.outputs.chrome-version }}
+          ${{ steps.setup-chrome.outputs.chrome-path }} --version
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
       - name: Build boxel-ui
