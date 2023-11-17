@@ -14,7 +14,11 @@ function testDocument() {
   if (!iframe) {
     throw new Error(`cannot find test-container's iframe`);
   }
-  return iframe.contentDocument;
+  let iframeDocument = iframe.contentDocument;
+  if (!iframeDocument) {
+    throw new Error(`cannot access test-container iframe’s document`);
+  }
+  return iframeDocument;
 }
 
 async function waitFor(selector, timeoutMs = 10000) {
