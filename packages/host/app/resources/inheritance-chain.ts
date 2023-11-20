@@ -28,18 +28,13 @@ export type CardInheritance = {
 };
 
 export class InheritanceChainResource extends Resource<Args> {
-  #loaded!: Promise<void>;
   @tracked private _value: CardInheritance[] = [];
 
   modify(_positional: never[], named: Args['named']) {
     let { cardTypeResource, card, url, loader } = named;
     if (cardTypeResource) {
-      this.#loaded = this.load.perform(url, card, loader, cardTypeResource);
+      this.load.perform(url, card, loader, cardTypeResource);
     }
-  }
-
-  get loaded() {
-    return this.#loaded;
   }
 
   get value() {
