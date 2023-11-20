@@ -73,9 +73,6 @@ export default class CardPrerender extends Component {
     operation: 'delete' | 'update',
     onInvalidation?: (invalidatedURLs: URL[]) => void,
   ): Promise<RunState> {
-    if (hasExecutableExtension(url.href) && !this.fastboot.isFastBoot) {
-      this.loaderService.reset();
-    }
     try {
       let state = await this.doIncremental.perform(
         prev,
