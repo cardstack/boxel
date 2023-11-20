@@ -37,7 +37,6 @@ import {
   waitForCodeEditor,
   type TestContextWithSSE,
 } from '../helpers';
-import { timeout } from 'ember-concurrency';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -83,7 +82,7 @@ const addressFieldSource = `
       </template>
     };
   }
-`
+`;
 
 const countryCardSource = `
   import {
@@ -111,7 +110,7 @@ const countryCardSource = `
       </template>
     };
   }
-`
+`;
 
 const tripsFieldSource = `
   import {
@@ -134,7 +133,7 @@ const tripsFieldSource = `
       </template>
     };
   }
-`
+`;
 
 const personCardSource = `
   import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -463,15 +462,15 @@ module('Acceptance | code submode tests', function (hooks) {
           attributes: {
             name: 'United States',
             description: null,
-            thumbnailURL: null
+            thumbnailURL: null,
           },
           meta: {
             adoptsFrom: {
               module: '../country',
-              name: 'Country'
-            }
-          }
-        }
+              name: 'Country',
+            },
+          },
+        },
       },
       'z00.json': '{}',
       'z01.json': '{}',
@@ -1241,7 +1240,7 @@ module('Acceptance | code submode tests', function (hooks) {
     );
     await waitForCodeEditor();
     await waitFor('[data-test-code-mode-card-preview-body]');
-    
+
     await click('[data-test-preview-card-footer-button-edit]');
     await this.expectEvents({
       assert,
@@ -1250,13 +1249,22 @@ module('Acceptance | code submode tests', function (hooks) {
       expectedEvents,
       callback: async () => {
         await fillIn('[data-test-field="lastName"] input', 'Ridhwanallah');
-        
-        await fillIn('[data-test-field="streetAddress"] input', 'Unknown Address');
+
+        await fillIn(
+          '[data-test-field="streetAddress"] input',
+          'Unknown Address',
+        );
         await fillIn('[data-test-field="city"] input', 'Bandung');
 
-        await click('[data-test-links-to-many="countriesVisited"] [data-test-add-new]');
-        await waitFor(`[data-test-select="${testRealmURL}Country/united-states"]`);
-        await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
+        await click(
+          '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
+        );
+        await waitFor(
+          `[data-test-select="${testRealmURL}Country/united-states"]`,
+        );
+        await click(
+          `[data-test-select="${testRealmURL}Country/united-states"]`,
+        );
         await click(`[data-test-card-catalog-go-button]`);
       },
     });
