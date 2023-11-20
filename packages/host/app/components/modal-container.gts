@@ -19,6 +19,7 @@ interface Signature {
     zIndex?: number;
     size?: 'small' | 'medium' | 'large';
     centered?: boolean;
+    cardContainerClass?: string;
   };
   Blocks: {
     content: [];
@@ -41,7 +42,10 @@ export default class ModalContainer extends Component<Signature> {
       style={{this.styleString}}
       ...attributes
     >
-      <CardContainer class='dialog-box' @displayBoundaries={{true}}>
+      <CardContainer
+        class='dialog-box {{@cardContainerClass}}'
+        @displayBoundaries={{true}}
+      >
         <Header @title={{@title}} class='dialog-box__header'>
           <IconButton
             @icon={{IconX}}

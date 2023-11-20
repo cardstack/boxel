@@ -366,7 +366,7 @@ function makeNewField({
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
   }
 
-  return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldCardIdentifier.name});`;
+  return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
 }
 
 function getProgramPath(path: NodePath<any>): NodePath<t.Program> {

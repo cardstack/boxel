@@ -10,6 +10,7 @@ import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
 import Header from './components/header/index.gts';
 import IconButton from './components/icon-button/index.gts';
+import IconDropdownButton from './components/icon-dropdown-button/index.gts';
 import BoxelInput, {
   type InputBottomTreatment as BoxelInputBottomTreatment,
   type InputValidationState as BoxelInputValidationState,
@@ -46,6 +47,7 @@ export {
   GridContainer,
   Header,
   IconButton,
+  IconDropdownButton,
   Label,
   LoadingIndicator,
   Menu,

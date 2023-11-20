@@ -178,6 +178,12 @@ export default class CardService extends Service {
         this.subscriber(json);
       }
       return result;
+    } catch (err) {
+      // TODO for CS-6268 we'll need to show a visual indicator that the auto
+      // save has failed. Until that ticket is implemented, the only indication
+      // of a failed auto-save will be from the console.
+      console.error(`Failed to save ${card.id}: `, err);
+      return;
     } finally {
       api.unsubscribeFromChanges(card, onCardChange);
     }

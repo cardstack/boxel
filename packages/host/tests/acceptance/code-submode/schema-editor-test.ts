@@ -63,7 +63,7 @@ const personCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
-    @field friends = linksToMany(() => Friend);
+    @field friends = linksToMany(Friend);
     @field address = containsMany(StringCard);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
