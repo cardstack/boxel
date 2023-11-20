@@ -42,6 +42,7 @@ export class StackBackgroundsResource extends Resource<Args> {
       stacks.map(async (stack) => {
         if (stack.length === 0) {
           this.value = [];
+          return;
         }
         let bottomMostCard = stack[0];
         return (await this.cardService.getRealmInfo(bottomMostCard.card))
