@@ -9,12 +9,23 @@ function cleanWhiteSpace(text) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-function testDocument() {
+async function testDocument() {
   let iframe = document.querySelector(`#${testContainerId} iframe`);
   if (!iframe) {
     throw new Error(`cannot find test-container's iframe`);
   }
-  return iframe.contentDocument;
+  return new Promise((res, rej) => {
+    let start = Date.now();
+    let contentDocument = iframe.contentDocument;
+    while (!contentDocument && Date.now() <= start + 5000) {
+      contentDocument = iframe.contentDocument;
+    }
+    if (!contentDocument) {
+      rej(`timed out waiting for iframe's contentDocument`);
+    } else {
+      res(contentDocument);
+    }
+  });
 }
 
 async function waitFor(selector, timeoutMs = 10000) {
@@ -30,13 +41,13 @@ async function waitFor(selector, timeoutMs = 10000) {
   }
 }
 
-function querySelector(selector) {
-  let doc = testDocument();
+async function querySelector(selector) {
+  let doc = await testDocument();
   return doc?.querySelector(selector);
 }
 
-function querySelectorAll(selector) {
-  let doc = testDocument();
+async function querySelectorAll(selector) {
+  let doc = await testDocument();
   return doc?.querySelectorAll(selector);
 }
 
@@ -81,8 +92,11 @@ QUnit.module(
 
     test('renders app', async function (assert) {
       await boot(testRealmURL, 'p');
-      assert.strictEqual(testDocument().location.href, `${testRealmURL}/`);
-      let p = querySelector('p');
+      assert.strictEqual(
+        await testDocument().location.href,
+        `${testRealmURL}/`,
+      );
+      let p = await querySelector('p');
       assert.ok(p, '<p> element exists');
       assert.equal(
         cleanWhiteSpace(p.textContent),
@@ -94,7 +108,7 @@ QUnit.module(
     test('renders file tree', async function (assert) {
       await bootToCodeModeFile('person-1.json', '[data-test-directory-level]');
 
-      let nav = querySelector('nav');
+      let nav = await querySelector('nav');
       assert.ok(nav, '<nav> element exists');
       let dirContents = nav.textContent;
       assert.ok(dirContents.includes('a.js'));
@@ -121,10 +135,10 @@ QUnit.module(
         '[data-test-card-id]',
       );
       assert.strictEqual(
-        testDocument().location.href,
+        await testDocument().location.href,
         `${testRealmURL}/code?openFile=person.gts`,
       );
-      let cardId = querySelector('[data-test-card-id');
+      let cardId = await querySelector('[data-test-card-id');
       assert.ok(cardId, 'card ID element exists');
       assert.strictEqual(
         cleanWhiteSpace(cardId.textContent),
@@ -132,7 +146,7 @@ QUnit.module(
         'the card id is correct',
       );
 
-      let fields = [...querySelectorAll('[data-test-field]')];
+      let fields = [...(await querySelectorAll('[data-test-field]'))];
       assert.strictEqual(fields.length, 3, 'number of fields is correct');
       assert.strictEqual(
         cleanWhiteSpace(fields[0].textContent),
@@ -154,7 +168,7 @@ QUnit.module(
     test('renders card instance', async function (assert) {
       await bootToCodeModeFile('person-2.json', '[data-test-card]');
 
-      let card = querySelector('[data-test-card]');
+      let card = await querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
         'Jackie',
@@ -164,7 +178,7 @@ QUnit.module(
 
     test('can change routes', async function (assert) {
       await bootToCodeModeFile('person.gts', '[data-test-directory-level]');
-      let files = querySelectorAll('nav .file');
+      let files = await querySelectorAll('nav .file');
       let instance = [...files].find(
         (file) => cleanWhiteSpace(file.textContent) === 'person-1.json',
       );
@@ -172,7 +186,7 @@ QUnit.module(
       instance.click();
 
       await waitFor('[data-test-card]');
-      let card = querySelector('[data-test-card]');
+      let card = await querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
         'Mango',
@@ -183,28 +197,28 @@ QUnit.module(
     test('can render a card route', async function (assert) {
       await boot(`${testRealmURL}/person-1`, '[data-test-card]');
       assert.strictEqual(
-        testDocument().location.href,
+        await testDocument().location.href,
         `${testRealmURL}/person-1`,
       );
-      let card = querySelector('[data-test-card]');
+      let card = await querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
         'Mango',
         'the card is rendered correctly',
       );
-      let nav = querySelector('.main nav');
+      let nav = await querySelector('.main nav');
       assert.notOk(nav, 'file tree is not rendered');
     });
 
     test('can show an error when navigating to nonexistent card route', async function (assert) {
       await boot(`${testRealmURL}/does-not-exist`, '[data-card-error]');
       assert.strictEqual(
-        testDocument().location.href,
+        await testDocument().location.href,
         `${testRealmURL}/does-not-exist`,
       );
-      let card = querySelector('[data-test-card]');
+      let card = await querySelector('[data-test-card]');
       assert.notOk(card, 'no card rendered');
-      let error = querySelector('[data-card-error]');
+      let error = await querySelector('[data-card-error]');
       assert.ok(
         cleanWhiteSpace(error.textContent).includes(`Cannot load card`),
         'error message is displayed',
