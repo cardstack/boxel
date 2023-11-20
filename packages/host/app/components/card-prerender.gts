@@ -22,6 +22,8 @@ import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
 import type RenderService from '../services/render-service';
 
+import config from '@cardstack/host/config/environment';
+
 // This component is used in a node/Fastboot context to perform
 // server-side rendering for indexing as well as by the TestRealm
 // to perform rendering for indexing in Ember test contexts.
@@ -73,7 +75,11 @@ export default class CardPrerender extends Component {
     operation: 'delete' | 'update',
     onInvalidation?: (invalidatedURLs: URL[]) => void,
   ): Promise<RunState> {
-    if (hasExecutableExtension(url.href) && !this.fastboot.isFastBoot) {
+    if (
+      hasExecutableExtension(url.href) &&
+      !this.fastboot.isFastBoot &&
+      config.environment !== 'test'
+    ) {
       this.loaderService.reset();
     }
     try {
