@@ -1205,9 +1205,14 @@ export class Realm {
   }
 
   private async respondWithHTML() {
-    return createResponse(this.url, await this.getIndexHTML(), {
-      headers: { 'content-type': 'text/html' },
-    });
+    return createResponse(
+      this.url,
+      await this.getIndexHTML(),
+      {
+        headers: { 'content-type': 'text/html' },
+      },
+      this.#useTestingDomain,
+    );
   }
 }
 
