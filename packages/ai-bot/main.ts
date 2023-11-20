@@ -18,6 +18,7 @@ import {
   processStream,
   getModifyPrompt,
   cleanContent,
+  getFunctions,
 } from './helpers';
 
 let log = logger('ai-bot');
@@ -157,10 +158,13 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
 
 async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
   let messages = getModifyPrompt(history, aiBotUsername);
+  let functions = getFunctions(history, aiBotUsername);
   return await openai.chat.completions.create({
-    model: 'gpt-4',
+    model: 'gpt-4-1106-preview',
     messages: messages,
-    stream: true,
+    stream: false,
+    functions: functions,
+    function_call: "auto" //{ "name": "patchCard" }
   });
 }
 
@@ -266,7 +270,9 @@ async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
         );
       }
 
-      const stream = await getResponse(history, userId);
+      const responseFull = await getResponse(history, userId);
+      console.log(JSON.stringify(responseFull, undefined, 2));
+      return;
       return await sendStream(stream, client, room, initialMessage.event_id);
     },
   );

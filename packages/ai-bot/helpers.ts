@@ -6,44 +6,11 @@ import { Readable } from 'node:stream';
 
 const MODIFY_SYSTEM_MESSAGE =
   '\
-You are able to modify content according to user requests as well as answer questions for them. You may ask any followup questions you may need.\
-If a user may be requesting a change, respond politely but not ingratiatingly to the user. The more complex the request, the more you can explain what you\'re about to do.\
+The user is using an application called Boxel, where they are working on editing "Cards" which are data models representable as JSON. \
+The user may be non-technical and should not need to understand the inner workings of Boxel. \
+If the user request is unclear, you may ask clarifying questions. \
 \
-Along with the changes you want to make, you must include the card ID of the card being changed. The original card. \
-Return up to 3 options for the user to select from, exploring a range of things the user may want. If the request has only one sensible option or they ask for something very directly you don\'t need to return more than one. The format of your response should be\
-```\
-Explanatory text\
-Option 1: Description\
-{\
-  "id": "originalCardID",\
-  "patch": {\
-    ...\
-  }\
-}\
-\
-Option 2: Description\
-{\
-  "id": "originalCardID",\
-  "patch": {\
-    ...\
-  }\
-}\
-\
-Option 3: Description\
-\
-{\
-  "id": "originalCardID",\
-  "patch": {\
-    ...\
-  }\
-}\
-```\
-The data in the option block will be used to update things for the user behind a button so they will not see the content directly - you must give a short text summary before the option block.\
-Return only JSON inside each option block, in a compatible format with the one you receive. The contents of any field will be automatically replaced with your changes, and must follow a subset of the same format - you may miss out fields but cannot add new ones. Do not add new nested components, it will fail validation.\
-Modify only the parts you are asked to. Only return modified fields.\
-You must not return any fields that you do not see in the input data.\
-Never prefix json responses with `json`\
-If the user hasn\'t shared any cards with you or what they\'re asking for doesn\'t make sense for the card type, you can ask them to "send their open cards" to you.';
+If you need access to the cards the user can see, you can ask them to "send their open cards" to you.';
 
 type ChatCompletion = {
   choices: Array<{
@@ -318,6 +285,44 @@ export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
   return cards;
 }
 
+export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
+  let functions = [];
+  for (let event of history) {
+    if (event.sender !== aiBotUserId) {
+      let content = event.content;
+      if (content.msgtype === 'org.boxel.message') {
+        // If a user has switched to sharing their current context
+        // and they have open cards then use those
+        if (content.context.cardSpec) {
+          functions = [
+            {
+              name: "patchCard",
+              description: `Patch an existing card to change its contents. Any field in the patch object will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+              parameters: {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "card_id": {
+                    "type": "string"
+                  },
+                  "patch": content.context.cardSpec,
+                },
+                "required": ["card_id", "patch", "description"],
+              }
+            }]
+          console.log("Set functions", functions)
+        }
+      } else {
+        console.log("Blanking out functions")
+        functions = [];
+      }
+    }
+  }
+  return functions;
+}
+
 export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {
   // Need to make sure the passed in username is a full id
   if (
@@ -350,10 +355,7 @@ export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {
   The user currently has given you the following data to work with:
   Cards:\n`;
   for (let card of getRelevantCards(history, aiBotUserId)) {
-    systemMessage += `Full data: ${JSON.stringify(card)}
-  You may only patch the following fields for this card: ${JSON.stringify(
-    card.attributes,
-  )}`;
+    systemMessage += `Full data: ${JSON.stringify(card)}`;
   }
 
   let messages: OpenAIPromptMessage[] = [
