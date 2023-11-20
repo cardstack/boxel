@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { hasExecutableExtension, baseRealm } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import {
   type EntrySetter,
@@ -73,6 +73,9 @@ export default class CardPrerender extends Component {
     operation: 'delete' | 'update',
     onInvalidation?: (invalidatedURLs: URL[]) => void,
   ): Promise<RunState> {
+    if (hasExecutableExtension(url.href) && !this.fastboot.isFastBoot) {
+      this.loaderService.reset();
+    }
     try {
       let state = await this.doIncremental.perform(
         prev,
