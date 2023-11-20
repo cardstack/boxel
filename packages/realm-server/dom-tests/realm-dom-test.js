@@ -5,6 +5,8 @@ const testRealmURL = 'http://localhost:4202/node-test';
 const testContainerId = 'test-container';
 const iframeSelectorTempId = 'iframe-selector-temp';
 
+console.log('loaded realm-dom-test module');
+
 class Messenger {
   #request;
   #destroyed = false;
@@ -105,6 +107,7 @@ async function querySelectorAll(selector, messenger) {
 }
 
 async function boot(url, waitForSelector) {
+  console.log('booting app');
   let container = document.getElementById(testContainerId);
   let iframe = document.createElement('iframe');
   iframe.setAttribute('src', url);
@@ -112,7 +115,9 @@ async function boot(url, waitForSelector) {
   await new Promise((res) => setTimeout(res, 1000));
   let messenger = new Messenger(iframe);
   try {
+    console.log('waiting for app to start');
     await waitFor(waitForSelector, messenger);
+    console.log('app has started');
   } catch (err) {
     throw new Error(`error encountered while booting ${url}: ${err.message}`);
   }
