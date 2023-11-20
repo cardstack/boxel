@@ -157,11 +157,18 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
 
 async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
   let messages = getModifyPrompt(history, aiBotUsername);
-  return await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: messages,
-    stream: true,
-  });
+  return await openai.chat.completions.create(
+    {
+      model: 'gpt-4-1106-preview',
+      messages: messages,
+      stream: true,
+    },
+    {
+      // Retry with exponential backoff,
+      // Let OpenAI library handle approved logic
+      maxRetries: 5,
+    },
+  );
 }
 
 (async () => {
@@ -265,9 +272,24 @@ async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
           messageObject,
         );
       }
-
-      const stream = await getResponse(history, userId);
-      return await sendStream(stream, client, room, initialMessage.event_id);
+      try {
+        const stream = await getResponse(history, userId);
+        return await sendStream(stream, client, room, initialMessage.event_id);
+      } catch (error) {
+        if (error instanceof OpenAI.APIError) {
+          log.error(
+            `OpenAI error: ${error.status} - ${error.name} - ${error.message} (${error.headers})`,
+          );
+        } else {
+          log.error(`Unexpected error: ${error}`);
+        }
+        return await sendMessage(
+          client,
+          room,
+          'There was an error processing your request, please try again later',
+          initialMessage.event_id,
+        );
+      }
     },
   );
 
