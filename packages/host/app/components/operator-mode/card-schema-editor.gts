@@ -6,7 +6,12 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { IconDropdownButton, Tooltip } from '@cardstack/boxel-ui/components';
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
 import { gt, menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -105,7 +110,8 @@ export default class CardSchemaEditor extends Component<Signature> {
 
       .context-menu-trigger {
         rotate: 90deg;
-        --dropdown-button-size: 20px;
+        --boxel-icon-button-width: 20px;
+        --boxel-icon-button-height: 20px;
       }
 
       .context-menu-list {
@@ -411,43 +417,48 @@ export default class CardSchemaEditor extends Component<Signature> {
                       </Tooltip>
 
                       {{#if @allowFieldManipulation}}
-                        <IconDropdownButton
-                          @icon={{ThreeDotsHorizontal}}
-                          @label='field options'
-                          @contentClass='context-menu'
-                          class='context-menu-trigger'
-                          data-test-schema-editor-field-contextual-button
-                          as |dd|
-                        >
-                          <div class='warning-box'>
-                            <p class='warning'>
-                              These actions will break compatibility with
-                              existing card instances.
-                            </p>
-                            <span class='warning-icon'>
-                              <WarningIcon
-                                width='20px'
-                                height='20px'
-                                role='presentation'
-                              />
-                            </span>
-                          </div>
-                          <dd.Menu
-                            class='context-menu-list'
-                            @items={{array
-                              (menuItem
-                                'Edit Field Settings'
-                                (fn this.toggleEditFieldModal field)
-                              )
-                              (menuDivider)
-                              (menuItem
-                                'Remove Field'
-                                (fn this.toggleRemoveFieldModalShown field)
-                                dangerous=true
-                              )
-                            }}
-                          />
-                        </IconDropdownButton>
+                        <BoxelDropdown @contentClass='context-menu'>
+                          <:trigger as |bindings|>
+                            <IconButton
+                              class='context-menu-trigger'
+                              @icon={{ThreeDotsHorizontal}}
+                              aria-label='field options'
+                              data-test-schema-editor-field-contextual-button
+                              {{bindings}}
+                            />
+                          </:trigger>
+                          <:content as |dd|>
+                            <div class='warning-box'>
+                              <p class='warning'>
+                                These actions will break compatibility with
+                                existing card instances.
+                              </p>
+                              <span class='warning-icon'>
+                                <WarningIcon
+                                  width='20px'
+                                  height='20px'
+                                  role='presentation'
+                                />
+                              </span>
+                            </div>
+                            <Menu
+                              class='context-menu-list'
+                              @items={{array
+                                (menuItem
+                                  'Edit Field Settings'
+                                  (fn this.toggleEditFieldModal field)
+                                )
+                                (menuDivider)
+                                (menuItem
+                                  'Remove Field'
+                                  (fn this.toggleRemoveFieldModalShown field)
+                                  dangerous=true
+                                )
+                              }}
+                              @closeMenu={{dd.close}}
+                            />
+                          </:content>
+                        </BoxelDropdown>
                       {{/if}}
                     {{/if}}
                   {{/let}}
