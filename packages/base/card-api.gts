@@ -1894,6 +1894,17 @@ export function subscribeToChanges(
     subscribers.set(fieldOrCard, changeSubscribers);
   }
   changeSubscribers.add(subscriber);
+
+  let fields = getFields(fieldOrCard, {
+    usedFieldsOnly: true,
+    includeComputeds: false,
+  });
+  Object.keys(fields).forEach((fieldName) => {
+    let value = peekAtField(fieldOrCard, fieldName);
+    if (isFieldDef(value)) {
+      subscribeToChanges(value, subscriber);
+    }
+  });
 }
 
 export function unsubscribeFromChanges(
@@ -1905,6 +1916,17 @@ export function unsubscribeFromChanges(
     return;
   }
   changeSubscribers.delete(subscriber);
+
+  let fields = getFields(fieldOrCard, {
+    usedFieldsOnly: true,
+    includeComputeds: false,
+  });
+  Object.keys(fields).forEach((fieldName) => {
+    let value = peekAtField(fieldOrCard, fieldName);
+    if (isFieldDef(value)) {
+      unsubscribeFromChanges(value, subscriber);
+    }
+  });
 }
 
 function getDataBucket<T extends BaseDef>(instance: T): Map<string, any> {
@@ -2383,7 +2405,17 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         );
       }
       let deserialized = getDataBucket(instance);
+
+      // Before updating field's value, we also have to make sure
+      // the subscribers also subscribes to a new value.
+      let existingValue = deserialized.get(fieldName as string);
+      let changeSubscribers = subscribers.get(existingValue);
+      if (existingValue && isFieldDef(existingValue) && changeSubscribers) {
+        subscribers.set(value, changeSubscribers);
+        subscribers.delete(existingValue);
+      }
       deserialized.set(fieldName as string, value);
+
       logger.log(recompute(instance));
     }
     if (instance instanceof CardDef && resource.id != null) {

@@ -37,6 +37,7 @@ import {
   waitForCodeEditor,
   type TestContextWithSSE,
 } from '../helpers';
+import { timeout } from 'ember-concurrency';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -52,11 +53,96 @@ const indexCardSource = `
   }
 `;
 
+const addressFieldSource = `
+  import {
+    contains,
+    field,
+    Component,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  export class Address extends FieldDef {
+    static displayName = 'Address';
+    @field streetAddress = contains(StringCard); // required
+    @field city = contains(StringCard); // required
+    @field region = contains(StringCard);
+    @field postalCode = contains(StringCard);
+    @field poBoxNumber = contains(StringCard);
+    @field country = contains(StringCard); // required // dropdown
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <div><@fields.streetAddress /></div>
+          <@fields.city />
+          <@fields.region />
+          <@fields.postalCode /><@fields.poBoxNumber />
+          <@fields.country />
+        </address>
+      </template>
+    };
+  }
+`
+
+const countryCardSource = `
+  import {
+    contains,
+    field,
+    Component,
+    CardDef,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class Country extends CardDef {
+    static displayName = 'Country';
+    @field name = contains(StringField);
+    @field title = contains(StringField, {
+      computeVia(this: Country) {
+        return this.name;
+      },
+    });
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <@fields.name />
+        </address>
+      </template>
+    };
+  }
+`
+
+const tripsFieldSource = `
+  import {
+    linksToMany,
+    field,
+    Component,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import { Country } from './country';
+
+  export class Trips extends FieldDef {
+    static displayName = 'Trips';
+    @field countriesVisited = linksToMany(Country);
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <@fields.countriesVisited />
+        </address>
+      </template>
+    };
+  }
+`
+
 const personCardSource = `
   import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
   import { Friend } from './friend';
   import { Pet } from "./pet";
+  import { Address } from './address';
+  import { Trips } from './trips';
 
   export class Person extends CardDef {
     static displayName = 'Person';
@@ -70,6 +156,8 @@ const personCardSource = `
     @field pet = linksTo(Pet);
     @field friends = linksToMany(Friend);
     @field address = containsMany(StringCard);
+    @field addressDetail = contains(Address);
+    @field trips = contains(Trips);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <div data-test-person>
@@ -276,6 +364,9 @@ module('Acceptance | code submode tests', function (hooks) {
       'friend.gts': friendCardSource,
       'employee.gts': employeeCardSource,
       'in-this-file.gts': inThisFileSource,
+      'address.gts': addressFieldSource,
+      'country.gts': countryCardSource,
+      'trips.gts': tripsFieldSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -365,6 +456,22 @@ module('Acceptance | code submode tests', function (hooks) {
             },
           },
         },
+      },
+      'Country/united-states.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            name: 'United States',
+            description: null,
+            thumbnailURL: null
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../country',
+              name: 'Country'
+            }
+          }
+        }
       },
       'z00.json': '{}',
       'z01.json': '{}',
@@ -1107,5 +1214,59 @@ module('Acceptance | code submode tests', function (hooks) {
       100,
       'the scroll position is correct',
     );
+  });
+
+  test<TestContextWithSSE>('updates values in preview panel must be represented in editor panel', async function (assert) {
+    // we only want to change this for this particular test so we emulate what the non-test env sees
+    //monacoService.serverEchoDebounceMs = 5000;
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/fadhlan`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/fadhlan.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-test-code-mode-card-preview-body]');
+    
+    await click('[data-test-preview-card-footer-button-edit]');
+    await this.expectEvents({
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      callback: async () => {
+        await fillIn('[data-test-field="lastName"] input', 'Ridhwanallah');
+        
+        await fillIn('[data-test-field="streetAddress"] input', 'Unknown Address');
+        await fillIn('[data-test-field="city"] input', 'Bandung');
+
+        await click('[data-test-links-to-many="countriesVisited"] [data-test-add-new]');
+        await waitFor(`[data-test-select="${testRealmURL}Country/united-states"]`);
+        await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
+        await click(`[data-test-card-catalog-go-button]`);
+      },
+    });
+    await waitFor('[data-test-saved]');
+    await waitFor('[data-test-save-idle]');
+
+    let content = getMonacoContent();
+    assert.ok(content.includes('Ridhwanallah'));
+    assert.ok(content.includes('Unknown Address'));
+    assert.ok(content.includes('Bandung'));
+    assert.ok(content.includes(`${testRealmURL}Country/united-states`));
   });
 });
