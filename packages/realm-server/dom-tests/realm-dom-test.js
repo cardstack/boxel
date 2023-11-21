@@ -103,7 +103,8 @@ async function querySelector(selector, messenger) {
     return null;
   }
   attachFragments(fragment);
-  return document.querySelector(`#${iframeSelectorTempId} > ${selector}`);
+  let leafSelector = selector.split(' ').pop();
+  return document.querySelector(`#${iframeSelectorTempId} > ${leafSelector}`);
 }
 
 async function querySelectorAll(selector, messenger) {
@@ -112,7 +113,10 @@ async function querySelectorAll(selector, messenger) {
     testRealmURL,
   );
   attachFragments(fragments);
-  return document.querySelectorAll(`#${iframeSelectorTempId} > ${selector}`);
+  let leafSelector = selector.split(' ').pop();
+  return document.querySelectorAll(
+    `#${iframeSelectorTempId} > ${leafSelector}`,
+  );
 }
 
 async function boot(url, waitForSelector) {
