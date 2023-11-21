@@ -95,6 +95,8 @@ export default class BoxelInput extends Component<Signature> {
 
     if (type === InputTypes.Textarea) {
       return undefined;
+    } else if (type === InputTypes.Search) {
+      return 'text';
     }
 
     return type;

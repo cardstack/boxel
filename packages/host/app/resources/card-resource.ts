@@ -227,7 +227,12 @@ export class CardResource extends Resource<Args> {
           }
 
           if (invalidations.includes(card.id)) {
-            this.reload.perform(card);
+            // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
+            // the inputs with past values. This can happen if the user makes edits in the time between the auto
+            // save request and the arrival SSE event.
+            if (!this.cardService.clientRequestIds.has(data.clientRequestId)) {
+              this.reload.perform(card);
+            }
           }
         },
       ),

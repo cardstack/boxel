@@ -1,6 +1,5 @@
 import Component from '@glimmer/component';
 
-import { trackedFunction } from 'ember-resources/util/function';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { on } from '@ember/modifier';
@@ -44,6 +43,7 @@ import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import OperatorModeStack from './stack';
 import SubmodeLayout from './submode-layout';
+import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -121,7 +121,7 @@ export default class InteractSubmode extends Component<Signature> {
 
   private deleteModal: DeleteModal | undefined;
 
-  private get stacks() {
+  get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
   }
 
@@ -231,47 +231,18 @@ export default class InteractSubmode extends Component<Signature> {
       },
     };
   }
-  private fetchBackgroundImageURLs = trackedFunction(this, async () => {
-    let result = await Promise.all(
-      this.stacks.map(async (stack) => {
-        if (stack.length === 0) {
-          return;
-        }
-        let bottomMostCard = stack[0];
-        return (await this.cardService.getRealmInfo(bottomMostCard.card))
-          ?.backgroundURL;
-      }),
-    );
-    return result;
-  });
-
-  private get backgroundImageURLs() {
-    return (
-      this.fetchBackgroundImageURLs.value?.map((u) => (u ? u : undefined)) ?? []
-    );
-  }
+  stackBackgroundsState = stackBackgroundsResource(this);
 
   private get backgroundImageStyle() {
     // only return a background image when both stacks originate from the same realm
     // otherwise we delegate to each stack to handle this
-    if (
-      this.backgroundImageURLs.length > 0 &&
-      this.backgroundImageURLs.every(
-        (u) => u != null && this.backgroundImageURLs[0] === u,
-      )
-    ) {
-      return htmlSafe(`background-image: url(${this.backgroundImageURLs[0]});`);
+    let { hasDifferingBackgroundURLs } = this.stackBackgroundsState;
+    if (!hasDifferingBackgroundURLs) {
+      return htmlSafe(
+        `background-image: url(${this.stackBackgroundsState.backgroundImageURLs[0]});`,
+      );
     }
     return false;
-  }
-
-  private get differingBackgroundImageURLs() {
-    // if the this.backgroundImageStyle is undefined when there are images its because
-    // they are different images--in that case we want to return these.
-    if (this.backgroundImageURLs.length > 0 && !this.backgroundImageStyle) {
-      return this.backgroundImageURLs;
-    }
-    return [];
   }
 
   private addCard = restartableTask(async () => {
@@ -621,19 +592,26 @@ export default class InteractSubmode extends Component<Signature> {
         {{else}}
           {{#each this.stacks as |stack stackIndex|}}
             {{#let
-              (get this.differingBackgroundImageURLs stackIndex)
-              as |backgroundImageURL|
+              (get
+                this.stackBackgroundsState.differingBackgroundImageURLs
+                stackIndex
+              )
+              as |backgroundImageURLSpecificToThisStack|
             }}
               <OperatorModeStack
                 data-test-operator-mode-stack={{stackIndex}}
                 class={{cn
                   'operator-mode-stack'
-                  (if backgroundImageURL 'with-bg-image')
+                  (if backgroundImageURLSpecificToThisStack 'with-bg-image')
                 }}
                 style={{if
-                  backgroundImageURL
+                  backgroundImageURLSpecificToThisStack
                   (htmlSafe
-                    (concat 'background-image: url(' backgroundImageURL ')')
+                    (concat
+                      'background-image: url('
+                      backgroundImageURLSpecificToThisStack
+                      ')'
+                    )
                   )
                 }}
                 @stackItems={{stack}}

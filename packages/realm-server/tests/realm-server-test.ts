@@ -288,6 +288,7 @@ module('Realm Server', function (hooks) {
       {
         type: 'incremental',
         invalidations: [`${testRealmURL}person-1`],
+        clientRequestId: null,
       },
     ];
     let response = await expectEvent({
@@ -563,6 +564,7 @@ module('Realm Server', function (hooks) {
       {
         type: 'incremental',
         invalidations: [`${testRealmURL}unused-card.gts`],
+        clientRequestId: null,
       },
     ];
     let response = await expectEvent({

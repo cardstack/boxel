@@ -115,7 +115,13 @@ export default class CodeEditor extends Component<Signature> {
 
   @cached
   private get initialMonacoCursorPosition() {
-    let loc = this.args.selectedDeclaration?.path?.node.loc;
+    let loc =
+      this.args.selectedDeclaration?.path?.node &&
+      'body' in this.args.selectedDeclaration.path.node &&
+      'loc' in this.args.selectedDeclaration.path.node.body &&
+      this.args.selectedDeclaration.path.node.body.loc
+        ? this.args.selectedDeclaration?.path?.node.body.loc
+        : undefined;
     if (loc) {
       let { start } = loc;
       return new Position(start.line, start.column);
@@ -127,8 +133,13 @@ export default class CodeEditor extends Component<Signature> {
   private updateMonacoCursorPositionByDeclaration(
     declaration: ModuleDeclaration,
   ) {
-    if (declaration.path?.node.loc) {
-      let { start, end } = declaration.path?.node.loc;
+    if (
+      declaration.path?.node &&
+      'body' in declaration.path.node &&
+      'loc' in declaration.path.node.body &&
+      declaration.path.node.body.loc
+    ) {
+      let { start, end } = declaration.path.node.body.loc;
       let currentCursorPosition = this.monacoService.getCursorPosition();
       if (
         currentCursorPosition &&
@@ -146,8 +157,13 @@ export default class CodeEditor extends Component<Signature> {
   private selectDeclarationByMonacoCursorPosition(position: Position) {
     let declarationCursorOn = this.declarations.find(
       (declaration: ModuleDeclaration) => {
-        if (declaration.path?.node.loc) {
-          let { start, end } = declaration.path?.node.loc;
+        if (
+          declaration.path?.node &&
+          'body' in declaration.path.node &&
+          'loc' in declaration.path.node.body &&
+          declaration.path.node.body.loc
+        ) {
+          let { start, end } = declaration.path.node.body.loc;
           return (
             position.lineNumber >= start.line && position.lineNumber <= end.line
           );
