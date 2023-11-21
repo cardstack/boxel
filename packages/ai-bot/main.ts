@@ -182,7 +182,8 @@ Common issues are:
    - Check it is reachable at ${matrixUrl}/_matrix/client/versions
    - If running in development, check the docker container is running (see the boxel README)
 - The bot is not registered on the matrix server
-   - The bot uses the username ${aiBotUsername}
+  - The bot uses the username ${aiBotUsername}
+- The bot is registered but the password is incorrect
    - The bot password ${
      process.env.BOXEL_AIBOT_PASSWORD
        ? 'is set in the env var, check it is correct'
