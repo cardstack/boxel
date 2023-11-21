@@ -63,6 +63,10 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/realm-server
+      - name: Lint drafts realm
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/drafts-realm
 
   ai-bot-test:
     name: AI bot Tests
