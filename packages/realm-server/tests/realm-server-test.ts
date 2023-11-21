@@ -564,6 +564,7 @@ module('Realm Server', function (hooks) {
       {
         type: 'incremental',
         invalidations: [`${testRealmURL}unused-card.gts`],
+        clientRequestId: null,
       },
     ];
     let response = await expectEvent({
