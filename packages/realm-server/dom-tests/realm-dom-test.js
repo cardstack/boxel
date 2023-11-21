@@ -34,13 +34,15 @@ class Messenger {
     this.#request = { deferred, message };
     this.iframe.contentWindow.postMessage(message, testRealmURL);
     let timeout = new Promise((_, reject) =>
-      setTimeout(() => {
-        let msg = `timeout waiting for iframe to respond to ${JSON.stringify(
-          message,
-        )}`;
-        console.error(msg);
-        reject(msg);
-      }, 5000),
+      setTimeout(
+        () =>
+          reject(
+            `timeout waiting for iframe to respond to ${JSON.stringify(
+              message,
+            )}`,
+          ),
+        5000,
+      ),
     );
     let result = await Promise.race([response, timeout]);
     this.#request = undefined;
