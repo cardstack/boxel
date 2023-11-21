@@ -63,6 +63,7 @@ module.exports = function (defaults) {
           resolve: {
             fallback: {
               fs: false,
+              os: false,
               path: require.resolve('path-browserify'),
               crypto: require.resolve('crypto-browserify'),
               stream: require.resolve('stream-browserify'),
