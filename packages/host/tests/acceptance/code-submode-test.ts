@@ -817,7 +817,7 @@ module('Acceptance | code submode tests', function (hooks) {
     await waitFor('[data-test-file-incompatibility-message]');
     assert
       .dom('[data-test-file-incompatibility-message]')
-      .hasText('No tools are available to inspect this file or its contents');
+      .hasText('No tools are available to inspect this file or its contents.');
 
     await waitFor('[data-test-detail-panel-file-incompatibility-message]');
     assert
