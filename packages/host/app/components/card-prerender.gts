@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
 
-import { hasExecutableExtension, baseRealm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import {
   type EntrySetter,
