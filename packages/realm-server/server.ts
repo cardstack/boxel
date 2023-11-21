@@ -68,7 +68,7 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, X-Requested-With',
+            'Authorization, Content-Type, If-Match, X-Requested-With, X-Boxel-Client-Request-Id',
         }),
       )
       .use(async (ctx, next) => {

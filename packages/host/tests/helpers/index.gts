@@ -397,7 +397,15 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         }
       }
       if (expectedEvents) {
-        assert.deepEqual(events, expectedEvents, 'sse response is correct');
+        let eventsWithoutClientRequestId = events.map((e) => {
+          delete e.data.clientRequestId;
+          return e;
+        });
+        assert.deepEqual(
+          eventsWithoutClientRequestId,
+          expectedEvents,
+          'sse response is correct',
+        );
       }
       if (onEvents) {
         onEvents(events);

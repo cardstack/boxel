@@ -12,7 +12,6 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { use, resource } from 'ember-resources';
 import {
   Button,
   LoadingIndicator,
@@ -32,11 +31,7 @@ import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-in
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import {
-  isReady,
-  type Ready,
-  type FileResource,
-} from '@cardstack/host/resources/file';
+import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
@@ -135,6 +130,14 @@ export default class CodeSubmode extends Component<Signature> {
       onCardInstanceChange: () => this.onCardLoaded,
     },
   );
+  private moduleContentsResource = moduleContentsResource(this, () => {
+    if (this.isReady) {
+      return hasExecutableExtension(this.readyFile.url)
+        ? this.readyFile
+        : undefined;
+    }
+    return;
+  });
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -199,13 +202,6 @@ export default class CodeSubmode extends Component<Signature> {
     return this.operatorModeStateService.realmURL;
   }
 
-  private get isLoading() {
-    return (
-      this.currentOpenFile?.state === 'loading' ||
-      this.moduleContentsResource?.isLoading
-    );
-  }
-
   private get isReady() {
     return isReady(this.currentOpenFile);
   }
@@ -243,6 +239,9 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
+    if (this.moduleContentsResource.isLoading) {
+      return null;
+    }
     // If file is incompatible
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
@@ -297,18 +296,6 @@ export default class CodeSubmode extends Component<Signature> {
   private get currentOpenFile() {
     return this.operatorModeStateService.openFile.current;
   }
-
-  @use private moduleContentsResource = resource(() => {
-    if (isReady(this.currentOpenFile)) {
-      let f: Ready = this.currentOpenFile;
-      if (hasExecutableExtension(f.url)) {
-        return moduleContentsResource(this, () => ({
-          executableFile: f,
-        }));
-      }
-    }
-    return;
-  });
 
   private onCardLoaded = (
     oldCard: CardDef | undefined,
@@ -694,11 +681,7 @@ export default class CodeSubmode extends Component<Signature> {
               @lengthPx={{this.panelWidths.rightPanel}}
             >
               <div class='inner-container'>
-                {{#if this.isLoading}}
-                  <div class='loading'>
-                    <LoadingIndicator />
-                  </div>
-                {{else if this.isReady}}
+                {{#if this.isReady}}
                   {{#if this.fileIncompatibilityMessage}}
                     <div
                       class='file-incompatible-message'
