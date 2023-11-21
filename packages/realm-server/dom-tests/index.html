@@ -10,15 +10,17 @@
     />
     <meta name="description" content="" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <style>
+      #iframe-selector-temp {
+        display: none;
+      }
+    </style>
   </head>
+
   <body>
     <div id="qunit"></div>
     <div id="qunit-fixture"></div>
-    <script>
-      // This setting relaxes the document.domain (by eliminating the port) so
-      // that we can do cross origin scripting in order to perform test assertions
-      document.domain = 'localhost';
-    </script>
     <script src="https://code.jquery.com/qunit/qunit-2.10.0.js"></script>
     <script src="/testem.js" integrity="" data-embroider-ignore></script>
     <script type="module" src="./index.js"></script>

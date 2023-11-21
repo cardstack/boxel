@@ -8,6 +8,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 
 export class Person extends CardDef {
+  static displayName = 'Person';
   @field firstName = contains(StringCard);
   @field title = contains(StringCard, {
     computeVia: function (this: Person) {
@@ -40,7 +41,7 @@ export let Person = (_class = (_class2 = class Person extends CardDef {
     _initializerDefineProperty(this, \"firstName\", _descriptor, this);
     _initializerDefineProperty(this, \"title\", _descriptor2, this);
   }
-}, _defineProperty(_class2, \"isolated\", setComponentTemplate(createTemplateFactory(
+}, _defineProperty(_class2, "displayName", 'Person'), _defineProperty(_class2, \"isolated\", setComponentTemplate(createTemplateFactory(
 /*
 \ \ 
       <h1 data-test-card><@fields.firstName /></h1>
