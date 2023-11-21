@@ -26,7 +26,12 @@
     }
   },
   "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
+    "environment": ["ember-loose", "ember-template-imports"],
+    "transform": {
+      "include": [
+        "**"
+      ]
+    }
   },
   "exclude": ["../base/__boxel/**/*"]
 }

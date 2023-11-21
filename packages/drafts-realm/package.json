@@ -3,10 +3,24 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
+  "scripts": {
+    "lint": "concurrently \"npm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"npm:lint:*:fix\" --names \"fix:\"",
+    "lint:glint": "glint",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "@glint/core": "^1.2.1",
+    "@glint/environment-ember-loose": "^1.2.1",
+    "@glint/environment-ember-template-imports": "^1.2.1",
+    "@glint/template": "^1.2.1",
+    "ember-template-imports": "^4.0.0"
+  },
   "devDependencies": {
+    "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/cardpay-sdk": "^1.0.53",
     "@types/lodash": "^4.14.182",
-    "@cardstack/boxel-ui": "workspace:*"
-  },
-  "scripts": {}
+    "concurrently": "^8.0.1"
+  }
 }
