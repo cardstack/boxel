@@ -58,7 +58,7 @@ const personCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
-    @field friends = linksToMany(() => Friend);
+    @field friends = linksToMany(Friend);
     @field address = containsMany(StringCard);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -474,7 +474,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
     await waitForCodeEditor();
 
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-card-module-definition]');
     await waitFor('[data-test-card-instance-definition]');
 
@@ -532,7 +532,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       )}`,
     );
     await waitForCodeEditor();
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-card-module-definition]');
 
     assert.dom('[data-test-card-module-definition]').includesText('Card');
@@ -579,7 +579,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
 
     await waitForCodeEditor();
-    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
@@ -878,7 +878,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -904,7 +904,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -929,7 +929,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -954,7 +954,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -980,7 +980,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -1007,7 +1007,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codeSelection: {
         localName: elementName,
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
@@ -1054,7 +1054,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           name: elementName,
         },
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [],
       submode: Submodes.Code,
@@ -1087,7 +1087,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           name: elementName,
         },
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [],
       submode: Submodes.Code,
@@ -1121,7 +1121,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           name: elementName,
         },
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [],
       submode: Submodes.Code,
@@ -1153,7 +1153,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           name: elementName,
         },
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [],
       submode: Submodes.Code,
@@ -1187,7 +1187,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           name: elementName,
         },
       },
-      fileView: 'inheritance',
+      fileView: 'inspector',
       openDirs: {},
       stacks: [],
       submode: Submodes.Code,

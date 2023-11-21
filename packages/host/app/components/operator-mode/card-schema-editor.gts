@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { DropdownButton, Tooltip } from '@cardstack/boxel-ui/components';
+import { IconDropdownButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { gt, menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -420,7 +420,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                       </Tooltip>
 
                       {{#if @allowFieldManipulation}}
-                        <DropdownButton
+                        <IconDropdownButton
                           @icon={{ThreeDotsHorizontal}}
                           @label='field options'
                           @contentClass='context-menu'
@@ -456,7 +456,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                               )
                             }}
                           />
-                        </DropdownButton>
+                        </IconDropdownButton>
                       {{/if}}
                     {{/if}}
                   {{/let}}

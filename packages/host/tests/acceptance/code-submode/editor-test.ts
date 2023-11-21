@@ -251,6 +251,30 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
         iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
       },
+      'Person/john-with-bad-pet-link.json': {
+        data: {
+          attributes: {
+            firstName: 'John',
+            address: {
+              city: 'Ljubljana',
+              country: 'Slovenia',
+            },
+          },
+          relationships: {
+            pet: {
+              links: {
+                self: `http://badlink.com/nonexisting-pet`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      },
     });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -308,6 +332,85 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
   test<
     TestContextWithSave & TestContextWithSSE
+  >('allows fixing broken cards', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/john-with-bad-pet-link.json`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/john-with-bad-pet-link.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-editor]');
+
+    let editedCard: LooseSingleCardDocument = {
+      data: {
+        attributes: {
+          firstName: 'John',
+          address: {
+            city: 'Ljubljana',
+            country: 'Slovenia',
+          },
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: `${testRealmURL}Pet/mango`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
+        },
+      },
+    };
+
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/john-with-bad-pet-link`],
+        },
+      },
+    ];
+
+    await this.expectEvents({
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      callback: async () => {
+        setMonacoContent(JSON.stringify(editedCard));
+        await waitFor('[data-test-save-idle]');
+      },
+    });
+
+    let fileRef = await adapter.openFile('Person/john-with-bad-pet-link.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      fileRef.content as string,
+      JSON.stringify(editedCard),
+      'Person/john-with-bad-pet-link.json changes were saved',
+    );
+  });
+
+  test<
+    TestContextWithSave & TestContextWithSSE
   >('card instance change made in monaco editor is auto-saved', async function (assert) {
     assert.expect(4);
     let expectedEvents = [
@@ -356,11 +459,11 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
       .containsText('Mango');
 
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
       }
-      assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+      assert.strictEqual(JSON.parse(content).data.attributes?.name, 'MangoXXX');
     });
 
     await this.expectEvents({
@@ -628,6 +731,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
             `${testRealmURL}Pet/mango`,
             `${testRealmURL}Pet/vangogh`,
             `${testRealmURL}Person/fadhlan`,
+            `${testRealmURL}Person/john-with-bad-pet-link`,
             `${testRealmURL}person`,
           ],
         },
