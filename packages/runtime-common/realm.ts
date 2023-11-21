@@ -570,14 +570,50 @@ export class Realm {
       // set the static public asset paths in index.html
       indexHTML = indexHTML.replace(/(src|href)="\//g, `$1="/${assetsDir}`);
 
-      // This setting relaxes the document.domain (by eliminating the port) so
-      // that we can do cross origin scripting in order to perform test assertions
+      // this installs an event listener to allow a test driver to introspect
+      // the DOM from a different localhost:4205 origin (the test driver's
+      // origin)
       if (this.#useTestingDomain) {
         indexHTML = `
           ${indexHTML}
           <script>
-            document.domain = 'localhost';
+            window.addEventListener('message', (event) => {
+              console.log('received event in realm index HTML', event);
+              if ([
+                  'http://localhost:4205',
+                  'http://localhost:7357',
+                  'http://127.0.0.1:4205',
+                  'http://127.0.0.1:7357'
+                ].includes(event.origin)) {
+                if (event.data === 'location') {
+                  event.source.postMessage(document.location.href, event.origin);
+                  return;
+                }
+
+                let { data: { querySelector, querySelectorAll, click } } = event;
+                let response;
+                if (querySelector) {
+                  let element = document.querySelector(querySelector);
+                  response = element ? element.outerHTML : null;
+                } else if (querySelectorAll) {
+                  response = [...document.querySelectorAll(querySelectorAll)].map(el => el.outerHTML);
+                } else if (click) {
+                  let el = document.querySelector(click);
+                  if (el) {
+                    el.click();
+                    response = null;
+                  } else {
+                    response = "cannot click on element: could not find '" + click + "'";
+                  }
+                } else {
+                  response = 'Do not know how to handle event data: ' + JSON.stringify(event.data);
+                }
+                console.log('event response:', response);
+                event.source.postMessage(response, event.origin);
+              }
+            });
           </script>
+          </
         `;
       }
     }
