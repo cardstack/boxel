@@ -161,10 +161,12 @@ interface IndexEvent {
   type: 'index';
   data: IncrementalIndexEventData | FullIndexEventData;
   id?: string;
+  clientRequestId?: string | null;
 }
 interface IncrementalIndexEventData {
   type: 'incremental';
   invalidations: string[];
+  clientRequestId?: string | null;
 }
 interface FullIndexEventData {
   type: 'full';
@@ -186,6 +188,7 @@ interface WriteOperation {
   type: 'write';
   path: LocalPath;
   contents: string;
+  clientRequestId?: string | null; // Used for client to be able to see if the SSE event is a result of the client's own write
   deferred: Deferred<WriteResult>;
 }
 
@@ -330,7 +333,11 @@ export class Realm {
     this.#operationQueue = [];
     for (let operation of operations) {
       if (operation.type === 'write') {
-        let result = await this.#write(operation.path, operation.contents);
+        let result = await this.#write(
+          operation.path,
+          operation.contents,
+          operation.clientRequestId,
+        );
         operation.deferred.fulfill(result);
       } else {
         await this.#delete(operation.path);
@@ -341,19 +348,28 @@ export class Realm {
     operationsDrained!();
   }
 
-  async write(path: LocalPath, contents: string): Promise<WriteResult> {
+  async write(
+    path: LocalPath,
+    contents: string,
+    clientRequestId?: string | null,
+  ): Promise<WriteResult> {
     let deferred = new Deferred<WriteResult>();
     this.#operationQueue.push({
       type: 'write',
       path,
       contents,
+      clientRequestId,
       deferred,
     });
     this.drainOperations();
     return deferred.promise;
   }
 
-  async #write(path: LocalPath, contents: string): Promise<WriteResult> {
+  async #write(
+    path: LocalPath,
+    contents: string,
+    clientRequestId?: string | null,
+  ): Promise<WriteResult> {
     await this.trackOwnWrite(path);
     let results = await this.#adapter.write(path, contents);
     await this.#searchIndex.update(this.paths.fileURL(path), {
@@ -363,6 +379,7 @@ export class Realm {
           data: {
             type: 'incremental',
             invalidations: invalidatedURLs.map((u) => u.href),
+            clientRequestId: clientRequestId ?? null, // use null instead of undefined for valid JSON serialization
           },
         });
       },
@@ -897,6 +914,7 @@ export class Realm {
         null,
         2,
       ),
+      request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.card(new URL(instanceURL), {
