@@ -1898,12 +1898,10 @@ module('Integration | operator-mode', function (hooks) {
 
     await focus(`[data-test-search-field]`);
     await typeIn(`[data-test-search-field]`, 'Ma');
-    assert.dom(`[data-test-search-label]`).containsText('Searching for "Ma"');
+    assert.dom(`[data-test-search-label]`).containsText('Searching for “Ma”');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert
-      .dom(`[data-test-search-result-label]`)
-      .containsText('2 Results for "Ma"');
+    assert.dom(`[data-test-search-label]`).containsText('2 Results for “Ma”');
     assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 2 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
@@ -1915,9 +1913,7 @@ module('Integration | operator-mode', function (hooks) {
     await focus(`[data-test-search-field]`);
     await typeIn(`[data-test-search-field]`, 'Mar');
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert
-      .dom(`[data-test-search-result-label]`)
-      .containsText('1 Result for "Mar"');
+    assert.dom(`[data-test-search-label]`).containsText('1 Result for “Mar”');
 
     //Ensures that there is no cards when reopen the search sheet
     await click(`[data-test-search-sheet-cancel-button]`);
@@ -1930,16 +1926,20 @@ module('Integration | operator-mode', function (hooks) {
     await typeIn(`[data-test-search-field]`, 'No Cards');
     assert
       .dom(`[data-test-search-label]`)
-      .containsText('Searching for "No Cards"');
+      .containsText('Searching for “No Cards”');
 
     await waitUntil(
       () =>
-        !document.querySelector('[data-test-search-sheet-search-result]') &&
-        document.querySelector('[data-test-search-result-label]'),
+        (
+          document.querySelector('[data-test-search-label]') as HTMLElement
+        )?.innerText.includes('0'),
+      {
+        timeoutMessage: 'timed out waiting for search label to show 0 results',
+      },
     );
     assert
-      .dom(`[data-test-search-result-label]`)
-      .containsText('0 Results for "No Cards"');
+      .dom(`[data-test-search-label]`)
+      .containsText('0 Results for “No Cards”');
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
   });
 
@@ -2008,10 +2008,12 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-boxel-input-error-message]`)
       .containsText('Not a valid Card URL');
+
     await fillIn(
       `[data-test-url-search]`,
       `https://cardstack.com/base/types/room-objective`,
     );
+
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist('invalid state is not shown');
@@ -2368,47 +2370,58 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await focus(`[data-test-search-field]`);
 
-    await fillIn(`[data-test-url-field]`, `http://localhost:4202/test/mango`);
-    await click(`[data-test-go-button]`);
+    await click('[data-test-search-field]');
+
+    assert
+      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
+      .doesNotExist('invalid state is not shown');
+
+    await fillIn('[data-test-search-field]', 'http://localhost:4202/test/man');
+    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
+
+    assert
+      .dom('[data-test-search-label]')
+      .containsText('No card found at http://localhost:4202/test/man');
+    assert.dom('[data-test-search-sheet-search-result]').doesNotExist();
+    assert.dom('[data-test-boxel-input-validation-state="invalid"]').exists();
+
+    await fillIn(
+      '[data-test-search-field]',
+      'http://localhost:4202/test/mango',
+    );
+    await waitFor('[data-test-search-sheet-search-result]');
+
+    assert
+      .dom('[data-test-search-label]')
+      .containsText('Card found at http://localhost:4202/test/mango');
+    assert.dom('[data-test-search-sheet-search-result]').exists({ count: 1 });
+    assert
+      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
+      .doesNotExist();
+
+    await fillIn('[data-test-search-field]', 'http://localhost:4202/test/man');
+    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
+
+    assert
+      .dom('[data-test-search-label]')
+      .containsText('No card found at http://localhost:4202/test/man');
+    assert.dom('[data-test-search-sheet-search-result]').doesNotExist();
+    assert.dom('[data-test-boxel-input-validation-state="invalid"]').exists();
+
+    await fillIn(
+      '[data-test-search-field]',
+      'http://localhost:4202/test/mango',
+    );
+    await waitFor('[data-test-search-sheet-search-result]');
+
+    await click('[data-test-search-sheet-search-result]');
+
     await waitFor(`[data-test-stack-card="http://localhost:4202/test/mango"]`);
     assert
       .dom(
         `[data-test-stack-card="http://localhost:4202/test/mango"] [data-test-field-component-card]`,
       )
       .containsText('Mango', 'the card is rendered in the stack');
-  });
-
-  test(`error message is shown when invalid card URL is entered in search sheet`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await waitFor(`[data-test-cards-grid-item]`);
-    await focus(`[data-test-search-field]`);
-
-    assert
-      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
-      .doesNotExist('invalid state is not shown');
-
-    await fillIn(
-      `[data-test-url-field]`,
-      `http://localhost:4202/test/not-a-card`,
-    );
-    await click(`[data-test-go-button]`);
-    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
-    assert
-      .dom(`[data-test-boxel-input-error-message]`)
-      .containsText('Not a valid Card URL');
-    await fillIn(`[data-test-url-field]`, `http://localhost:4202/test/mango`);
-    assert
-      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
-      .doesNotExist('invalid state is not shown');
   });
 
   test(`can select one or more cards on cards-grid and unselect`, async function (assert) {
