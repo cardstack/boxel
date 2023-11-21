@@ -1,4 +1,4 @@
-import { fn, array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -6,16 +6,10 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { IconDropdownButton, Tooltip } from '@cardstack/boxel-ui/components';
-import { gt, menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
+import { Tooltip } from '@cardstack/boxel-ui/components';
+import { gt } from '@cardstack/boxel-ui/helpers';
 
-import {
-  ArrowTopLeft,
-  IconLink,
-  ThreeDotsHorizontal,
-  Warning as WarningIcon,
-  IconPlus,
-} from '@cardstack/boxel-ui/icons';
+import { ArrowTopLeft, IconLink, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import { getPlural } from '@cardstack/runtime-common';
 
@@ -43,6 +37,7 @@ import {
   isOwnField,
   calculateTotalOwnFields,
 } from '@cardstack/host/utils/schema-editor';
+import ContextMenuButton from './context-menu-button';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -97,36 +92,6 @@ export default class CardSchemaEditor extends Component<Signature> {
 
       .card-fields {
         margin-top: var(--boxel-sp);
-      }
-
-      :global(.context-menu) {
-        width: 13.5rem;
-      }
-
-      .context-menu-trigger {
-        rotate: 90deg;
-        --dropdown-button-size: 20px;
-      }
-
-      .context-menu-list {
-        --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-top-right-radius: 0;
-        border-top-left-radius: 0;
-      }
-
-      .warning-box {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xxxs);
-        padding: var(--boxel-sp-sm);
-        background-color: var(--boxel-warning-100);
-        border-top-right-radius: inherit;
-        border-top-left-radius: inherit;
-      }
-
-      .warning {
-        margin: 0;
       }
 
       .left {
@@ -411,43 +376,14 @@ export default class CardSchemaEditor extends Component<Signature> {
                       </Tooltip>
 
                       {{#if @allowFieldManipulation}}
-                        <IconDropdownButton
-                          @icon={{ThreeDotsHorizontal}}
-                          @label='field options'
-                          @contentClass='context-menu'
-                          class='context-menu-trigger'
+                        <ContextMenuButton
+                          @toggleSettings={{fn this.toggleEditFieldModal field}}
+                          @toggleRemoveModal={{fn
+                            this.toggleRemoveFieldModalShown
+                            field
+                          }}
                           data-test-schema-editor-field-contextual-button
-                          as |dd|
-                        >
-                          <div class='warning-box'>
-                            <p class='warning'>
-                              These actions will break compatibility with
-                              existing card instances.
-                            </p>
-                            <span class='warning-icon'>
-                              <WarningIcon
-                                width='20px'
-                                height='20px'
-                                role='presentation'
-                              />
-                            </span>
-                          </div>
-                          <dd.Menu
-                            class='context-menu-list'
-                            @items={{array
-                              (menuItem
-                                'Edit Field Settings'
-                                (fn this.toggleEditFieldModal field)
-                              )
-                              (menuDivider)
-                              (menuItem
-                                'Remove Field'
-                                (fn this.toggleRemoveFieldModalShown field)
-                                dangerous=true
-                              )
-                            }}
-                          />
-                        </IconDropdownButton>
+                        />
                       {{/if}}
                     {{/if}}
                   {{/let}}

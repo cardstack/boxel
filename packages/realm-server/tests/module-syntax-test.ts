@@ -35,7 +35,6 @@ module('module-syntax', function () {
     let src = `
       import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
-
       export class Person extends CardDef {
         @field firstName = contains(StringCard);
         static embedded = class Embedded extends Component<typeof this> {
@@ -64,7 +63,6 @@ module('module-syntax', function () {
         import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
-
         export class Person extends CardDef {
           @field firstName = contains(StringCard);
           @field age = contains(NumberCard);
@@ -73,6 +71,23 @@ module('module-syntax', function () {
           }
         }
       `,
+    );
+    assert.strictEqual(
+      mod.code().trim(),
+      `
+      import NumberCard from "https://cardstack.com/base/number";
+      import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      export class Person extends CardDef {
+        @field firstName = contains(StringCard);
+      @field age = contains(NumberCard);
+      
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.firstName/></h1></template>                
+        }
+      }
+      `.trim(),
+      'original code formatting is preserved',
     );
 
     let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
@@ -695,6 +710,18 @@ module('module-syntax', function () {
           @field lastName = contains(StringCard);
         }
       `,
+    );
+    assert.strictEqual(
+      mod.code().trim(),
+      `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends CardDef {
+        @field lastName = contains(StringCard);
+      }
+      `.trim(),
+      'original code formatting is preserved',
     );
 
     let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
