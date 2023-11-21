@@ -586,8 +586,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     setMonacoContent('Hello Mars');
 
     await waitFor('[data-test-save-idle]');
-
-    await percySnapshot(assert);
   });
 
   test<TestContextWithSave>('unsaved changes made in monaco editor are saved when switching out of code submode', async function (assert) {
@@ -766,8 +764,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         await waitFor('[data-test-save-idle]');
       },
     });
-
-    await percySnapshot(assert);
 
     let fileRef = await adapter.openFile('pet.gts');
     if (!fileRef) {

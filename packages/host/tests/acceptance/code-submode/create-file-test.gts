@@ -186,10 +186,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor('[data-test-create-file-modal]');
     await waitFor(`[data-test-realm-name="Test Workspace A"]`);
     assert
-      .dom('[data-test-realm-dropdown]')
+      .dom('[data-test-realm-dropdown-trigger]')
       .hasText('Test Workspace A', 'current realm is selected');
 
-    await click(`[data-test-realm-dropdown]`);
+    await click(`[data-test-realm-dropdown-trigger]`);
     await waitFor(
       '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
     );

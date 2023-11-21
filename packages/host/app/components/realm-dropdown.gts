@@ -1,7 +1,8 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 
-import { DropdownButton } from '@cardstack/boxel-ui/components';
+import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
 
@@ -10,7 +11,6 @@ import RealmIcon from './operator-mode/realm-icon';
 
 export interface RealmDropdownItem extends RealmInfo {
   path: string;
-  iconURL: string | null;
 }
 
 interface Signature {
@@ -18,42 +18,55 @@ interface Signature {
     onSelect: (item: RealmDropdownItem) => void;
     selectedRealmURL: URL | undefined;
     disabled?: boolean;
+    contentClass?: string;
   };
   Element: HTMLElement;
 }
 
 export default class RealmDropdown extends Component<Signature> {
   <template>
-    <DropdownButton
-      class='realm-dropdown'
-      @items={{this.realms}}
-      @onSelect={{@onSelect}}
-      @selectedItem={{this.selectedRealm}}
-      @disabled={{@disabled}}
-      @kind='secondary-light'
-      @size='small'
-      data-test-realm-dropdown
-      data-test-realm-name={{this.selectedRealm.name}}
-      ...attributes
+    <BoxelDropdown
+      @contentClass={{@contentClass}}
+      data-test-load-realms-loaded={{this.loaded}}
     >
-      <RealmIcon
-        class='icon'
-        width='20'
-        height='20'
-        @realmIconURL={{if
-          this.selectedRealm.iconURL
-          this.selectedRealm.iconURL
-          this.defaultRealmIcon
-        }}
-        @realmName={{this.selectedRealm.name}}
-      />
-      <div class='selected-item'>
-        {{if this.selectedRealm this.selectedRealm.name 'Select'}}
-      </div>
-      <DropdownArrowDown class='arrow-icon' width='22px' height='22px' />
-    </DropdownButton>
+      <:trigger as |bindings|>
+        <Button
+          class='realm-dropdown-trigger'
+          @kind='secondary-light'
+          @size='small'
+          @disabled={{@disabled}}
+          {{bindings}}
+          data-test-realm-dropdown-trigger
+          data-test-realm-name={{this.selectedRealm.name}}
+          ...attributes
+        >
+          {{#if this.selectedRealm}}
+            <RealmIcon
+              class='icon'
+              width='20'
+              height='20'
+              @realmIconURL={{this.selectedRealm.iconURL}}
+              @realmName={{this.selectedRealm.name}}
+            />
+            <div class='selected-item'>
+              {{this.selectedRealm.name}}
+            </div>
+          {{else}}
+            Select a realm
+          {{/if}}
+          <DropdownArrowDown class='arrow-icon' width='22px' height='22px' />
+        </Button>
+      </:trigger>
+      <:content as |dd|>
+        <Menu
+          @items={{this.menuItems}}
+          @closeMenu={{dd.close}}
+          data-test-realm-dropdown-menu
+        />
+      </:content>
+    </BoxelDropdown>
     <style>
-      .realm-dropdown {
+      .realm-dropdown-trigger {
         width: var(--realm-dropdown-trigger-width, auto);
         display: flex;
         justify-content: flex-start;
@@ -65,7 +78,7 @@ export default class RealmDropdown extends Component<Signature> {
         margin-left: auto;
         flex-shrink: 0;
       }
-      .realm-dropdown[aria-expanded='true'] .arrow-icon {
+      .realm-dropdown-trigger[aria-expanded='true'] .arrow-icon {
         transform: rotate(180deg);
       }
       .selected-item {
@@ -76,11 +89,16 @@ export default class RealmDropdown extends Component<Signature> {
     </style>
   </template>
 
+  defaultRealmIcon = '/default-realm-icon.png';
   @service declare realmInfoService: RealmInfoService;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
     this.realmInfoService.fetchAllKnownRealmInfos.perform();
+  }
+
+  get loaded() {
+    return this.realmInfoService.fetchAllKnownRealmInfos.isIdle;
   }
 
   get realms(): RealmDropdownItem[] {
@@ -99,7 +117,16 @@ export default class RealmDropdown extends Component<Signature> {
     return items;
   }
 
-  defaultRealmIcon = '/default-realm-icon.png';
+  get menuItems(): MenuItem[] {
+    return this.realms.map(
+      (realm) =>
+        new MenuItem(realm.name, 'action', {
+          action: () => this.args.onSelect(realm),
+          selected: realm.name === this.selectedRealm?.name,
+          iconURL: realm.iconURL ?? undefined,
+        }),
+    );
+  }
 
   get selectedRealm(): RealmDropdownItem | undefined {
     if (!this.args.selectedRealmURL) {

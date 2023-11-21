@@ -3,7 +3,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { capitalize } from '@ember/string';
 import { tracked } from '@glimmer/tracking';
-import { DropdownButton } from '@cardstack/boxel-ui/components';
+import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import CreateFileModal, {
@@ -20,24 +20,35 @@ interface Signature {
 
 export default class NewFileButton extends Component<Signature> {
   <template>
-    <DropdownButton
-      class='new-file-button'
-      @kind='primary'
-      @size='small'
-      @items={{this.menuItems}}
-      @disabled={{this.newFileType}}
-      data-test-new-file-button
-    >
-      <IconPlus
-        @width='var(--boxel-icon-sm)'
-        @height='var(--boxel-icon-sm)'
-        stroke='var(--boxel-light)'
-        stroke-width='1px'
-        aria-label='Add'
-        class='new-file-button-icon'
-      />
-      New File
-    </DropdownButton>
+    <BoxelDropdown>
+      <:trigger as |bindings|>
+        <Button
+          class='new-file-button'
+          @kind='primary'
+          @size='small'
+          @disabled={{this.newFileType}}
+          {{bindings}}
+          data-test-new-file-button
+        >
+          <IconPlus
+            @width='var(--boxel-icon-sm)'
+            @height='var(--boxel-icon-sm)'
+            stroke='var(--boxel-light)'
+            stroke-width='1px'
+            aria-label='Add'
+            class='new-file-button-icon'
+          />
+          New File
+        </Button>
+      </:trigger>
+      <:content as |dd|>
+        <Menu
+          @items={{this.menuItems}}
+          @closeMenu={{dd.close}}
+          data-test-new-file-dropdown-menu
+        />
+      </:content>
+    </BoxelDropdown>
 
     {{#if this.newFileType}}
       <CreateFileModal
