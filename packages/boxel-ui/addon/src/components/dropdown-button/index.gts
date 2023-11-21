@@ -1,92 +1,71 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { hash } from '@ember/helper';
-import type { WithBoundArgs } from '@glint/template';
+import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
+import Component from '@glimmer/component';
 
-import cn from '../../helpers/cn.ts';
-import type { Icon } from '../../icons/types.ts';
-import BoxelDropdown from '../dropdown/index.gts';
-import BoxelMenu from '../menu/index.gts';
+import {
+  type BoxelButtonKind,
+  type BoxelButtonSize,
+} from '../button/index.gts';
+
+type DropdownItem = {
+  iconURL?: string;
+  name: string;
+};
 
 interface Signature {
   Args: {
-    class?: string;
-    contentClass?: string;
-    icon: Icon | undefined;
-    iconSize?: number;
-    label: string;
-    size?: number;
+    disabled?: boolean;
+    items: DropdownItem[] | MenuItem[] | [];
+    kind?: BoxelButtonKind;
+    onSelect?: (item: DropdownItem) => void;
+    selectedItem?: DropdownItem | undefined;
+    size?: BoxelButtonSize;
   };
   Blocks: {
-    default: [
-      {
-        Menu: WithBoundArgs<typeof BoxelMenu, 'closeMenu'>;
-        close: () => void;
-      },
-    ];
+    default: [];
   };
-  Element: HTMLButtonElement;
+  Element: HTMLElement;
 }
 
-const DropdownButton: TemplateOnlyComponent<Signature> = <template>
-  <BoxelDropdown @contentClass={{@contentClass}}>
-    <:trigger as |bindings|>
-      <button
-        {{bindings}}
-        class={{cn
-          'boxel-dropdown-button'
-          'boxel-dropdown-button__reset'
-          'boxel-dropdown-button__trigger'
-          @class
-        }}
-        aria-label={{@label}}
-        data-test-boxel-dropdown-button
-        ...attributes
-      >
-        {{#if @icon}}
-          <@icon
-            width={{if @iconSize @iconSize 16}}
-            height={{if @iconSize @iconSize 16}}
-          />
-        {{/if}}
-      </button>
-    </:trigger>
-    <:content as |dd|>
-      {{yield
-        (hash Menu=(component BoxelMenu closeMenu=dd.close) close=dd.close)
-      }}
-    </:content>
-  </BoxelDropdown>
-  <style>
-    @layer {
-      /* Remove all default user-agent styles while keeping specificity low */
-      :where(.boxel-dropdown-button__reset) {
-        all: unset;
+export default class DropdownButton extends Component<Signature> {
+  <template>
+    <BoxelDropdown>
+      <:trigger as |bindings|>
+        <Button
+          {{bindings}}
+          @kind={{@kind}}
+          @size={{@size}}
+          @disabled={{@disabled}}
+          data-test-dropdown-button
+          ...attributes
+        >
+          {{yield}}
+        </Button>
+      </:trigger>
+      <:content as |dd|>
+        <Menu @items={{this.menuItems}} @closeMenu={{dd.close}} />
+      </:content>
+    </BoxelDropdown>
+  </template>
+
+  get menuItems() {
+    return this.args.items.map((item) => {
+      if (item instanceof MenuItem) {
+        return item;
       }
 
-      .boxel-dropdown-button__trigger {
-        --dropdown-button-size: 30px;
-
-        width: var(--dropdown-button-size);
-        height: var(--dropdown-button-size);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .boxel-dropdown-button__trigger:hover:not(
-          .boxel-dropdown-button--no-hover
-        ) {
-        --icon-color: var(--boxel-highlight);
-        cursor: pointer;
-      }
-
-      .boxel-dropdown-button__trigger > svg {
-        display: block;
-        height: 100%;
-        margin: auto;
-      }
-    }
-  </style>
-</template>;
-
-export default DropdownButton;
+      return new MenuItem(item.name, 'action', {
+        action: () => {
+          if (!this.args.onSelect) {
+            throw new Error(
+              'You must provide an `onSelect` action to `DropdownButton` when using an array of `items`',
+            );
+          }
+          this.args.onSelect(item);
+        },
+        selected: item.name === this.args.selectedItem?.name,
+        iconURL: item.iconURL ?? '',
+      });
+    });
+  }
+}

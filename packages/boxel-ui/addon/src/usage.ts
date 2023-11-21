@@ -12,6 +12,7 @@ import FieldContainerUsage from './components/field-container/usage.gts';
 import GridContainerUsage from './components/grid-container/usage.gts';
 import HeaderUsage from './components/header/usage.gts';
 import IconButtonUsage from './components/icon-button/usage.gts';
+import IconDropdownButtonUsage from './components/icon-dropdown-button/usage.gts';
 import InputUsage from './components/input/usage.gts';
 import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
@@ -33,6 +34,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['GridContainer', GridContainerUsage],
   ['Header', HeaderUsage],
   ['IconButton', IconButtonUsage],
+  ['IconDropdownButton', IconDropdownButtonUsage],
   ['Input', InputUsage],
   ['LoadingIndicator', LoadingIndicatorUsage],
   ['Menu', MenuUsage],

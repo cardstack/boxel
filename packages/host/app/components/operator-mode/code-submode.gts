@@ -537,7 +537,7 @@ export default class CodeSubmode extends Component<Signature> {
         @dismissURLError={{this.dismissURLError}}
         @realmURL={{this.realmURL}}
       />
-      <NewFileButton />
+      <NewFileButton @realmURL={{this.realmURL}} />
     </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
       <div

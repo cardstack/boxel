@@ -36,8 +36,6 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import UrlSearch from '../url-search';
-
 import SearchResult from './search-result';
 
 import type CardService from '../../services/card-service';
@@ -84,6 +82,36 @@ export default class SearchSheet extends Component<Signature> {
       : BoxelInputBottomTreatments.Flat;
   }
 
+  get searchLabel() {
+    if (this.getCard.isRunning) {
+      return `Fetching ${this.searchKey}`;
+    } else if (this.searchKeyIsURL) {
+      if (this.searchCardResults.length) {
+        return `Card found at ${this.searchKey}`;
+      } else {
+        return `No card found at ${this.searchKey}`;
+      }
+    } else if (this.isSearching) {
+      return `Searching for “${this.searchKey}”`;
+    } else {
+      return `${this.searchCardResults.length} Result${
+        this.searchCardResults.length != 1 ? 's' : ''
+      } for “${this.searchKey}”`;
+    }
+  }
+
+  get inputValidationState() {
+    if (
+      this.searchKeyIsURL &&
+      !this.getCard.isRunning &&
+      !this.searchCardResults.length
+    ) {
+      return 'invalid';
+    } else {
+      return 'initial';
+    }
+  }
+
   get sheetSize() {
     switch (this.args.mode) {
       case SearchSheetModes.Closed:
@@ -110,12 +138,23 @@ export default class SearchSheet extends Component<Signature> {
       mode == SearchSheetModes.SearchPrompt ||
       mode == SearchSheetModes.ChoosePrompt
     ) {
-      return 'Search for cards';
+      return 'Search for cards or enter card URL';
     }
     return 'Search for…';
   }
 
+  get searchKeyIsURL() {
+    try {
+      new URL(this.searchKey);
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
   getCard = restartableTask(async (cardURL: string) => {
+    this.clearSearchCardResults();
+
     let response = await this.loaderService.loader.fetch(cardURL, {
       headers: {
         Accept: 'application/vnd.card+json',
@@ -129,7 +168,9 @@ export default class SearchSheet extends Component<Signature> {
           maybeCardDoc,
           new URL(maybeCardDoc.data.id),
         );
-        this.handleCardSelect(card);
+
+        this.clearSearchCardResults();
+        this.searchCardResults.push(card);
       }
     }
   });
@@ -161,7 +202,7 @@ export default class SearchSheet extends Component<Signature> {
   resetState() {
     this.searchKey = '';
     this.cardURL = '';
-    this.searchCardResults.splice(0, this.searchCardResults.length);
+    this.clearSearchCardResults();
   }
 
   @cached
@@ -172,7 +213,7 @@ export default class SearchSheet extends Component<Signature> {
 
   debouncedSearchFieldUpdate = debounce(() => {
     if (!this.searchKey) {
-      this.searchCardResults.splice(0, this.searchCardResults.length);
+      this.clearSearchCardResults();
       this.isSearching = false;
       return;
     }
@@ -182,8 +223,12 @@ export default class SearchSheet extends Component<Signature> {
   @action
   onSearchFieldUpdated() {
     if (this.searchKey) {
-      this.searchCardResults.splice(0, this.searchCardResults.length);
-      this.searchCard.perform(this.searchKey);
+      if (this.searchKeyIsURL) {
+        this.getCard.perform(this.searchKey);
+      } else {
+        this.clearSearchCardResults();
+        this.searchCard.perform(this.searchKey);
+      }
     }
   }
 
@@ -193,6 +238,10 @@ export default class SearchSheet extends Component<Signature> {
     this.isSearching = true;
     this.debouncedSearchFieldUpdate();
     this.args.onSearch?.(searchKey);
+  }
+
+  private clearSearchCardResults() {
+    this.searchCardResults.splice(0, this.searchCardResults.length);
   }
 
   private searchCard = restartableTask(async (searchKey: string) => {
@@ -228,7 +277,7 @@ export default class SearchSheet extends Component<Signature> {
     if (cards.length > 0) {
       this.searchCardResults.push(...cards);
     } else {
-      this.searchCardResults.splice(0, this.searchCardResults.length);
+      this.clearSearchCardResults();
     }
 
     this.isSearching = false;
@@ -257,6 +306,7 @@ export default class SearchSheet extends Component<Signature> {
         @variant={{if (eq @mode 'closed') 'default' 'large'}}
         @bottomTreatment={{this.inputBottomTreatment}}
         @value={{this.searchKey}}
+        @state={{this.inputValidationState}}
         @placeholder={{this.placeholderText}}
         @onFocus={{@onFocus}}
         @onInput={{this.setSearchKey}}
@@ -270,15 +320,7 @@ export default class SearchSheet extends Component<Signature> {
           (or (gt this.searchCardResults.length 0) this.isSearchKeyNotEmpty)
         }}
           <div class='search-result-section'>
-            {{#if this.isSearching}}
-              <Label data-test-search-label>Searching for "{{this.searchKey}}"</Label>
-            {{else}}
-              <Label
-                data-test-search-result-label
-              >{{this.searchCardResults.length}}
-                Result{{unless (eq this.searchCardResults.length 1) 's'}}
-                for "{{this.searchKey}}"</Label>
-            {{/if}}
+            <Label data-test-search-label>{{this.searchLabel}}</Label>
             <div class='search-result-section__body'>
               <div class='search-result-section__cards'>
                 {{#each this.searchCardResults as |card i|}}
@@ -312,22 +354,11 @@ export default class SearchSheet extends Component<Signature> {
         {{/if}}
       </div>
       <div class='footer'>
-        <UrlSearch
-          @cardURL={{this.cardURL}}
-          @setCardURL={{this.setCardURL}}
-          @setSelectedCard={{this.handleCardSelect}}
-        />
         <div class='buttons'>
           <Button
             {{on 'click' this.onCancel}}
             data-test-search-sheet-cancel-button
           >Cancel</Button>
-          <Button
-            data-test-go-button
-            @disabled={{this.isGoDisabled}}
-            @kind='primary'
-            {{on 'click' this.onGo}}
-          >Go</Button>
         </div>
       </div>
     </div>
