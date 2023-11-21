@@ -1,8 +1,6 @@
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import Modifier from 'ember-modifier';
 
 import { task } from 'ember-concurrency';
@@ -33,6 +31,8 @@ interface Signature {
   Args: {
     card: CardDef;
     realmURL: URL;
+    format?: Format; // defaults to 'isolated'
+    setFormat: (format: Format) => void;
   };
   Blocks: {};
 }
@@ -43,19 +43,17 @@ export default class CardPreviewPanel extends Component<Signature> {
     await navigator.clipboard.writeText(this.args.card.id);
   });
 
-  @tracked private previewFormat: Format = 'isolated';
-
-  @action private setPreviewFormat(format: Format) {
-    this.previewFormat = format;
-  }
-
   private onScroll = (event: Event) => {
     let scrollPosition = (event.target as HTMLElement).scrollTop;
-    this.scrollPositions.set(this.previewFormat, scrollPosition);
+    this.scrollPositions.set(this.format, scrollPosition);
   };
 
   private get scrollPosition() {
-    return this.scrollPositions.get(this.previewFormat);
+    return this.scrollPositions.get(this.format);
+  }
+
+  private get format(): Format {
+    return this.args.format ?? 'isolated';
   }
 
   <template>
@@ -120,33 +118,31 @@ export default class CardPreviewPanel extends Component<Signature> {
         onScroll=this.onScroll
       }}
     >
-      <Preview @card={{@card}} @format={{this.previewFormat}} />
+      <Preview @card={{@card}} @format={{this.format}} />
     </div>
 
     <div class='preview-footer' data-test-code-mode-card-preview-footer>
       <div class='footer-buttons'>
         <button
-          class='footer-button
-            {{if (eq this.previewFormat "isolated") "active"}}'
-          {{on 'click' (fn this.setPreviewFormat 'isolated')}}
+          class='footer-button {{if (eq this.format "isolated") "active"}}'
+          {{on 'click' (fn @setFormat 'isolated')}}
           data-test-preview-card-footer-button-isolated
         >Isolated</button>
         <button
-          class='footer-button {{if (eq this.previewFormat "atom") "active"}}'
-          {{on 'click' (fn this.setPreviewFormat 'atom')}}
+          class='footer-button {{if (eq this.format "atom") "active"}}'
+          {{on 'click' (fn @setFormat 'atom')}}
           data-test-preview-card-footer-button-atom
         >
           Atom</button>
         <button
-          class='footer-button
-            {{if (eq this.previewFormat "embedded") "active"}}'
-          {{on 'click' (fn this.setPreviewFormat 'embedded')}}
+          class='footer-button {{if (eq this.format "embedded") "active"}}'
+          {{on 'click' (fn @setFormat 'embedded')}}
           data-test-preview-card-footer-button-embedded
         >
           Embedded</button>
         <button
-          class='footer-button {{if (eq this.previewFormat "edit") "active"}}'
-          {{on 'click' (fn this.setPreviewFormat 'edit')}}
+          class='footer-button {{if (eq this.format "edit") "active"}}'
+          {{on 'click' (fn @setFormat 'edit')}}
           data-test-preview-card-footer-button-edit
         >Edit</button>
       </div>

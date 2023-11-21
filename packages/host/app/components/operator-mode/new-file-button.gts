@@ -1,15 +1,20 @@
 import Component from '@glimmer/component';
-import { array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import { capitalize } from '@ember/string';
 import { tracked } from '@glimmer/tracking';
 import { DropdownButton } from '@cardstack/boxel-ui/components';
-import { menuItem } from '@cardstack/boxel-ui/helpers';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
-import CreateFileModal from './create-file-modal';
+import CreateFileModal, {
+  type NewFileType,
+  newFileTypes,
+} from './create-file-modal';
 
 interface Signature {
   Args: {
     realmURL: URL;
+    onSave: (fullURL: URL) => void;
   };
 }
 
@@ -19,7 +24,8 @@ export default class NewFileButton extends Component<Signature> {
       class='new-file-button'
       @kind='primary'
       @size='small'
-      @items={{array (menuItem 'Card Instance' this.toggleNewFileModal)}}
+      @items={{this.menuItems}}
+      @disabled={{this.newFileType}}
       data-test-new-file-button
     >
       <IconPlus
@@ -33,10 +39,12 @@ export default class NewFileButton extends Component<Signature> {
       New File
     </DropdownButton>
 
-    {{#if this.newFileModalShown}}
+    {{#if this.newFileType}}
       <CreateFileModal
+        @fileType={{this.newFileType}}
         @realmURL={{@realmURL}}
-        @onClose={{this.toggleNewFileModal}}
+        @onSave={{@onSave}}
+        @onClose={{fn this.setNewFileType undefined}}
       />
     {{/if}}
 
@@ -58,9 +66,23 @@ export default class NewFileButton extends Component<Signature> {
     </style>
   </template>
 
-  @tracked newFileModalShown = false;
+  @tracked newFileType?: { id: NewFileType; displayName: string } = undefined;
 
-  @action toggleNewFileModal() {
-    this.newFileModalShown = !this.newFileModalShown;
+  @action setNewFileType(
+    type: { id: NewFileType; displayName: string } | undefined,
+  ) {
+    this.newFileType = type;
+  }
+
+  get menuItems() {
+    return newFileTypes.map((id) => {
+      let displayName = id
+        .split('-')
+        .map((el) => capitalize(el))
+        .join(' ');
+      return new MenuItem(displayName, 'action', {
+        action: () => this.setNewFileType({ id, displayName }),
+      });
+    });
   }
 }
