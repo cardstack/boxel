@@ -1,6 +1,6 @@
 /* eslint-env browser */
 /* globals QUnit */
-const { skip, test } = QUnit;
+const { test } = QUnit;
 const testRealmURL = 'http://localhost:4202/node-test';
 const testContainerId = 'test-container';
 const iframeSelectorTempId = 'iframe-selector-temp';
@@ -125,7 +125,7 @@ async function boot(url, waitForSelector) {
   iframe.setAttribute('src', url);
   container.append(iframe);
   // wait moment for iframe src to load
-  await new Promise((res) => setTimeout(res, 500));
+  await new Promise((res) => setTimeout(res, 1000));
   let messenger = new Messenger(iframe);
   try {
     // waits for app to boot
@@ -208,39 +208,40 @@ QUnit.module(
       assert.ok(dirContents.includes('unused-card.gts'));
     });
 
-    skip('renders card source', async function (assert) {
-      messenger = await boot(
-        `${testRealmURL}/code?openFile=person.gts`,
-        '[data-test-card-id]',
+    test('renders card definition schema view', async function (assert) {
+      messenger = await bootToCodeModeFile(
+        'person.gts',
+        '[data-test-card-schema="Person"]',
       );
       let location = await messenger.send('location');
-      assert.strictEqual(location, `${testRealmURL}/code?openFile=person.gts`);
-      let cardId = await querySelector('[data-test-card-id', messenger);
-      assert.ok(cardId, 'card ID element exists');
       assert.strictEqual(
-        cleanWhiteSpace(cardId.textContent),
-        `Card ID: ${testRealmURL}/person/Person`,
-        'the card id is correct',
+        location,
+        `${testRealmURL}/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          JSON.stringify({
+            stacks: [[]],
+            submode: 'code',
+            fileView: 'browser',
+            codePath: `${testRealmURL}/person.gts`,
+          }),
+        )}`,
       );
 
-      let fields = [
-        ...(await querySelectorAll('[data-test-field]', messenger)),
+      let personFields = [
+        ...(await querySelectorAll(
+          '[data-test-card-schema="Person"] [data-field-name]',
+          messenger,
+        )),
       ];
-      assert.strictEqual(fields.length, 3, 'number of fields is correct');
+      assert.strictEqual(personFields.length, 2, 'number of fields is correct');
       assert.strictEqual(
-        cleanWhiteSpace(fields[0].textContent),
-        `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
+        cleanWhiteSpace(personFields[0].textContent),
+        `firstName String`,
         'field is correct',
       );
       assert.strictEqual(
-        cleanWhiteSpace(fields[1].textContent),
-        `description - contains - field card ID: https://cardstack.com/base/string/default`,
-        'description field is correct',
-      );
-      assert.strictEqual(
-        cleanWhiteSpace(fields[2].textContent),
-        `thumbnailURL - contains - field card ID: https://cardstack.com/base/string/default`,
-        'thumbnailURL field is correct',
+        cleanWhiteSpace(personFields[1].textContent),
+        `title Override, Computed = String`,
+        'field is correct',
       );
     });
 
@@ -286,7 +287,7 @@ QUnit.module(
         'Mango',
         'the card is rendered correctly',
       );
-      let nav = await querySelector('.main nav', messenger);
+      let nav = await querySelector('nav', messenger);
       assert.notOk(nav, 'file tree is not rendered');
     });
 
