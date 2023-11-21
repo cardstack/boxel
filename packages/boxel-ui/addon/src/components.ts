@@ -4,13 +4,11 @@ import Button from './components/button/index.gts';
 import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import BoxelDropdown from './components/dropdown/index.gts';
-import DropdownButton from './components/dropdown-button/index.gts';
 import FieldContainer from './components/field-container/index.gts';
 import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
 import Header from './components/header/index.gts';
 import IconButton from './components/icon-button/index.gts';
-import IconDropdownButton from './components/icon-dropdown-button/index.gts';
 import BoxelInput, {
   type InputBottomTreatment as BoxelInputBottomTreatment,
   type InputValidationState as BoxelInputValidationState,
@@ -42,12 +40,10 @@ export {
   BoxelMessage,
   Button,
   CardContainer,
-  DropdownButton,
   FieldContainer,
   GridContainer,
   Header,
   IconButton,
-  IconDropdownButton,
   Label,
   LoadingIndicator,
   Menu,
