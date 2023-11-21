@@ -397,7 +397,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(`[data-test-realm-name="Test Workspace A"]`);
 
     // realm selection
-    await click(`[data-test-realm-dropdown]`);
+    await click(`[data-test-realm-dropdown-trigger]`);
     await waitFor(
       '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
     );
@@ -513,7 +513,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(`[data-test-realm-name="Test Workspace A"]`);
 
     // realm selection
-    await click(`[data-test-realm-dropdown]`);
+    await click(`[data-test-realm-dropdown-trigger]`);
     await waitFor(
       '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
     );
