@@ -8,6 +8,9 @@ const MODIFY_SYSTEM_MESSAGE =
   '\
 The user is using an application called Boxel, where they are working on editing "Cards" which are data models representable as JSON. \
 The user may be non-technical and should not need to understand the inner workings of Boxel. \
+The user may be asking questions about the contents of the cards rather than help editing them. Use your world knowledge to help them. \
+If the user wants the data they see edited, you MUST use the "patchCard" function to make the change. \
+NEVER tell the user to use patchCard, you should always do it for them. \
 If the user request is unclear, you may ask clarifying questions. \
 \
 If you need access to the cards the user can see, you can ask them to "send their open cards" to you.';
@@ -257,7 +260,7 @@ interface OpenAIPromptMessage {
    * The role of the messages author. One of `system`, `user`, `assistant`, or
    * `function`.
    */
-  role: 'system' | 'user' | 'assistant' | 'function';
+  role: 'system' | 'user' | 'assistant';
 }
 
 export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
@@ -296,26 +299,27 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
         if (content.context.cardSpec) {
           functions = [
             {
-              name: "patchCard",
-              description: `Patch an existing card to change its contents. Any field in the patch object will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+              name: 'patchCard',
+              description: `Patch an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
               parameters: {
-                "type": "object",
-                "properties": {
-                  "description": {
-                    "type": "string"
+                type: 'object',
+                properties: {
+                  description: {
+                    type: 'string',
                   },
-                  "card_id": {
-                    "type": "string"
+                  card_id: {
+                    type: 'string',
                   },
-                  "patch": content.context.cardSpec,
+                  attributes: content.context.cardSpec,
                 },
-                "required": ["card_id", "patch", "description"],
-              }
-            }]
-          console.log("Set functions", functions)
+                required: ['card_id', 'attributes', 'description'],
+              },
+            },
+          ];
+          console.log('Set functions', functions);
         }
       } else {
-        console.log("Blanking out functions")
+        console.log('Blanking out functions');
         functions = [];
       }
     }

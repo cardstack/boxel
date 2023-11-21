@@ -15,6 +15,7 @@ import { BoxelMessage } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
+import marked from 'marked';
 import {
   Loader,
   getCard,
@@ -175,7 +176,10 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       }}
     >
       {{! template-lint-disable no-triple-curlies }}
-      {{{@model.formattedMessage}}}
+
+      <div>
+        {{@fields.message}}
+      </div>
 
       {{#if this.attachedCardResource.cardError}}
         <div data-test-card-error class='error'>

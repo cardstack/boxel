@@ -62,14 +62,9 @@ async function sendMessage(
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
-async function sendOption(client: MatrixClient, room: Room, content: any) {
-  log.info('sending option', content);
-  let patch = content['patch'];
-  if (patch['attributes']) {
-    patch = patch['attributes'];
-  }
-  let id = content['id'];
-
+async function sendOption(client: MatrixClient, room: Room, patch: any) {
+  log.info('sending option', patch);
+  let id = patch['card_id'];
   let messageObject = {
     body: 'patch',
     msgtype: 'org.boxel.command',
@@ -79,7 +74,7 @@ async function sendOption(client: MatrixClient, room: Room, content: any) {
       type: 'patch',
       id: id,
       patch: {
-        attributes: patch,
+        attributes: patch['attributes'],
       },
     },
   };
@@ -164,7 +159,7 @@ async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
     messages: messages,
     stream: false,
     functions: functions,
-    function_call: "auto" //{ "name": "patchCard" }
+    function_call: 'auto', //{ "name": "patchCard" }
   });
 }
 
@@ -272,8 +267,27 @@ async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
 
       const responseFull = await getResponse(history, userId);
       console.log(JSON.stringify(responseFull, undefined, 2));
-      return;
-      return await sendStream(stream, client, room, initialMessage.event_id);
+      if (responseFull.choices[0].finish_reason === 'function_call') {
+        let functionCall = responseFull.choices[0].message.function_call;
+        let args = JSON.parse(functionCall.arguments);
+        if (functionCall.name === 'patchCard') {
+          await sendMessage(
+            client,
+            room,
+            args.description,
+            initialMessage.event_id,
+          );
+          return await sendOption(client, room, args);
+        }
+      } else {
+        return await sendMessage(
+          client,
+          room,
+          responseFull.choices[0].message.content,
+          initialMessage.event_id,
+        );
+      }
+      //return await sendStream(stream, client, room, initialMessage.event_id);
     },
   );
 

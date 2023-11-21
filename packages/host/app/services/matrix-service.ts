@@ -24,7 +24,10 @@ import {
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
-import { generatePatchCallSpecification } from '@cardstack/runtime-common/helpers/ai';
+import {
+  basicMappings,
+  generatePatchCallSpecification,
+} from '@cardstack/runtime-common/helpers/ai';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -262,7 +265,12 @@ export default class MatrixService extends Service {
         }),
       );
       // Let's get the thing and log
-      let patchSpec = generatePatchCallSpecification(context!.openCards[0], this.cardAPI);
+      let mappings = await basicMappings(this.loaderService.loader);
+      let patchSpec = generatePatchCallSpecification(
+        context!.openCards[0].constructor,
+        this.cardAPI,
+        mappings,
+      );
       console.log(patchSpec);
       //
       await this.client.sendEvent(roomId, 'm.room.message', {
@@ -281,8 +289,9 @@ export default class MatrixService extends Service {
     let serializedCard: LooseSingleCardDocument | undefined;
     if (card) {
       serializedCard = await this.cardService.serializeCard(card);
-      body = `${body ?? ''} (Card: ${card.title ?? 'Untitled'}, ${card.id
-        })`.trim();
+      body = `${body ?? ''} (Card: ${card.title ?? 'Untitled'}, ${
+        card.id
+      })`.trim();
     }
     if (card) {
       await this.client.sendEvent(roomId, 'm.room.message', {
@@ -335,8 +344,10 @@ export default class MatrixService extends Service {
 
     do {
       let response = await fetch(
-        `${matrixURL}/_matrix/client/v3/rooms/${roomId}/messages?dir=${opts?.direction ? opts.direction.slice(0, 1) : 'f'
-        }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${from ? '&from=' + from : ''
+        `${matrixURL}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
+          opts?.direction ? opts.direction.slice(0, 1) : 'f'
+        }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
+          from ? '&from=' + from : ''
         }`,
         {
           headers: {
