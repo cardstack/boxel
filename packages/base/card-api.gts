@@ -1901,7 +1901,7 @@ export function subscribeToChanges(
   });
   Object.keys(fields).forEach((fieldName) => {
     let value = peekAtField(fieldOrCard, fieldName);
-    if (isFieldDef(value)) {
+    if (isCompoundField(value)) {
       subscribeToChanges(value, subscriber);
     }
   });
@@ -1923,7 +1923,7 @@ export function unsubscribeFromChanges(
   });
   Object.keys(fields).forEach((fieldName) => {
     let value = peekAtField(fieldOrCard, fieldName);
-    if (isFieldDef(value)) {
+    if (isCompoundField(value)) {
       unsubscribeFromChanges(value, subscriber);
     }
   });
@@ -2410,7 +2410,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       // the subscribers also subscribes to a new value.
       let existingValue = deserialized.get(fieldName as string);
       let changeSubscribers = subscribers.get(existingValue);
-      if (existingValue && isFieldDef(existingValue) && changeSubscribers) {
+      if (
+        existingValue &&
+        isCompoundField(existingValue) &&
+        changeSubscribers
+      ) {
         subscribers.set(value, changeSubscribers);
         subscribers.delete(existingValue);
       }
