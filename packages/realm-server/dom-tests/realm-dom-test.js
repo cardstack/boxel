@@ -124,9 +124,11 @@ async function boot(url, waitForSelector) {
   let iframe = document.createElement('iframe');
   iframe.setAttribute('src', url);
   container.append(iframe);
-  await new Promise((res) => setTimeout(res, 1000));
+  // wait moment for iframe src to load
+  await new Promise((res) => setTimeout(res, 500));
   let messenger = new Messenger(iframe);
   try {
+    // waits for app to boot
     await waitFor(waitForSelector, messenger);
   } catch (err) {
     throw new Error(`error encountered while booting ${url}: ${err.message}`);
