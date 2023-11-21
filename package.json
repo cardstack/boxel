@@ -31,8 +31,7 @@
       "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
       "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch",
       "matrix-js-sdk@25.0.0": "patches/matrix-js-sdk@25.0.0.patch",
-      "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
-      "http-server@14.1.1": "patches/http-server@14.1.1.patch"
+      "style-loader@2.0.0": "patches/style-loader@2.0.0.patch"
     }
   },
   "devDependencies": {

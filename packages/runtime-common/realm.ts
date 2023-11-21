@@ -577,11 +577,14 @@ export class Realm {
         indexHTML = `
           ${indexHTML}
           <script>
-            document.domain = 'localhost';
-
             window.addEventListener('message', (event) => {
               console.log('received event in realm index HTML', event);
-              if (event.origin === 'http://localhost:4205') {
+              if ([
+                  'http://localhost:4205',
+                  'http://localhost:7357',
+                  'http://127.0.0.1:4205',
+                  'http://127.0.0.1:7357'
+                ].includes(event.origin)) {
                 if (event.data === 'location') {
                   event.source.postMessage(document.location.href, event.origin);
                   return;

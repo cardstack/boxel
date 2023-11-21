@@ -14,9 +14,6 @@ patchedDependencies:
   fastboot@4.1.0:
     hash: kizxbxhfcldguz4jcwonfduu2y
     path: patches/fastboot@4.1.0.patch
-  http-server@14.1.1:
-    hash: 5xzccql5nxvs2jbdmbgv3oim3e
-    path: patches/http-server@14.1.1.patch
   magic-string@0.25.9:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
@@ -1568,7 +1565,7 @@ importers:
         version: 10.1.0
       http-server:
         specifier: ^14.1.1
-        version: 14.1.1(patch_hash=5xzccql5nxvs2jbdmbgv3oim3e)
+        version: 14.1.1
       jsdom:
         specifier: ^21.1.1
         version: 21.1.1
@@ -16083,7 +16080,7 @@ packages:
       - debug
     dev: true
 
-  /http-server@14.1.1(patch_hash=5xzccql5nxvs2jbdmbgv3oim3e):
+  /http-server@14.1.1:
     resolution: {integrity: sha512-+cbxadF40UXd9T01zUHgA+rlo2Bg1Srer4+B4NwIHdaGxAGGv59nYRnGGDJ9LBk7alpS0US+J+bLLdQOOkJq4A==}
     engines: {node: '>=12'}
     hasBin: true
@@ -16105,7 +16102,6 @@ packages:
       - debug
       - supports-color
     dev: true
-    patched: true
 
   /http-signature@1.2.0:
     resolution: {integrity: sha512-CAbnr6Rz4CYQkLYUtSNXxQPUH2gK8f3iWexVlsnMeD+GjlsQ0Xsy1cOX+mN3dtxYomRy21CiOzU8Uhw6OwncEQ==}
