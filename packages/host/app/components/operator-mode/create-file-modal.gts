@@ -79,7 +79,7 @@ export default class CreateFileModal extends Component<Signature> {
                 @size='small'
                 @disabled={{this.createCardInstance.isRunning}}
                 {{on 'click' (perform this.chooseCardInstanceType)}}
-                data-test-change-card-type
+                data-test-select-card-type
               >
                 {{if this.selectedCatalogEntry 'Change' 'Select'}}
               </Button>
@@ -179,7 +179,6 @@ export default class CreateFileModal extends Component<Signature> {
       },
     };
 
-    // let relativeTo = await this.cardService.getRealmURL(this.selectedCard);
     let relativeTo = new URL(this.selectedCatalogEntry.id);
     let cardModule = new URL(moduleFrom(ref), relativeTo);
     // we make the code ref use an absolute URL for safety in
@@ -199,9 +198,11 @@ export default class CreateFileModal extends Component<Signature> {
     );
 
     if (card) {
-      await this.cardService
-        .saveModel(this, card)
-        .then(() => this.args.onSave(new URL(`${card.id}.json`)));
+      let savedCard = await this.cardService.saveModel(this, card);
+      console.log(savedCard?.id);
+      if (savedCard) {
+        this.args.onSave(new URL(`${savedCard.id}.json`));
+      }
     }
 
     this.args.onClose();

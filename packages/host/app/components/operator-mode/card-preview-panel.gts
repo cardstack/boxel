@@ -59,7 +59,7 @@ export default class CardPreviewPanel extends Component<Signature> {
   <template>
     <div
       class='preview-header'
-      data-test-code-mode-card-preview-header
+      data-test-code-mode-card-preview-header={{@card.id}}
       ...attributes
     >
       <div class='header-icon'>
