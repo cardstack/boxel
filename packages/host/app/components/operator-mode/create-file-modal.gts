@@ -36,7 +36,7 @@ interface Signature {
   Args: {
     fileType: { id: NewFileType; displayName: string };
     onClose: () => void;
-    onSave: (fullURL: URL) => void;
+    onSave: (fileURL: URL) => void;
     realmURL?: URL;
   };
 }
@@ -201,7 +201,7 @@ export default class CreateFileModal extends Component<Signature> {
     if (card) {
       await this.cardService
         .saveModel(this, card)
-        .then(() => this.args.onSave(new URL(card.id)));
+        .then(() => this.args.onSave(new URL(`${card.id}.json`)));
     }
 
     this.args.onClose();

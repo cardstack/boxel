@@ -14,7 +14,7 @@ import CreateFileModal, {
 interface Signature {
   Args: {
     realmURL: URL;
-    onSave: (fullURL: URL) => void;
+    onSave: (fileURL: URL) => void;
   };
 }
 

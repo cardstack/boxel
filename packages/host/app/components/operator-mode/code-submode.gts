@@ -525,8 +525,8 @@ export default class CodeSubmode extends Component<Signature> {
     this.previewFormat = format;
   }
 
-  @action private onNewFileSave(fullURL: URL) {
-    this.operatorModeStateService.updateCodePath(fullURL);
+  @action private onNewFileSave(fileURL: URL) {
+    this.operatorModeStateService.updateCodePath(fileURL);
     this.setPreviewFormat('edit');
   }
 
