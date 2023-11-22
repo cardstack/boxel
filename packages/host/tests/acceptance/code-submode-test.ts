@@ -74,7 +74,7 @@ const postalCodeFieldSource = `
       </template>
     };    
   }
-`
+`;
 
 const addressFieldSource = `
   import {
@@ -1316,17 +1316,11 @@ module('Acceptance | code submode tests', function (hooks) {
           'Unknown Address',
         );
         await fillIn('[data-test-field="city"] input', 'Bandung');
-        
+
         // compound field with 2 level
-        await fillIn(
-          '[data-test-field="fiveDigitPostalCode"] input',
-          '12345',
-        );
-        await fillIn(
-          '[data-test-field="fourDigitOptional"] input',
-          '1234',
-        );
-        
+        await fillIn('[data-test-field="fiveDigitPostalCode"] input', '12345');
+        await fillIn('[data-test-field="fourDigitOptional"] input', '1234');
+
         // compound field with linksToMany field
         await click(
           '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
@@ -1339,7 +1333,7 @@ module('Acceptance | code submode tests', function (hooks) {
         );
         await click(`[data-test-card-catalog-go-button]`);
       },
-      opts: { timeout: 4500 }
+      opts: { timeout: 4500 },
     });
     await waitFor('[data-test-saved]');
     await waitFor('[data-test-save-idle]');

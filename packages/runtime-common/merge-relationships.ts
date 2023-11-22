@@ -5,7 +5,7 @@ export function mergeRelationships(
   relData: LooseCardResource['relationships'],
   otherRelData: LooseCardResource['relationships'],
 ): LooseCardResource['relationships'] {
-    let merged = mergeWith(
+  let merged = mergeWith(
     _formatForMerge(relData),
     _formatForMerge(otherRelData),
     (_objectValue: any, sourceValue: any) => {
