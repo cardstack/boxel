@@ -157,21 +157,48 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
 
 async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
   let messages = getModifyPrompt(history, aiBotUsername);
-  return await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: messages,
-    stream: true,
-  });
+  return await openai.chat.completions.create(
+    {
+      model: 'gpt-4-1106-preview',
+      messages: messages,
+      stream: true,
+    },
+    {
+      // Retry with exponential backoff,
+      // Let OpenAI library handle approved logic
+      maxRetries: 5,
+    },
+  );
 }
 
 (async () => {
+  const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
   let client = createClient({
-    baseUrl: process.env.MATRIX_URL || 'http://localhost:8008',
+    baseUrl: matrixUrl,
   });
-  let auth = await client.loginWithPassword(
-    aiBotUsername,
-    process.env.BOXEL_AIBOT_PASSWORD || 'pass',
-  );
+  let auth = await client
+    .loginWithPassword(
+      aiBotUsername,
+      process.env.BOXEL_AIBOT_PASSWORD || 'pass',
+    )
+    .catch((e) => {
+      log.error(e);
+      log.info(`The matrix bot could not login to the server.
+Common issues are:
+- The server is not running (configured to use ${matrixUrl})
+   - Check it is reachable at ${matrixUrl}/_matrix/client/versions
+   - If running in development, check the docker container is running (see the boxel README)
+- The bot is not registered on the matrix server
+  - The bot uses the username ${aiBotUsername}
+- The bot is registered but the password is incorrect
+   - The bot password ${
+     process.env.BOXEL_AIBOT_PASSWORD
+       ? 'is set in the env var, check it is correct'
+       : 'is not set in the env var so defaults to "pass"'
+   }
+      `);
+      process.exit(1);
+    });
   let { user_id: userId } = auth;
   client.on(RoomMemberEvent.Membership, function (_event, member) {
     if (member.membership === 'invite' && member.userId === userId) {
@@ -265,9 +292,24 @@ async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
           messageObject,
         );
       }
-
-      const stream = await getResponse(history, userId);
-      return await sendStream(stream, client, room, initialMessage.event_id);
+      try {
+        const stream = await getResponse(history, userId);
+        return await sendStream(stream, client, room, initialMessage.event_id);
+      } catch (error) {
+        if (error instanceof OpenAI.APIError) {
+          log.error(
+            `OpenAI error: ${error.status} - ${error.name} - ${error.message} (${error.headers})`,
+          );
+        } else {
+          log.error(`Unexpected error: ${error}`);
+        }
+        return await sendMessage(
+          client,
+          room,
+          'There was an error processing your request, please try again later',
+          initialMessage.event_id,
+        );
+      }
     },
   );
 
