@@ -254,9 +254,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     let firstElContext = this.listPanelContext.get(Number(firstElId));
     let secondElContext = this.listPanelContext.get(Number(secondElId));
     if (!firstElContext || !secondElContext) {
-      console.warn(
-        'Expected firstElContext && nextElCosecondElContextntext to be defined',
-      );
+      console.warn('Expected firstElContext && secondElContext to be defined');
       return;
     }
 
