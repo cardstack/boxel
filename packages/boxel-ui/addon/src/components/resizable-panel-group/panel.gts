@@ -8,8 +8,10 @@ import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
 export type PanelContext = {
+  id: number;
   defaultLengthFraction?: number;
   lengthPx: number;
+  initialMinLengthPx?: number;
   minLengthPx?: number;
 };
 
@@ -236,7 +238,7 @@ export default class Panel extends Component<Signature> {
   }
 
   get panelContext() {
-    if (!this.id) {
+    if (this.id == undefined) {
       return {
         lengthPx: undefined,
         defaultLengthFraction: this.args.defaultLengthFraction,
@@ -280,13 +282,13 @@ export default class Panel extends Component<Signature> {
     let horizontal = this.args.orientation === 'horizontal';
     let reverse = this.args.reverseHandlerArrow;
 
-    if (!this.id) {
+    if (this.id == undefined) {
       return '';
     }
 
     let toward: string | null = null;
 
-    let isFirstPanel = this.id === 1;
+    let isFirstPanel = this.id === 0;
     let isCollapsed = this.panelContext?.lengthPx === 0;
 
     let nextPanelIsLast = this.args.isLastPanel(this.id + 1);
