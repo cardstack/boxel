@@ -131,12 +131,7 @@ export default class CodeSubmode extends Component<Signature> {
     },
   );
   private moduleContentsResource = moduleContentsResource(this, () => {
-    if (this.isReady) {
-      return hasExecutableExtension(this.readyFile.url)
-        ? this.readyFile
-        : undefined;
-    }
-    return;
+    return this.isModule ? this.readyFile : undefined;
   });
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -212,7 +207,9 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isModule() {
     return (
-      hasExecutableExtension(this.readyFile.name) && !this.isIncompatibleFile
+      this.isReady &&
+      hasExecutableExtension(this.readyFile.url) &&
+      !this.isIncompatibleFile
     );
   }
 
@@ -239,6 +236,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
+    //this will prevent displaying message during a page refresh
     if (this.moduleContentsResource.isLoading) {
       return null;
     }
