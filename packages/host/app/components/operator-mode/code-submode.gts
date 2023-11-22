@@ -271,7 +271,6 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get inspectorFileIncompatibilityMessage() {
-    debugger;
     if (this.moduleContentsResource.isLoading) {
       return null;
     }
