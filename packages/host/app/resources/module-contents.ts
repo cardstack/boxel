@@ -70,6 +70,8 @@ export class ModuleContentsResource extends Resource<Args> {
     let { executableFile } = named;
     if (executableFile) {
       this.load.perform(executableFile);
+    } else {
+      this._declarations = [];
     }
   }
 

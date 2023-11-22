@@ -246,6 +246,10 @@ const friendCardSource = `
   }
 `;
 
+const txtSource = `
+  Hello, world!
+`;
+
 module('Acceptance | code submode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -366,6 +370,7 @@ module('Acceptance | code submode tests', function (hooks) {
           },
         },
       },
+      'hello.txt': txtSource,
       'z00.json': '{}',
       'z01.json': '{}',
       'z02.json': '{}',
@@ -794,6 +799,34 @@ module('Acceptance | code submode tests', function (hooks) {
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
     assert.dom('[data-test-file-incompatibility-message]').exists();
+  });
+
+  test('displays clear message on inspector-panel and schema-editor when file is completely unsupported', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-incompatibility-message]');
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.',
+      );
+
+    await waitFor('[data-test-detail-panel-file-incompatibility-message]');
+    assert
+      .dom('[data-test-detail-panel-file-incompatibility-message]')
+      .hasText(
+        'Inspector cannot be used with this file type. Select a file with a .json, .gts or .ts extension.',
+      );
   });
 
   test('Clicking card in search panel opens card JSON in editor', async function (assert) {
