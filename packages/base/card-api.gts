@@ -2421,7 +2421,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       // Before updating field's value, we also have to make sure
       // the subscribers also subscribes to a new value.
       let existingValue = deserialized.get(fieldName as string);
-      if (existingValue && isCardOrField(existingValue)) {
+      if (isCardOrField(existingValue) && isCardOrField(value)) {
         migrateSubscribers(existingValue, value);
       }
       deserialized.set(fieldName as string, value);
