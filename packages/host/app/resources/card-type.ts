@@ -192,15 +192,21 @@ export class CardType extends Resource<Args> {
   };
 }
 
-export function getCardType(parent: object, card: () => typeof BaseDef) {
+export function getCardType(
+  parent: object,
+  card: () => typeof BaseDef,
+  loader?: () => Loader,
+) {
   return CardType.from(parent, () => ({
     named: {
       definition: card(),
-      loader: (
-        (getOwner(parent) as any).lookup(
-          'service:loader-service',
-        ) as LoaderService
-      ).loader,
+      loader: loader
+        ? loader()
+        : (
+            (getOwner(parent) as any).lookup(
+              'service:loader-service',
+            ) as LoaderService
+          ).loader,
     },
   })) as CardType;
 }

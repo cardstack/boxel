@@ -25,7 +25,10 @@ interface Signature {
 
 export default class RealmDropdown extends Component<Signature> {
   <template>
-    <BoxelDropdown @contentClass={{@contentClass}}>
+    <BoxelDropdown
+      @contentClass={{@contentClass}}
+      data-test-load-realms-loaded={{this.loaded}}
+    >
       <:trigger as |bindings|>
         <Button
           class='realm-dropdown-trigger'
@@ -92,6 +95,10 @@ export default class RealmDropdown extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
     this.realmInfoService.fetchAllKnownRealmInfos.perform();
+  }
+
+  get loaded() {
+    return this.realmInfoService.fetchAllKnownRealmInfos.isIdle;
   }
 
   get realms(): RealmDropdownItem[] {

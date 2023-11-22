@@ -107,11 +107,17 @@ export default class CardSchemaEditor extends Component<Signature> {
       .computed-icon {
         display: inline-flex;
         font: 700 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
+        line-height: 20px;
         padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
         background-color: var(--boxel-200);
-        border-radius: var(--boxel-border-radius-sm);
-        margin-right: var(--boxel-sp-xxs);
+        border-top-left-radius: var(--boxel-border-radius-sm);
+        border-bottom-left-radius: var(--boxel-border-radius-sm);
+        margin-bottom: calc(var(--boxel-sp-5xs) * -2);
+        transform: translate(
+          calc(var(--boxel-sp-5xs) * -1),
+          calc(var(--boxel-sp-5xs) * -1)
+        );
+        height: 100%;
       }
 
       .linked-icon {
@@ -314,11 +320,6 @@ export default class CardSchemaEditor extends Component<Signature> {
               <div class='right'>
                 {{#let (this.fieldModuleURL field) as |moduleUrl|}}
                   {{#let (getCodeRef field) as |codeRef|}}
-                    {{#if field.isComputed}}
-                      <span class='computed-icon' data-test-computed-icon>
-                        =
-                      </span>
-                    {{/if}}
                     {{#if (this.isOverridden field)}}
                       <button
                         class='overridden-field-link'
@@ -341,6 +342,14 @@ export default class CardSchemaEditor extends Component<Signature> {
                             data-test-card-schema-field-navigational-button
                           >
                             <:icon>
+                              {{#if field.isComputed}}
+                                <span
+                                  class='computed-icon'
+                                  data-test-computed-icon
+                                >
+                                  =
+                                </span>
+                              {{/if}}
                               {{#if (this.isLinkedField field)}}
                                 <span class='linked-icon' data-test-linked-icon>
                                   <IconLink width='16px' height='16px' />

@@ -6,13 +6,15 @@ import { Resource } from 'ember-resources';
 
 import { getAncestor, getField, isBaseDef } from '@cardstack/runtime-common';
 
+import { Loader } from '@cardstack/runtime-common/loader';
+
 import {
   ModuleSyntax,
   type PossibleCardOrFieldClass,
   type BaseDeclaration,
-  type Declaration,
   isInternalReference,
   isPossibleCardOrFieldClass,
+  Declaration,
 } from '@cardstack/runtime-common/module-syntax';
 
 import {
@@ -20,7 +22,7 @@ import {
   type CardType,
 } from '@cardstack/host/resources/card-type';
 
-import { Ready as ReadyFile } from '@cardstack/host/resources/file';
+import { type Ready } from '@cardstack/host/resources/file';
 
 import { importResource } from '@cardstack/host/resources/import';
 
@@ -50,7 +52,7 @@ export function isCardOrFieldDeclaration(
 }
 
 interface Args {
-  named: { executableFile: ReadyFile };
+  named: { executableFile: Ready | undefined };
 }
 
 export class ModuleContentsResource extends Resource<Args> {
@@ -66,13 +68,15 @@ export class ModuleContentsResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { executableFile } = named;
-    this.load.perform(executableFile);
+    if (executableFile) {
+      this.load.perform(executableFile);
+    }
   }
 
-  private load = restartableTask(async (executableFile: ReadyFile) => {
+  private load = restartableTask(async (executableFile: Ready) => {
     //==loading module
     let moduleResource = importResource(this, () => executableFile.url);
-    await moduleResource.loaded;
+    await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
     let exportedCardsOrFields = Object.values(
       moduleResource?.module || {},
     ).filter(isBaseDef);
@@ -91,14 +95,14 @@ export class ModuleContentsResource extends Resource<Args> {
       moduleSyntax,
       exportedCardsOrFields,
     );
-
     this._declarations = moduleSyntax.declarations.reduce(
       (acc: ModuleDeclaration[], value: Declaration) => {
         if (isPossibleCardOrFieldClass(value)) {
           const cardOrField = exportedCardsOrFields.find(
             (c) => c.name === value.localName,
           );
-          if (cardOrField) {
+          let loader = Loader.getLoaderFor(cardOrField);
+          if (cardOrField && loader !== undefined) {
             return [
               ...acc,
               {
@@ -107,20 +111,24 @@ export class ModuleContentsResource extends Resource<Args> {
                 cardType: getCardType(
                   this,
                   () => cardOrField as typeof BaseDef,
+                  () => loader as Loader,
                 ),
               } as CardOrField & Partial<PossibleCardOrFieldClass>,
             ];
           } else {
             if (localCardsOrFields.has(value)) {
               let cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
-              return [
-                ...acc,
-                {
-                  ...value,
-                  cardOrField,
-                  cardType: getCardType(this, () => cardOrField),
-                } as CardOrField & Partial<PossibleCardOrFieldClass>,
-              ];
+              // we don't check for loader here because cards or fields not defined in module will not have a loader
+              if (cardOrField) {
+                return [
+                  ...acc,
+                  {
+                    ...value,
+                    cardOrField,
+                    cardType: getCardType(this, () => cardOrField),
+                  } as CardOrField & Partial<PossibleCardOrFieldClass>,
+                ];
+              }
             }
           }
         }
@@ -138,10 +146,12 @@ export class ModuleContentsResource extends Resource<Args> {
 
 export function moduleContentsResource(
   parent: object,
-  args: () => Args['named'],
+  executableFile: () => Ready | undefined,
 ): ModuleContentsResource {
   return ModuleContentsResource.from(parent, () => ({
-    named: args(),
+    named: {
+      executableFile: executableFile(),
+    },
   })) as unknown as ModuleContentsResource;
 }
 
