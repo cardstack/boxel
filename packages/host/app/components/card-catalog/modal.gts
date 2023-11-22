@@ -8,6 +8,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -19,10 +20,12 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 import {
   createNewCard,
   baseRealm,
+  isSingleCardDocument,
   type CodeRef,
   type CreateNewCard,
   Deferred,
   type RealmInfo,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import type { Query, Filter } from '@cardstack/runtime-common/query';
@@ -37,8 +40,6 @@ import {
 } from '../../utils/text-suggestion';
 
 import ModalContainer from '../modal-container';
-
-import UrlSearch from '../url-search';
 
 import CardCatalogFilters from './filters';
 
@@ -98,7 +99,7 @@ export default class CardCatalogModal extends Component<Signature> {
             @value={{this.state.searchKey}}
             @onInput={{this.setSearchKey}}
             @onKeyPress={{this.onSearchFieldKeypress}}
-            @placeholder='Search for a card'
+            @placeholder='Search for a card or enter its URL'
             data-test-search-field
           />
           <CardCatalogFilters
@@ -149,11 +150,6 @@ export default class CardCatalogModal extends Component<Signature> {
                   {{this.cardRefName}}
                 </Button>
               {{/if}}
-              <UrlSearch
-                @cardURL={{this.state.cardURL}}
-                @setCardURL={{this.setCardURL}}
-                @setSelectedCard={{this.setSelectedCard}}
-              />
             </div>
             <div>
               <Button
@@ -347,6 +343,16 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
+  get searchKeyIsURL() {
+    try {
+      new URL(this.state.searchKey);
+      console.log(`is url!`);
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
   debouncedSearchFieldUpdate = debounce(() => this.onSearchFieldUpdated(), 500);
 
   @action setCardURL(cardURL: string) {
@@ -370,24 +376,58 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state.searchKey && !this.state.selectedRealms.length) {
       return this.resetState();
     }
-    let results: RealmCards[] = [];
-    for (let { url, realmInfo, cards } of this.displayedRealms) {
-      let filteredCards = cards.filter((c) => {
-        return c.title
-          ?.trim()
-          .toLowerCase()
-          .includes(this.state.searchKey.trim().toLowerCase());
-      });
-      if (filteredCards.length) {
-        results.push({
-          url,
-          realmInfo,
-          cards: filteredCards,
+
+    if (this.searchKeyIsURL) {
+      this.getCard.perform(this.state.searchKey);
+    } else {
+      let results: RealmCards[] = [];
+      for (let { url, realmInfo, cards } of this.displayedRealms) {
+        let filteredCards = cards.filter((c) => {
+          return c.title
+            ?.trim()
+            .toLowerCase()
+            .includes(this.state.searchKey.trim().toLowerCase());
         });
+        if (filteredCards.length) {
+          results.push({
+            url,
+            realmInfo,
+            cards: filteredCards,
+          });
+        }
+      }
+      this.state.searchResults = results;
+    }
+  }
+
+  private getCard = restartableTask(async (cardURL: string) => {
+    let response = await this.loaderService.loader.fetch(cardURL, {
+      headers: { Accept: SupportedMimeType.CardJson },
+    });
+
+    if (response.ok) {
+      let maybeCardDoc = await response.json();
+
+      if (isSingleCardDocument(maybeCardDoc)) {
+        let selectedCard = await this.cardService.createFromSerialized(
+          maybeCardDoc.data,
+          maybeCardDoc,
+          new URL(maybeCardDoc.data.id),
+        );
+
+        let results: RealmCards[] = [];
+        if (selectedCard) {
+          results.push({
+            url: cardURL,
+            // FIXME can the presence of this be guaranteed?
+            realmInfo: maybeCardDoc.data.meta.realmInfo!,
+            cards: [selectedCard],
+          });
+          this.state.searchResults = results;
+        }
       }
     }
-    this.state.searchResults = results;
-  }
+  });
 
   @action toggleSelect(card?: CardDef): void {
     this.state.cardURL = '';
