@@ -270,6 +270,17 @@ export default class CodeSubmode extends Component<Signature> {
     return null;
   }
 
+  private get inspectorFileIncompatibilityMessage() {
+    debugger;
+    if (this.moduleContentsResource.isLoading) {
+      return null;
+    }
+    if (!this.card && !this.isModule && !this.isIncompatibleFile) {
+      return 'Inspector cannot be used with this file type.';
+    }
+    return null;
+  }
+
   private get readyFile() {
     if (isReady(this.currentOpenFile)) {
       return this.currentOpenFile;
@@ -602,16 +613,25 @@ export default class CodeSubmode extends Component<Signature> {
                         <FileTree @realmURL={{this.realmURL}} />
                       {{else}}
                         {{#if this.isReady}}
-                          <DetailPanel
-                            @cardInstance={{this.card}}
-                            @readyFile={{this.readyFile}}
-                            @selectedDeclaration={{this.selectedDeclaration}}
-                            @declarations={{this.declarations}}
-                            @selectDeclaration={{this.selectDeclaration}}
-                            @delete={{perform this.delete}}
-                            @openDefinition={{this.openDefinition}}
-                            data-test-card-inspector-panel
-                          />
+                          {{#if this.inspectorFileIncompatibilityMessage}}
+                            <div
+                              class='file-incompatible-message'
+                              data-test-detail-panel-file-incompatibility-message
+                            >
+                              {{this.inspectorFileIncompatibilityMessage}}
+                            </div>
+                          {{else}}
+                            <DetailPanel
+                              @cardInstance={{this.card}}
+                              @readyFile={{this.readyFile}}
+                              @selectedDeclaration={{this.selectedDeclaration}}
+                              @declarations={{this.declarations}}
+                              @selectDeclaration={{this.selectDeclaration}}
+                              @delete={{perform this.delete}}
+                              @openDefinition={{this.openDefinition}}
+                              data-test-card-inspector-panel
+                            />
+                          {{/if}}
                         {{/if}}
                       {{/if}}
                     </section>

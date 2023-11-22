@@ -822,7 +822,7 @@ module('Acceptance | code submode tests', function (hooks) {
     await waitFor('[data-test-detail-panel-file-incompatibility-message]');
     assert
       .dom('[data-test-detail-panel-file-incompatibility-message]')
-      .hasText('Inspector cannot be used with this file type');
+      .hasText('Inspector cannot be used with this file type.');
   });
 
   test('Clicking card in search panel opens card JSON in editor', async function (assert) {

@@ -367,13 +367,6 @@ export default class DetailPanel extends Component<Signature> {
                 }}
               />
             </div>
-          {{else}}
-            <div
-              class='file-incompatible-message'
-              data-test-detail-panel-file-incompatibility-message
-            >
-              Inspector cannot be used with this file type
-            </div>
           {{/if}}
         {{/if}}
       {{/if}}
@@ -435,20 +428,6 @@ export default class DetailPanel extends Component<Signature> {
       }
       .chain-icon {
         --icon-color: var(--boxel-dark);
-      }
-
-      .file-incompatible-message {
-        display: flex;
-        flex-wrap: wrap;
-        align-content: center;
-        justify-content: center;
-        text-align: center;
-        height: 100%;
-        background-color: var(--boxel-200);
-        font: var(--boxel-font-sm);
-        color: var(--boxel-450);
-        font-weight: 500;
-        padding: var(--boxel-sp-xl);
       }
     </style>
   </template>
