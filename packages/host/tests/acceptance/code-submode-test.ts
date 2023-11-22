@@ -1275,8 +1275,6 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('updates values in preview panel must be represented in editor panel', async function (assert) {
-    // we only want to change this for this particular test so we emulate what the non-test env sees
-    //monacoService.serverEchoDebounceMs = 5000;
     let expectedEvents = [
       {
         type: 'index',
