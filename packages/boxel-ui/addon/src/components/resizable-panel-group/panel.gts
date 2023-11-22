@@ -8,10 +8,10 @@ import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
 export type PanelContext = {
-  id: number;
   defaultLengthFraction?: number;
-  lengthPx: number;
+  id: number;
   initialMinLengthPx?: number;
+  lengthPx: number;
   minLengthPx?: number;
 };
 
