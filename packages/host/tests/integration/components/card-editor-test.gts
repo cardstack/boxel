@@ -77,58 +77,48 @@ module('Integration | card-editor', function (hooks) {
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
 
+    let { field, contains, linksTo, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class Pet extends CardDef {
+      @field name = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h3 data-test-pet={{@model.name}}>
+            <@fields.name />
+          </h3>
+        </template>
+      };
+    }
+    class FancyPet extends Pet {
+      @field favoriteToy = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h3 data-test-pet={{@model.name}}>
+            <@fields.name />
+            (plays with
+            <@fields.favoriteToy />)
+          </h3>
+        </template>
+      };
+    }
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field pet = linksTo(Pet);
+      static isolated = class Embedded extends Component<typeof this> {
+        <template>
+          <h2 data-test-person={{@model.firstName}}>
+            <@fields.firstName />
+          </h2>
+          Pet:
+          <@fields.pet />
+        </template>
+      };
+    }
     adapter = new TestRealmAdapter({
-      'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-
-        export class Pet extends CardDef {
-          @field name = contains(StringCard);
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h3 data-test-pet={{@model.name}}>
-                <@fields.name/>
-              </h3>
-            </template>
-          }
-        }
-      `,
-      'fancy-pet.gts': `
-        import { contains, field, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { Pet } from "./pet";
-
-        export class FancyPet extends Pet {
-          @field favoriteToy = contains(StringCard);
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h3 data-test-pet={{@model.name}}>
-                <@fields.name/>
-                (plays with <@fields.favoriteToy/>)
-              </h3>
-            </template>
-          }
-        }
-      `,
-      'person.gts': `
-        import { contains, linksTo, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { Pet } from "./pet";
-
-        export class Person extends CardDef {
-          @field firstName = contains(StringCard);
-          @field pet = linksTo(Pet);
-          static isolated = class Embedded extends Component<typeof this> {
-            <template>
-              <h2 data-test-person={{@model.firstName}}>
-                <@fields.firstName/>
-              </h2>
-              Pet: <@fields.pet/>
-            </template>
-          }
-        }
-      `,
       'Pet/mango.json': {
         data: {
           type: 'card',
@@ -220,21 +210,27 @@ module('Integration | card-editor', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      shimModules: {
+        'pet.gts': { Pet },
+        'fancy-pet.gts': { FancyPet },
+        'person.gts': { Person },
+      },
+    });
     await realm.ready;
   });
 
   test('renders card in edit (default) format', async function (assert) {
     let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class TestCard extends CardDef {
-      @field firstName = contains(StringCard);
-      @field nickName = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field nickName = contains(StringField, {
         computeVia: function (this: TestCard) {
           return `${this.firstName}-poo`;
         },
       });
-      @field lastName = contains(StringCard);
+      @field lastName = contains(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-firstName><@fields.firstName /></div>
@@ -267,9 +263,9 @@ module('Integration | card-editor', function (hooks) {
 
   test('can change card format', async function (assert) {
     let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class TestCard extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-isolated-firstName><@fields.firstName /></div>
@@ -317,9 +313,9 @@ module('Integration | card-editor', function (hooks) {
 
   test('edited card data is visible in different formats', async function (assert) {
     let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class TestCard extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-isolated-firstName><@fields.firstName /></div>

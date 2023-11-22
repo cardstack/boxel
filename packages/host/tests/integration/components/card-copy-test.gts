@@ -110,52 +110,52 @@ module('Integration | card-copy', function (hooks) {
       ].filter((a) => a.length > 0);
       await operatorModeStateService.restore({ stacks });
     };
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+
+    let { field, contains, linksTo, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.firstName;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
+        </template>
+      };
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
+        </template>
+      };
+    }
+
+    class Person extends CardDef {
+      static displayName = 'Person';
+      @field firstName = contains(StringField);
+      @field pet = linksTo(Pet);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-person={{@model.firstName}}><@fields.firstName /></h2>
+          <@fields.pet />
+        </template>
+      };
+    }
+
     adapter1 = new TestRealmAdapter({
-      'person.gts': `
-        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { Pet } from "./pet";
-
-        export class Person extends CardDef {
-          static displayName = 'Person';
-          @field firstName = contains(StringCard);
-          @field pet = linksTo(Pet);
-          @field title = contains(StringCard, {
-            computeVia: function (this: Person) { return this.firstName; }
-          });
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h2 data-test-person={{@model.firstName}}><@fields.firstName/></h2>
-              <@fields.pet/>
-            </template>
-          }
-        }
-      `,
-      'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-
-        export class Pet extends CardDef {
-          static displayName = 'Pet';
-          @field firstName = contains(StringCard);
-          @field title = contains(StringCard, {
-            computeVia: function (this: Pet) {
-              return this.firstName;
-            },
-          });
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h2 data-test-pet={{@model.firstName}}><@fields.firstName/></h2>
-              <@fields.pet/>
-            </template>
-          }
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h3 data-test-pet={{@model.firstName}}><@fields.name/></h3>
-            </template>
-          }
-        }
-      `,
       'index.json': {
         data: {
           type: 'card',
@@ -261,6 +261,10 @@ module('Integration | card-copy', function (hooks) {
     realm1 = await TestRealm.createWithAdapter(adapter1, loader, this.owner, {
       realmURL: testRealmURL,
       onFetch: wrappedOnFetch(),
+      shimModules: {
+        'person.gts': { Person },
+        'pet.gts': { Pet },
+      },
     });
     await realm1.ready;
 

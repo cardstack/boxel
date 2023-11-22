@@ -1,4 +1,5 @@
 import { RenderingTestContext } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
@@ -444,36 +445,35 @@ module('Integration | search-index', function (hooks) {
 
   test('can recover from rendering a card that has a template error', async function (assert) {
     {
+      let cardApi: typeof import('https://cardstack.com/base/card-api');
+      let string: typeof import('https://cardstack.com/base/string');
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+      string = await loader.import(`${baseRealm.url}string`);
+
+      let { field, contains, CardDef, Component } = cardApi;
+      let { default: StringField } = string;
+
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1><@fields.firstName /></h1>
+          </template>
+        };
+      }
+
+      class Boom extends CardDef {
+        @field firstName = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1><@fields.firstName />{{this.boom}}</h1>
+          </template>
+          get boom() {
+            throw new Error('intentional error');
+          }
+        };
+      }
       let adapter = new TestRealmAdapter({
-        'person.gts': `
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
-
-          export class Person extends CardDef {
-            @field firstName = contains(StringCard);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <h1><@fields.firstName/></h1>
-              </template>
-            }
-          }
-        `,
-        'boom.gts': `
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
-
-          export class Boom extends CardDef {
-            @field firstName = contains(StringCard);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <h1><@fields.firstName/>{{this.boom}}</h1>
-              </template>
-              get boom() {
-                throw new Error('intentional error');
-              }
-            }
-          }
-        `,
         'vangogh.json': {
           data: {
             attributes: {
@@ -505,6 +505,12 @@ module('Integration | search-index', function (hooks) {
         adapter,
         loader,
         this.owner,
+        {
+          shimModules: {
+            'person.gts': { Person },
+            'boom.gts': { Boom },
+          },
+        },
       );
       await realm.ready;
       let indexer = realm.searchIndex;
@@ -542,20 +548,23 @@ module('Integration | search-index', function (hooks) {
 
     {
       // perform a new index to assert that render stack is still consistent
-      let adapter = new TestRealmAdapter({
-        'person.gts': `
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
+      let cardApi: typeof import('https://cardstack.com/base/card-api');
+      let string: typeof import('https://cardstack.com/base/string');
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+      string = await loader.import(`${baseRealm.url}string`);
 
-          export class Person extends CardDef {
-            @field firstName = contains(StringCard);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <h1><@fields.firstName/></h1>
-              </template>
-            }
-          }
-        `,
+      let { field, contains, CardDef, Component } = cardApi;
+      let { default: StringField } = string;
+
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1><@fields.firstName /></h1>
+          </template>
+        };
+      }
+      let adapter = new TestRealmAdapter({
         'vangogh.json': {
           data: {
             attributes: {
@@ -574,6 +583,11 @@ module('Integration | search-index', function (hooks) {
         adapter,
         loader,
         this.owner,
+        {
+          shimModules: {
+            'person.gts': { Person },
+          },
+        },
       );
       await realm.ready;
       let indexer = realm.searchIndex;
@@ -599,39 +613,46 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can recover from rendering a card that has a nested card with a template error', async function (assert) {
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+
+    let { field, contains, CardDef, Component, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
+    class Boom extends FieldDef {
+      @field firstName = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName />{{this.boom}}</h1>
+        </template>
+        get boom() {
+          throw new Error('intentional error');
+        }
+      };
+    }
+
+    class BoomPerson extends CardDef {
+      @field firstName = contains(StringField);
+      @field boom = contains(Boom);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName /></h1>
+          <h2><@fields.boom /></h2>
+        </template>
+      };
+    }
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName /></h1>
+        </template>
+      };
+    }
     let adapter = new TestRealmAdapter({
-      'boom-person.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { Boom } from "./boom";
-
-        export class BoomPerson extends CardDef {
-          @field firstName = contains(StringCard);
-          @field boom = contains(Boom);
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h1><@fields.firstName/></h1>
-              <h2><@fields.boom/></h2>
-            </template>
-          }
-        }
-        `,
-      'boom.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-
-        export class Boom extends CardDef {
-          @field firstName = contains(StringCard);
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h1><@fields.firstName/>{{this.boom}}</h1>
-            </template>
-            get boom() {
-              throw new Error('intentional error');
-            }
-          }
-        }
-        `,
       'vangogh.json': {
         data: {
           attributes: {
@@ -648,19 +669,6 @@ module('Integration | search-index', function (hooks) {
           },
         },
       },
-      'person.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-
-        export class Person extends CardDef {
-          @field firstName = contains(StringCard);
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h1><@fields.firstName/></h1>
-            </template>
-          }
-        }
-        `,
       'working-van-gogh.json': {
         data: {
           attributes: {
@@ -675,7 +683,13 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      shimModules: {
+        'boom-person.gts': { BoomPerson },
+        'boom.gts': { Boom },
+        'person.gts': { Person },
+      },
+    });
     await realm.ready;
     let indexer = realm.searchIndex;
 
@@ -712,43 +726,50 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can recover from rendering a card that encounters a template error in its own custom component', async function (assert) {
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+
+    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class CustomBoom extends FieldDef {
+      @field firstName = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName /><Custom /></h1>
+        </template>
+      };
+    }
+    class Custom extends GlimmerComponent {
+      <template>
+        {{this.boom}}
+      </template>
+      get boom() {
+        throw new Error('intentional error');
+      }
+    }
+
+    class BoomPerson2 extends CardDef {
+      @field firstName = contains(StringField);
+      @field boom = contains(CustomBoom);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName /></h1>
+          <h2><@fields.boom /></h2>
+        </template>
+      };
+    }
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName /></h1>
+        </template>
+      };
+    }
     let adapter = new TestRealmAdapter({
-      'boom-person2.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { CustomBoom } from "./custom-boom";
-
-        export class BoomPerson2 extends CardDef {
-          @field firstName = contains(StringCard);
-          @field boom = contains(CustomBoom);
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h1><@fields.firstName/></h1>
-              <h2><@fields.boom/></h2>
-            </template>
-          }
-        }
-        `,
-      'custom-boom.gts': `
-        import GlimmerComponent from '@glimmer/component';
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-
-        export class CustomBoom extends CardDef {
-          @field firstName = contains(StringCard);
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h1><@fields.firstName/><Custom/></h1>
-            </template>
-          }
-        }
-        class Custom extends GlimmerComponent {
-          <template>{{this.boom}}</template>
-          get boom() {
-            throw new Error('intentional error');
-          }
-        }
-        `,
       'vangogh.json': {
         data: {
           attributes: {
@@ -765,19 +786,6 @@ module('Integration | search-index', function (hooks) {
           },
         },
       },
-      'person.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-
-        export class Person extends CardDef {
-          @field firstName = contains(StringCard);
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h1><@fields.firstName/></h1>
-            </template>
-          }
-        }
-        `,
       'working-vangogh.json': {
         data: {
           attributes: {
@@ -793,7 +801,13 @@ module('Integration | search-index', function (hooks) {
       },
     });
 
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      shimModules: {
+        'boom-person2.gts': { BoomPerson2 },
+        'custom-boom.gts': { CustomBoom },
+        'person.gts': { Person },
+      },
+    });
     await realm.ready;
 
     let indexer = realm.searchIndex;
@@ -830,46 +844,38 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can index a card that has a cyclic relationship with the field of a card in its fields', async function (assert) {
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+
+    let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field pet = linksTo(() => PetCard);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+    }
+    class Appointment extends FieldDef {
+      @field title = contains(StringField);
+      @field contact = linksTo(() => Person);
+    }
+
+    class PetCard extends CardDef {
+      @field firstName = contains(StringField);
+      @field appointment = contains(Appointment);
+      @field title = contains(StringField, {
+        computeVia: function (this: PetCard) {
+          return { title: this.firstName };
+        },
+      });
+    }
     let adapter = new TestRealmAdapter({
-      'person-card.gts': `
-      import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import { PetCard } from "./pet-card";
-
-      export class PersonCard extends CardDef {
-        @field firstName = contains(StringCard);
-        @field pet = linksTo(() => PetCard);
-        @field title = contains(StringCard, {
-          computeVia: function (this: PersonCard) {
-            return this.firstName;
-          },
-        });
-      }
-    `,
-      'appointment.gts': `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import { PersonCard } from "./person-card";
-
-      export class Appointment extends CardDef {
-        @field title = contains(StringCard);
-        @field contact = contains(() => PersonCard);
-      }
-    `,
-      'pet-card.gts': `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import { Appointment } from "./appointment";
-
-      export class PetCard extends CardDef {
-        @field firstName = contains(StringCard);
-        @field appointment = contains(() => Appointment);
-        @field title = contains(StringCard, {
-          computeVia: function (this: Appointment) {
-            return this.firstName;
-          },
-        });
-      }`,
       'jackie.json': {
         data: {
           attributes: {
@@ -899,7 +905,13 @@ module('Integration | search-index', function (hooks) {
       },
     });
 
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      shimModules: {
+        'person-card.gts': { Person },
+        'appointment.gts': { Appointment },
+        'pet-card.gts': { PetCard },
+      },
+    });
     await realm.ready;
     let indexer = realm.searchIndex;
     let card = await indexer.card(new URL(`${testRealmURL}jackie`));

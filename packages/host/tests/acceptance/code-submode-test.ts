@@ -17,7 +17,10 @@ import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -72,7 +75,7 @@ const postalCodeFieldSource = `
           <div><@fields.fiveDigitPostalCode /> - <@fields.fourDigitOptional /></div>
         </address>
       </template>
-    };    
+    };
   }
 `;
 
@@ -1289,7 +1292,6 @@ module('Acceptance | code submode tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}Person/fadhlan.json`,
     })!;
-
     await visit(
       `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
         operatorModeStateParam,
@@ -1299,6 +1301,7 @@ module('Acceptance | code submode tests', function (hooks) {
     await waitFor('[data-test-code-mode-card-preview-body]');
 
     await click('[data-test-preview-card-footer-button-edit]');
+
     await this.expectEvents({
       assert,
       realm,
@@ -1343,5 +1346,69 @@ module('Acceptance | code submode tests', function (hooks) {
     assert.ok(content.includes('12345'));
     assert.ok(content.includes('1234'));
     assert.ok(content.includes(`${testRealmURL}Country/united-states`));
+  });
+
+  test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/fadhlan`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/fadhlan.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-card-resource-loaded]');
+    await this.expectEvents({
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      callback: async () => {
+        await realm.write(
+          'Person/fadhlan.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'FadhlanXXX',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
+    });
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-code-mode-card-preview-body]')
+          ?.textContent?.includes('FadhlanXXX'),
+    );
+    assert
+      .dom('[data-test-code-mode-card-preview-body]')
+      .includesText('FadhlanXXX');
   });
 });

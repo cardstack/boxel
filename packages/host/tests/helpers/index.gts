@@ -161,6 +161,7 @@ interface Options {
   isAcceptanceTest?: true;
   onFetch?: (req: Request) => Promise<Request>;
   overridingHandlers?: RequestHandler[];
+  shimModules?: Record<string, Record<string, any>>;
 }
 
 // We use a rendered component to facilitate our indexing (this emulates
@@ -178,13 +179,14 @@ export const TestRealm = {
     } else {
       await makeRenderer();
     }
-    return makeRealm(
+    return await makeRealm(
       new TestRealmAdapter(flatFiles),
       loader,
       owner,
       opts?.realmURL,
       opts?.onFetch,
       opts?.overridingHandlers,
+      opts?.shimModules,
     );
   },
 
@@ -199,13 +201,14 @@ export const TestRealm = {
     } else {
       await makeRenderer();
     }
-    return makeRealm(
+    return await makeRealm(
       adapter,
       loader,
       owner,
       opts?.realmURL,
       opts?.onFetch,
       opts?.overridingHandlers,
+      opts?.shimModules,
     );
   },
 };
@@ -433,13 +436,14 @@ function getEventData(message: string) {
 }
 
 let runnerOptsMgr = new RunnerOptionsManager();
-function makeRealm(
+async function makeRealm(
   adapter: RealmAdapter,
   loader: Loader,
   owner: Owner,
   realmURL = testRealmURL,
   onFetch?: (req: Request) => Promise<Request>,
   overridingHandlers?: RequestHandler[],
+  shimModules?: Record<string, Record<string, any>>,
 ) {
   let localIndexer = owner.lookup(
     'service:local-indexer',
@@ -461,6 +465,15 @@ function makeRealm(
   if (overridingHandlers && overridingHandlers.length > 0) {
     loader.prependURLHandlers(overridingHandlers);
   }
+
+  if (shimModules) {
+    for (const path of Object.keys(shimModules)) {
+      let module = shimModules[path];
+      let moduleURL = `${realmURL}${path}`;
+      await shimModule(moduleURL, module, loader);
+    }
+  }
+
   realm = new Realm(
     realmURL,
     adapter,
@@ -473,6 +486,7 @@ function makeRealm(
     async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
   );
+
   return realm;
 }
 

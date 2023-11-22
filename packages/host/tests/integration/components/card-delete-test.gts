@@ -103,32 +103,34 @@ module('Integration | card-delete', function (hooks) {
       ].filter((a) => a.length > 0);
       await operatorModeStateService.restore({ stacks });
     };
-    adapter = new TestRealmAdapter({
-      'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
 
-        export class Pet extends CardDef {
-          static displayName = 'Pet';
-          @field firstName = contains(StringCard);
-          @field title = contains(StringCard, {
-            computeVia: function (this: Pet) {
-              return this.firstName;
-            },
-          });
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h2 data-test-pet={{@model.firstName}}><@fields.firstName/></h2>
-              <@fields.pet/>
-            </template>
-          }
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h3 data-test-pet={{@model.firstName}}><@fields.name/></h3>
-            </template>
-          }
-        }
-      `,
+    let { field, contains, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.firstName;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
+        </template>
+      };
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
+        </template>
+      };
+    }
+    adapter = new TestRealmAdapter({
       'index.json': {
         data: {
           type: 'card',
@@ -178,6 +180,9 @@ module('Integration | card-delete', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       realmURL: testRealmURL,
+      shimModules: {
+        'pet.gts': { Pet },
+      },
     });
     await realm.ready;
   });

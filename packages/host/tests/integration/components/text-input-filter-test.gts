@@ -74,18 +74,20 @@ module('Integration | text-input-filter', function (hooks) {
       new URL('http://localhost:4201/base/'),
     );
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    let bigInteger: typeof import('https://cardstack.com/base/big-integer');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    bigInteger = await loader.import(`${baseRealm.url}big-integer`);
+
+    let { field, contains, CardDef } = cardApi;
+    let { default: BigIntegerField } = bigInteger;
+
+    class Sample extends CardDef {
+      static displayName = 'Sample';
+      @field someBigInt = contains(BigIntegerField);
+      @field anotherBigInt = contains(BigIntegerField);
+    }
 
     adapter = new TestRealmAdapter({
-      'sample.gts': `
-        import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-        import BigIntegerCard from 'https://cardstack.com/base/big-integer';
-
-        export class Sample extends CardDef {
-        static displayName = 'Sample';
-        @field someBigInt = contains(BigIntegerCard);
-        @field anotherBigInt = contains(BigIntegerCard);
-        }
-      `,
       'Sample/1.json': {
         data: {
           type: 'card',
@@ -103,7 +105,11 @@ module('Integration | text-input-filter', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      shimModules: {
+        'sample.gts': { Sample },
+      },
+    });
     await realm.ready;
   });
 

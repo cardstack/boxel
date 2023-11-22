@@ -40,20 +40,23 @@ module('Integration | card-prerender', function (hooks) {
   );
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    adapter = new TestRealmAdapter({
-      'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
 
-        export class Pet extends CardDef {
-          @field firstName = contains(StringCard);
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h3><@fields.firstName/></h3>
-            </template>
-          }
-        }
-      `,
+    let { field, contains, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class Pet extends CardDef {
+      @field firstName = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h3><@fields.firstName /></h3>
+        </template>
+      };
+    }
+    adapter = new TestRealmAdapter({
       'Pet/mango.json': {
         data: {
           type: 'card',
@@ -86,7 +89,11 @@ module('Integration | card-prerender', function (hooks) {
       },
     });
 
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      shimModules: {
+        'pet.gts': { Pet },
+      },
+    });
     await realm.ready;
   });
 

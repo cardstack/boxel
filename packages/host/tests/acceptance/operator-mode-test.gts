@@ -14,10 +14,12 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
+import { baseRealm, primitive } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
   TestRealm,
@@ -49,165 +51,161 @@ module('Acceptance | operator mode tests', function (hooks) {
     window.localStorage.removeItem('recent-cards');
     window.localStorage.removeItem('recent-files');
 
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+
+    let {
+      field,
+      contains,
+      deserialize,
+      linksTo,
+      linksToMany,
+      BaseDef,
+      CardDef,
+      Component,
+      FieldDef,
+    } = cardApi;
+    let { default: StringField } = string;
+    type BaseDefConstructor = typeof BaseDef;
+    type BaseInstanceType<T extends BaseDefConstructor> = T extends {
+      [primitive]: infer P;
+    }
+      ? P
+      : InstanceType<T>;
+
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h3 data-test-pet={{@model.name}}>
+            <@fields.name />
+          </h3>
+        </template>
+      };
+    }
+    class ShippingInfo extends FieldDef {
+      static displayName = 'Shipping Info';
+      @field preferredCarrier = contains(StringField);
+      @field remarks = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: ShippingInfo) {
+          return this.preferredCarrier;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
+          <@fields.preferredCarrier />
+        </template>
+      };
+    }
+
+    class Address extends FieldDef {
+      static displayName = 'Address';
+      @field city = contains(StringField);
+      @field country = contains(StringField);
+      @field shippingInfo = contains(ShippingInfo);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h3 data-test-city={{@model.city}}>
+            <@fields.city />
+          </h3>
+          <h3 data-test-country={{@model.country}}>
+            <@fields.country />
+          </h3>
+          <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
+        </template>
+      };
+
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <FieldContainer @label='city' @tag='label' data-test-boxel-input-city>
+            <@fields.city />
+          </FieldContainer>
+          <FieldContainer
+            @label='country'
+            @tag='label'
+            data-test-boxel-input-country
+          >
+            <@fields.country />
+          </FieldContainer>
+          <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
+        </template>
+      };
+    }
+
+    class Person extends CardDef {
+      static displayName = 'Person';
+      @field firstName = contains(StringField);
+      @field pet = linksTo(Pet);
+      @field friends = linksToMany(Pet);
+      @field firstLetterOfTheName = contains(StringField, {
+        computeVia: function (this: Person) {
+          if (!this.firstName) {
+            return;
+          }
+          return this.firstName[0];
+        },
+      });
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+      @field address = contains(Address);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-person={{@model.firstName}}>
+            <@fields.firstName />
+          </h2>
+          <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
+            <@fields.firstLetterOfTheName />
+          </p>
+          Pet:
+          <@fields.pet />
+          Friends:
+          <@fields.friends />
+          Address:
+          <@fields.address />
+        </template>
+      };
+    }
+
+    class BoomField extends FieldDef {
+      static [primitive]: string;
+      static async [deserialize]<T extends BaseDefConstructor>(
+        this: T,
+      ): Promise<BaseInstanceType<T>> {
+        throw new Error('Boom!');
+      }
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          {{@model}}
+        </template>
+      };
+    }
+
+    class BoomPerson extends CardDef {
+      static displayName = 'Boom Person';
+      @field firstName = contains(StringField);
+      @field boom = contains(BoomField);
+      @field title = contains(StringField, {
+        computeVia: function (this: BoomPerson) {
+          return this.firstName;
+        },
+      });
+    }
     adapter = new TestRealmAdapter({
-      'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-
-        export class Pet extends CardDef {
-          static displayName = 'Pet';
-          @field name = contains(StringCard);
-          @field title = contains(StringCard, {
-            computeVia: function (this: Pet) {
-              return this.name;
-            },
-          });
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h3 data-test-pet={{@model.name}}>
-                <@fields.name/>
-              </h3>
-            </template>
-          }
-        }
-      `,
-      'shipping-info.gts': `
-        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        export class ShippingInfo extends FieldDef {
-          static displayName = 'Shipping Info';
-          @field preferredCarrier = contains(StringCard);
-          @field remarks = contains(StringCard);
-          @field title = contains(StringCard, {
-            computeVia: function (this: ShippingInfo) {
-              return this.preferredCarrier;
-            },
-          });
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
-              <@fields.preferredCarrier/>
-            </template>
-          }
-        }
-      `,
-      'address.gts': `
-        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { ShippingInfo } from "./shipping-info";
-        import { FieldContainer } from '@cardstack/boxel-ui/components';
-
-        export class Address extends FieldDef {
-          static displayName = 'Address';
-          @field city = contains(StringCard);
-          @field country = contains(StringCard);
-          @field shippingInfo = contains(ShippingInfo);
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h3 data-test-city={{@model.city}}>
-                <@fields.city/>
-              </h3>
-              <h3 data-test-country={{@model.country}}>
-                <@fields.country/>
-              </h3>
-              <div data-test-shippingInfo-field><@fields.shippingInfo/></div>
-            </template>
-          }
-
-          static edit = class Edit extends Component<typeof this> {
-            <template>
-              <FieldContainer @label='city' @tag='label' data-test-boxel-input-city>
-                <@fields.city />
-              </FieldContainer>
-              <FieldContainer @label='country' @tag='label' data-test-boxel-input-country>
-                <@fields.country />
-              </FieldContainer>
-              <div data-test-shippingInfo-field><@fields.shippingInfo/></div>
-            </template>
-          };
-        }
-      `,
-      'person.gts': `
-        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { Pet } from "./pet";
-        import { Address } from "./address";
-
-        export class Person extends CardDef {
-          static displayName = 'Person';
-          @field firstName = contains(StringCard);
-          @field pet = linksTo(Pet);
-          @field friends = linksToMany(Pet);
-          @field firstLetterOfTheName = contains(StringCard, {
-            computeVia: function (this: Chain) {
-              if (!this.firstName) {
-                return;
-              }
-              return this.firstName[0];
-            },
-          });
-          @field title = contains(StringCard, {
-            computeVia: function (this: Person) {
-              return this.firstName;
-            },
-          });
-          @field address = contains(Address);
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h2 data-test-person={{@model.firstName}}>
-                <@fields.firstName/>
-              </h2>
-              <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
-                <@fields.firstLetterOfTheName/>
-              </p>
-              Pet: <@fields.pet/>
-              Friends: <@fields.friends/>
-              Address: <@fields.address/>
-            </template>
-          }
-        }
-      `,
-      'boom-field.gts': `
-        import {
-          FieldDef,
-          Component,
-          primitive,
-          deserialize,
-          BaseDefConstructor,
-          BaseInstanceType,
-        } from 'https://cardstack.com/base/card-api';
-
-        export class BoomField extends FieldDef {
-          static [primitive]: string;
-          static async [deserialize]<T extends BaseDefConstructor>(
-            this: T,
-            value: any,
-          ): Promise<BaseInstanceType<T>> {
-            throw new Error('Boom!');
-          }
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              {{@model}}
-            </template>
-          };
-        }
-      `,
-      'boom-person.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { BoomField } from "./boom-field";
-
-        export class BoomPerson extends CardDef {
-          static displayName = 'Boom Person';
-          @field firstName = contains(StringCard);
-          @field boom = contains(BoomField);
-          @field title = contains(StringCard, {
-            computeVia: function (this: BoomPerson) {
-              return this.firstName;
-            },
-          });
-        }
-      `,
       'README.txt': `Hello World`,
       'person-entry.json': {
         data: {
@@ -328,9 +326,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       },
     });
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
       overridingHandlers: [
@@ -341,6 +336,14 @@ module('Acceptance | operator mode tests', function (hooks) {
           return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
         },
       ],
+      shimModules: {
+        'address.gts': { Address },
+        'boom-field.gts': { BoomField },
+        'boom-person.gts': { BoomPerson },
+        'person.gts': { Person },
+        'pet.gts': { Pet },
+        'shipping-info.gts': { ShippingInfo },
+      },
     });
     await realm.ready;
   });

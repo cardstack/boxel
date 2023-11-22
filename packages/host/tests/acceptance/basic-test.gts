@@ -19,49 +19,8 @@ import {
   sourceFetchReturnUrlHandle,
 } from '../helpers';
 
-const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
-
-  export class Index extends CardDef {
-    static isolated = class Isolated extends Component<typeof this> {
-      <template>
-        <div data-test-index-card>
-          Hello, world!
-        </div>
-      </template>
-    };
-  }
-`;
-
-const personCardSource = `
-  import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
-
-  export class Person extends CardDef {
-    @field firstName = contains(StringCard);
-    @field lastName = contains(StringCard);
-    @field title = contains(StringCard, {
-      computeVia: function (this: Person) {
-        return [this.firstName, this.lastName].filter(Boolean).join(' ');
-      },
-    });
-    static isolated = class Isolated extends Component<typeof this> {
-      <template>
-        <div data-test-person>
-          <p>First name: <@fields.firstName /></p>
-          <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
-        </div>
-        <style>
-          div {
-            color: green;
-            content: '';
-          }
-        </style>
-      </template>
-    };
-  }
-`;
+let cardApi: typeof import('https://cardstack.com/base/card-api');
+let string: typeof import('https://cardstack.com/base/string');
 
 module('Acceptance | basic tests', function (hooks) {
   let realm: Realm;
@@ -79,11 +38,49 @@ module('Acceptance | basic tests', function (hooks) {
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
 
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+    let { field, contains, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class Index extends CardDef {
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-index-card>
+            Hello, world!
+          </div>
+        </template>
+      };
+    }
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return [this.firstName, this.lastName].filter(Boolean).join(' ');
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-person>
+            <p>First name: <@fields.firstName /></p>
+            <p>Last name: <@fields.lastName /></p>
+            <p>Title: <@fields.title /></p>
+          </div>
+          <style>
+            div {
+              color: green;
+              content: '';
+            }
+          </style>
+        </template>
+      };
+    }
+
     adapter = new TestRealmAdapter({
-      'index.gts': indexCardSource,
-      'person.gts': personCardSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -132,9 +129,6 @@ module('Acceptance | basic tests', function (hooks) {
       },
     });
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
       overridingHandlers: [
@@ -142,6 +136,10 @@ module('Acceptance | basic tests', function (hooks) {
           return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
         },
       ],
+      shimModules: {
+        'index.gts': { Index },
+        'person.gts': { Person },
+      },
     });
     await realm.ready;
   });
