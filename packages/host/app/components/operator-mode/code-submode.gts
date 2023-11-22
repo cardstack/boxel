@@ -271,6 +271,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get inspectorFileIncompatibilityMessage() {
+    //this will prevent displaying message during a page refresh
     if (this.moduleContentsResource.isLoading) {
       return null;
     }
