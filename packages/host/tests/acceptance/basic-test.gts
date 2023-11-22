@@ -7,25 +7,15 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
-import { Realm } from '@cardstack/runtime-common/realm';
-
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
-  TestRealm,
-  TestRealmAdapter,
   setupLocalIndexing,
   setupServerSentEvents,
-  sourceFetchReturnUrlHandle,
+  setupAcceptanceTestRealm,
 } from '../helpers';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
-
 module('Acceptance | basic tests', function (hooks) {
-  let realm: Realm;
-  let adapter: TestRealmAdapter;
-
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
@@ -40,10 +30,15 @@ module('Acceptance | basic tests', function (hooks) {
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
+    let { field, contains, CardDef, Component } = await loader.import<
+      typeof import('https://cardstack.com/base/card-api')
+    >(`${baseRealm.url}card-api`);
+    let { default: StringField } = await loader.import<
+      typeof import('https://cardstack.com/base/string')
+    >(`${baseRealm.url}string`);
+    let { CatalogEntry } = await loader.import<
+      typeof import('https://cardstack.com/base/catalog-entry')
+    >(`${baseRealm.url}catalog-entry`);
 
     class Index extends CardDef {
       static isolated = class Isolated extends Component<typeof this> {
@@ -80,68 +75,26 @@ module('Acceptance | basic tests', function (hooks) {
       };
     }
 
-    adapter = new TestRealmAdapter({
-      'person-entry.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Person',
-            description: 'Catalog entry',
-            ref: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'index.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './index',
-              name: 'Index',
-            },
-          },
-        },
-      },
-      'Person/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-    });
-
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      isAcceptanceTest: true,
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
-        },
-      ],
-      shimModules: {
+    await setupAcceptanceTestRealm({
+      loader,
+      contents: {
         'index.gts': { Index },
         'person.gts': { Person },
+        'person-entry.json': new CatalogEntry({
+          title: 'Person',
+          description: 'Catalog entry',
+          ref: {
+            module: `./person`,
+            name: 'Person',
+          },
+        }),
+        'index.json': new Index(),
+        'Person/1.json': new Person({
+          firstName: 'Hassan',
+          lastName: 'Abdel-Rahman',
+        }),
       },
     });
-    await realm.ready;
   });
 
   test('visiting realm root', async function (assert) {

@@ -13,17 +13,15 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import {
   testRealmURL,
   setupCardLogs,
-  TestRealmAdapter,
-  TestRealm,
   cleanWhiteSpace,
   trimCardContainer,
   setupLocalIndexing,
+  setupIntegrationTestRealm,
 } from '../helpers';
 
 let loader: Loader;
 
 module('Integration | card-prerender', function (hooks) {
-  let adapter: TestRealmAdapter;
   let realm: Realm;
 
   setupRenderingTest(hooks);
@@ -56,45 +54,43 @@ module('Integration | card-prerender', function (hooks) {
         </template>
       };
     }
-    adapter = new TestRealmAdapter({
-      'Pet/mango.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/mango`,
-          attributes: {
-            firstName: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Pet/vangogh.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/vangogh`,
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-    });
 
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      shimModules: {
+    ({ realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
         'pet.gts': { Pet },
+        'Pet/mango.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/vangogh.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/vangogh`,
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
       },
-    });
-    await realm.ready;
+    }));
   });
 
   test("can generate the card's pre-rendered HTML", async function (assert) {

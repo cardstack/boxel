@@ -26,8 +26,8 @@ import {
   setupOnSave,
   setupServerSentEvents,
   TestRealmAdapter,
-  TestRealm,
   type TestContextWithSSE,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -130,61 +130,57 @@ module('Integration | card-delete', function (hooks) {
         </template>
       };
     }
-    adapter = new TestRealmAdapter({
-      'index.json': {
-        data: {
-          type: 'card',
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
-            },
-          },
-        },
-      },
-      'Pet/mango.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../pet',
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Pet/vangogh.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../pet',
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      '.realm.json': {
-        name: 'Test Workspace 1',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
-    });
-
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      realmURL: testRealmURL,
-      shimModules: {
+    ({ realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
         'pet.gts': { Pet },
+        'index.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'Pet/mango.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/vangogh.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        '.realm.json': {
+          name: 'Test Workspace 1',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        },
       },
-    });
-    await realm.ready;
+    }));
   });
 
   test<TestContextWithSSE>('can delete a card from the index card stack item', async function (assert) {
@@ -228,7 +224,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await click('[data-test-confirm-delete-button]');
@@ -306,7 +301,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
@@ -369,7 +363,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
@@ -435,7 +428,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
@@ -509,7 +501,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(
@@ -573,7 +564,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(
@@ -650,7 +640,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(
@@ -714,7 +703,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(

@@ -18,8 +18,6 @@ import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
-  TestRealm,
-  TestRealmAdapter,
   testRealmURL,
   testRealmInfo,
   cleanWhiteSpace,
@@ -27,6 +25,7 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   type CardDocFiles,
+  setupIntegrationTestRealm,
 } from '../helpers';
 
 const paths = new RealmPaths(testRealmURL);
@@ -49,20 +48,21 @@ module('Integration | search-index', function (hooks) {
   );
 
   test('full indexing discovers card instances', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'empty.json': {
-        data: {
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
-              name: 'CardDef',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'empty.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let { data: cards } = await indexer.search({});
     assert.deepEqual(cards, [
@@ -91,31 +91,32 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can recover from indexing a card with a broken link', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'Pet/mango.json': {
-        data: {
-          id: `${testRealmURL}Pet/mango`,
-          attributes: {
-            firstName: 'Mango',
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: `${testRealmURL}Person/owner`,
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Pet/mango.json': {
+          data: {
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              firstName: 'Mango',
+            },
+            relationships: {
+              owner: {
+                links: {
+                  self: `${testRealmURL}Person/owner`,
+                },
               },
             },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     {
       let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
@@ -190,45 +191,46 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can index card with linkTo field', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'Person/owner.json': {
-        data: {
-          id: `${testRealmURL}Person/owner`,
-          attributes: {
-            firstName: 'Hassan',
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Person/owner.json': {
+          data: {
+            id: `${testRealmURL}Person/owner`,
+            attributes: {
+              firstName: 'Hassan',
             },
-          },
-        },
-      },
-      'Pet/mango.json': {
-        data: {
-          id: `${testRealmURL}Pet/mango`,
-          attributes: {
-            firstName: 'Mango',
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: `${testRealmURL}Person/owner`,
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
+        },
+        'Pet/mango.json': {
+          data: {
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              firstName: 'Mango',
+            },
+            relationships: {
+              owner: {
+                links: {
+                  self: `${testRealmURL}Person/owner`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
     if (mango?.type === 'doc') {
@@ -269,45 +271,46 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can index card with a relative linkTo field', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'Person/owner.json': {
-        data: {
-          id: `${testRealmURL}Person/owner`,
-          attributes: {
-            firstName: 'Hassan',
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Person/owner.json': {
+          data: {
+            id: `${testRealmURL}Person/owner`,
+            attributes: {
+              firstName: 'Hassan',
             },
-          },
-        },
-      },
-      'Pet/mango.json': {
-        data: {
-          id: `${testRealmURL}Pet/mango`,
-          attributes: {
-            firstName: 'Mango',
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: `../Person/owner`,
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
+        },
+        'Pet/mango.json': {
+          data: {
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              firstName: 'Mango',
+            },
+            relationships: {
+              owner: {
+                links: {
+                  self: `../Person/owner`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
     if (mango?.type === 'doc') {
@@ -348,47 +351,53 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can index a card with relative code-ref fields', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'person.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
 
-        export class Person extends CardDef {
-          @field firstName = contains(StringCard);
-        }
-      `,
-      'person-catalog-entry.json': {
-        data: {
-          attributes: {
-            title: 'Person Card',
-            description: 'Catalog entry for Person card',
-            ref: {
-              module: './person',
-              name: 'Person',
-            },
-            demo: {
-              firstName: 'Mango',
-            },
-          },
-          meta: {
-            fields: {
+    let { field, contains, CardDef } = cardApi;
+    let { default: StringField } = string;
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+    }
+
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'person.gts': { Person },
+        'person-catalog-entry.json': {
+          data: {
+            attributes: {
+              title: 'Person Card',
+              description: 'Catalog entry for Person card',
+              ref: {
+                module: './person',
+                name: 'Person',
+              },
               demo: {
-                adoptsFrom: {
-                  module: './person',
-                  name: 'Person',
-                },
+                firstName: 'Mango',
               },
             },
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
+            meta: {
+              fields: {
+                demo: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let entry = await indexer.card(
       new URL(`${testRealmURL}person-catalog-entry`),
@@ -473,46 +482,40 @@ module('Integration | search-index', function (hooks) {
           }
         };
       }
-      let adapter = new TestRealmAdapter({
-        'vangogh.json': {
-          data: {
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './person',
-                name: 'Person',
+
+      let { realm } = await setupIntegrationTestRealm({
+        loader,
+        contents: {
+          'person.gts': { Person },
+          'boom.gts': { Boom },
+          'vangogh.json': {
+            data: {
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
               },
             },
           },
-        },
-        'boom.json': {
-          data: {
-            attributes: {
-              firstName: 'Boom!',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './boom',
-                name: 'Boom',
+          'boom.json': {
+            data: {
+              attributes: {
+                firstName: 'Boom!',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './boom',
+                  name: 'Boom',
+                },
               },
             },
           },
         },
       });
-      let realm = await TestRealm.createWithAdapter(
-        adapter,
-        loader,
-        this.owner,
-        {
-          shimModules: {
-            'person.gts': { Person },
-            'boom.gts': { Boom },
-          },
-        },
-      );
-      await realm.ready;
       let indexer = realm.searchIndex;
       {
         let entry = await indexer.card(new URL(`${testRealmURL}boom`));
@@ -564,32 +567,25 @@ module('Integration | search-index', function (hooks) {
           </template>
         };
       }
-      let adapter = new TestRealmAdapter({
-        'vangogh.json': {
-          data: {
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './person',
-                name: 'Person',
+      let { realm } = await setupIntegrationTestRealm({
+        loader,
+        contents: {
+          'person.gts': { Person },
+          'vangogh.json': {
+            data: {
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
               },
             },
           },
         },
       });
-      let realm = await TestRealm.createWithAdapter(
-        adapter,
-        loader,
-        this.owner,
-        {
-          shimModules: {
-            'person.gts': { Person },
-          },
-        },
-      );
-      await realm.ready;
       let indexer = realm.searchIndex;
       {
         let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
@@ -652,45 +648,43 @@ module('Integration | search-index', function (hooks) {
         </template>
       };
     }
-    let adapter = new TestRealmAdapter({
-      'vangogh.json': {
-        data: {
-          attributes: {
-            firstName: 'Van Gogh',
-            boom: {
-              firstName: 'Mango',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: './boom-person',
-              name: 'BoomPerson',
-            },
-          },
-        },
-      },
-      'working-van-gogh.json': {
-        data: {
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-    });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      shimModules: {
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
         'boom-person.gts': { BoomPerson },
         'boom.gts': { Boom },
         'person.gts': { Person },
+        'vangogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+              boom: {
+                firstName: 'Mango',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './boom-person',
+                name: 'BoomPerson',
+              },
+            },
+          },
+        },
+        'working-van-gogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
       },
     });
-    await realm.ready;
     let indexer = realm.searchIndex;
 
     let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
@@ -769,46 +763,45 @@ module('Integration | search-index', function (hooks) {
         </template>
       };
     }
-    let adapter = new TestRealmAdapter({
-      'vangogh.json': {
-        data: {
-          attributes: {
-            firstName: 'Van Gogh',
-            boom: {
-              firstName: 'Mango',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: './boom-person2',
-              name: 'BoomPerson2',
-            },
-          },
-        },
-      },
-      'working-vangogh.json': {
-        data: {
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-    });
 
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      shimModules: {
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
         'boom-person2.gts': { BoomPerson2 },
         'custom-boom.gts': { CustomBoom },
         'person.gts': { Person },
+
+        'vangogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+              boom: {
+                firstName: 'Mango',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './boom-person2',
+                name: 'BoomPerson2',
+              },
+            },
+          },
+        },
+        'working-vangogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
       },
     });
-    await realm.ready;
 
     let indexer = realm.searchIndex;
     let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
@@ -852,7 +845,7 @@ module('Integration | search-index', function (hooks) {
     let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
 
-    class Person extends CardDef {
+    class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field pet = linksTo(() => PetCard);
       @field title = contains(StringField, {
@@ -863,7 +856,7 @@ module('Integration | search-index', function (hooks) {
     }
     class Appointment extends FieldDef {
       @field title = contains(StringField);
-      @field contact = linksTo(() => Person);
+      @field contact = contains(Person);
     }
 
     class PetCard extends CardDef {
@@ -871,89 +864,66 @@ module('Integration | search-index', function (hooks) {
       @field appointment = contains(Appointment);
       @field title = contains(StringField, {
         computeVia: function (this: PetCard) {
-          return { title: this.firstName };
+          return this.firstName;
         },
       });
     }
-    let adapter = new TestRealmAdapter({
-      'jackie.json': {
-        data: {
-          attributes: {
-            firstName: 'Jackie',
-            appointment: {
-              title: 'Vet visit',
-              contact: { firstName: 'Burcu' },
+
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'person-card.gts': { Person },
+        'appointment.gts': { Appointment },
+        'pet-card.gts': { PetCard },
+        'jackie.json': {
+          data: {
+            attributes: {
+              firstName: 'Jackie',
+              appointment: {
+                title: 'Vet visit',
+                contact: { firstName: 'Burcu' },
+              },
+              description: 'Dog',
+              thumbnailURL: './jackie.jpg',
             },
-            description: 'Dog',
-            thumbnailURL: './jackie.jpg',
-          },
-          meta: { adoptsFrom: { module: `./pet-card`, name: 'PetCard' } },
-          relationships: {
-            'appointment.contact.pet': {
-              links: { self: `${testRealmURL}mango` },
+            meta: { adoptsFrom: { module: `./pet-card`, name: 'PetCard' } },
+            relationships: {
+              'appointment.contact.pet': {
+                links: { self: `${testRealmURL}mango` },
+              },
             },
           },
         },
-      },
-      'mango.json': {
-        data: {
-          attributes: { firstName: 'Mango' },
-          meta: {
-            adoptsFrom: { module: `./pet-card`, name: 'PetCard' },
+        'mango.json': {
+          data: {
+            attributes: { firstName: 'Mango' },
+            meta: {
+              adoptsFrom: { module: `./pet-card`, name: 'PetCard' },
+            },
           },
         },
       },
     });
 
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      shimModules: {
-        'person-card.gts': { Person },
-        'appointment.gts': { Appointment },
-        'pet-card.gts': { PetCard },
-      },
-    });
-    await realm.ready;
     let indexer = realm.searchIndex;
     let card = await indexer.card(new URL(`${testRealmURL}jackie`));
 
     if (card?.type === 'doc') {
-      assert.deepEqual(card.doc, {
-        data: {
-          id: `${testRealmURL}jackie`,
-          type: 'card',
-          links: { self: `${testRealmURL}jackie` },
-          attributes: {
-            firstName: 'Jackie',
-            title: 'Jackie',
-            appointment: {
-              title: 'Vet visit',
-              description: null,
-              thumbnailURL: null,
-              contact: {
-                firstName: 'Burcu',
-                description: null,
-                thumbnailURL: null,
-              },
-            },
-            description: 'Dog',
-            thumbnailURL: `./jackie.jpg`,
+      assert.deepEqual(card.doc.data.attributes, {
+        firstName: 'Jackie',
+        title: 'Jackie',
+        appointment: {
+          title: 'Vet visit',
+          contact: {
+            firstName: 'Burcu',
           },
-          meta: {
-            adoptsFrom: {
-              module: `./pet-card`,
-              name: 'PetCard',
-            },
-            lastModified: adapter.lastModified.get(
-              `${testRealmURL}jackie.json`,
-            ),
-            realmInfo: testRealmInfo,
-            realmURL: 'http://test-realm/test/',
-          },
-          relationships: {
-            'appointment.contact.pet': {
-              links: { self: `${testRealmURL}mango` },
-            },
-          },
+        },
+        description: 'Dog',
+        thumbnailURL: `./jackie.jpg`,
+      });
+      assert.deepEqual(card.doc.data.relationships, {
+        'appointment.contact.pet': {
+          links: { self: `${testRealmURL}mango` },
         },
       });
     } else {
@@ -962,78 +932,79 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can index a card with a containsMany composite containing a linkTo field', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'Vendor/vendor1.json': {
-        data: {
-          id: `${testRealmURL}Vendor/vendor1`,
-          attributes: {
-            name: 'Acme Industries',
-            paymentMethods: [
-              {
-                type: 'crypto',
-                payment: {
-                  address: '0x1111',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Vendor/vendor1.json': {
+          data: {
+            id: `${testRealmURL}Vendor/vendor1`,
+            attributes: {
+              name: 'Acme Industries',
+              paymentMethods: [
+                {
+                  type: 'crypto',
+                  payment: {
+                    address: '0x1111',
+                  },
+                },
+                {
+                  type: 'crypto',
+                  payment: {
+                    address: '0x2222',
+                  },
+                },
+              ],
+            },
+            relationships: {
+              'paymentMethods.0.payment.chain': {
+                links: {
+                  self: `${testRealmURL}Chain/1`,
                 },
               },
-              {
-                type: 'crypto',
-                payment: {
-                  address: '0x2222',
+              'paymentMethods.1.payment.chain': {
+                links: {
+                  self: `${testRealmURL}Chain/2`,
                 },
               },
-            ],
-          },
-          relationships: {
-            'paymentMethods.0.payment.chain': {
-              links: {
-                self: `${testRealmURL}Chain/1`,
-              },
             },
-            'paymentMethods.1.payment.chain': {
-              links: {
-                self: `${testRealmURL}Chain/2`,
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/vendor`,
+                name: 'Vendor',
               },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/vendor`,
-              name: 'Vendor',
             },
           },
         },
-      },
-      'Chain/1.json': {
-        data: {
-          id: `${testRealmURL}Chain/1`,
-          attributes: {
-            name: 'Ethereum Mainnet',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/chain`,
-              name: 'Chain',
+        'Chain/1.json': {
+          data: {
+            id: `${testRealmURL}Chain/1`,
+            attributes: {
+              name: 'Ethereum Mainnet',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/chain`,
+                name: 'Chain',
+              },
             },
           },
         },
-      },
-      'Chain/2.json': {
-        data: {
-          id: `${testRealmURL}Chain/2`,
-          attributes: {
-            name: 'Polygon',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/chain`,
-              name: 'Chain',
+        'Chain/2.json': {
+          data: {
+            id: `${testRealmURL}Chain/2`,
+            attributes: {
+              name: 'Polygon',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/chain`,
+                name: 'Chain',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let vendor = await indexer.card(new URL(`${testRealmURL}Vendor/vendor1`), {
       loadLinks: true,
@@ -1158,35 +1129,36 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can tolerate a card whose computed throws an exception', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'Boom/boom.json': {
-        data: {
-          id: `${testRealmURL}Boom/boom`,
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/card-with-error',
-              name: 'Boom',
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Boom/boom.json': {
+          data: {
+            id: `${testRealmURL}Boom/boom`,
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/card-with-error',
+                name: 'Boom',
+              },
             },
           },
         },
-      },
-      'Person/owner.json': {
-        data: {
-          id: `${testRealmURL}Person/owner`,
-          attributes: {
-            firstName: 'Hassan',
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+        'Person/owner.json': {
+          data: {
+            id: `${testRealmURL}Person/owner`,
+            attributes: {
+              firstName: 'Hassan',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     {
       let card = await indexer.card(new URL(`${testRealmURL}Boom/boom`));
@@ -1211,43 +1183,44 @@ module('Integration | search-index', function (hooks) {
   });
 
   test(`search doc includes 'contains' and used 'linksTo' fields`, async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'Pet/mango.json': {
-        data: {
-          attributes: { firstName: 'Mango' },
-          relationships: {
-            owner: {
-              links: { self: `${testRealmURL}Person/hassan` },
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Pet/mango.json': {
+          data: {
+            attributes: { firstName: 'Mango' },
+            relationships: {
+              owner: {
+                links: { self: `${testRealmURL}Person/hassan` },
+              },
             },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}pet`,
-              name: 'Pet',
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'Person/hassan.json': {
-        data: {
-          id: `${testRealmURL}Person/hassan`,
-          attributes: {
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-            email: 'hassan@cardstack.com',
-            posts: 100,
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+        'Person/hassan.json': {
+          data: {
+            id: `${testRealmURL}Person/hassan`,
+            attributes: {
+              firstName: 'Hassan',
+              lastName: 'Abdel-Rahman',
+              email: 'hassan@cardstack.com',
+              posts: 100,
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let entry = await indexer.searchEntry(
       new URL(`${testRealmURL}Person/hassan`),
@@ -1268,44 +1241,45 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('search doc normalizes containsMany composite fields', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'CatalogEntry/booking.json': {
-        data: {
-          attributes: {
-            title: 'Booking',
-            description: 'Catalog entry for Booking',
-            ref: {
-              module: 'http://localhost:4202/test/booking',
-              name: 'Booking',
-            },
-            demo: {
-              title: null,
-              venue: null,
-              startTime: null,
-              endTime: null,
-              hosts: [],
-              sponsors: [],
-            },
-          },
-          meta: {
-            fields: {
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'CatalogEntry/booking.json': {
+          data: {
+            attributes: {
+              title: 'Booking',
+              description: 'Catalog entry for Booking',
+              ref: {
+                module: 'http://localhost:4202/test/booking',
+                name: 'Booking',
+              },
               demo: {
-                adoptsFrom: {
-                  module: 'http://localhost:4202/test/booking',
-                  name: 'Booking',
-                },
+                title: null,
+                venue: null,
+                startTime: null,
+                endTime: null,
+                hosts: [],
+                sponsors: [],
               },
             },
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
+            meta: {
+              fields: {
+                demo: {
+                  adoptsFrom: {
+                    module: 'http://localhost:4202/test/booking',
+                    name: 'Booking',
+                  },
+                },
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let entry = await indexer.searchEntry(
       new URL(`${testRealmURL}CatalogEntry/booking`),
@@ -1336,52 +1310,53 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can index a card with linksToMany field', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'Pet/vanGogh.json': {
-        data: {
-          attributes: { firstName: 'Van Gogh' },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}pet`,
-              name: 'Pet',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Pet/vanGogh.json': {
+          data: {
+            attributes: { firstName: 'Van Gogh' },
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'PetPerson/hassan.json': {
-        data: {
-          attributes: { firstName: 'Hassan' },
-          relationships: {
-            'pets.0': {
-              links: { self: `${testRealmURL}Pet/mango` },
+        'PetPerson/hassan.json': {
+          data: {
+            attributes: { firstName: 'Hassan' },
+            relationships: {
+              'pets.0': {
+                links: { self: `${testRealmURL}Pet/mango` },
+              },
+              'pets.1': {
+                links: { self: `${testRealmURL}Pet/vanGogh` },
+              },
             },
-            'pets.1': {
-              links: { self: `${testRealmURL}Pet/vanGogh` },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}pet-person`,
-              name: 'PetPerson',
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}pet-person`,
+                name: 'PetPerson',
+              },
             },
           },
         },
-      },
-      'Pet/mango.json': {
-        data: {
-          attributes: { firstName: 'Mango' },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}pet`,
-              name: 'Pet',
+        'Pet/mango.json': {
+          data: {
+            attributes: { firstName: 'Mango' },
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}pet`,
+                name: 'Pet',
+              },
             },
           },
         },
       },
     });
 
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let hassan = await indexer.card(
       new URL(`${testRealmURL}PetPerson/hassan`),
@@ -1511,23 +1486,23 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can index a card with empty linksToMany field value', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'PetPerson/burcu.json': {
-        data: {
-          attributes: { firstName: 'Burcu' },
-          relationships: { pets: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}pet-person`,
-              name: 'PetPerson',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'PetPerson/burcu.json': {
+          data: {
+            attributes: { firstName: 'Burcu' },
+            relationships: { pets: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}pet-person`,
+                name: 'PetPerson',
+              },
             },
           },
         },
       },
     });
-
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let card = await indexer.card(new URL(`${testRealmURL}PetPerson/burcu`), {
       loadLinks: true,
@@ -1588,68 +1563,69 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can index a card that contains a card with a linksToMany field', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'Pet/vanGogh.json': {
-        data: {
-          attributes: { firstName: 'Van Gogh' },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'pet-person-catalog-entry.json': {
-        data: {
-          attributes: {
-            title: 'PetPerson',
-            description: 'Catalog entry for PetPerson',
-            ref: {
-              module: `${testModuleRealm}pet-person`,
-              name: 'PetPerson',
-            },
-            demo: { firstName: 'Hassan' },
-          },
-          relationships: {
-            'demo.pets.0': {
-              links: { self: `${testRealmURL}Pet/mango` },
-            },
-            'demo.pets.1': {
-              links: { self: `${testRealmURL}Pet/vanGogh` },
-            },
-          },
-          meta: {
-            fields: {
-              demo: {
-                adoptsFrom: {
-                  module: `${testModuleRealm}pet-person`,
-                  name: 'PetPerson',
-                },
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Pet/vanGogh.json': {
+          data: {
+            attributes: { firstName: 'Van Gogh' },
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}pet`,
+                name: 'Pet',
               },
             },
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
+          },
+        },
+        'pet-person-catalog-entry.json': {
+          data: {
+            attributes: {
+              title: 'PetPerson',
+              description: 'Catalog entry for PetPerson',
+              ref: {
+                module: `${testModuleRealm}pet-person`,
+                name: 'PetPerson',
+              },
+              demo: { firstName: 'Hassan' },
+            },
+            relationships: {
+              'demo.pets.0': {
+                links: { self: `${testRealmURL}Pet/mango` },
+              },
+              'demo.pets.1': {
+                links: { self: `${testRealmURL}Pet/vanGogh` },
+              },
+            },
+            meta: {
+              fields: {
+                demo: {
+                  adoptsFrom: {
+                    module: `${testModuleRealm}pet-person`,
+                    name: 'PetPerson',
+                  },
+                },
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
             },
           },
         },
-      },
-      'Pet/mango.json': {
-        data: {
-          attributes: { firstName: 'Mango' },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}pet`,
-              name: 'Pet',
+        'Pet/mango.json': {
+          data: {
+            attributes: { firstName: 'Mango' },
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}pet`,
+                name: 'Pet',
+              },
             },
           },
         },
       },
     });
 
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let catalogEntry = await indexer.card(
       new URL(`${testRealmURL}pet-person-catalog-entry`),
@@ -1801,77 +1777,78 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can index a card that has nested linksTo fields', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'Friend/hassan.json': {
-        data: {
-          id: `${testRealmURL}Friend/hassan`,
-          attributes: {
-            firstName: 'Hassan',
-            description: 'Friend of dogs',
-          },
-          relationships: {
-            friend: {
-              links: {
-                self: `${testRealmURL}Friend/mango`,
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Friend/hassan.json': {
+          data: {
+            id: `${testRealmURL}Friend/hassan`,
+            attributes: {
+              firstName: 'Hassan',
+              description: 'Friend of dogs',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/mango`,
+                },
               },
             },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/friend',
-              name: 'Friend',
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/friend',
+                name: 'Friend',
+              },
             },
           },
         },
-      },
-      'Friend/mango.json': {
-        data: {
-          id: `${testRealmURL}Friend/mango`,
-          attributes: {
-            firstName: 'Mango',
-            description: 'Dog friend',
-          },
-          relationships: {
-            friend: {
-              links: {
-                self: `${testRealmURL}Friend/vanGogh`,
+        'Friend/mango.json': {
+          data: {
+            id: `${testRealmURL}Friend/mango`,
+            attributes: {
+              firstName: 'Mango',
+              description: 'Dog friend',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/vanGogh`,
+                },
               },
             },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/friend',
-              name: 'Friend',
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/friend',
+                name: 'Friend',
+              },
             },
           },
         },
-      },
-      'Friend/vanGogh.json': {
-        data: {
-          id: `${testRealmURL}Friend/vanGogh`,
-          attributes: {
-            firstName: 'Van Gogh',
-            description: 'Dog friend',
-            thumbnailURL: 'van-gogh.jpg',
-          },
-          relationships: {
-            friend: {
-              links: {
-                self: null,
+        'Friend/vanGogh.json': {
+          data: {
+            id: `${testRealmURL}Friend/vanGogh`,
+            attributes: {
+              firstName: 'Van Gogh',
+              description: 'Dog friend',
+              thumbnailURL: 'van-gogh.jpg',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: null,
+                },
               },
             },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/friend',
-              name: 'Friend',
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/friend',
+                name: 'Friend',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`));
     if (hassan?.type === 'doc') {
@@ -1945,54 +1922,55 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can index a field with a cycle in the linksTo field', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'Friend/hassan.json': {
-        data: {
-          id: `${testRealmURL}Friend/hassan`,
-          attributes: {
-            firstName: 'Hassan',
-            description: 'Dog owner',
-          },
-          relationships: {
-            friend: {
-              links: {
-                self: `${testRealmURL}Friend/mango`,
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Friend/hassan.json': {
+          data: {
+            id: `${testRealmURL}Friend/hassan`,
+            attributes: {
+              firstName: 'Hassan',
+              description: 'Dog owner',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/mango`,
+                },
               },
             },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/friend',
-              name: 'Friend',
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/friend',
+                name: 'Friend',
+              },
             },
           },
         },
-      },
-      'Friend/mango.json': {
-        data: {
-          id: `${testRealmURL}Friend/mango`,
-          attributes: {
-            firstName: 'Mango',
-            description: 'Dog friend',
-          },
-          relationships: {
-            friend: {
-              links: {
-                self: `${testRealmURL}Friend/hassan`,
+        'Friend/mango.json': {
+          data: {
+            id: `${testRealmURL}Friend/mango`,
+            attributes: {
+              firstName: 'Mango',
+              description: 'Dog friend',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/hassan`,
+                },
               },
             },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/friend',
-              name: 'Friend',
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/friend',
+                name: 'Friend',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`), {
       loadLinks: true,
@@ -2211,34 +2189,35 @@ module('Integration | search-index', function (hooks) {
     let mangoID = `${testRealmURL}Friends/mango`;
     let vanGoghID = `${testRealmURL}Friends/vanGogh`;
     let friendsRef = { module: `${testModuleRealm}friends`, name: 'Friends' };
-    let adapter = new TestRealmAdapter({
-      'Friends/vanGogh.json': {
-        data: {
-          attributes: { firstName: 'Van Gogh' },
-          relationships: { 'friends.0': { links: { self: hassanID } } },
-          meta: { adoptsFrom: friendsRef },
-        },
-      },
-      'Friends/hassan.json': {
-        data: {
-          attributes: { firstName: 'Hassan' },
-          relationships: {
-            'friends.0': { links: { self: mangoID } },
-            'friends.1': { links: { self: vanGoghID } },
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Friends/vanGogh.json': {
+          data: {
+            attributes: { firstName: 'Van Gogh' },
+            relationships: { 'friends.0': { links: { self: hassanID } } },
+            meta: { adoptsFrom: friendsRef },
           },
-          meta: { adoptsFrom: friendsRef },
         },
-      },
-      'Friends/mango.json': {
-        data: {
-          attributes: { firstName: 'Mango' },
-          relationships: { 'friends.0': { links: { self: hassanID } } },
-          meta: { adoptsFrom: friendsRef },
+        'Friends/hassan.json': {
+          data: {
+            attributes: { firstName: 'Hassan' },
+            relationships: {
+              'friends.0': { links: { self: mangoID } },
+              'friends.1': { links: { self: vanGoghID } },
+            },
+            meta: { adoptsFrom: friendsRef },
+          },
+        },
+        'Friends/mango.json': {
+          data: {
+            attributes: { firstName: 'Mango' },
+            relationships: { 'friends.0': { links: { self: hassanID } } },
+            meta: { adoptsFrom: friendsRef },
+          },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let indexer = realm.searchIndex;
     assert.deepEqual(
       indexer.stats,
@@ -2626,9 +2605,9 @@ module('Integration | search-index', function (hooks) {
   });
 
   test("indexing identifies an instance's card references", async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'person-1.json': {
           data: {
             attributes: {
@@ -2643,9 +2622,7 @@ module('Integration | search-index', function (hooks) {
           },
         },
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
     let indexer = realm.searchIndex;
     let refs = (await indexer.searchEntry(new URL(`${testRealmURL}person-1`)))
       ?.deps;
@@ -2687,9 +2664,9 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('search index does not contain entries that match patterns in ignore files', async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'ignore-me-1.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         'posts/nested.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         'posts/please-ignore-me.json': {
@@ -2706,10 +2683,8 @@ dir/
 posts/please-ignore-me.json
       `,
       },
-      this.owner,
-    );
+    });
 
-    await realm.ready;
     let indexer = realm.searchIndex;
 
     {
@@ -2759,16 +2734,14 @@ posts/please-ignore-me.json
   });
 
   test('search index ignores .realm.json file', async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         '.realm.json': `{ name: 'Example Workspace' }`,
         'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
       },
-      this.owner,
-    );
+    });
 
-    await realm.ready;
     let indexer = realm.searchIndex;
     let card = await indexer.card(new URL(`${testRealmURL}post`));
     assert.ok(card, 'instance exists');
@@ -2781,18 +2754,16 @@ posts/please-ignore-me.json
   });
 
   test("incremental indexing doesn't process ignored files", async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'posts/ignore-me.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         '.gitignore': `
 posts/ignore-me.json
       `,
       },
-      this.owner,
-    );
+    });
 
-    await realm.ready;
     let indexer = realm.searchIndex;
     await indexer.update(new URL(`${testRealmURL}posts/ignore-me.json`));
 
@@ -3174,8 +3145,10 @@ posts/ignore-me.json
     let indexer: SearchIndex;
 
     hooks.beforeEach(async function () {
-      let realm = await TestRealm.create(loader, sampleCards, this.owner);
-      await realm.ready;
+      let { realm } = await setupIntegrationTestRealm({
+        loader,
+        contents: sampleCards,
+      });
       indexer = realm.searchIndex;
     });
 

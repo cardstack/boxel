@@ -15,8 +15,7 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import {
   testRealmURL,
   setupLocalIndexing,
-  TestRealmAdapter,
-  TestRealm,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -64,106 +63,104 @@ module('Integration | card-catalog filters', function (hooks) {
       @field blogPost = linksTo(BlogPost);
     }
 
-    let adapter = new TestRealmAdapter({
-      '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
-      'index.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
-            },
-          },
-        },
-      },
-      'CatalogEntry/publishing-packet.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Publishing Packet',
-            description: 'Catalog entry for PublishingPacket',
-            ref: {
-              module: `../publishing-packet`,
-              name: 'PublishingPacket',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'CatalogEntry/author.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Author',
-            description: 'Catalog entry for Author',
-            ref: {
-              module: `${testRealmURL}author`,
-              name: 'Author',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'CatalogEntry/blog-post.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'BlogPost',
-            description: 'Catalog entry for BlogPost',
-            ref: {
-              module: `${testRealmURL}blog-post`,
-              name: 'BlogPost',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'CatalogEntry/address.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Address',
-            description: 'Catalog entry for Address field',
-            ref: {
-              module: `${testRealmURL}address`,
-              name: 'Address',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-    });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      shimModules: {
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
         'blog-post.gts': { BlogPost },
         'address.gts': { Address },
         'author.gts': { Author },
         'publishing-packet.gts': { PublishingPacket },
+        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'CatalogEntry/publishing-packet.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Publishing Packet',
+              description: 'Catalog entry for PublishingPacket',
+              ref: {
+                module: `../publishing-packet`,
+                name: 'PublishingPacket',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'CatalogEntry/author.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Author',
+              description: 'Catalog entry for Author',
+              ref: {
+                module: `${testRealmURL}author`,
+                name: 'Author',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'CatalogEntry/blog-post.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'BlogPost',
+              description: 'Catalog entry for BlogPost',
+              ref: {
+                module: `${testRealmURL}blog-post`,
+                name: 'BlogPost',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'CatalogEntry/address.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Address',
+              description: 'Catalog entry for Address field',
+              ref: {
+                module: `${testRealmURL}address`,
+                name: 'Address',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
       },
     });
-    await realm.ready;
 
     let operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',

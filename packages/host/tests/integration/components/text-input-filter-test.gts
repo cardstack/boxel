@@ -29,9 +29,8 @@ import {
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
-  TestRealmAdapter,
-  TestRealm,
   saveCard,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -40,7 +39,6 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 let loader: Loader;
 
 module('Integration | text-input-filter', function (hooks) {
-  let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -86,31 +84,28 @@ module('Integration | text-input-filter', function (hooks) {
       @field someBigInt = contains(BigIntegerField);
       @field anotherBigInt = contains(BigIntegerField);
     }
-
-    adapter = new TestRealmAdapter({
-      'Sample/1.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Sample/1`,
-          attributes: {
-            someBigInt: null,
-            anotherBigInt: '123',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}sample`,
-              name: 'Sample',
+    ({ realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'sample.gts': { Sample },
+        'Sample/1.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Sample/1`,
+            attributes: {
+              someBigInt: null,
+              anotherBigInt: '123',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}sample`,
+                name: 'Sample',
+              },
             },
           },
         },
       },
-    });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      shimModules: {
-        'sample.gts': { Sample },
-      },
-    });
-    await realm.ready;
+    }));
   });
 
   setupCardLogs(

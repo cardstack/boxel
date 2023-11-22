@@ -15,13 +15,8 @@ import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
 
-import {
-  baseRealm,
-  cardTypeDisplayName,
-  Deferred,
-} from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { Realm } from '@cardstack/runtime-common/realm';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -33,20 +28,15 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
   testRealmURL,
   setupCardLogs,
+  setupIntegrationTestRealm,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
   showSearchResult,
-  TestRealmAdapter,
-  TestRealm,
   type TestContextWithSave,
-  sourceFetchRedirectHandle,
-  sourceFetchReturnUrlHandle,
 } from '../../helpers';
 import { MockMatrixService } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -58,8 +48,6 @@ let setCardInOperatorModeState: (card: string) => Promise<void>;
 let loader: Loader;
 
 module('Integration | operator-mode', function (hooks) {
-  let adapter: TestRealmAdapter;
-  let realm: Realm;
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
@@ -75,25 +63,6 @@ module('Integration | operator-mode', function (hooks) {
   );
   setupServerSentEvents(hooks);
   let noop = () => {};
-  async function loadCard(url: string): Promise<CardDef> {
-    let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.searchIndex.card(new URL(url));
-    if (!result || result.type === 'error') {
-      throw new Error(
-        `cannot get instance ${url} from the index: ${
-          result ? result.error.detail : 'not found'
-        }`,
-      );
-    }
-    let card = await createFromSerialized<typeof CardDef>(
-      result.doc.data,
-      result.doc,
-      new URL(url),
-      loader,
-    );
-    await recompute(card, { loadFields: true });
-    return card;
-  }
 
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
@@ -337,330 +306,10 @@ module('Integration | operator-mode', function (hooks) {
         },
       });
     }
-    adapter = new TestRealmAdapter({
-      'Pet/mango.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/mango`,
-          attributes: {
-            name: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'BoomPet/paper.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}BoomPet/paper`,
-          attributes: {
-            name: 'Paper',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}boom-pet`,
-              name: 'BoomPet',
-            },
-          },
-        },
-      },
-      'Pet/jackie.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/jackie`,
-          attributes: {
-            name: 'Jackie',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Pet/woody.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/woody`,
-          attributes: {
-            name: 'Woody',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Person/fadhlan.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Person/fadhlan`,
-          attributes: {
-            firstName: 'Fadhlan',
-            address: {
-              city: 'Bandung',
-              country: 'Indonesia',
-              shippingInfo: {
-                preferredCarrier: 'DHL',
-                remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-              },
-            },
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: `${testRealmURL}Pet/mango`,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'Person/burcu.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Person/burcu`,
-          attributes: {
-            firstName: 'Burcu',
-          },
-          relationships: {
-            'friends.0': {
-              links: {
-                self: `${testRealmURL}Pet/jackie`,
-              },
-            },
-            'friends.1': {
-              links: {
-                self: `${testRealmURL}Pet/woody`,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'grid.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
-            },
-          },
-        },
-      },
-      'CatalogEntry/publishing-packet.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Publishing Packet',
-            description: 'Catalog entry for PublishingPacket',
-            ref: {
-              module: `${testRealmURL}publishing-packet`,
-              name: 'PublishingPacket',
-            },
-            demo: {
-              socialBlurb: null,
-            },
-          },
-          relationships: {
-            'demo.blogPost': {
-              links: {
-                self: '../BlogPost/1',
-              },
-            },
-          },
-          meta: {
-            fields: {
-              demo: {
-                adoptsFrom: {
-                  module: `../publishing-packet`,
-                  name: 'PublishingPacket',
-                },
-              },
-            },
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'CatalogEntry/pet-room.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'General Pet Room',
-            description: 'Catalog entry for Pet Room Card',
-            ref: {
-              module: `${testRealmURL}pet-room`,
-              name: 'PetRoom',
-            },
-          },
-          meta: {
-            fields: {
-              demo: {
-                adoptsFrom: {
-                  module: `../pet-room`,
-                  name: 'PetRoom',
-                },
-              },
-            },
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'CatalogEntry/pet-card.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Pet',
-            description: 'Catalog entry for Pet',
-            ref: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-            demo: {
-              name: 'Snoopy',
-            },
-          },
-          meta: {
-            fields: {
-              demo: {
-                adoptsFrom: {
-                  module: `../pet`,
-                  name: 'Pet',
-                },
-              },
-            },
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'BlogPost/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Outer Space Journey',
-            body: 'Hello world',
-          },
-          relationships: {
-            authorBio: {
-              links: {
-                self: '../Author/1',
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../blog-post',
-              name: 'BlogPost',
-            },
-          },
-        },
-      },
-      'BlogPost/2.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Beginnings',
-          },
-          relationships: {
-            authorBio: {
-              links: {
-                self: null,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../blog-post',
-              name: 'BlogPost',
-            },
-          },
-        },
-      },
-      'Author/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Alien',
-            lastName: 'Bob',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../author',
-              name: 'Author',
-            },
-          },
-        },
-      },
-      'Author/2.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'R2-D2',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../author',
-              name: 'Author',
-            },
-          },
-        },
-      },
-      'Author/mark.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Mark',
-            lastName: 'Jackson',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../author',
-              name: 'Author',
-            },
-          },
-        },
-      },
-      '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
-      ...Object.fromEntries(personCards),
-    });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
-        },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
-        },
-      ],
-      shimModules: {
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
         'pet.gts': { Pet },
         'shipping-info.gts': { ShippingInfo },
         'address.gts': { Address },
@@ -671,9 +320,320 @@ module('Integration | operator-mode', function (hooks) {
         'author.gts': { Author },
         'publishing-packet.gts': { PublishingPacket },
         'pet-room.gts': { PetRoom },
+        'Pet/mango.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'BoomPet/paper.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}BoomPet/paper`,
+            attributes: {
+              name: 'Paper',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}boom-pet`,
+                name: 'BoomPet',
+              },
+            },
+          },
+        },
+        'Pet/jackie.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/jackie`,
+            attributes: {
+              name: 'Jackie',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/woody.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/woody`,
+            attributes: {
+              name: 'Woody',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Person/fadhlan.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Person/fadhlan`,
+            attributes: {
+              firstName: 'Fadhlan',
+              address: {
+                city: 'Bandung',
+                country: 'Indonesia',
+                shippingInfo: {
+                  preferredCarrier: 'DHL',
+                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                },
+              },
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/burcu.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Person/burcu`,
+            attributes: {
+              firstName: 'Burcu',
+            },
+            relationships: {
+              'friends.0': {
+                links: {
+                  self: `${testRealmURL}Pet/jackie`,
+                },
+              },
+              'friends.1': {
+                links: {
+                  self: `${testRealmURL}Pet/woody`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'grid.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'CatalogEntry/publishing-packet.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Publishing Packet',
+              description: 'Catalog entry for PublishingPacket',
+              ref: {
+                module: `${testRealmURL}publishing-packet`,
+                name: 'PublishingPacket',
+              },
+              demo: {
+                socialBlurb: null,
+              },
+            },
+            relationships: {
+              'demo.blogPost': {
+                links: {
+                  self: '../BlogPost/1',
+                },
+              },
+            },
+            meta: {
+              fields: {
+                demo: {
+                  adoptsFrom: {
+                    module: `../publishing-packet`,
+                    name: 'PublishingPacket',
+                  },
+                },
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'CatalogEntry/pet-room.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'General Pet Room',
+              description: 'Catalog entry for Pet Room Card',
+              ref: {
+                module: `${testRealmURL}pet-room`,
+                name: 'PetRoom',
+              },
+            },
+            meta: {
+              fields: {
+                demo: {
+                  adoptsFrom: {
+                    module: `../pet-room`,
+                    name: 'PetRoom',
+                  },
+                },
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'CatalogEntry/pet-card.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Pet',
+              description: 'Catalog entry for Pet',
+              ref: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+              demo: {
+                name: 'Snoopy',
+              },
+            },
+            meta: {
+              fields: {
+                demo: {
+                  adoptsFrom: {
+                    module: `../pet`,
+                    name: 'Pet',
+                  },
+                },
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'BlogPost/1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Outer Space Journey',
+              body: 'Hello world',
+            },
+            relationships: {
+              authorBio: {
+                links: {
+                  self: '../Author/1',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../blog-post',
+                name: 'BlogPost',
+              },
+            },
+          },
+        },
+        'BlogPost/2.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Beginnings',
+            },
+            relationships: {
+              authorBio: {
+                links: {
+                  self: null,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../blog-post',
+                name: 'BlogPost',
+              },
+            },
+          },
+        },
+        'Author/1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Alien',
+              lastName: 'Bob',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../author',
+                name: 'Author',
+              },
+            },
+          },
+        },
+        'Author/2.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'R2-D2',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../author',
+                name: 'Author',
+              },
+            },
+          },
+        },
+        'Author/mark.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Mark',
+              lastName: 'Jackson',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../author',
+                name: 'Author',
+              },
+            },
+          },
+        },
+        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
+        ...Object.fromEntries(personCards),
       },
     });
-    await realm.ready;
 
     setCardInOperatorModeState = async (cardURL: string) => {
       let operatorModeStateService = this.owner.lookup(
@@ -1759,12 +1719,11 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
-    let personCard = await loadCard(`${testRealmURL}Person/fadhlan`);
     assert
       .dom(
         `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-header-title]`,
       )
-      .containsText(cardTypeDisplayName(personCard));
+      .containsText('Person');
 
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
@@ -1786,12 +1745,11 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
-    let personCard = await loadCard(`${testRealmURL}Person/fadhlan`);
     assert
       .dom(
         `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-header-title]`,
       )
-      .containsText(cardTypeDisplayName(personCard));
+      .containsText('Person');
 
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();

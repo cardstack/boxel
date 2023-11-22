@@ -15,27 +15,20 @@ import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import { baseRealm, primitive } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
-  TestRealm,
-  TestRealmAdapter,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
   testRealmURL,
-  sourceFetchRedirectHandle,
-  sourceFetchReturnUrlHandle,
+  setupAcceptanceTestRealm,
 } from '../helpers';
 
 module('Acceptance | operator mode tests', function (hooks) {
-  let realm: Realm;
-  let adapter: TestRealmAdapter;
-
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
@@ -205,147 +198,136 @@ module('Acceptance | operator mode tests', function (hooks) {
         },
       });
     }
-    adapter = new TestRealmAdapter({
-      'README.txt': `Hello World`,
-      'person-entry.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Person Card',
-            description: 'Catalog entry for Person Card',
-            ref: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'Pet/mango.json': {
-        data: {
-          attributes: {
-            name: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Pet/vangogh.json': {
-        data: {
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
 
-      'Person/fadhlan.json': {
-        data: {
-          attributes: {
-            firstName: 'Fadhlan',
-            address: {
-              city: 'Bandung',
-              country: 'Indonesia',
-              shippingInfo: {
-                preferredCarrier: 'DHL',
-                remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-              },
-            },
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: `${testRealmURL}Pet/mango`,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'boom.json': {
-        data: {
-          attributes: {
-            firstName: 'Boom!',
-          },
-          meta: {
-            adoptsFrom: {
-              module: './boom-person',
-              name: 'BoomPerson',
-            },
-          },
-        },
-      },
-      'grid.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
-            },
-          },
-        },
-      },
-      'index.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
-            },
-          },
-        },
-      },
-      '.realm.json': {
-        name: 'Test Workspace B',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
-    });
-
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      isAcceptanceTest: true,
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
-        },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
-        },
-      ],
-      shimModules: {
+    await setupAcceptanceTestRealm({
+      loader,
+      contents: {
         'address.gts': { Address },
         'boom-field.gts': { BoomField },
         'boom-person.gts': { BoomPerson },
         'person.gts': { Person },
         'pet.gts': { Pet },
         'shipping-info.gts': { ShippingInfo },
+        'README.txt': `Hello World`,
+        'person-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Person Card',
+              description: 'Catalog entry for Person Card',
+              ref: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'Pet/mango.json': {
+          data: {
+            attributes: {
+              name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/vangogh.json': {
+          data: {
+            attributes: {
+              name: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+
+        'Person/fadhlan.json': {
+          data: {
+            attributes: {
+              firstName: 'Fadhlan',
+              address: {
+                city: 'Bandung',
+                country: 'Indonesia',
+                shippingInfo: {
+                  preferredCarrier: 'DHL',
+                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                },
+              },
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'boom.json': {
+          data: {
+            attributes: {
+              firstName: 'Boom!',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './boom-person',
+                name: 'BoomPerson',
+              },
+            },
+          },
+        },
+        'grid.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        '.realm.json': {
+          name: 'Test Workspace B',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        },
       },
     });
-    await realm.ready;
   });
 
   test('visiting index card and entering operator mode', async function (assert) {

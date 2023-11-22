@@ -27,9 +27,8 @@ import {
   shimModule,
   setupCardLogs,
   setupLocalIndexing,
-  TestRealmAdapter,
-  TestRealm,
   saveCard,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -39,7 +38,6 @@ let string: typeof import('https://cardstack.com/base/string');
 let loader: Loader;
 
 module('Integration | card-editor', function (hooks) {
-  let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
 
@@ -118,106 +116,105 @@ module('Integration | card-editor', function (hooks) {
         </template>
       };
     }
-    adapter = new TestRealmAdapter({
-      'Pet/mango.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/mango`,
-          attributes: {
-            name: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Pet/vangogh.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/vangogh`,
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Pet/ringo.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/ringo`,
-          attributes: {
-            name: 'Ringo',
-            favoriteToy: 'sneaky snake',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}fancy-pet`,
-              name: 'FancyPet',
-            },
-          },
-        },
-      },
-      'Person/hassan.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Person/hassan`,
-          attributes: {
-            firstName: 'Hassan',
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: `${testRealmURL}Pet/mango`,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'Person/mariko.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Person/mariko`,
-          attributes: {
-            firstName: 'Mariko',
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: null,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      },
-    });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      shimModules: {
+
+    ({ realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
         'pet.gts': { Pet },
         'fancy-pet.gts': { FancyPet },
         'person.gts': { Person },
+        'Pet/mango.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/vangogh.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/vangogh`,
+            attributes: {
+              name: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/ringo.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/ringo`,
+            attributes: {
+              name: 'Ringo',
+              favoriteToy: 'sneaky snake',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}fancy-pet`,
+                name: 'FancyPet',
+              },
+            },
+          },
+        },
+        'Person/hassan.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Person/hassan`,
+            attributes: {
+              firstName: 'Hassan',
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/mariko.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Person/mariko`,
+            attributes: {
+              firstName: 'Mariko',
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: null,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
       },
-    });
-    await realm.ready;
+    }));
   });
 
   test('renders card in edit (default) format', async function (assert) {

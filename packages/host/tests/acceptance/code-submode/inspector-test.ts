@@ -18,13 +18,11 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
-  TestRealm,
   TestRealmAdapter,
   getMonacoContent,
   setupLocalIndexing,
   testRealmURL,
-  sourceFetchRedirectHandle,
-  sourceFetchReturnUrlHandle,
+  setupAcceptanceTestRealm,
   setupServerSentEvents,
   waitForCodeEditor,
   type TestContextWithSSE,
@@ -318,139 +316,130 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
 
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
-    adapter = new TestRealmAdapter({
-      'index.gts': indexCardSource,
-      'pet-person.gts': personCardSource,
-      'person.gts': personCardSource,
-      'pet.gts': petCardSource,
-      'friend.gts': friendCardSource,
-      'employee.gts': employeeCardSource,
-      'in-this-file.gts': inThisFileSource,
-      'exports.gts': exportsSource,
-      'special-exports.gts': specialExportsSource,
-      'imports.gts': importsSource,
-      'person-entry.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Person',
-            description: 'Catalog entry',
-            ref: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'index.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './index',
-              name: 'Index',
-            },
-          },
-        },
-      },
-      'not-json.json': 'I am not JSON.',
-      'Person/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'Pet/mango.json': {
-        data: {
-          attributes: {
-            name: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Pet/vangogh.json': {
-        data: {
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'z00.json': '{}',
-      'z01.json': '{}',
-      'z02.json': '{}',
-      'z03.json': '{}',
-      'z04.json': '{}',
-      'z05.json': '{}',
-      'z06.json': '{}',
-      'z07.json': '{}',
-      'z08.json': '{}',
-      'z09.json': '{}',
-      'z10.json': '{}',
-      'z11.json': '{}',
-      'z12.json': '{}',
-      'z13.json': '{}',
-      'z14.json': '{}',
-      'z15.json': '{}',
-      'z16.json': '{}',
-      'z17.json': '{}',
-      'z18.json': '{}',
-      'z19.json': '{}',
-      'zzz/zzz/file.json': '{}',
-      '.realm.json': {
-        name: 'Test Workspace B',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
-    });
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
+
+    // this seeds the loader used during index which obtains url mappings
+    // from the global loader
+    ({ realm, adapter } = await setupAcceptanceTestRealm({
+      loader,
+      contents: {
+        'index.gts': indexCardSource,
+        'pet-person.gts': personCardSource,
+        'person.gts': personCardSource,
+        'pet.gts': petCardSource,
+        'friend.gts': friendCardSource,
+        'employee.gts': employeeCardSource,
+        'in-this-file.gts': inThisFileSource,
+        'exports.gts': exportsSource,
+        'special-exports.gts': specialExportsSource,
+        'imports.gts': importsSource,
+        'person-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Person',
+              description: 'Catalog entry',
+              ref: {
+                module: `./person`,
+                name: 'Person',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}catalog-entry`,
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './index',
+                name: 'Index',
+              },
+            },
+          },
+        },
+        'not-json.json': 'I am not JSON.',
+        'Person/1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Hassan',
+              lastName: 'Abdel-Rahman',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Pet/mango.json': {
+          data: {
+            attributes: {
+              name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/vangogh.json': {
+          data: {
+            attributes: {
+              name: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'z00.json': '{}',
+        'z01.json': '{}',
+        'z02.json': '{}',
+        'z03.json': '{}',
+        'z04.json': '{}',
+        'z05.json': '{}',
+        'z06.json': '{}',
+        'z07.json': '{}',
+        'z08.json': '{}',
+        'z09.json': '{}',
+        'z10.json': '{}',
+        'z11.json': '{}',
+        'z12.json': '{}',
+        'z13.json': '{}',
+        'z14.json': '{}',
+        'z15.json': '{}',
+        'z16.json': '{}',
+        'z17.json': '{}',
+        'z18.json': '{}',
+        'z19.json': '{}',
+        'zzz/zzz/file.json': '{}',
+        '.realm.json': {
+          name: 'Test Workspace B',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        },
+      },
+    }));
+
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;
-
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      isAcceptanceTest: true,
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
-        },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
-        },
-      ],
-    });
-    await realm.ready;
   });
 
   test('inspector will show json instance definition and module definition in card inheritance panel', async function (assert) {
@@ -732,7 +721,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await click('[data-test-confirm-delete-button]');
@@ -819,7 +807,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await click('[data-test-confirm-delete-button]');

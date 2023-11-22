@@ -28,14 +28,11 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
-  TestRealm,
-  TestRealmAdapter,
   getMonacoContent,
+  setupAcceptanceTestRealm,
   setMonacoContent,
   setupLocalIndexing,
   testRealmURL,
-  sourceFetchRedirectHandle,
-  sourceFetchReturnUrlHandle,
   setupServerSentEvents,
   waitForCodeEditor,
   type TestContextWithSSE,
@@ -367,7 +364,6 @@ const txtSource = `
 
 module('Acceptance | code submode tests', function (hooks) {
   let realm: Realm;
-  let adapter: TestRealmAdapter;
   let monacoService: MonacoService;
 
   setupApplicationTest(hooks);
@@ -385,172 +381,162 @@ module('Acceptance | code submode tests', function (hooks) {
       'service:monaco-service',
     ) as MonacoService;
 
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
-    adapter = new TestRealmAdapter({
-      'index.gts': indexCardSource,
-      'pet-person.gts': personCardSource,
-      'person.gts': personCardSource,
-      'pet.gts': petCardSource,
-      'friend.gts': friendCardSource,
-      'employee.gts': employeeCardSource,
-      'in-this-file.gts': inThisFileSource,
-      'postal-code.gts': postalCodeFieldSource,
-      'address.gts': addressFieldSource,
-      'country.gts': countryCardSource,
-      'trips.gts': tripsFieldSource,
-      'person-entry.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Person',
-            description: 'Catalog entry',
-            ref: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'index.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './index',
-              name: 'Index',
-            },
-          },
-        },
-      },
-      'not-json.json': 'I am not JSON.',
-      'Person/fadhlan.json': {
-        data: {
-          attributes: {
-            firstName: 'Fadhlan',
-            address: [
-              {
-                city: 'Bandung',
-                country: 'Indonesia',
-                shippingInfo: {
-                  preferredCarrier: 'DHL',
-                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-                },
-              },
-            ],
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: `${testRealmURL}Pet/mango`,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'Person/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'Pet/mango.json': {
-        data: {
-          attributes: {
-            name: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Country/united-states.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            name: 'United States',
-            description: null,
-            thumbnailURL: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../country',
-              name: 'Country',
-            },
-          },
-        },
-      },
-      'hello.txt': txtSource,
-      'z00.json': '{}',
-      'z01.json': '{}',
-      'z02.json': '{}',
-      'z03.json': '{}',
-      'z04.json': '{}',
-      'z05.json': '{}',
-      'z06.json': '{}',
-      'z07.json': '{}',
-      'z08.json': '{}',
-      'z09.json': '{}',
-      'z10.json': '{}',
-      'z11.json': '{}',
-      'z12.json': '{}',
-      'z13.json': '{}',
-      'z14.json': '{}',
-      'z15.json': '{}',
-      'z16.json': '{}',
-      'z17.json': '{}',
-      'z18.json': '{}',
-      'z19.json': '{}',
-      'zzz/zzz/file.json': '{}',
-      '.realm.json': {
-        name: 'Test Workspace B',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
-      'noop.gts': `export function noop() {};\nclass NoopClass {}`,
-    });
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      isAcceptanceTest: true,
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+    // this seeds the loader used during index which obtains url mappings
+    // from the global loader
+    ({ realm } = await setupAcceptanceTestRealm({
+      loader,
+      contents: {
+        'index.gts': indexCardSource,
+        'pet-person.gts': personCardSource,
+        'person.gts': personCardSource,
+        'pet.gts': petCardSource,
+        'friend.gts': friendCardSource,
+        'employee.gts': employeeCardSource,
+        'in-this-file.gts': inThisFileSource,
+        'postal-code.gts': postalCodeFieldSource,
+        'address.gts': addressFieldSource,
+        'country.gts': countryCardSource,
+        'trips.gts': tripsFieldSource,
+        'person-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Person',
+              description: 'Catalog entry',
+              ref: {
+                module: `./person`,
+                name: 'Person',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}catalog-entry`,
+                name: 'CatalogEntry',
+              },
+            },
+          },
         },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './index',
+                name: 'Index',
+              },
+            },
+          },
         },
-      ],
-    });
-    await realm.ready;
+        'not-json.json': 'I am not JSON.',
+        'Person/fadhlan.json': {
+          data: {
+            attributes: {
+              firstName: 'Fadhlan',
+              address: [
+                {
+                  city: 'Bandung',
+                  country: 'Indonesia',
+                  shippingInfo: {
+                    preferredCarrier: 'DHL',
+                    remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                  },
+                },
+              ],
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Hassan',
+              lastName: 'Abdel-Rahman',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Pet/mango.json': {
+          data: {
+            attributes: {
+              name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Country/united-states.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'United States',
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../country',
+                name: 'Country',
+              },
+            },
+          },
+        },
+        'hello.txt': txtSource,
+        'z00.json': '{}',
+        'z01.json': '{}',
+        'z02.json': '{}',
+        'z03.json': '{}',
+        'z04.json': '{}',
+        'z05.json': '{}',
+        'z06.json': '{}',
+        'z07.json': '{}',
+        'z08.json': '{}',
+        'z09.json': '{}',
+        'z10.json': '{}',
+        'z11.json': '{}',
+        'z12.json': '{}',
+        'z13.json': '{}',
+        'z14.json': '{}',
+        'z15.json': '{}',
+        'z16.json': '{}',
+        'z17.json': '{}',
+        'z18.json': '{}',
+        'z19.json': '{}',
+        'zzz/zzz/file.json': '{}',
+        '.realm.json': {
+          name: 'Test Workspace B',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        },
+        'noop.gts': `export function noop() {};\nclass NoopClass {}`,
+      },
+    }));
   });
 
   test('defaults to inheritance view and can toggle to file view', async function (assert) {
@@ -1155,7 +1141,6 @@ module('Acceptance | code submode tests', function (hooks) {
       await this.expectEvents({
         assert,
         realm,
-        adapter,
         expectedEvents,
         callback: async () => {
           setMonacoContent(`// This is a change \n${inThisFileSource}`);
@@ -1305,7 +1290,6 @@ module('Acceptance | code submode tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         // primitive field
@@ -1379,7 +1363,6 @@ module('Acceptance | code submode tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await realm.write(
