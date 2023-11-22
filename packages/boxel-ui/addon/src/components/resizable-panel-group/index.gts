@@ -183,7 +183,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
     return id;
   }
 
-  @action
   calculatePanelRatio() {
     let panelLengths = Array.from(this.listPanelContext.values()).map(
       (panelContext) => panelContext.lengthPx,
