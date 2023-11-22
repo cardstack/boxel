@@ -52,7 +52,7 @@ const indexCardSource = `
   }
 `;
 
-const addressFieldSource = `
+const postalCodeFieldSource = `
   import {
     contains,
     field,
@@ -61,12 +61,37 @@ const addressFieldSource = `
   } from 'https://cardstack.com/base/card-api';
   import StringCard from 'https://cardstack.com/base/string';
 
+  export class PostalCode extends FieldDef {
+    static displayName = 'Postal Code';
+    @field fiveDigitPostalCode = contains(StringCard); // required
+    @field fourDigitOptional = contains(StringCard);
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <div><@fields.fiveDigitPostalCode /> - <@fields.fourDigitOptional /></div>
+        </address>
+      </template>
+    };    
+  }
+`
+
+const addressFieldSource = `
+  import {
+    contains,
+    field,
+    Component,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+  import { PostalCode } from './postal-code';
+
   export class Address extends FieldDef {
     static displayName = 'Address';
     @field streetAddress = contains(StringCard); // required
     @field city = contains(StringCard); // required
     @field region = contains(StringCard);
-    @field postalCode = contains(StringCard);
+    @field postalCode = contains(PostalCode);
     @field poBoxNumber = contains(StringCard);
     @field country = contains(StringCard); // required // dropdown
 
@@ -363,6 +388,7 @@ module('Acceptance | code submode tests', function (hooks) {
       'friend.gts': friendCardSource,
       'employee.gts': employeeCardSource,
       'in-this-file.gts': inThisFileSource,
+      'postal-code.gts': postalCodeFieldSource,
       'address.gts': addressFieldSource,
       'country.gts': countryCardSource,
       'trips.gts': tripsFieldSource,
@@ -1248,14 +1274,27 @@ module('Acceptance | code submode tests', function (hooks) {
       adapter,
       expectedEvents,
       callback: async () => {
+        // primitive field
         await fillIn('[data-test-field="lastName"] input', 'Ridhwanallah');
 
+        // compound field with 1 level
         await fillIn(
           '[data-test-field="streetAddress"] input',
           'Unknown Address',
         );
         await fillIn('[data-test-field="city"] input', 'Bandung');
-
+        
+        // compound field with 2 level
+        await fillIn(
+          '[data-test-field="fiveDigitPostalCode"] input',
+          '12345',
+        );
+        await fillIn(
+          '[data-test-field="fourDigitOptional"] input',
+          '1234',
+        );
+        
+        // compound field with linksToMany field
         await click(
           '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
         );
@@ -1267,6 +1306,7 @@ module('Acceptance | code submode tests', function (hooks) {
         );
         await click(`[data-test-card-catalog-go-button]`);
       },
+      opts: { timeout: 4500 }
     });
     await waitFor('[data-test-saved]');
     await waitFor('[data-test-save-idle]');
@@ -1275,6 +1315,8 @@ module('Acceptance | code submode tests', function (hooks) {
     assert.ok(content.includes('Ridhwanallah'));
     assert.ok(content.includes('Unknown Address'));
     assert.ok(content.includes('Bandung'));
+    assert.ok(content.includes('12345'));
+    assert.ok(content.includes('1234'));
     assert.ok(content.includes(`${testRealmURL}Country/united-states`));
   });
 });

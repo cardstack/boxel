@@ -1901,7 +1901,7 @@ export function subscribeToChanges(
   });
   Object.keys(fields).forEach((fieldName) => {
     let value = peekAtField(fieldOrCard, fieldName);
-    if (isCompoundField(value)) {
+    if (isCardOrField(value)) {
       subscribeToChanges(value, subscriber);
     }
   });
@@ -1923,10 +1923,22 @@ export function unsubscribeFromChanges(
   });
   Object.keys(fields).forEach((fieldName) => {
     let value = peekAtField(fieldOrCard, fieldName);
-    if (isCompoundField(value)) {
+    if (isCardOrField(value)) {
       unsubscribeFromChanges(value, subscriber);
     }
   });
+}
+
+function migrateSubscribers(oldFieldOrCard: BaseDef, newFieldOrCard: BaseDef) {
+  let changeSubscribers = subscribers.get(oldFieldOrCard);
+  if (changeSubscribers) {
+    changeSubscribers.forEach((changeSubscriber) =>
+      subscribeToChanges(newFieldOrCard, changeSubscriber),
+    );
+    changeSubscribers.forEach((changeSubscriber) =>
+      unsubscribeFromChanges(oldFieldOrCard, changeSubscriber),
+    );
+  }
 }
 
 function getDataBucket<T extends BaseDef>(instance: T): Map<string, any> {
@@ -2409,17 +2421,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       // Before updating field's value, we also have to make sure
       // the subscribers also subscribes to a new value.
       let existingValue = deserialized.get(fieldName as string);
-      let changeSubscribers = subscribers.get(existingValue);
-      if (
-        existingValue &&
-        isCompoundField(existingValue) &&
-        changeSubscribers
-      ) {
-        subscribers.set(value, changeSubscribers);
-        subscribers.delete(existingValue);
+      if (existingValue && isCardOrField(existingValue)) {
+        migrateSubscribers(existingValue, value);
       }
       deserialized.set(fieldName as string, value);
-
       logger.log(recompute(instance));
     }
     if (instance instanceof CardDef && resource.id != null) {

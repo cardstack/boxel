@@ -151,6 +151,7 @@ export interface TestContextWithSSE extends TestContext {
     expectedNumberOfEvents?: number;
     onEvents?: (events: { type: string; data: Record<string, any> }[]) => void;
     callback: () => Promise<any>;
+    opts?: { timeout?: number };
   }) => Promise<any>;
   subscribers: ((e: { type: string; data: string }) => void)[];
 }
@@ -330,6 +331,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       expectedNumberOfEvents,
       onEvents,
       callback,
+      opts,
     }: {
       assert: Assert;
       realm: Realm;
@@ -340,6 +342,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         events: { type: string; data: Record<string, any> }[],
       ) => void;
       callback: () => Promise<T>;
+      opts?: { timeout?: number };
     }): Promise<T> => {
       let defer = new Deferred();
       let events: { type: string; data: Record<string, any> }[] = [];
@@ -368,7 +371,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
               `expectEvent timed out, saw events ${JSON.stringify(events)}`,
             ),
           ),
-        3000,
+        opts?.timeout ?? 3000,
       );
       let result = await callback();
       let decoder = new TextDecoder();
