@@ -11,7 +11,6 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { primitive as primitiveType } from 'https://cardstack.com/base/card-api';
@@ -42,7 +41,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
       .loader;
   });
   hooks.beforeEach(async function () {
-    shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     primitive = cardApi.primitive;
     string = await loader.import(`${baseRealm.url}string`);
