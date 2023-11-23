@@ -21,7 +21,6 @@ import CardEditor from '@cardstack/host/components/card-editor';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -74,7 +73,6 @@ module('Integration | text-input-filter', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/'),
     );
-    shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
 
     adapter = new TestRealmAdapter({

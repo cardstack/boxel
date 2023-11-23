@@ -474,7 +474,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   />
                 </:trigger>
                 <:content>
-                  {{if (eq @item.format 'isolated') 'Close' 'Cancel & Close'}}
+                  Close
                 </:content>
               </Tooltip>
             </:actions>
