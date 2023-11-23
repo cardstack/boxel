@@ -438,6 +438,7 @@ function makeRealm(
   onFetch?: (req: Request) => Promise<Request>,
   overridingHandlers?: RequestHandler[],
 ) {
+  //try to put card prerender in here
   let localIndexer = owner.lookup(
     'service:local-indexer',
   ) as unknown as MockLocalIndexer;

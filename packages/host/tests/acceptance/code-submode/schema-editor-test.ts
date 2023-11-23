@@ -1,3 +1,4 @@
+import Service from '@ember/service';
 import {
   visit,
   click,
@@ -14,7 +15,7 @@ import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { Loader, baseRealm } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -216,6 +217,8 @@ const ambiguousDisplayNamesCardSource = `
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
+  let loader: Loader;
+  let serviceLoader: Loader;
 
   async function saveField(
     context: TestContextWithSSE,
@@ -241,7 +244,21 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
   });
-
+  class MockCardPrerenderLoaderService extends Service {
+    getLoader() {
+      return loader;
+    }
+  }
+  hooks.beforeEach(function () {
+    serviceLoader = (
+      this.owner.lookup('service:loader-service') as LoaderService
+    ).loader;
+    loader = Loader.cloneLoader(serviceLoader);
+    this.owner.register(
+      'service:card-prerender-loader-service',
+      MockCardPrerenderLoaderService,
+    );
+  });
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
 
@@ -331,9 +348,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       },
     });
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-
+    debugger;
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
       overridingHandlers: [
@@ -345,6 +360,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         },
       ],
     });
+    serviceLoader.copyHandlers(loader);
     await realm.ready;
   });
 

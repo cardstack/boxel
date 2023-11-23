@@ -114,10 +114,13 @@ type EvaluatableDep =
 
 export type RequestHandler = (req: Request) => Promise<Response | null>;
 
+let nonce = 0;
+
 export class Loader {
   private log = logger('loader');
   private modules = new Map<string, Module>();
   private urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
+  nonce = nonce++; //leave in here helpful for debugging
 
   // use a tuple array instead of a map so that we can support reversing
   // different resolutions back to the same URL. the resolution that we apply
@@ -142,6 +145,10 @@ export class Loader {
       clone.shimModule(moduleIdentifier, module);
     }
     return clone;
+  }
+
+  copyHandlers(loader: Loader) {
+    this.urlHandlers = loader.urlHandlers;
   }
 
   addURLMapping(from: URL, to: URL) {

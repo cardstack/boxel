@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Loader } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import {
   type EntrySetter,
@@ -19,6 +19,7 @@ import { CurrentRun } from '../lib/current-run';
 import { getModulesInRealm } from '../lib/utils';
 
 import type LoaderService from '../services/loader-service';
+import type CardPrerenderLoaderService from '../services/card-prerender-loader-service';
 import type LocalIndexer from '../services/local-indexer';
 import type RenderService from '../services/render-service';
 
@@ -27,12 +28,16 @@ import type RenderService from '../services/render-service';
 // to perform rendering for indexing in Ember test contexts.
 export default class CardPrerender extends Component {
   @service declare loaderService: LoaderService;
+  @service declare cardPrerenderLoaderService: CardPrerenderLoaderService;
   @service declare renderService: RenderService;
   @service declare fastboot: { isFastBoot: boolean };
   @service declare localIndexer: LocalIndexer;
+  private loader: Loader;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
+    debugger;
+    this.loader = this.cardPrerenderLoaderService.getLoader();
     if (this.fastboot.isFastBoot) {
       try {
         this.doRegistration.perform();
@@ -92,15 +97,12 @@ export default class CardPrerender extends Component {
   }
 
   private warmUpModuleCache = dropTask(async () => {
-    let baseRealmModules = await getModulesInRealm(
-      this.loaderService.loader,
-      baseRealm.url,
-    );
+    let baseRealmModules = await getModulesInRealm(this.loader, baseRealm.url);
     // TODO the fact that we need to reverse this list is
     // indicative of a loader issue. Need to work with Ed around this as I think
     // there is probably missing state in our loader's state machine.
     for (let module of baseRealmModules.reverse()) {
-      await this.loaderService.loader.import(module);
+      await this.loader.import(module);
     }
   });
 
@@ -118,7 +120,7 @@ export default class CardPrerender extends Component {
     let current = await CurrentRun.fromScratch(
       new CurrentRun({
         realmURL,
-        loader: this.loaderService.loader,
+        loader: this.loader,
         reader,
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
@@ -141,7 +143,7 @@ export default class CardPrerender extends Component {
         operation,
         prev,
         reader,
-        loader: this.loaderService.loader,
+        loader: this.loader,
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
         onInvalidation,

@@ -399,6 +399,7 @@ export class CurrentRun {
         visit: this.visitFile.bind(this),
         identityContext,
         realmPath: this.#realmPaths,
+        loader: this.#loader,
       });
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
       let data = api.serializeCard(card, { includeComputeds: true });

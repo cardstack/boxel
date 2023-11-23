@@ -31,6 +31,7 @@ export class InheritanceChainResource extends Resource<Args> {
   @tracked private _value: CardInheritance[] = [];
 
   modify(_positional: never[], named: Args['named']) {
+    debugger;
     let { cardTypeResource, card, url, loader } = named;
     if (cardTypeResource) {
       this.load.perform(url, card, loader, cardTypeResource);

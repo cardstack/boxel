@@ -6,7 +6,7 @@ import Serializer from '@simple-dom/serializer';
 
 import voidMap from '@simple-dom/void-map';
 
-import { baseRealm, RealmPaths } from '@cardstack/runtime-common';
+import { baseRealm, RealmPaths, type Loader } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { isCardError, CardError } from '@cardstack/runtime-common/error';
 import {
@@ -28,7 +28,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { render } from '../lib/isolated-render';
 
 import type CardService from './card-service';
-import type LoaderService from './loader-service';
 import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
 
 const ELEMENT_NODE_TYPE = 1;
@@ -43,6 +42,7 @@ interface RenderCardParams {
   format?: Format;
   identityContext: IdentityContextType;
   realmPath: RealmPaths;
+  loader: Loader;
 }
 export type RenderCard = (params: RenderCardParams) => Promise<string>;
 
@@ -50,7 +50,6 @@ const maxRenderThreshold = 10000;
 export default class RenderService extends Service {
   // @ts-expect-error the types for this invocation of @service() don't work
   @service('-document') document: SimpleDocument;
-  @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   indexRunDeferred: Deferred<void> | undefined;
   renderError: Error | undefined;
@@ -63,6 +62,7 @@ export default class RenderService extends Service {
       format = 'embedded',
       identityContext,
       realmPath,
+      loader,
     } = params;
     let component = card.constructor.getComponent(card, format);
 
@@ -102,6 +102,7 @@ export default class RenderService extends Service {
             identityContext,
             visit,
             realmPath,
+            loader,
           });
         } else {
           throw err;
@@ -126,10 +127,8 @@ export default class RenderService extends Service {
   private async resolveField(
     params: Omit<RenderCardParams, 'format'> & { fieldName: string },
   ): Promise<void> {
-    let { card, visit, identityContext, realmPath, fieldName } = params;
-    let api = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
-    );
+    let { card, visit, identityContext, realmPath, fieldName, loader } = params;
+    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
     try {
       await api.getIfReady(card, fieldName as keyof CardDef, undefined, {
         loadFields: true,
