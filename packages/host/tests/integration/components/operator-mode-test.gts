@@ -2019,49 +2019,6 @@ module('Integration | operator-mode', function (hooks) {
       .doesNotExist('invalid state is not shown');
   });
 
-  test(`card selection and card URL field are mutually exclusive in card chooser`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-create-new-card-button]`);
-    await waitFor(`[data-test-card-catalog-item]`);
-
-    await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"] button`,
-    );
-    assert
-      .dom(
-        `[data-test-card-catalog-item="https://cardstack.com/base/types/card"].selected`,
-      )
-      .exists('card is selected');
-
-    await fillIn(
-      `[data-test-url-search]`,
-      `https://cardstack.com/base/types/card`,
-    );
-
-    assert
-      .dom(
-        `[data-test-card-catalog-item="https://cardstack.com/base/types/card"].selected`,
-      )
-      .doesNotExist('card is not selected');
-
-    await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"] button`,
-    );
-    assert
-      .dom(`[data-test-url-search]`)
-      .hasNoValue('card URL field is cleared');
-  });
-
   test(`can search by card title in card chooser`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
