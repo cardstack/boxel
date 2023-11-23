@@ -426,6 +426,8 @@ export default class CardCatalogModal extends Component<Signature> {
           this.state.searchResults = results;
         }
       }
+    } else {
+      this.state.searchResults = [];
     }
   });
 

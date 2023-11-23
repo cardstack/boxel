@@ -409,6 +409,30 @@ module('Acceptance | interact submode tests', function (hooks) {
       // await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
       // assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
     });
+
+    test('Handles a URL with no results', async function (assert) {
+      let operatorModeStateParam = stringify({ stacks: [] })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      await waitFor('[data-test-add-card-button]');
+      await click('[data-test-add-card-button]');
+
+      await waitFor('[data-test-search-field]');
+      await fillIn(
+        '[data-test-search-field]',
+        `${testRealmURL}xyz-does-not-exist`,
+      );
+
+      await waitFor('[data-test-card-catalog]');
+      await waitFor('[data-test-card-catalog-item]', { count: 0 });
+      assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
+      // FIXME should this be URL-specific? (and singular)
+    });
   });
 
   module('1 stack', function () {
