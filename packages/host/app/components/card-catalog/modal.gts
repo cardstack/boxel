@@ -8,7 +8,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import { restartableTask } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -20,12 +19,10 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 import {
   createNewCard,
   baseRealm,
-  isSingleCardDocument,
   type CodeRef,
   type CreateNewCard,
   Deferred,
   type RealmInfo,
-  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import type { Query, Filter } from '@cardstack/runtime-common/query';
