@@ -377,59 +377,35 @@ export default class CardCatalogModal extends Component<Signature> {
       return this.resetState();
     }
 
+    let results: RealmCards[] = [];
+    let cardFilter;
+
     if (this.searchKeyIsURL) {
-      this.getCard.perform(this.state.searchKey);
+      cardFilter = (c: CardDef) => {
+        return c.id === this.state.searchKey;
+      };
     } else {
-      let results: RealmCards[] = [];
-      for (let { url, realmInfo, cards } of this.displayedRealms) {
-        let filteredCards = cards.filter((c) => {
-          return c.title
-            ?.trim()
-            .toLowerCase()
-            .includes(this.state.searchKey.trim().toLowerCase());
+      cardFilter = (c: CardDef) => {
+        return c.title
+          ?.trim()
+          .toLowerCase()
+          .includes(this.state.searchKey.trim().toLowerCase());
+      };
+    }
+
+    for (let { url, realmInfo, cards } of this.displayedRealms) {
+      let filteredCards = cards.filter(cardFilter);
+
+      if (filteredCards.length) {
+        results.push({
+          url,
+          realmInfo,
+          cards: filteredCards,
         });
-        if (filteredCards.length) {
-          results.push({
-            url,
-            realmInfo,
-            cards: filteredCards,
-          });
-        }
       }
-      this.state.searchResults = results;
     }
+    this.state.searchResults = results;
   }
-
-  private getCard = restartableTask(async (cardURL: string) => {
-    let response = await this.loaderService.loader.fetch(cardURL, {
-      headers: { Accept: SupportedMimeType.CardJson },
-    });
-
-    if (response.ok) {
-      let maybeCardDoc = await response.json();
-
-      if (isSingleCardDocument(maybeCardDoc)) {
-        let selectedCard = await this.cardService.createFromSerialized(
-          maybeCardDoc.data,
-          maybeCardDoc,
-          new URL(maybeCardDoc.data.id),
-        );
-
-        let results: RealmCards[] = [];
-        if (selectedCard) {
-          results.push({
-            url: cardURL,
-            // FIXME can the presence of this be guaranteed?
-            realmInfo: maybeCardDoc.data.meta.realmInfo!,
-            cards: [selectedCard],
-          });
-          this.state.searchResults = results;
-        }
-      }
-    } else {
-      this.state.searchResults = [];
-    }
-  });
 
   @action toggleSelect(card?: CardDef): void {
     this.state.cardURL = '';
