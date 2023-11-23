@@ -432,7 +432,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       await waitFor('[data-test-card-catalog]');
       await waitFor('[data-test-card-catalog-item]', { count: 0 });
       assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
-      // FIXME should this be URL-specific? (and singular)
     });
   });
 
