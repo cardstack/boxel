@@ -1958,18 +1958,26 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(
-      `[data-test-url-search]`,
+      `[data-test-search-field]`,
       `https://cardstack.com/base/types/card`,
     );
-    await waitUntil(
-      () =>
-        (
-          document.querySelector(`[data-test-card-catalog-go-button]`) as
-            | HTMLButtonElement
-            | undefined
-        )?.disabled === false,
-    );
-    await click(`[data-test-card-catalog-go-button]`);
+
+    await waitFor('[data-test-card-catalog-item]', {
+      count: 1,
+    });
+
+    assert
+      .dom(`[data-test-realm="Base Workspace"] [data-test-results-count]`)
+      .hasText('1 result');
+
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
+    await click('[data-test-select]');
+
+    await waitFor('[data-test-card-catalog-go-button][disabled]', {
+      count: 0,
+    });
+    await click('[data-test-card-catalog-go-button]');
+
     assert
       .dom(`[data-test-stack-card-index="1"] [data-test-field="title"]`)
       .exists();
