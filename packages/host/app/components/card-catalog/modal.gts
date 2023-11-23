@@ -107,6 +107,7 @@ export default class CardCatalogModal extends Component<Signature> {
             @selectedRealms={{this.state.selectedRealms}}
             @onSelectRealm={{this.onSelectRealm}}
             @onDeselectRealm={{this.onDeselectRealm}}
+            @disableRealmFilter={{this.searchKeyIsURL}}
           />
         </:header>
         <:content>

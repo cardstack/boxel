@@ -371,7 +371,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         count: 1,
       });
 
-      // FIXME should realm choice be disabled?
+      assert.dom('[data-test-realm-filter-button]').isDisabled();
 
       assert
         .dom(`[data-test-realm="Test Workspace B"] [data-test-results-count]`)
