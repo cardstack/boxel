@@ -511,7 +511,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         panelLengths[panelContext.id] = actualSize;
       });
     };
-    calculateLengtsOfPanelWithoutMinLegth();
+    calculateLengthsOfPanelWithoutMinLength();
 
     for (let index = 0; index <= this.listPanelContext.size; index++) {
       let panelContext = this.listPanelContext.get(index);
