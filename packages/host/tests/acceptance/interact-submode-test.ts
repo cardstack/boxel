@@ -390,24 +390,25 @@ module('Acceptance | interact submode tests', function (hooks) {
         .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
         .containsText('Test Workspace B');
 
-      // FIXME what are these asserting?
+      // Close the card, find it in recent cards, and reopen it
+      await click(
+        `[data-test-stack-card="${testRealmURL}person-entry"] [data-test-close-button]`,
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}person-entry"]`, {
+        count: 0,
+      });
+      assert.dom('[data-test-add-card-button]').exists('stack is empty');
 
-      // await click(
-      //   `[data-test-stack-card="${testRealmURL}index"] [data-test-close-button]`,
-      // );
-      // await waitFor(`[data-test-stack-card="${testRealmURL}index"]`, {
-      //   count: 0,
-      // });
-      // assert.dom('[data-test-add-card-button]').exists('stack is empty');
+      await click('[data-test-search-field]');
+      assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
-      // await click('[data-test-search-field]');
-      // assert.dom('[data-test-search-sheet]').hasClass('prompt');
+      await waitFor(`[data-test-search-result="${testRealmURL}person-entry"]`);
+      await click(`[data-test-search-result="${testRealmURL}person-entry"]`);
 
-      // await waitFor(`[data-test-search-result="${testRealmURL}index"]`);
-      // await click(`[data-test-search-result="${testRealmURL}index"]`);
-
-      // await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
-      // assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
+      await waitFor(`[data-test-stack-card="${testRealmURL}person-entry"]`);
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
+        .exists();
     });
 
     test('Handles a URL with no results', async function (assert) {
