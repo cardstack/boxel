@@ -4,6 +4,8 @@ import { next } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { WithBoundArgs } from '@glint/template';
+import { nodeFor } from 'ember-ref-bucket';
+import { resolveGlobalRef } from 'ember-ref-bucket/utils/ref';
 import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -117,10 +119,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   private get panelGroupLengthWithoutResizeHandlerPx() {
-    let resizeHandlerSelector = `#resize-handler-${this.args.orientation}-0`;
-    let resizeHandlerEl = this.panelGroupElement?.querySelector(
-      resizeHandlerSelector,
-    ) as HTMLElement;
+    let resizeHandlerSelector = `resize-handler-${this.args.orientation}-0`;
+    let resizeHandlerEl = this.getHtmlElement(resizeHandlerSelector);
     if (!resizeHandlerEl) {
       console.error(
         `Could not find selector: ${resizeHandlerSelector} when handling window resize for resizeable panel group`,
@@ -214,7 +214,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return;
     }
 
-    let parentElement = document.querySelector(`#${buttonId}`)?.parentElement;
+    let parentElement = this.getHtmlElement(buttonId).parentElement;
     this.currentResizeHandler = {
       id: buttonId,
       initialPosition: event[this.clientPositionProperty],
@@ -335,7 +335,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return undefined;
     }
 
-    let parentElement = document.querySelector(`#${buttonId}`)?.parentElement;
+    let parentElement = this.getHtmlElement(buttonId).parentElement;
     let prevEl = parentElement?.previousElementSibling as HTMLElement;
     let nextEl = parentElement?.nextElementSibling as HTMLElement;
 
@@ -516,5 +516,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
         });
       }
     }
+  }
+
+  private getHtmlElement(id: string): HTMLElement {
+    return nodeFor(resolveGlobalRef(), id);
   }
 }

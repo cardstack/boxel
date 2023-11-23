@@ -3,6 +3,8 @@ import { scheduleOnce } from '@ember/runloop';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { ref } from 'ember-ref-bucket';
+import createRef from 'ember-ref-bucket/modifiers/create-ref';
 
 import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
@@ -67,6 +69,7 @@ export default class Panel extends Component<Signature> {
           data-test-resize-handler={{this.resizeHandlerId}}
           {{on 'mousedown' @onResizeHandlerMouseDown}}
           {{on 'dblclick' @onResizeHandlerDblClick}}
+          {{createRef this.resizeHandlerId bucket=undefined}}
         ><div class={{this.arrowResizeHandlerClass}} /></button>
       </div>
     {{/unless}}
@@ -223,6 +226,7 @@ export default class Panel extends Component<Signature> {
   </template>
 
   @tracked id: number | undefined;
+  @ref('test') newButton: any | null = null;
 
   constructor(owner: any, args: any) {
     super(owner, args);
