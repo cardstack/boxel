@@ -32,6 +32,7 @@ export interface Signature {
 
 export default class RealmInfoProvider extends Component<Signature> {
   @service declare realmInfoService: RealmInfoService;
+  cachedRealmInfo: RealmInfo | null = null;
 
   @use private realmInfoResource = resource(() => {
     if (!('fileURL' in this.args) && !('realmURL' in this.args)) {
@@ -50,7 +51,7 @@ export default class RealmInfoProvider extends Component<Signature> {
       load: () => Promise<void>;
     } = new TrackedObject({
       isLoading: true,
-      value: null,
+      value: this.cachedRealmInfo,
       error: undefined,
       load: async () => {
         state.isLoading = true;
@@ -59,6 +60,7 @@ export default class RealmInfoProvider extends Component<Signature> {
           let realmInfo = await this.realmInfoService.fetchRealmInfo(this.args);
 
           state.value = realmInfo;
+          this.cachedRealmInfo = realmInfo;
         } catch (error: any) {
           state.error = error;
         } finally {
