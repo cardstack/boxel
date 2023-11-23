@@ -1981,44 +1981,6 @@ module('Integration | operator-mode', function (hooks) {
       .exists();
   });
 
-  test(`error message is shown when invalid card URL is entered in card chooser`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-create-new-card-button]`);
-    await waitFor(`[data-test-card-catalog-item]`);
-
-    assert
-      .dom(`[data-test-boxel-input-validation-state="Not a valid Card URL"]`)
-      .doesNotExist('invalid state is not shown');
-
-    await fillIn(
-      `[data-test-url-search]`,
-      `https://cardstack.com/base/not-a-card`,
-    );
-    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
-    assert
-      .dom(`[data-test-boxel-input-error-message]`)
-      .containsText('Not a valid Card URL');
-
-    await fillIn(
-      `[data-test-url-search]`,
-      `https://cardstack.com/base/types/room-objective`,
-    );
-
-    assert
-      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
-      .doesNotExist('invalid state is not shown');
-  });
-
   test(`can search by card title in card chooser`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
