@@ -347,7 +347,6 @@ export default class CardCatalogModal extends Component<Signature> {
   get searchKeyIsURL() {
     try {
       new URL(this.state.searchKey);
-      console.log(`is url!`);
       return true;
     } catch (_e) {
       return false;
