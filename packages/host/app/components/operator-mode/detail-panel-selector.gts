@@ -94,18 +94,25 @@ export default class Selector extends Component<Signature> {
 
   getType(declaration: ModuleDeclaration) {
     let type = declaration.type as string;
-    if (isCardOrFieldDeclaration(declaration)) {
-      if (isCardDef(declaration.cardOrField)) {
-        type = 'card';
-      } else if (isFieldDef(declaration.cardOrField)) {
-        type = 'field';
-      } else if (isBaseDef(declaration.cardOrField)) {
-        type = 'base';
-      } else {
-        throw new Error(
-          'card or field declaration does not have an appropriate type',
-        );
+    debugger;
+    if (isCardDef(declaration.cardOrField)) {
+      type = 'card';
+      if (declaration.type === 'specifier') {
+        type = 'card-specifier';
       }
+    } else if (isFieldDef(declaration.cardOrField)) {
+      type = 'field';
+      if (declaration.type === 'specifier') {
+        type = 'card-specifier';
+      }
+    } else if (isBaseDef(declaration.cardOrField)) {
+      type = 'base';
+    } else if (declaration.type === 'specifier') {
+      type = 'specifier';
+    } else {
+      throw new Error(
+        'card or field declaration does not have an appropriate type',
+      );
     }
     return type;
   }

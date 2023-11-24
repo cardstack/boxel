@@ -29,6 +29,7 @@ import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
 import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
+  isCardOrFieldSpecifier,
 } from '@cardstack/host/resources/module-contents';
 
 import {
@@ -89,6 +90,13 @@ export default class DetailPanel extends Component<Signature> {
   });
 
   get cardType() {
+    debugger;
+    if (
+      this.args.selectedDeclaration &&
+      isCardOrFieldSpecifier(this.args.selectedDeclaration)
+    ) {
+      return this.args.selectedDeclaration.cardType;
+    }
     if (
       this.args.selectedDeclaration &&
       isCardOrFieldDeclaration(this.args.selectedDeclaration)
@@ -164,6 +172,17 @@ export default class DetailPanel extends Component<Signature> {
     return false;
   }
 
+  get isCardSpecifier() {
+    if (this.args.selectedDeclaration) {
+      return (
+        this.isModule &&
+        (isCardDef(this.args.selectedDeclaration?.cardOrField) ||
+          isFieldDef(this.args.selectedDeclaration?.cardOrField))
+      );
+    }
+    return false;
+  }
+
   private get fileExtension() {
     if (!this.args.cardInstance) {
       return '.' + this.args.readyFile.url.split('.').pop() || '';
@@ -231,7 +250,9 @@ export default class DetailPanel extends Component<Signature> {
           </div>
         {{/if}}
 
-        {{#if (or this.isCardInstance this.isCard this.isField)}}
+        {{#if
+          (or this.isCardInstance this.isCard this.isField this.isCardSpecifier)
+        }}
           <div class='inheritance-panel'>
             <header
               class='panel-header'
@@ -350,7 +371,22 @@ export default class DetailPanel extends Component<Signature> {
                   {{/let}}
                 {{/if}}
               {{/let}}
+            {{else if this.isCardSpecifier}}
+              {{#let (getCodeRef this.cardType.type) as |codeRef|}}
+                {{#let 'Card Definition' as |definitionTitle|}}
+                  <ClickableModuleDefinitionContainer
+                    @title={{definitionTitle}}
+                    @fileURL={{this.cardType.type.module}}
+                    @name={{this.cardType.type.displayName}}
+                    @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                    @openDefinition={{@openDefinition}}
+                    @moduleHref={{this.cardType.type.module}}
+                    @codeRef={{codeRef}}
+                  />
+                {{/let}}
+              {{/let}}
             {{/if}}
+
           </div>
         {{else}}
           {{#if (or this.isBinary this.isNonCardJson)}}
