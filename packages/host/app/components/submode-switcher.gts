@@ -6,6 +6,10 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import get from 'lodash/get';
+
+import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
+
+import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers';
 import {
   DropdownArrowUp,
   DropdownArrowDown,
@@ -13,9 +17,7 @@ import {
   IconCode,
 } from '@cardstack/boxel-ui/icons';
 
-import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
-
-import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers';
+import config from '@cardstack/host/config/environment';
 
 export const Submodes = {
   Interact: 'interact',
@@ -40,6 +42,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
           <Button
             class='submode-switcher-dropdown-trigger'
             aria-label='Options'
+            title={{this.appVersion}}
             {{on 'click' this.toggleDropdown}}
             {{bindings}}
           >
@@ -157,6 +160,11 @@ export default class SubmodeSwitcher extends Component<Signature> {
   @action onSubmodeSelect(submode: Submode) {
     this.isExpanded = false;
     this.args.onSubmodeSelect(submode);
+  }
+
+  get appVersion() {
+    // FIXME could use ember-cli-app-version but I can’t figure out the import!
+    return `Version ${config.APP.version}`;
   }
 
   get buildMenuItems(): MenuItem[] {
