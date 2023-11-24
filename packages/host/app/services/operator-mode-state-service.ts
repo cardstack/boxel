@@ -92,10 +92,6 @@ export default class OperatorModeStateService extends Service {
 
   private openFileSubscribers: OpenFileSubscriber[] = [];
 
-  constructor(properties: object) {
-    super(properties);
-  }
-
   async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
   }
