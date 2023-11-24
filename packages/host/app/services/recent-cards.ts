@@ -21,7 +21,7 @@ export default class RecentCards extends Service {
     return this.recentCards.length > 0;
   }
 
-  addRecentCard(card: CardDef) {
+  add(card: CardDef) {
     const existingCardIndex = this.recentCards.findIndex(
       (recentCard) => recentCard.id === card.id,
     );
@@ -39,7 +39,7 @@ export default class RecentCards extends Service {
     window.localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
   }
 
-  removeRecentCard(id: string) {
+  remove(id: string) {
     let index = this.recentCards.findIndex((c) => c.id === id);
     if (index === -1) {
       return;

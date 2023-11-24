@@ -102,7 +102,7 @@ export default class OperatorModeStateService extends Service {
       this.state.stacks[stackIndex] = new TrackedArray([]);
     }
     this.state.stacks[stackIndex].push(item);
-    this.recentCards.addRecentCard(item.card);
+    this.recentCards.add(item.card);
     this.schedulePersist();
   }
 
@@ -132,7 +132,7 @@ export default class OperatorModeStateService extends Service {
     for (let item of items) {
       this.trimItemsFromStack(item);
     }
-    this.recentCards.removeRecentCard(card.id);
+    this.recentCards.remove(card.id);
 
     let cardRealmUrl = await this.cardService.getRealmURL(card);
 
