@@ -16,8 +16,6 @@ import {
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { shimExternals } from '@cardstack/host/lib/externals';
-
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
@@ -48,10 +46,6 @@ module('Integration | realm', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-
-  hooks.beforeEach(function () {
-    shimExternals(loader);
-  });
 
   test('realm can serve GET card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
