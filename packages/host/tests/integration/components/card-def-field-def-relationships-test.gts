@@ -1,17 +1,21 @@
 import { click, waitFor } from '@ember/test-helpers';
+
+import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
-import percySnapshot from '@percy/ember';
+
 import {
   baseRealm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { type Loader } from '@cardstack/runtime-common/loader';
+
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { shimExternals } from '@cardstack/host/lib/externals';
+
 import {
   saveCard,
   setupCardLogs,
