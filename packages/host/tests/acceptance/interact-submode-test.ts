@@ -701,9 +701,12 @@ module('Acceptance | interact submode tests', function (hooks) {
       let operatorModeStateService = this.owner.lookup(
         'service:operator-mode-state-service',
       ) as OperatorModeStateService;
+      let recentCardsService = this.owner.lookup(
+        'service:recent-cards',
+      ) as RecentCardsService;
 
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
-      operatorModeStateService.recentCards =
+      recentCardsService.recentCards =
         operatorModeStateService.state.stacks[0].map((item) => item.card);
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
