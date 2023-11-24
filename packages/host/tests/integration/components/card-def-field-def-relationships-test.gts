@@ -18,6 +18,7 @@ import {
   setupLocalIndexing,
   shimModule,
   TestRealm,
+  TestRealmAdapter,
   testRealmURL,
   type CardDocFiles,
 } from '../../helpers';
@@ -60,7 +61,12 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     number = await loader.import(`${baseRealm.url}number`);
 
     createTestRealm = async (files) => {
-      let realm = await TestRealm.create(loader, files, this.owner);
+      let adapter = new TestRealmAdapter(files);
+      let realm = await TestRealm.createWithAdapter(
+        adapter,
+        loader,
+        this.owner,
+      );
       await realm.ready;
     };
 
@@ -526,49 +532,90 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('CardDef field (plural) linked to from a FieldDef renders in atom format', async function (assert) {
-    let { field, contains, linksToMany, CardDef, FieldDef } = cardApi;
-    let { default: StringField } = string;
-
-    class Country extends CardDef {
-      static displayName = 'Country';
-      @field name = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia(this: Country) {
-          return this.name;
-        },
-      });
-    }
-    class Trips extends FieldDef {
-      static displayName = 'Trips';
-      @field countries = linksToMany(Country);
-    }
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field trips = contains(Trips);
-    }
-
-    await shimModule(`${testRealmURL}country`, { Country }, loader);
-    await shimModule(`${testRealmURL}person`, { Person }, loader);
-
-    let usa = new Country({ name: 'United States' });
-    let japan = new Country({ name: 'Japan' });
-    let fadhlan = new Person({
-      firstName: 'Fadhlan',
-    });
-
-    let usaCardDoc = await saveCard(usa, `${testRealmURL}usa`, loader);
-    let japanCardDoc = await saveCard(japan, `${testRealmURL}japan`, loader);
-    let personCardDoc = await saveCard(
-      fadhlan,
-      `${testRealmURL}Person/fadhlan`,
-      loader,
-    );
-
     await createTestRealm({
-      'usa.json': usaCardDoc,
-      'japan.json': japanCardDoc,
-      'Person/fadhlan.json': personCardDoc,
+      'country.gts': `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class Country extends CardDef {
+          static displayName = 'Country';
+          @field name = contains(StringField);
+          @field title = contains(StringField, {
+            computeVia(this: Country) {
+              return this.name;
+            },
+          });
+        }`,
+      'trips.gts': `
+        import { linksToMany, field, FieldDef } from "https://cardstack.com/base/card-api";
+        import { Country } from "./country";
+
+        export class Trips extends FieldDef {
+          static displayName = 'Trips';
+          @field countries = linksToMany(Country);
+        }
+      `,
+      'person.gts': `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { Trips } from "./trips";
+
+        export class Person extends CardDef {
+          static displayName = 'Person';
+          @field firstName = contains(StringField);
+          @field trips = contains(Trips);
+        }
+      `,
+      'usa.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            name: 'United States',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}country`,
+              name: 'Country',
+            },
+          },
+        },
+      },
+      'japan.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            name: 'Japan',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}country`,
+              name: 'Country',
+            },
+          },
+        },
+      },
+      'Person/fadhlan.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Fadhlan',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+            trips: {},
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      },
     });
 
     await renderComponent(OperatorModeComponent);
