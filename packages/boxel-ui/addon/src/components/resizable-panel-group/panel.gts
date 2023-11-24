@@ -3,12 +3,16 @@ import { scheduleOnce } from '@ember/runloop';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { ref } from 'ember-ref-bucket';
+import createRef from 'ember-ref-bucket/modifiers/create-ref';
 
 import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
 export type PanelContext = {
   defaultLengthFraction?: number;
+  id: number;
+  initialMinLengthPx?: number;
   lengthPx: number;
   minLengthPx?: number;
 };
@@ -27,6 +31,7 @@ interface Signature {
     registerPanel: (context: {
       defaultLengthFraction: number | undefined;
       lengthPx: number | undefined;
+      minLengthPx: number | undefined;
     }) => number;
     reverseHandlerArrow: boolean;
   };
@@ -64,6 +69,7 @@ export default class Panel extends Component<Signature> {
           data-test-resize-handler={{this.resizeHandlerId}}
           {{on 'mousedown' @onResizeHandlerMouseDown}}
           {{on 'dblclick' @onResizeHandlerDblClick}}
+          {{createRef this.resizeHandlerId bucket=undefined}}
         ><div class={{this.arrowResizeHandlerClass}} /></button>
       </div>
     {{/unless}}
@@ -220,6 +226,7 @@ export default class Panel extends Component<Signature> {
   </template>
 
   @tracked id: number | undefined;
+  @ref('test') newButton: any | null = null;
 
   constructor(owner: any, args: any) {
     super(owner, args);
@@ -230,11 +237,12 @@ export default class Panel extends Component<Signature> {
     this.id = this.args.registerPanel({
       lengthPx: this.args.lengthPx,
       defaultLengthFraction: this.args.defaultLengthFraction,
+      minLengthPx: this.args.minLengthPx,
     });
   }
 
   get panelContext() {
-    if (!this.id) {
+    if (this.id == undefined) {
       return {
         lengthPx: undefined,
         defaultLengthFraction: this.args.defaultLengthFraction,
@@ -278,13 +286,13 @@ export default class Panel extends Component<Signature> {
     let horizontal = this.args.orientation === 'horizontal';
     let reverse = this.args.reverseHandlerArrow;
 
-    if (!this.id) {
+    if (this.id == undefined) {
       return '';
     }
 
     let toward: string | null = null;
 
-    let isFirstPanel = this.id === 1;
+    let isFirstPanel = this.id === 0;
     let isCollapsed = this.panelContext?.lengthPx === 0;
 
     let nextPanelIsLast = this.args.isLastPanel(this.id + 1);
