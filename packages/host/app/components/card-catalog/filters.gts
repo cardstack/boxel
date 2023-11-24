@@ -10,6 +10,7 @@ interface Signature {
   selectedRealms: RealmCards[];
   onSelectRealm: (realm: RealmCards) => void;
   onDeselectRealm: (realm: RealmCards) => void;
+  disableRealmFilter: boolean;
 }
 
 export default class CardCatalogFilters extends Component<Signature> {
@@ -52,7 +53,11 @@ export default class CardCatalogFilters extends Component<Signature> {
       <div class='filter'>
         <BoxelDropdown>
           <:trigger as |bindings|>
-            <button {{bindings}} data-test-realm-filter-button>
+            <button
+              {{bindings}}
+              disabled={{@disableRealmFilter}}
+              data-test-realm-filter-button
+            >
               Realm:
               {{this.realmFilterSummary}}
             </button>

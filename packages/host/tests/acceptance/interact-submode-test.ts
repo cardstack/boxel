@@ -360,23 +360,41 @@ module('Acceptance | interact submode tests', function (hooks) {
       await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
 
-      await waitFor('[data-test-url-field]');
-      await fillIn('[data-test-url-field]', `${testRealmURL}index`);
+      await waitFor('[data-test-search-field]');
+      await click('[data-test-search-field]');
+      await fillIn('[data-test-search-field]', `${testRealmURL}person-entry`);
+
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}person-entry"]`,
+      );
+      await waitFor('[data-test-card-catalog-item]', {
+        count: 1,
+      });
+
+      assert.dom('[data-test-realm-filter-button]').isDisabled();
+
+      assert
+        .dom(`[data-test-realm="Test Workspace B"] [data-test-results-count]`)
+        .hasText('1 result');
+
+      assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
+      await click('[data-test-select]');
 
       await waitFor('[data-test-card-catalog-go-button][disabled]', {
         count: 0,
       });
       await click('[data-test-card-catalog-go-button]');
-      await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
+      await waitFor(`[data-test-stack-card="${testRealmURL}person-entry"]`);
 
       assert
-        .dom(`[data-test-stack-card="${testRealmURL}index"]`)
+        .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
         .containsText('Test Workspace B');
 
+      // Close the card, find it in recent cards, and reopen it
       await click(
-        `[data-test-stack-card="${testRealmURL}index"] [data-test-close-button]`,
+        `[data-test-stack-card="${testRealmURL}person-entry"] [data-test-close-button]`,
       );
-      await waitFor(`[data-test-stack-card="${testRealmURL}index"]`, {
+      await waitFor(`[data-test-stack-card="${testRealmURL}person-entry"]`, {
         count: 0,
       });
       assert.dom('[data-test-add-card-button]').exists('stack is empty');
@@ -384,11 +402,36 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
-      await waitFor(`[data-test-search-result="${testRealmURL}index"]`);
-      await click(`[data-test-search-result="${testRealmURL}index"]`);
+      await waitFor(`[data-test-search-result="${testRealmURL}person-entry"]`);
+      await click(`[data-test-search-result="${testRealmURL}person-entry"]`);
 
-      await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
-      assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
+      await waitFor(`[data-test-stack-card="${testRealmURL}person-entry"]`);
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
+        .exists();
+    });
+
+    test('Handles a URL with no results', async function (assert) {
+      let operatorModeStateParam = stringify({ stacks: [] })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      await waitFor('[data-test-add-card-button]');
+      await click('[data-test-add-card-button]');
+
+      await waitFor('[data-test-search-field]');
+      await fillIn(
+        '[data-test-search-field]',
+        `${testRealmURL}xyz-does-not-exist`,
+      );
+
+      await waitFor('[data-test-card-catalog]');
+      await waitFor('[data-test-card-catalog-item]', { count: 0 });
+      assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
     });
   });
 
