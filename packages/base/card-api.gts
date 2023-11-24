@@ -154,7 +154,11 @@ interface StaleValue {
   staleValue: any;
 }
 
-type CardChangeSubscriber = (fieldName: string, fieldValue: any) => void;
+type CardChangeSubscriber = (
+  instance: BaseDef,
+  fieldName: string,
+  fieldValue: any,
+) => void;
 
 function isStaleValue(value: any): value is StaleValue {
   if (value && typeof value === 'object') {
@@ -1889,11 +1893,27 @@ export function subscribeToChanges(
   subscriber: CardChangeSubscriber,
 ) {
   let changeSubscribers = subscribers.get(fieldOrCard);
+  if (changeSubscribers && changeSubscribers.has(subscriber)) {
+    return;
+  }
+
   if (!changeSubscribers) {
     changeSubscribers = new Set();
     subscribers.set(fieldOrCard, changeSubscribers);
   }
+
   changeSubscribers.add(subscriber);
+
+  let fields = getFields(fieldOrCard, {
+    usedFieldsOnly: true,
+    includeComputeds: false,
+  });
+  Object.keys(fields).forEach((fieldName) => {
+    let value = peekAtField(fieldOrCard, fieldName);
+    if (isCardOrField(value)) {
+      subscribeToChanges(value, subscriber);
+    }
+  });
 }
 
 export function unsubscribeFromChanges(
@@ -1905,6 +1925,29 @@ export function unsubscribeFromChanges(
     return;
   }
   changeSubscribers.delete(subscriber);
+
+  let fields = getFields(fieldOrCard, {
+    usedFieldsOnly: true,
+    includeComputeds: false,
+  });
+  Object.keys(fields).forEach((fieldName) => {
+    let value = peekAtField(fieldOrCard, fieldName);
+    if (isCardOrField(value)) {
+      unsubscribeFromChanges(value, subscriber);
+    }
+  });
+}
+
+function migrateSubscribers(oldFieldOrCard: BaseDef, newFieldOrCard: BaseDef) {
+  let changeSubscribers = subscribers.get(oldFieldOrCard);
+  if (changeSubscribers) {
+    changeSubscribers.forEach((changeSubscriber) =>
+      subscribeToChanges(newFieldOrCard, changeSubscriber),
+    );
+    changeSubscribers.forEach((changeSubscriber) =>
+      unsubscribeFromChanges(oldFieldOrCard, changeSubscriber),
+    );
+  }
 }
 
 function getDataBucket<T extends BaseDef>(instance: T): Map<string, any> {
@@ -2383,6 +2426,17 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         );
       }
       let deserialized = getDataBucket(instance);
+
+      // Before updating field's value, we also have to make sure
+      // the subscribers also subscribes to a new value.
+      let existingValue = deserialized.get(fieldName as string);
+      if (
+        isCardOrField(existingValue) &&
+        isCardOrField(value) &&
+        existingValue !== value
+      ) {
+        migrateSubscribers(existingValue, value);
+      }
       deserialized.set(fieldName as string, value);
       logger.log(recompute(instance));
     }
@@ -2509,11 +2563,11 @@ function makeDescriptor<
   return descriptor;
 }
 
-function notifySubscribers(card: BaseDef, fieldName: string, value: any) {
-  let changeSubscribers = subscribers.get(card);
+function notifySubscribers(instance: BaseDef, fieldName: string, value: any) {
+  let changeSubscribers = subscribers.get(instance);
   if (changeSubscribers) {
     for (let subscriber of changeSubscribers) {
-      subscriber(fieldName, value);
+      subscriber(instance, fieldName, value);
     }
   }
 }
