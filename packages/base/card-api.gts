@@ -154,7 +154,11 @@ interface StaleValue {
   staleValue: any;
 }
 
-type CardChangeSubscriber = (fieldName: string, fieldValue: any) => void;
+type CardChangeSubscriber = (
+  instance: BaseDef,
+  fieldName: string,
+  fieldValue: any,
+) => void;
 
 function isStaleValue(value: any): value is StaleValue {
   if (value && typeof value === 'object') {
@@ -1889,10 +1893,15 @@ export function subscribeToChanges(
   subscriber: CardChangeSubscriber,
 ) {
   let changeSubscribers = subscribers.get(fieldOrCard);
+  if (changeSubscribers && changeSubscribers.has(subscriber)) {
+    return;
+  }
+
   if (!changeSubscribers) {
     changeSubscribers = new Set();
     subscribers.set(fieldOrCard, changeSubscribers);
   }
+
   changeSubscribers.add(subscriber);
 
   let fields = getFields(fieldOrCard, {
@@ -2421,7 +2430,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       // Before updating field's value, we also have to make sure
       // the subscribers also subscribes to a new value.
       let existingValue = deserialized.get(fieldName as string);
-      if (isCardOrField(existingValue) && isCardOrField(value)) {
+      if (
+        isCardOrField(existingValue) &&
+        isCardOrField(value) &&
+        existingValue !== value
+      ) {
         migrateSubscribers(existingValue, value);
       }
       deserialized.set(fieldName as string, value);
@@ -2550,11 +2563,11 @@ function makeDescriptor<
   return descriptor;
 }
 
-function notifySubscribers(card: BaseDef, fieldName: string, value: any) {
-  let changeSubscribers = subscribers.get(card);
+function notifySubscribers(instance: BaseDef, fieldName: string, value: any) {
+  let changeSubscribers = subscribers.get(instance);
   if (changeSubscribers) {
     for (let subscriber of changeSubscribers) {
-      subscriber(fieldName, value);
+      subscriber(instance, fieldName, value);
     }
   }
 }
