@@ -626,7 +626,7 @@ module('Integration | card-delete', function (hooks) {
 
     // creates a recent item
     let recentCardsService = this.owner.lookup(
-      'service:operator-mode-state-service',
+      'service:recent-cards',
     ) as RecentCardsService;
     let mango = await loadCard(`${testRealmURL}Pet/mango`);
     recentCardsService.addRecentCard(mango);
