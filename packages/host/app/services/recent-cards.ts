@@ -1,6 +1,7 @@
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
+import { task } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -13,30 +14,11 @@ export default class RecentCards extends Service {
 
   constructor(properties: object) {
     super(properties);
-    this.constructRecentCards();
+    this.constructRecentCards.perform();
   }
 
   get any() {
     return this.recentCards.length > 0;
-  }
-
-  async constructRecentCards() {
-    const recentCardIdsString = window.localStorage.getItem('recent-cards');
-    if (!recentCardIdsString) {
-      return;
-    }
-
-    const recentCardIds = JSON.parse(recentCardIdsString) as string[];
-    for (const recentCardId of recentCardIds) {
-      const cardResource = getCard(this, () => recentCardId);
-      await cardResource.loaded;
-      let { card } = cardResource;
-      if (!card) {
-        console.warn(`cannot load card ${recentCardId}`);
-        continue;
-      }
-      this.recentCards.push(card);
-    }
   }
 
   addRecentCard(card: CardDef) {
@@ -71,4 +53,23 @@ export default class RecentCards extends Service {
       JSON.stringify(this.recentCards.map((c) => c.id)),
     );
   }
+
+  private constructRecentCards = task(async () => {
+    const recentCardIdsString = window.localStorage.getItem('recent-cards');
+    if (!recentCardIdsString) {
+      return;
+    }
+
+    const recentCardIds = JSON.parse(recentCardIdsString) as string[];
+    for (const recentCardId of recentCardIds) {
+      const cardResource = getCard(this, () => recentCardId);
+      await cardResource.loaded;
+      let { card } = cardResource;
+      if (!card) {
+        console.warn(`cannot load card ${recentCardId}`);
+        continue;
+      }
+      this.recentCards.push(card);
+    }
+  });
 }
