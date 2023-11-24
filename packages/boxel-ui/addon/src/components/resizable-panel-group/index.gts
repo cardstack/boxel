@@ -5,7 +5,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { WithBoundArgs } from '@glint/template';
 import { nodeFor } from 'ember-ref-bucket';
-import { resolveGlobalRef } from 'ember-ref-bucket/utils/ref';
 import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -32,6 +31,7 @@ interface Signature {
         | 'onResizeHandlerDblClick'
         | 'orientation'
         | 'panelContext'
+        | 'panelGroupComponent'
         | 'registerPanel'
         | 'reverseHandlerArrow'
       >,
@@ -59,6 +59,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
             onResizeHandlerDblClick=this.onResizeHandlerDblClick
             reverseHandlerArrow=@reverseCollapse
             hideHandle=this.hideHandles
+            panelGroupComponent=this
           )
         }}
       {{/if}}
@@ -519,6 +520,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   private getHtmlElement(id: string): HTMLElement {
-    return nodeFor(resolveGlobalRef(), id);
+    return nodeFor(this, id);
   }
 }
