@@ -33,6 +33,7 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import RecentCards from '@cardstack/host/services/recent-cards';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -75,6 +76,7 @@ export default class SearchSheet extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
+  @service declare recentCards: RecentCards;
 
   get inputBottomTreatment() {
     return this.args.mode == SearchSheetModes.Closed
@@ -208,7 +210,7 @@ export default class SearchSheet extends Component<Signature> {
   @cached
   get orderedRecentCards() {
     // Most recently added first
-    return [...this.operatorModeStateService.recentCards].reverse();
+    return [...this.recentCards.recentCards].reverse();
   }
 
   debouncedSearchFieldUpdate = debounce(() => {
@@ -335,7 +337,7 @@ export default class SearchSheet extends Component<Signature> {
             </div>
           </div>
         {{/if}}
-        {{#if (gt this.operatorModeStateService.recentCards.length 0)}}
+        {{#if this.recentCards.any}}
           <div class='search-result-section'>
             <Label>Recent</Label>
             <div class='search-result-section__body'>
