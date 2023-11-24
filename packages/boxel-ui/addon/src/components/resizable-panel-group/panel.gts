@@ -8,6 +8,7 @@ import createRef from 'ember-ref-bucket/modifiers/create-ref';
 
 import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
+import type ResizablePanelGroup from './index.gts';
 
 export type PanelContext = {
   defaultLengthFraction?: number;
@@ -28,6 +29,7 @@ interface Signature {
     onResizeHandlerMouseDown: (event: MouseEvent) => void;
     orientation: 'horizontal' | 'vertical';
     panelContext: (panelId: number) => PanelContext | undefined;
+    panelGroupComponent: ResizablePanelGroup;
     registerPanel: (context: {
       defaultLengthFraction: number | undefined;
       lengthPx: number | undefined;
@@ -69,7 +71,7 @@ export default class Panel extends Component<Signature> {
           data-test-resize-handler={{this.resizeHandlerId}}
           {{on 'mousedown' @onResizeHandlerMouseDown}}
           {{on 'dblclick' @onResizeHandlerDblClick}}
-          {{createRef this.resizeHandlerId bucket=undefined}}
+          {{createRef this.resizeHandlerId bucket=@panelGroupComponent}}
         ><div class={{this.arrowResizeHandlerClass}} /></button>
       </div>
     {{/unless}}
