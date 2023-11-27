@@ -629,6 +629,69 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     );
   });
 
+  test('scroll position is restored when returning to file view', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+      openDirs: { [testRealmURL]: ['Person/'] },
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    let endDirectorySelector = `[data-test-directory="zzz/"]`;
+
+    await waitFor(endDirectorySelector);
+    let endDirectoryElement = find(endDirectorySelector);
+
+    if (!endDirectoryElement) {
+      assert.ok(endDirectoryElement, 'end directory should exist');
+    } else {
+      assert.notOk(
+        await elementIsVisible(endDirectoryElement),
+        'expected end directory not to be within view',
+      );
+
+      endDirectoryElement.scrollIntoView({ block: 'center' });
+
+      assert.ok(
+        await elementIsVisible(endDirectoryElement),
+        'expected end directory to now be within view',
+      );
+    }
+
+    await click('[data-test-inspector-toggle]');
+    assert.dom(endDirectorySelector).doesNotExist();
+
+    await click('[data-test-file-browser-toggle]');
+    await waitFor(endDirectorySelector);
+
+    endDirectoryElement = find(endDirectorySelector);
+
+    if (!endDirectoryElement) {
+      assert.ok(endDirectoryElement, 'end directory should exist');
+    } else {
+      assert.ok(
+        await elementIsVisible(endDirectoryElement),
+        'expected end directory to be within view after returning to the file tree',
+      );
+    }
+
+    // FIXME extend to show different positions across realms?
+  });
+
   test('can open files in base realm', async function (assert) {
     let codeModeStateParam = stringify({
       stacks: [
