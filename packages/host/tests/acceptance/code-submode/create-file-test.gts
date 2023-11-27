@@ -3,6 +3,8 @@ import { setupApplicationTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 import percySnapshot from '@percy/ember';
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
@@ -16,6 +18,7 @@ import {
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
   setupOnSave,
+  setupServerSentEvents,
   type TestContextWithSave,
 } from '../../helpers';
 
@@ -125,7 +128,9 @@ const filesB: Record<string, any> = {
 module('Acceptance | code submode | create-file tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
+  setupServerSentEvents(hooks);
   setupOnSave(hooks);
+  setupWindowMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
