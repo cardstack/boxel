@@ -73,7 +73,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Pet',
         description: 'Catalog entry for Pet',
-        ref: { module: `${testRealmURL}pet`, name: 'Pet' },
+        ref: { module: `../pet`, name: 'Pet' },
       },
       meta: {
         adoptsFrom: {
@@ -89,7 +89,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Person',
         description: 'Catalog entry for Person',
-        ref: { module: `${testRealmURL}person`, name: 'Person' },
+        ref: { module: `../person`, name: 'Person' },
       },
       meta: {
         adoptsFrom: {
@@ -152,6 +152,35 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       ],
     });
     await realm.ready;
+
+    let realm2 = await TestRealm.create(loader, filesB, this.owner, {
+      realmURL: testRealmURL2,
+      isAcceptanceTest: true,
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchRedirectHandle(
+            req,
+            new TestRealmAdapter(files),
+            testRealmURL,
+          );
+        },
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(
+            req,
+            realm2.maybeHandle.bind(realm2),
+          );
+        },
+      ],
+    });
+    await realm2.ready;
+
+    let realmService = this.owner.lookup(
+      'service:realm-info-service',
+    ) as RealmInfoService;
+
+    await realmService.fetchRealmInfo({
+      realmURL: new URL(testRealmURL2),
+    });
 
     let state: Partial<OperatorModeState> = {
       stacks: [],
