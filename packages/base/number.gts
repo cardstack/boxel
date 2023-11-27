@@ -1,51 +1,40 @@
-import {
-  primitive,
-  Component,
-  useIndexBasedKey,
-  deserialize,
-  BaseDefConstructor,
-  BaseInstanceType,
-  FieldDef,
-} from './card-api';
+import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { TextInputFilter, DeserializedResult } from './text-input-filter';
+import { TextInputFilter } from './text-input-filter';
 
-function _deserialize(
-  numberString: string | null | undefined,
-  //TODO: It turns out at runtime, number value is being passed down.
-  //Particularly, value 0 which is falsy can cause issues if not handled correctly
-  //Work has to be done to sync [deserialize] in card-api with _deserialize
-): DeserializedResult<number> {
-  if (numberString == null || numberString == undefined) {
-    return { value: null };
-  }
-  let maybeNumber = Number(numberString);
-  if (Number.isNaN(maybeNumber) || !Number.isFinite(maybeNumber)) {
-    return {
-      value: null,
-      errorMessage:
-        'Input cannot be converted to a number. Please enter a valid number',
-    };
-  }
-  if (maybeNumber > Number.MAX_SAFE_INTEGER) {
-    return {
-      value: null,
-      errorMessage:
-        'Input number is too large. Please enter a smaller number or consider using BigInteger base card.',
-    };
-  }
-  if (maybeNumber < Number.MIN_SAFE_INTEGER) {
-    return {
-      value: null,
-      errorMessage:
-        'Input number is too small. Please enter a more positive number or consider using BigInteger base card.',
-    };
-  }
-  return { value: maybeNumber };
+function serialize(val: number): string {
+  return val.toString();
 }
 
-function _serialize(val: number): string {
-  return val.toString();
+function deserialize(string: string | null | undefined): number | null {
+  if (string == null || string === '') {
+    return null;
+  }
+  return Number(string);
+}
+
+function validate(value: string | null): string | null {
+  if (value == null || value === '') {
+    return null;
+  }
+
+  if (value.endsWith('.')) {
+    return 'Input cannot end with a decimal point. Please enter a valid number.';
+  }
+
+  let number = Number(value);
+
+  if (Number.isNaN(number) || !Number.isFinite(number)) {
+    return 'Input cannot be converted to a number. Please enter a valid number.';
+  }
+  if (number > Number.MAX_SAFE_INTEGER) {
+    return 'Input number is too large. Please enter a smaller number or consider using BigInteger base card.';
+  }
+  if (number < Number.MIN_SAFE_INTEGER) {
+    return 'Input number is too small. Please enter a more positive number or consider using BigInteger base card.';
+  }
+
+  return null;
 }
 
 class View extends Component<typeof NumberField> {
@@ -58,12 +47,6 @@ export default class NumberField extends FieldDef {
   static displayName = 'Number';
   static [primitive]: number;
   static [useIndexBasedKey]: never;
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    number: any,
-  ): Promise<BaseInstanceType<T>> {
-    return _deserialize(number).value as BaseInstanceType<T>;
-  }
   static embedded = View;
   static atom = View;
 
@@ -80,8 +63,9 @@ export default class NumberField extends FieldDef {
     textInputFilter: TextInputFilter<number> = new TextInputFilter(
       () => this.args.model,
       (inputVal) => this.args.set(inputVal),
-      _deserialize,
-      _serialize,
+      deserialize,
+      serialize,
+      validate,
     );
   };
 }
