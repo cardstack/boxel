@@ -13,13 +13,9 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import {
   catalogEntryRef,
   chooseCard,
-  RealmPaths,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import {
-  moduleFrom,
-  codeRefWithAbsoluteURL,
-} from '@cardstack/runtime-common/code-ref';
+import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
