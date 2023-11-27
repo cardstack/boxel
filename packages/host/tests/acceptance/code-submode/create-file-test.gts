@@ -311,7 +311,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(`[data-test-select="${baseRealm.url}types/card"]`);
     await click(`[data-test-select="${baseRealm.url}types/card"]`);
     await click('[data-test-card-catalog-go-button]');
-    await waitFor(`[data-test-selected-type="CardDef"]`);
+    await waitFor(`[data-test-selected-type="General Card"]`);
 
     let deferred = new Deferred<void>();
     let fileURL = '';
@@ -382,8 +382,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(`[data-test-select="${baseRealm.url}types/card"]`);
     await click(`[data-test-select="${baseRealm.url}types/card"]`);
     await click('[data-test-card-catalog-go-button]');
-    await waitFor(`[data-test-selected-type="CardDef"]`);
-    assert.dom(`[data-test-selected-type]`).hasText('CardDef');
+    await waitFor(`[data-test-selected-type="General Card"]`);
+    assert.dom(`[data-test-selected-type]`).hasText('General Card');
 
     let deferred = new Deferred<void>();
     let fileID = '';

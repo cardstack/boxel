@@ -69,9 +69,9 @@ export default class CreateFileModal extends Component<Signature> {
               {{#if this.selectedCatalogEntry}}
                 <Pill
                   @inert={{true}}
-                  data-test-selected-type={{this.selectedCatalogEntry.ref.name}}
+                  data-test-selected-type={{this.selectedCatalogEntry.title}}
                 >
-                  {{this.selectedCatalogEntry.ref.name}}
+                  {{this.selectedCatalogEntry.title}}
                 </Pill>
               {{/if}}
               <Button
