@@ -197,13 +197,14 @@ export default class CreateFileModal extends Component<Signature> {
       relativeTo,
     );
 
-    if (card) {
-      let savedCard = await this.cardService.saveModel(this, card);
-      if (savedCard) {
-        this.args.onSave(new URL(`${savedCard.id}.json`));
-      }
+    if (!card) {
+      throw new Error(
+        `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
+      );
     }
 
+    await this.cardService.saveModel(this, card);
+    this.args.onSave(new URL(`${card.id}.json`));
     this.args.onClose();
   });
 }
