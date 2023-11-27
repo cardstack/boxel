@@ -9,7 +9,7 @@ import compact from 'ember-composable-helpers/helpers/compact';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import { DiagonalArrowLeftUp } from '@cardstack/boxel-ui/icons';
+import { DiagonalArrowLeftUp, ReExportArrow } from '@cardstack/boxel-ui/icons';
 
 import {
   isCardDef,
@@ -18,10 +18,8 @@ import {
 } from '@cardstack/runtime-common/code-ref';
 
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
-import {
-  type ModuleDeclaration,
-  isCardOrFieldDeclaration,
-} from '@cardstack/host/resources/module-contents';
+import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
+import { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface SelectorItemOptions {
   action: Function;
@@ -78,6 +76,19 @@ interface Signature {
   Blocks: EmptyObject;
 }
 
+function typeOfCardOrField(cardOrField: typeof BaseDef) {
+  if (isCardDef(cardOrField)) {
+    return 'card';
+  } else if (isFieldDef(cardOrField)) {
+    return 'field';
+  } else if (isBaseDef(cardOrField)) {
+    return 'base';
+  }
+  throw new Error(
+    `in-this-file panel: declaration should either be card, field, or base.`,
+  );
+}
+
 export default class Selector extends Component<Signature> {
   @action invokeSelectorItemAction(
     action: unknown,
@@ -93,28 +104,16 @@ export default class Selector extends Component<Signature> {
   }
 
   getType(declaration: ModuleDeclaration) {
-    let type = declaration.type as string;
-    debugger;
-    if (isCardDef(declaration.cardOrField)) {
-      type = 'card';
-      if (declaration.type === 'specifier') {
-        type = 'card-specifier';
-      }
-    } else if (isFieldDef(declaration.cardOrField)) {
-      type = 'field';
-      if (declaration.type === 'specifier') {
-        type = 'card-specifier';
-      }
-    } else if (isBaseDef(declaration.cardOrField)) {
-      type = 'base';
-    } else if (declaration.type === 'specifier') {
-      type = 'specifier';
-    } else {
-      throw new Error(
-        'card or field declaration does not have an appropriate type',
-      );
+    if (declaration.type === 'possibleCardOrField' && declaration.cardOrField) {
+      return typeOfCardOrField(declaration.cardOrField);
+    } else if (declaration.type === 'reexport' && declaration.cardOrField) {
+      return typeOfCardOrField(declaration.cardOrField);
+    } else if (declaration.type === 'class') {
+      return 'class';
+    } else if (declaration.type === 'function') {
+      return 'function';
     }
-    return type;
+    return '';
   }
 
   <template>

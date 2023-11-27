@@ -220,7 +220,6 @@ export function isFieldOfType(obj: any): obj is FieldOfType {
 }
 
 export function getCodeRef(t: Type | FieldOfType): ResolvedCodeRef | undefined {
-  debugger;
   let codeRef: CodeRef;
   if (isFieldOfType(t)) {
     codeRef = isCodeRefType(t.card) ? t.card : t.card.codeRef;

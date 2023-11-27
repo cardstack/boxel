@@ -28,12 +28,18 @@ export interface FunctionDeclaration extends BaseDeclaration {
 
 export interface ClassDeclaration extends BaseDeclaration {
   type: 'class';
+  path: NodePath<t.ClassDeclaration>;
 }
 
-export interface PossibleCardOrFieldClass extends ClassDeclaration {
+export interface PossibleCardOrFieldDeclaration extends BaseDeclaration {
+  type: 'possibleCardOrField';
   super?: ClassReference; // this is optional to allow to be inclusive of base def class
   possibleFields: Map<string, PossibleField>;
   path: NodePath<t.ClassDeclaration>;
+}
+
+export interface Reexport extends BaseDeclaration {
+  type: 'reexport';
 }
 
 export interface PossibleField {
@@ -43,17 +49,14 @@ export interface PossibleField {
   path: NodePath<t.ClassProperty>;
 }
 
-// a module declaration should be (an item of focus within a module)
-// - exported function or class
-// - exported card or field
-// - unexported card or field
 export type Declaration =
-  | PossibleCardOrFieldClass
+  | PossibleCardOrFieldDeclaration
   | FunctionDeclaration
-  | ClassDeclaration;
+  | ClassDeclaration
+  | Reexport;
 
 export interface Options {
-  possibleCardsOrFields: PossibleCardOrFieldClass[]; //cards may not be exports
+  possibleCardsOrFields: PossibleCardOrFieldDeclaration[]; //cards may not be exports
   declarations: Declaration[];
 }
 
@@ -85,18 +88,17 @@ const coreVisitor = {
   },
   ClassDeclaration: {
     enter(path: NodePath<t.ClassDeclaration>, state: State) {
-      let type = 'class' as 'class';
       // == handle class that doesn't inherit from super ==
       if (!path.node.superClass) {
         let localName = getLocalName(path);
         // == handle base def ==
         if (isBaseDefClass(path)) {
-          let possibleCardOrField = {
+          let possibleCardOrField: PossibleCardOrFieldDeclaration = {
             localName,
             path,
             possibleFields: new Map(),
             exportedAs: getExportedAsName(path, localName),
-            type,
+            type: 'possibleCardOrField',
           };
           state.opts.possibleCardsOrFields.push(possibleCardOrField);
           state.opts.declarations.push(possibleCardOrField);
@@ -109,7 +111,7 @@ const coreVisitor = {
             localName,
             exportedAs: getExportedAsName(path, localName),
             path,
-            type,
+            type: 'class',
           });
           return;
         }
@@ -124,7 +126,7 @@ const coreVisitor = {
             localName,
             exportedAs: getExportedAsName(path, localName),
             path,
-            type,
+            type: 'class',
           });
         }
         return;
@@ -139,13 +141,13 @@ const coreVisitor = {
           state.insideCard = true;
           let localName = getLocalName(path);
 
-          let possibleCardOrField = {
+          let possibleCardOrField: PossibleCardOrFieldDeclaration = {
             super: classRef,
             localName,
             path,
             possibleFields: new Map(),
             exportedAs: getExportedAsName(path, localName),
-            type,
+            type: 'possibleCardOrField',
           };
           state.opts.possibleCardsOrFields.push(possibleCardOrField);
           state.opts.declarations.push(possibleCardOrField);
@@ -157,7 +159,7 @@ const coreVisitor = {
               localName,
               exportedAs: getExportedAsName(path, localName),
               path,
-              type,
+              type: 'class',
             });
           }
         }
@@ -262,34 +264,28 @@ const reExportVisitor = {
       //possibly flaky but it seems that only default
       //definition doesn't exist
       path.node.specifiers.forEach((specifier) => {
-        if (!specifier.local) {
-          return;
+        if (t.isExportSpecifier(specifier)) {
+          const localName = specifier.local.name; //local doesn't seem to be detected
+          // let importInfo = getNamedImportInfo(path.scope, localName);
+          // if (!importInfo) {
+          //   console.log(
+          //     `${localName} doesn't have import info bcos its locally defined`,
+          //   );
+          //   return;
+          //   //it sometimes is undefined
+          // }
+          // const importedName = importInfo.specifier.node.imported
+          //   ? getName(importInfo.specifier.node.imported)
+          //   : importInfo.specifier.node.local.name; // 1st is imported name, 2nd is local name which is importing a default
+          state.opts.declarations.push({
+            path,
+            exportedAs: getExportedAsName(path, localName),
+            localName: localName, //importedName
+            type: 'reexport',
+          });
+        } else {
+          throw new Error('Unsupported export specifier');
         }
-        const localName = specifier.local.name;
-        let importInfo = getNamedImportInfo(path.scope, localName);
-        // console.log(
-        //   `Re-export of ${localName} from ${importInfo.declaration.node.source.value}`,
-        // );
-        if (!importInfo) {
-          console.log(
-            `${localName} doesn't have import info bcos its locally defined`,
-          );
-          if (path.node.source) {
-            debugger;
-          }
-          return;
-          //it sometimes is undefined
-        }
-        const importedName = importInfo.specifier.node.imported
-          ? importInfo.specifier.node.imported.name
-          : importInfo.specifier.node.local.name; // 1st is imported name, 2nd is local name which is importing a default
-        state.opts.declarations.push({
-          path,
-          exportedAs: getExportedAsName(path, localName),
-          localName: importedName,
-          type: 'specifier',
-        });
-        console.log('u r here');
       });
     }
     if (path.node.source) {
@@ -307,7 +303,7 @@ const reExportVisitor = {
         path,
         exportedAs: 'default',
         localName,
-        type: 'specifier',
+        type: 'reexport',
       });
     }
   },
@@ -316,7 +312,7 @@ const reExportVisitor = {
     // Handle export all from another module
     // Example: export * from './module';
     if (path.node.source) {
-      console.log('in export all specifier blabal');
+      console.log('TODO: skipping handling this');
     }
   },
 };
@@ -338,7 +334,10 @@ class CompilerError extends Error {
 
 // find the local identifier of a class or function declaration that is used in an export specifier
 function findExportSpecifierPathForDeclaration(
-  path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
+  path:
+    | NodePath<t.ClassDeclaration>
+    | NodePath<t.FunctionDeclaration>
+    | NodePath<t.ExportNamedDeclaration>,
   localName: string | undefined,
 ): NodePath<t.Identifier> | undefined {
   // the class's identifier is referenced in a node whose parent is an ExportSpecifier
@@ -352,7 +351,10 @@ function findExportSpecifierPathForDeclaration(
 }
 
 function getExportedAsName(
-  path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
+  path:
+    | NodePath<t.ClassDeclaration>
+    | NodePath<t.FunctionDeclaration>
+    | NodePath<t.ExportNamedDeclaration>,
   localName: string | undefined,
 ): string | undefined {
   let { parentPath } = path;
@@ -363,6 +365,7 @@ function getExportedAsName(
     // the class declaration is part of a default export
     return 'default';
   } else {
+    // export named declaration seems to only occur here
     let maybeExportSpecifierLocal = findExportSpecifierPathForDeclaration(
       path,
       localName,
@@ -450,7 +453,7 @@ function getNamedImportInfo(
   let binding = scope.getBinding(name);
   if (binding?.path.isImportDefaultSpecifier()) {
     return {
-      declaration: binding.path.parentPath as NodePath,
+      declaration: binding.path.parentPath,
       specifier: binding.path,
     };
   }
@@ -478,9 +481,9 @@ function getName(node: t.Identifier | t.StringLiteral) {
   }
 }
 
-export function isPossibleCardOrFieldClass(
+export function isPossibleCardOrFieldClassDeclaration(
   declaration: any,
-): declaration is PossibleCardOrFieldClass {
+): declaration is PossibleCardOrFieldDeclaration {
   let hasSuper = declaration.super;
   let isBase = isBaseDefClass(declaration.path);
   return (

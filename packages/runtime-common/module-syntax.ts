@@ -4,11 +4,10 @@ import { parse, print } from 'recast';
 import {
   schemaAnalysisPlugin,
   type Options,
-  type PossibleCardOrFieldClass,
+  type PossibleCardOrFieldDeclaration,
   type Declaration,
   type BaseDeclaration,
   type ClassReference,
-  isPossibleCardOrFieldClass,
   isInternalReference,
 } from './schema-analysis-plugin';
 import {
@@ -40,11 +39,11 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type { PossibleCardOrFieldClass, Declaration, BaseDeclaration };
-export { isPossibleCardOrFieldClass, isInternalReference };
+export type { PossibleCardOrFieldDeclaration, Declaration, BaseDeclaration };
+export { isInternalReference };
 
 export class ModuleSyntax {
-  declare possibleCardsOrFields: PossibleCardOrFieldClass[];
+  declare possibleCardsOrFields: PossibleCardOrFieldDeclaration[];
   declare declarations: Declaration[];
   private declare ast: t.File;
   private url: URL;
@@ -229,8 +228,8 @@ export class ModuleSyntax {
   // This function performs the same job as
   // @cardstack/runtime-common/code-ref.ts#loadCard() but using syntax instead
   // of running code
-  private getCard(codeRef: CodeRef): PossibleCardOrFieldClass {
-    let cardOrFieldClass: PossibleCardOrFieldClass | undefined;
+  private getCard(codeRef: CodeRef): PossibleCardOrFieldDeclaration {
+    let cardOrFieldClass: PossibleCardOrFieldDeclaration | undefined;
     if (!('type' in codeRef)) {
       cardOrFieldClass = this.possibleCardsOrFields.find(
         (c) => c.exportedAs === codeRef.name,
@@ -269,7 +268,7 @@ export class ModuleSyntax {
 
   private getPossibleCardForClassReference(
     classRef: ClassReference,
-  ): PossibleCardOrFieldClass | undefined {
+  ): PossibleCardOrFieldDeclaration | undefined {
     if (classRef.type === 'external') {
       if (
         trimExecutableExtension(new URL(classRef.module, this.url)) === this.url
