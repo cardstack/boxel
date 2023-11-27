@@ -21,7 +21,7 @@ import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
-import type RecentCardsService from '@cardstack/host/services/recent-cards';
+import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -85,7 +85,7 @@ export default class OperatorModeStateService extends Service {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
-  @service declare recentCards: RecentCardsService;
+  @service declare recentCardsService: RecentCardsService;
   @service declare recentFilesService: RecentFilesService;
   @service declare realmInfoService: RealmInfoService;
   @service declare router: RouterService;
@@ -102,7 +102,7 @@ export default class OperatorModeStateService extends Service {
       this.state.stacks[stackIndex] = new TrackedArray([]);
     }
     this.state.stacks[stackIndex].push(item);
-    this.recentCards.add(item.card);
+    this.recentCardsService.add(item.card);
     this.schedulePersist();
   }
 
@@ -132,7 +132,7 @@ export default class OperatorModeStateService extends Service {
     for (let item of items) {
       this.trimItemsFromStack(item);
     }
-    this.recentCards.remove(card.id);
+    this.recentCardsService.remove(card.id);
 
     let cardRealmUrl = await this.cardService.getRealmURL(card);
 

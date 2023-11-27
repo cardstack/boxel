@@ -9,7 +9,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-export default class RecentCards extends Service {
+export default class RecentCardsService extends Service {
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
   constructor(properties: object) {
