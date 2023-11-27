@@ -202,11 +202,9 @@ export class ModuleSyntax {
 
     // we use string manipulation to add the field into the src so that we
     // don't have to suffer babel's decorator transpilation
-    src = `
-      ${src.substring(0, insertPosition)}${newField}${src.substring(
-        insertPosition,
-      )}
-    `;
+    src = `${src.substring(0, insertPosition)}${newField}${src.substring(
+      insertPosition,
+    )}`;
     // analyze one more time to incorporate the new field
     this.analyze(src);
   }

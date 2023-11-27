@@ -53,7 +53,8 @@ module('module-syntax', function () {
   });
 
   test('can add a field to a card', async function (assert) {
-    let mod = addField(`
+    let mod = addField(
+      `
       import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       export class Person extends CardDef {
@@ -62,25 +63,26 @@ module('module-syntax', function () {
           <template><h1><@fields.firstName/></h1></template>
         }
       }
-    `);
+      `,
+    );
 
     assert.codeEqual(
       mod.code(),
       `
-        import NumberCard from "https://cardstack.com/base/number";
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        export class Person extends CardDef {
-          @field firstName = contains(StringCard);
-          @field age = contains(NumberCard);
-          static embedded = class Embedded extends Component<typeof this> {
-            <template><h1><@fields.firstName/></h1></template>
-          }
+      import NumberCard from "https://cardstack.com/base/number";
+      import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      export class Person extends CardDef {
+        @field firstName = contains(StringCard);
+        @field age = contains(NumberCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.firstName/></h1></template>
         }
+      }
       `,
     );
     assert.strictEqual(
-      mod.code().trim(),
+      mod.code(),
       `
       import NumberCard from "https://cardstack.com/base/number";
       import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
@@ -92,7 +94,7 @@ module('module-syntax', function () {
           <template><h1><@fields.firstName/></h1></template>                
         }
       }
-      `.trim(),
+      `,
       'original code formatting is preserved',
     );
 
@@ -165,7 +167,8 @@ module('module-syntax', function () {
 
   test('added field respects indentation of previous field', async function (assert) {
     // 4 space indent
-    let mod = addField(`
+    let mod = addField(
+      `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         export class Person extends CardDef {
@@ -174,9 +177,10 @@ module('module-syntax', function () {
                 <template><h1><@fields.firstName/></h1></template>
             }
         }
-    `);
+      `,
+    );
     assert.strictEqual(
-      mod.code().trim(),
+      mod.code(),
       `
         import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
@@ -188,14 +192,15 @@ module('module-syntax', function () {
                 <template><h1><@fields.firstName/></h1></template>                
             }
         }
-      `.trim(),
+      `,
       'original code formatting is preserved',
     );
   });
 
   test('added field respects indentation of previous class member', async function (assert) {
     // 2 space indent
-    let mod = addField(`
+    let mod = addField(
+      `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         export class Person extends CardDef {
@@ -203,9 +208,10 @@ module('module-syntax', function () {
             <template><h1><@fields.firstName/></h1></template>
           }
         }
-    `);
+      `,
+    );
     assert.strictEqual(
-      mod.code().trim(),
+      mod.code(),
       `
         import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
@@ -216,21 +222,23 @@ module('module-syntax', function () {
             <template><h1><@fields.firstName/></h1></template>                
           }
         }
-    `.trim(),
+      `,
       'original code formatting is preserved',
     );
   });
 
   test(`added field defaults to a 2 space indent if it's the only class member`, async function (assert) {
-    let mod = addField(`
+    let mod = addField(
+      `
       import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       export class Person extends CardDef {
       }
-    `);
+      `,
+    );
 
     assert.strictEqual(
-      mod.code().trim(),
+      mod.code(),
       `
       import NumberCard from "https://cardstack.com/base/number";
       import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
@@ -238,17 +246,19 @@ module('module-syntax', function () {
       export class Person extends CardDef {
         @field age = contains(NumberCard);
       }
-      `.trim(),
+      `,
       'original code formatting is preserved',
     );
-    mod = addField(`
+    mod = addField(
+      `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         export class Person extends CardDef { }
-      `);
+      `,
+    );
 
     assert.strictEqual(
-      mod.code().trim(),
+      mod.code(),
       `
         import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
@@ -256,18 +266,20 @@ module('module-syntax', function () {
         export class Person extends CardDef { 
           @field age = contains(NumberCard);
         }
-        `.trim(),
+      `,
       'original code formatting is preserved',
     );
 
-    mod = addField(`
+    mod = addField(
+      `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         export class Person extends CardDef {}
-      `);
+      `,
+    );
 
     assert.strictEqual(
-      mod.code().trim(),
+      mod.code(),
       `
         import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
@@ -275,7 +287,7 @@ module('module-syntax', function () {
         export class Person extends CardDef {
           @field age = contains(NumberCard);
         }
-        `.trim(),
+      `,
       'original code formatting is preserved',
     );
   });
@@ -292,11 +304,11 @@ module('module-syntax', function () {
                 <template><h1><@fields.firstName/></h1></template>
             }
         }
-    `,
+      `,
       0,
     );
     assert.strictEqual(
-      mod.code().trim(),
+      mod.code(),
       `
         import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
@@ -308,7 +320,7 @@ module('module-syntax', function () {
                 <template><h1><@fields.firstName/></h1></template>                
             }
         }
-      `.trim(),
+      `,
       'original code formatting is preserved',
     );
   });
