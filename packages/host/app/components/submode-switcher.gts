@@ -163,7 +163,6 @@ export default class SubmodeSwitcher extends Component<Signature> {
   }
 
   get appVersion() {
-    // FIXME could use ember-cli-app-version but I can’t figure out the import!
     return `Version ${config.APP.version}`;
   }
 
