@@ -199,7 +199,6 @@ export default class CreateFileModal extends Component<Signature> {
 
     if (card) {
       let savedCard = await this.cardService.saveModel(this, card);
-      console.log(savedCard?.id);
       if (savedCard) {
         this.args.onSave(new URL(`${savedCard.id}.json`));
       }
