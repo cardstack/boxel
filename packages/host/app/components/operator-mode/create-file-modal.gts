@@ -96,7 +96,7 @@ export default class CreateFileModal extends Component<Signature> {
             @kind='primary'
             @size='tall'
             @loading={{this.createCardInstance.isRunning}}
-            @disabled={{this.createCardInstance.isRunning}}
+            @disabled={{this.isCreateButtonDisabled}}
             {{on 'click' (perform this.createCardInstance)}}
             data-test-create-file
           >
@@ -148,6 +148,14 @@ export default class CreateFileModal extends Component<Signature> {
 
   @action removeSelectedRealm() {
     this.selectedRealmURL = undefined;
+  }
+
+  get isCreateButtonDisabled() {
+    return (
+      !this.selectedCatalogEntry ||
+      !this.selectedRealmURL ||
+      this.createCardInstance.isRunning
+    );
   }
 
   private chooseCardInstanceType = restartableTask(async () => {
