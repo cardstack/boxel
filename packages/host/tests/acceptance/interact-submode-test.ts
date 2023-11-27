@@ -25,6 +25,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import {
   TestRealm,
@@ -592,12 +593,13 @@ module('Acceptance | interact submode tests', function (hooks) {
       let operatorModeStateService = this.owner.lookup(
         'service:operator-mode-state-service',
       ) as OperatorModeStateService;
+      let recentCardsService = this.owner.lookup(
+        'service:recent-cards-service',
+      ) as RecentCardsService;
 
       let firstStack = operatorModeStateService.state.stacks[0];
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
-      operatorModeStateService.recentCards = firstStack.map(
-        (item) => item.card,
-      );
+      recentCardsService.recentCards = firstStack.map((item) => item.card);
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-add-card-left-stack]').exists();
@@ -699,9 +701,12 @@ module('Acceptance | interact submode tests', function (hooks) {
       let operatorModeStateService = this.owner.lookup(
         'service:operator-mode-state-service',
       ) as OperatorModeStateService;
+      let recentCardsService = this.owner.lookup(
+        'service:recent-cards-service',
+      ) as RecentCardsService;
 
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
-      operatorModeStateService.recentCards =
+      recentCardsService.recentCards =
         operatorModeStateService.state.stacks[0].map((item) => item.card);
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
