@@ -3,8 +3,9 @@ import { setupApplicationTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 import percySnapshot from '@percy/ember';
-import { baseRealm, Deferred, RealmPaths } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import {
@@ -17,9 +18,8 @@ import {
   setupOnSave,
   type TestContextWithSave,
 } from '../../helpers';
-import config from '@cardstack/host/config/environment';
 
-const { resolvedBaseRealmURL } = config;
+const testRealmURL2 = 'http://localhost:4202/test2/';
 
 const files: Record<string, any> = {
   '.realm.json': {
@@ -73,7 +73,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Pet',
         description: 'Catalog entry for Pet',
-        ref: { module: '../pet', name: 'Pet' },
+        ref: { module: `${testRealmURL}pet`, name: 'Pet' },
       },
       meta: {
         adoptsFrom: {
@@ -89,7 +89,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Person',
         description: 'Catalog entry for Person',
-        ref: { module: '../person', name: 'Person' },
+        ref: { module: `${testRealmURL}person`, name: 'Person' },
       },
       meta: {
         adoptsFrom: {
@@ -101,23 +101,31 @@ const files: Record<string, any> = {
   },
 };
 
+const filesB: Record<string, any> = {
+  '.realm.json': {
+    name: 'Test Workspace B',
+    backgroundURL:
+      'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+    iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+  },
+  'index.json': {
+    data: {
+      type: 'card',
+      attributes: {},
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/cards-grid',
+          name: 'CardsGrid',
+        },
+      },
+    },
+  },
+};
+
 module('Acceptance | code submode | create-file tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
-
-  let visitFileInCodeSubmode = async (filePath: string) => {
-    let state: Partial<OperatorModeState> = {
-      stacks: [],
-      submode: 'code' as Submode,
-      codePath: new URL(filePath),
-    };
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        stringify(state),
-      )}`,
-    );
-  };
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
@@ -125,13 +133,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    loader.addURLMapping(
-      new URL(testRealmURL),
-      new URL('http://localhost:4202/test/'),
-    );
     let realm = await TestRealm.create(loader, files, this.owner, {
       realmURL: testRealmURL,
       isAcceptanceTest: true,
@@ -149,11 +152,20 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       ],
     });
     await realm.ready;
+
+    let state: Partial<OperatorModeState> = {
+      stacks: [],
+      submode: 'code' as Submode,
+      codePath: new URL(`${testRealmURL}index.json`),
+    };
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        stringify(state),
+      )}`,
+    );
   });
 
   test('allows realm selection', async function (assert) {
-    await visitFileInCodeSubmode(`${testRealmURL}index.json`);
-
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor('[data-test-card-resource-loaded]');
     assert
@@ -187,8 +199,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
-    await visitFileInCodeSubmode(`${testRealmURL}index.json`);
-
     // open modal via new-file button
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor('[data-test-new-file-button]');
@@ -257,8 +267,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from a remote realm', async function (assert) {
-    await visitFileInCodeSubmode(`${testRealmURL}index.json`);
-
     // open modal via new-file button
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor('[data-test-new-file-button]');
@@ -321,9 +329,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from the same realm', async function (assert) {
-    await visitFileInCodeSubmode(`${testRealmURL}index.json`);
-
+  test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from another realm', async function (assert) {
     // open modal via new-file button
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor('[data-test-new-file-button]');
@@ -337,9 +343,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(
       '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
     );
-    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
-    await waitFor(`[data-test-realm-name="Base Workspace"]`);
-    assert.dom('[data-test-realm-name]').hasText('Base Workspace');
+    await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
+    await waitFor(`[data-test-realm-name="Test Workspace B"]`);
+    assert.dom('[data-test-realm-name]').hasText('Test Workspace B');
 
     // card type selection
     await click('[data-test-select-card-type]');
@@ -351,7 +357,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     assert.dom(`[data-test-selected-type]`).hasText('CardDef');
 
     let deferred = new Deferred<void>();
-    let realmPaths = new RealmPaths(baseRealm.url);
     let fileID = '';
 
     this.onSave(async (json) => {
@@ -365,13 +370,13 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       );
       assert.strictEqual(
         json.data.meta.realmURL,
-        baseRealm.url,
+        testRealmURL2,
         'realm url is correct',
       );
       assert.deepEqual(
         json.data.meta.adoptsFrom,
         {
-          module: `../card-api`,
+          module: `${baseRealm.url}card-api`,
           name: 'CardDef',
         },
         'adoptsFrom is correct',
@@ -385,19 +390,15 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert
       .dom('[data-test-code-mode-card-preview-header] img')
-      .hasAttribute('alt', 'Icon for realm Base Workspace');
+      .hasAttribute('alt', 'Icon for realm Test Workspace B');
     assert.dom('[data-test-card-resource-loaded]').containsText('Card');
     assert.dom('[data-test-field="title"] input').hasValue('');
-    assert
-      .dom('[data-test-card-url-bar-input]')
-      .hasValue(`${resolvedBaseRealmURL}${realmPaths.local(fileID)}.json`);
+    assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
 
     await deferred.promise;
   });
 
   test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from a local realm', async function (assert) {
-    await visitFileInCodeSubmode(`${testRealmURL}index.json`);
-
     // open modal via new-file button
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor('[data-test-new-file-button]');
@@ -411,9 +412,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(
       '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
     );
-    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
-    await waitFor(`[data-test-realm-name="Base Workspace"]`);
-    assert.dom('[data-test-realm-name]').hasText('Base Workspace');
+    await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
+    await waitFor(`[data-test-realm-name="Test Workspace B"]`);
+    assert.dom('[data-test-realm-name]').hasText('Test Workspace B');
 
     // card type selection
     await click('[data-test-select-card-type]');
@@ -424,7 +425,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(`[data-test-selected-type="Person"]`);
 
     let deferred = new Deferred<void>();
-    let realmPaths = new RealmPaths(baseRealm.url);
     let fileID = '';
 
     this.onSave(async (json) => {
@@ -438,7 +438,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       );
       assert.strictEqual(
         json.data.meta.realmURL,
-        testRealmURL,
+        testRealmURL2,
         'realm url is correct',
       );
       assert.deepEqual(
@@ -458,12 +458,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert
       .dom('[data-test-code-mode-card-preview-header] img')
-      .hasAttribute('alt', 'Icon for realm Test Workspace A');
+      .hasAttribute('alt', 'Icon for realm Test Workspace B');
     assert.dom('[data-test-card-resource-loaded]').containsText('Person');
     assert.dom('[data-test-field="firstName"] input').hasValue('');
-    assert
-      .dom('[data-test-card-url-bar-input]')
-      .hasValue(`${resolvedBaseRealmURL}${realmPaths.local(fileID)}.json`);
+    assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
 
     await deferred.promise;
   });
