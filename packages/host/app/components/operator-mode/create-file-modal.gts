@@ -72,6 +72,7 @@ export default class CreateFileModal extends Component<Signature> {
               {{/if}}
               <Button
                 class={{if this.selectedCatalogEntry 'change-trigger'}}
+                @kind='text-only'
                 @size='small'
                 @disabled={{this.createCardInstance.isRunning}}
                 {{on 'click' (perform this.chooseCardInstanceType)}}

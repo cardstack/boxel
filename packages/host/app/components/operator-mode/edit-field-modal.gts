@@ -329,15 +329,6 @@ export default class EditFieldModal extends Component<Signature> {
         display: flex;
       }
 
-      .card-chooser-area button.change {
-        background-color: transparent;
-        border: none;
-        color: var(--boxel-highlight);
-        font-size: var(--boxel-font-sm);
-        font-weight: 600;
-        height: 1em;
-      }
-
       .card-chooser-area button.pull-right {
         margin-left: auto;
         height: auto;
@@ -383,13 +374,15 @@ export default class EditFieldModal extends Component<Signature> {
               </Pill>
             {{/if}}
 
-            <button
+            <BoxelButton
+              @kind='text-only'
+              @size='small'
               {{on 'click' this.chooseCard}}
               class='change {{if this.fieldCard "pull-right"}}'
               data-test-choose-card-button
             >
               Change
-            </button>
+            </BoxelButton>
           </div>
         </FieldContainer>
 
