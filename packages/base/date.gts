@@ -67,6 +67,7 @@ export default class DateField extends FieldDef {
         type='date'
         @value={{this.formatted}}
         @onInput={{fn this.parseInput @set}}
+        @max='9999-12-31'
       />
     </template>
 

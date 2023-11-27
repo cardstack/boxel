@@ -132,12 +132,7 @@ export default class CodeSubmode extends Component<Signature> {
     },
   );
   private moduleContentsResource = moduleContentsResource(this, () => {
-    if (this.isReady) {
-      return hasExecutableExtension(this.readyFile.url)
-        ? this.readyFile
-        : undefined;
-    }
-    return;
+    return this.isModule ? this.readyFile : undefined;
   });
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -213,7 +208,9 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isModule() {
     return (
-      hasExecutableExtension(this.readyFile.name) && !this.isIncompatibleFile
+      this.isReady &&
+      hasExecutableExtension(this.readyFile.url) &&
+      !this.isIncompatibleFile
     );
   }
 
@@ -240,6 +237,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
+    //this will prevent displaying message during a page refresh
     if (this.moduleContentsResource.isLoading) {
       return null;
     }
@@ -259,7 +257,7 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
-      return 'No tools are available to inspect this file or its contents.';
+      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
     }
 
     // TODO: handle card preview errors (when json is valid but card returns error)
@@ -270,6 +268,17 @@ export default class CodeSubmode extends Component<Signature> {
       return `card preview error ${this.cardError.message}`;
     }
 
+    return null;
+  }
+
+  private get inspectorFileIncompatibilityMessage() {
+    //this will prevent displaying message during a page refresh
+    if (this.moduleContentsResource.isLoading) {
+      return null;
+    }
+    if (!this.card && !this.isModule && !this.isIncompatibleFile) {
+      return 'Inspector cannot be used with this file type. Select a file with a .json, .gts or .ts extension.';
+    }
     return null;
   }
 
@@ -617,16 +626,25 @@ export default class CodeSubmode extends Component<Signature> {
                         <FileTree @realmURL={{this.realmURL}} />
                       {{else}}
                         {{#if this.isReady}}
-                          <DetailPanel
-                            @cardInstance={{this.card}}
-                            @readyFile={{this.readyFile}}
-                            @selectedDeclaration={{this.selectedDeclaration}}
-                            @declarations={{this.declarations}}
-                            @selectDeclaration={{this.selectDeclaration}}
-                            @delete={{perform this.delete}}
-                            @openDefinition={{this.openDefinition}}
-                            data-test-card-inspector-panel
-                          />
+                          {{#if this.inspectorFileIncompatibilityMessage}}
+                            <div
+                              class='file-incompatible-message'
+                              data-test-detail-panel-file-incompatibility-message
+                            >
+                              {{this.inspectorFileIncompatibilityMessage}}
+                            </div>
+                          {{else}}
+                            <DetailPanel
+                              @cardInstance={{this.card}}
+                              @readyFile={{this.readyFile}}
+                              @selectedDeclaration={{this.selectedDeclaration}}
+                              @declarations={{this.declarations}}
+                              @selectDeclaration={{this.selectDeclaration}}
+                              @delete={{perform this.delete}}
+                              @openDefinition={{this.openDefinition}}
+                              data-test-card-inspector-panel
+                            />
+                          {{/if}}
                         {{/if}}
                       {{/if}}
                     </section>

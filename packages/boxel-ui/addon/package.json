@@ -47,13 +47,15 @@
     "ember-link": "^2.1.0",
     "ember-load-initializers": "^2.1.2",
     "ember-modifier": "^4.1.0",
+    "ember-ref-bucket": "5.0.5",
     "ember-resize-modifier": "^0.6.0",
     "ember-set-body-class": "^1.0.2",
     "ember-velcro": "^2.1.0",
     "file-loader": "^6.2.0",
     "focus-trap": "^7.4.3",
     "lodash": "^4.17.21",
-    "tracked-built-ins": "^3.2.0"
+    "tracked-built-ins": "^3.2.0",
+    "typescript": "^5.1.6"
   },
   "devDependencies": {
     "@babel/core": "^7.22.11",

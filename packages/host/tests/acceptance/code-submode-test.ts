@@ -52,11 +52,121 @@ const indexCardSource = `
   }
 `;
 
+const postalCodeFieldSource = `
+  import {
+    contains,
+    field,
+    Component,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  export class PostalCode extends FieldDef {
+    static displayName = 'Postal Code';
+    @field fiveDigitPostalCode = contains(StringCard); // required
+    @field fourDigitOptional = contains(StringCard);
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <div><@fields.fiveDigitPostalCode /> - <@fields.fourDigitOptional /></div>
+        </address>
+      </template>
+    };    
+  }
+`;
+
+const addressFieldSource = `
+  import {
+    contains,
+    field,
+    Component,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+  import { PostalCode } from './postal-code';
+
+  export class Address extends FieldDef {
+    static displayName = 'Address';
+    @field streetAddress = contains(StringCard); // required
+    @field city = contains(StringCard); // required
+    @field region = contains(StringCard);
+    @field postalCode = contains(PostalCode);
+    @field poBoxNumber = contains(StringCard);
+    @field country = contains(StringCard); // required // dropdown
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <div><@fields.streetAddress /></div>
+          <@fields.city />
+          <@fields.region />
+          <@fields.postalCode /><@fields.poBoxNumber />
+          <@fields.country />
+        </address>
+      </template>
+    };
+  }
+`;
+
+const countryCardSource = `
+  import {
+    contains,
+    field,
+    Component,
+    CardDef,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class Country extends CardDef {
+    static displayName = 'Country';
+    @field name = contains(StringField);
+    @field title = contains(StringField, {
+      computeVia(this: Country) {
+        return this.name;
+      },
+    });
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <@fields.name />
+        </address>
+      </template>
+    };
+  }
+`;
+
+const tripsFieldSource = `
+  import {
+    linksToMany,
+    field,
+    Component,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import { Country } from './country';
+
+  export class Trips extends FieldDef {
+    static displayName = 'Trips';
+    @field countriesVisited = linksToMany(Country);
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <@fields.countriesVisited />
+        </address>
+      </template>
+    };
+  }
+`;
+
 const personCardSource = `
   import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
   import { Friend } from './friend';
   import { Pet } from "./pet";
+  import { Address } from './address';
+  import { Trips } from './trips';
 
   export class Person extends CardDef {
     static displayName = 'Person';
@@ -70,6 +180,8 @@ const personCardSource = `
     @field pet = linksTo(Pet);
     @field friends = linksToMany(Friend);
     @field address = containsMany(StringCard);
+    @field addressDetail = contains(Address);
+    @field trips = contains(Trips);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <div data-test-person>
@@ -246,6 +358,10 @@ const friendCardSource = `
   }
 `;
 
+const txtSource = `
+  Hello, world!
+`;
+
 module('Acceptance | code submode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -276,6 +392,10 @@ module('Acceptance | code submode tests', function (hooks) {
       'friend.gts': friendCardSource,
       'employee.gts': employeeCardSource,
       'in-this-file.gts': inThisFileSource,
+      'postal-code.gts': postalCodeFieldSource,
+      'address.gts': addressFieldSource,
+      'country.gts': countryCardSource,
+      'trips.gts': tripsFieldSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -366,6 +486,23 @@ module('Acceptance | code submode tests', function (hooks) {
           },
         },
       },
+      'Country/united-states.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            name: 'United States',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../country',
+              name: 'Country',
+            },
+          },
+        },
+      },
+      'hello.txt': txtSource,
       'z00.json': '{}',
       'z01.json': '{}',
       'z02.json': '{}',
@@ -796,6 +933,34 @@ module('Acceptance | code submode tests', function (hooks) {
     assert.dom('[data-test-file-incompatibility-message]').exists();
   });
 
+  test('displays clear message on inspector-panel and schema-editor when file is completely unsupported', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-incompatibility-message]');
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.',
+      );
+
+    await waitFor('[data-test-detail-panel-file-incompatibility-message]');
+    assert
+      .dom('[data-test-detail-panel-file-incompatibility-message]')
+      .hasText(
+        'Inspector cannot be used with this file type. Select a file with a .json, .gts or .ts extension.',
+      );
+  });
+
   test('Clicking card in search panel opens card JSON in editor', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
@@ -1107,5 +1272,76 @@ module('Acceptance | code submode tests', function (hooks) {
       100,
       'the scroll position is correct',
     );
+  });
+
+  test<TestContextWithSSE>('updates values in preview panel must be represented in editor panel', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/fadhlan`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/fadhlan.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-test-code-mode-card-preview-body]');
+
+    await click('[data-test-preview-card-footer-button-edit]');
+    await this.expectEvents({
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      callback: async () => {
+        // primitive field
+        await fillIn('[data-test-field="lastName"] input', 'Ridhwanallah');
+
+        // compound field with 1 level
+        await fillIn(
+          '[data-test-field="streetAddress"] input',
+          'Unknown Address',
+        );
+        await fillIn('[data-test-field="city"] input', 'Bandung');
+
+        // compound field with 2 level
+        await fillIn('[data-test-field="fiveDigitPostalCode"] input', '12345');
+        await fillIn('[data-test-field="fourDigitOptional"] input', '1234');
+
+        // compound field with linksToMany field
+        await click(
+          '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
+        );
+        await waitFor(
+          `[data-test-select="${testRealmURL}Country/united-states"]`,
+        );
+        await click(
+          `[data-test-select="${testRealmURL}Country/united-states"]`,
+        );
+        await click(`[data-test-card-catalog-go-button]`);
+      },
+      opts: { timeout: 4500 },
+    });
+    await waitFor('[data-test-saved]');
+    await waitFor('[data-test-save-idle]');
+
+    let content = getMonacoContent();
+    assert.ok(content.includes('Ridhwanallah'));
+    assert.ok(content.includes('Unknown Address'));
+    assert.ok(content.includes('Bandung'));
+    assert.ok(content.includes('12345'));
+    assert.ok(content.includes('1234'));
+    assert.ok(content.includes(`${testRealmURL}Country/united-states`));
   });
 });

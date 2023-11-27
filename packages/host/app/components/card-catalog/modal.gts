@@ -38,8 +38,6 @@ import {
 
 import ModalContainer from '../modal-container';
 
-import UrlSearch from '../url-search';
-
 import CardCatalogFilters from './filters';
 
 import CardCatalog from './index';
@@ -98,7 +96,7 @@ export default class CardCatalogModal extends Component<Signature> {
             @value={{this.state.searchKey}}
             @onInput={{this.setSearchKey}}
             @onKeyPress={{this.onSearchFieldKeypress}}
-            @placeholder='Search for a card'
+            @placeholder='Search for a card or enter its URL'
             data-test-search-field
           />
           <CardCatalogFilters
@@ -106,6 +104,7 @@ export default class CardCatalogModal extends Component<Signature> {
             @selectedRealms={{this.state.selectedRealms}}
             @onSelectRealm={{this.onSelectRealm}}
             @onDeselectRealm={{this.onDeselectRealm}}
+            @disableRealmFilter={{this.searchKeyIsURL}}
           />
         </:header>
         <:content>
@@ -149,11 +148,6 @@ export default class CardCatalogModal extends Component<Signature> {
                   {{this.cardRefName}}
                 </Button>
               {{/if}}
-              <UrlSearch
-                @cardURL={{this.state.cardURL}}
-                @setCardURL={{this.setCardURL}}
-                @setSelectedCard={{this.setSelectedCard}}
-              />
             </div>
             <div>
               <Button
@@ -347,6 +341,15 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
+  get searchKeyIsURL() {
+    try {
+      new URL(this.state.searchKey);
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
   debouncedSearchFieldUpdate = debounce(() => this.onSearchFieldUpdated(), 500);
 
   @action setCardURL(cardURL: string) {
@@ -370,14 +373,26 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state.searchKey && !this.state.selectedRealms.length) {
       return this.resetState();
     }
+
     let results: RealmCards[] = [];
-    for (let { url, realmInfo, cards } of this.displayedRealms) {
-      let filteredCards = cards.filter((c) => {
+    let cardFilter;
+
+    if (this.searchKeyIsURL) {
+      cardFilter = (c: CardDef) => {
+        return c.id === this.state.searchKey;
+      };
+    } else {
+      cardFilter = (c: CardDef) => {
         return c.title
           ?.trim()
           .toLowerCase()
           .includes(this.state.searchKey.trim().toLowerCase());
-      });
+      };
+    }
+
+    for (let { url, realmInfo, cards } of this.displayedRealms) {
+      let filteredCards = cards.filter(cardFilter);
+
       if (filteredCards.length) {
         results.push({
           url,

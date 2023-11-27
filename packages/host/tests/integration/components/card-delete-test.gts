@@ -15,6 +15,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -624,11 +625,11 @@ module('Integration | card-delete', function (hooks) {
     ];
 
     // creates a recent item
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    let recentCardsService = this.owner.lookup(
+      'service:recent-cards-service',
+    ) as RecentCardsService;
     let mango = await loadCard(`${testRealmURL}Pet/mango`);
-    operatorModeStateService.addRecentCard(mango);
+    recentCardsService.add(mango);
 
     await setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
