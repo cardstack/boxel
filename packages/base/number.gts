@@ -1,6 +1,6 @@
+import { TextInputValidator } from 'text-input-validator';
 import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { TextInputFilter } from './text-input-filter';
 
 function serialize(val: number): string {
   return val.toString();
@@ -53,16 +53,16 @@ export default class NumberField extends FieldDef {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <BoxelInput
-        @value={{this.textInputFilter.asString}}
-        @onInput={{this.textInputFilter.onInput}}
-        @errorMessage={{this.textInputFilter.errorMessage}}
-        @state={{if this.textInputFilter.isInvalid 'invalid' 'none'}}
+        @value={{this.textInputValidator.asString}}
+        @onInput={{this.textInputValidator.onInput}}
+        @errorMessage={{this.textInputValidator.errorMessage}}
+        @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
       />
     </template>
 
-    textInputFilter: TextInputFilter<number> = new TextInputFilter(
+    textInputValidator: TextInputValidator<number> = new TextInputValidator(
       () => this.args.model,
-      (inputVal) => this.args.set(inputVal),
+      (inputVal: number | null | undefined) => this.args.set(inputVal),
       deserialize,
       serialize,
       validate,
