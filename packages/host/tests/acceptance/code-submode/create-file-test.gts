@@ -8,7 +8,6 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { type Loader } from '@cardstack/runtime-common/loader';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import type { Submode } from '@cardstack/host/components/submode-switcher';
@@ -70,8 +69,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   hooks.beforeEach(async function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    shimExternals(loader);
-
     catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
 
     createTestRealm = async (files) => {

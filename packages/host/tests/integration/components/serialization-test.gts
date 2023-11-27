@@ -12,7 +12,6 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
@@ -44,7 +43,6 @@ module('Integration | serialization', function (hooks) {
   hooks.beforeEach(async function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    shimExternals(loader);
   });
 
   setupCardLogs(

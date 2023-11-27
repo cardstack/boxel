@@ -19,10 +19,10 @@ import { baseRealm } from '@cardstack/runtime-common';
 import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
+  BaseDef,
   SignatureFor,
   primitive as primitiveType,
   queryableValue as queryableValueType,
@@ -65,7 +65,6 @@ module('Integration | card-basics', function (hooks) {
   );
 
   hooks.beforeEach(async function () {
-    shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     primitive = cardApi.primitive;
     queryableValue = cardApi.queryableValue;
@@ -552,11 +551,14 @@ module('Integration | card-basics', function (hooks) {
       favoriteColor: 'brown',
     });
 
-    let changeEvent: { fieldName: string; value: any } | undefined;
+    let changeEvent:
+      | { instance: BaseDef; fieldName: string; value: any }
+      | undefined;
     let eventCount = 0;
-    let subscriber = (fieldName: string, value: any) => {
+    let subscriber = (instance: BaseDef, fieldName: string, value: any) => {
       eventCount++;
       changeEvent = {
+        instance,
         fieldName,
         value,
       };
@@ -569,6 +571,11 @@ module('Integration | card-basics', function (hooks) {
         eventCount,
         1,
         'the change event was fired the correct amount of times',
+      );
+      assert.deepEqual(
+        changeEvent?.instance,
+        mango,
+        'the instance was correctly specified in change event',
       );
       assert.strictEqual(
         changeEvent?.fieldName,
@@ -624,11 +631,14 @@ module('Integration | card-basics', function (hooks) {
       favoriteColors: ['brown'],
     });
 
-    let changeEvent: { fieldName: string; value: any } | undefined;
+    let changeEvent:
+      | { instance: BaseDef; fieldName: string; value: any }
+      | undefined;
     let eventCount = 0;
-    let subscriber = (fieldName: string, value: any) => {
+    let subscriber = (instance: BaseDef, fieldName: string, value: any) => {
       eventCount++;
       changeEvent = {
+        instance,
         fieldName,
         value,
       };
@@ -642,6 +652,11 @@ module('Integration | card-basics', function (hooks) {
         eventCount,
         1,
         'the change event was fired the correct amount of times',
+      );
+      assert.deepEqual(
+        changeEvent?.instance,
+        mango,
+        'the instance was correctly specified in change event',
       );
       assert.strictEqual(
         changeEvent?.fieldName,
@@ -714,11 +729,14 @@ module('Integration | card-basics', function (hooks) {
     await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
     await saveCard(paper, `${testRealmURL}Pet/paper`, loader);
 
-    let changeEvent: { fieldName: string; value: any } | undefined;
+    let changeEvent:
+      | { instance: BaseDef; fieldName: string; value: any }
+      | undefined;
     let eventCount = 0;
-    let subscriber = (fieldName: string, value: any) => {
+    let subscriber = (instance: BaseDef, fieldName: string, value: any) => {
       eventCount++;
       changeEvent = {
+        instance,
         fieldName,
         value,
       };
@@ -731,6 +749,11 @@ module('Integration | card-basics', function (hooks) {
         eventCount,
         1,
         'the change event was fired the correct amount of times',
+      );
+      assert.deepEqual(
+        changeEvent?.instance,
+        hassan,
+        'the instance was correctly specified in change event',
       );
       assert.strictEqual(
         changeEvent?.fieldName,
@@ -803,11 +826,14 @@ module('Integration | card-basics', function (hooks) {
     await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
     await saveCard(paper, `${testRealmURL}Pet/paper`, loader);
 
-    let changeEvent: { fieldName: string; value: any } | undefined;
+    let changeEvent:
+      | { instance: BaseDef; fieldName: string; value: any }
+      | undefined;
     let eventCount = 0;
-    let subscriber = (fieldName: string, value: any) => {
+    let subscriber = (instance: BaseDef, fieldName: string, value: any) => {
       eventCount++;
       changeEvent = {
+        instance,
         fieldName,
         value,
       };
@@ -821,6 +847,11 @@ module('Integration | card-basics', function (hooks) {
         eventCount,
         1,
         'the change event was fired the correct amount of times',
+      );
+      assert.deepEqual(
+        changeEvent?.instance,
+        hassan,
+        'the instance was correctly specified in change event',
       );
       assert.strictEqual(
         changeEvent?.fieldName,

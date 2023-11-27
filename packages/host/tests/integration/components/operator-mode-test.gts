@@ -1958,18 +1958,26 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(
-      `[data-test-url-search]`,
+      `[data-test-search-field]`,
       `https://cardstack.com/base/types/card`,
     );
-    await waitUntil(
-      () =>
-        (
-          document.querySelector(`[data-test-card-catalog-go-button]`) as
-            | HTMLButtonElement
-            | undefined
-        )?.disabled === false,
-    );
-    await click(`[data-test-card-catalog-go-button]`);
+
+    await waitFor('[data-test-card-catalog-item]', {
+      count: 1,
+    });
+
+    assert
+      .dom(`[data-test-realm="Base Workspace"] [data-test-results-count]`)
+      .hasText('1 result');
+
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
+    await click('[data-test-select]');
+
+    await waitFor('[data-test-card-catalog-go-button][disabled]', {
+      count: 0,
+    });
+    await click('[data-test-card-catalog-go-button]');
+
     assert
       .dom(`[data-test-stack-card-index="1"] [data-test-field="title"]`)
       .exists();
@@ -1979,87 +1987,6 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-stack-card-index="1"] [data-test-field="thumbnailURL"]`)
       .exists();
-  });
-
-  test(`error message is shown when invalid card URL is entered in card chooser`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-create-new-card-button]`);
-    await waitFor(`[data-test-card-catalog-item]`);
-
-    assert
-      .dom(`[data-test-boxel-input-validation-state="Not a valid Card URL"]`)
-      .doesNotExist('invalid state is not shown');
-
-    await fillIn(
-      `[data-test-url-search]`,
-      `https://cardstack.com/base/not-a-card`,
-    );
-    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
-    assert
-      .dom(`[data-test-boxel-input-error-message]`)
-      .containsText('Not a valid Card URL');
-
-    await fillIn(
-      `[data-test-url-search]`,
-      `https://cardstack.com/base/types/room-objective`,
-    );
-
-    assert
-      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
-      .doesNotExist('invalid state is not shown');
-  });
-
-  test(`card selection and card URL field are mutually exclusive in card chooser`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-create-new-card-button]`);
-    await waitFor(`[data-test-card-catalog-item]`);
-
-    await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"] button`,
-    );
-    assert
-      .dom(
-        `[data-test-card-catalog-item="https://cardstack.com/base/types/card"].selected`,
-      )
-      .exists('card is selected');
-
-    await fillIn(
-      `[data-test-url-search]`,
-      `https://cardstack.com/base/types/card`,
-    );
-
-    assert
-      .dom(
-        `[data-test-card-catalog-item="https://cardstack.com/base/types/card"].selected`,
-      )
-      .doesNotExist('card is not selected');
-
-    await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"] button`,
-    );
-    assert
-      .dom(`[data-test-url-search]`)
-      .hasNoValue('card URL field is cleared');
   });
 
   test(`can search by card title in card chooser`, async function (assert) {

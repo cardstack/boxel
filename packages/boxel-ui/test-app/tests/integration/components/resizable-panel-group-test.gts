@@ -144,35 +144,43 @@ module('Integration | ResizablePanelGroup', function (hooks) {
 
   test('it adjusts to its container shrinking (length specified A)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
-      'max-height: 100%; width: 200px; height: 418px; border: 1px solid green';
+      'max-height: 100%; width: 200px; height: 420px; border: 1px solid green';
+    // Height ratio panel 1 and panel 2 is 3:2
     this.renderController.panel1LengthPx = 240;
     this.renderController.panel2LengthPx = 160;
     await renderVerticalResizablePanelGroup(this.renderController);
+    assert.hasNumericStyle('.panel-1-content', 'height', 240, 1);
+    assert.hasNumericStyle('.panel-2-content', 'height', 160, 1);
     this.renderController.containerStyle =
-      'max-height: 100%; width: 200px; height: 218px; border: 1px solid green';
+      'max-height: 100%; width: 200px; height: 220px; border: 1px solid green';
     await sleep(100); // let didResizeModifier run
+    // Maintain the ratio 3:2 when resizing
     assert.hasNumericStyle('.panel-1-content', 'height', 120, 1);
     assert.hasNumericStyle('.panel-2-content', 'height', 80, 1);
   });
 
   test('it adjusts to its container shrinking (length specified B)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
-      'max-height: 100%; width: 200px; height: 618px; border: 1px solid green';
+      'max-height: 100%; width: 200px; height: 620px; border: 1px solid green';
+    // Height ratio panel 1 and panel 2 is 2:1
     this.renderController.panel1LengthPx = 400;
     this.renderController.panel2LengthPx = 200;
     this.renderController.panel1InnerContentStyle =
       'height: 180px; background: blue';
     await renderVerticalResizablePanelGroup(this.renderController);
+    assert.hasNumericStyle('.panel-1-content', 'height', 400, 1);
+    assert.hasNumericStyle('.panel-2-content', 'height', 200, 1);
     this.renderController.containerStyle =
-      'max-height: 100%; width: 200px; height: 218px; border: 1px solid green';
+      'max-height: 100%; width: 200px; height: 220px; border: 1px solid green';
     await sleep(100); // let didResizeModifier run
-    assert.hasNumericStyle('.panel-1-content', 'height', 150, 1);
-    assert.hasNumericStyle('.panel-2-content', 'height', 50, 1);
+    // Maintain the ratio 2:1 when resizing
+    assert.hasNumericStyle('.panel-1-content', 'height', 133, 1);
+    assert.hasNumericStyle('.panel-2-content', 'height', 67, 1);
   });
 
   test('it adjusts to its container shrinking and growing', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
-      'max-height: 100%; width: 200px; height: 618px; border: 1px solid green';
+      'max-height: 100%; width: 200px; height: 620px; border: 1px solid green';
     this.renderController.panel1LengthPx = 400;
     this.renderController.panel2LengthPx = 200;
     this.renderController.panel1InnerContentStyle =
@@ -180,19 +188,25 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     await renderVerticalResizablePanelGroup(this.renderController);
     this.renderController.panel1LengthPx = 50;
     this.renderController.panel2LengthPx = 550;
+    await sleep(100); // let didResizeModifier run
     await doubleClick('[data-test-resize-handler]'); // Double-click to hide recent
-    await sleep(100); // let didResizeModifier run
-    assert.hasNumericStyle('.panel-1-content', 'height', 598, 1);
-    assert.hasNumericStyle('.panel-2-content', 'height', 2, 1);
+    await sleep(100); // let onResizeHandlerDblClick run
+    assert.hasNumericStyle('.panel-1-content', 'height', 600, 1);
+    assert.hasNumericStyle('.panel-2-content', 'height', 0, 2);
     this.renderController.containerStyle =
-      'max-height: 100%; width: 200px; height: 318px; border: 1px solid green'; // shrink container by ~50%
+      'max-height: 100%; width: 200px; height: 320px; border: 1px solid green'; // shrink container by ~50%
     await sleep(100); // let didResizeModifier run
+    assert.hasNumericStyle('.panel-1-content', 'height', 300, 1);
+    assert.hasNumericStyle('.panel-2-content', 'height', 0, 2);
     await doubleClick('[data-test-resize-handler]'); // Double-click to unhide recent
+    await sleep(100); // let onResizeHandlerDblClick run
+    assert.hasNumericStyle('.panel-1-content', 'height', 180, 1);
+    assert.hasNumericStyle('.panel-2-content', 'height', 120, 1);
     this.renderController.containerStyle =
-      'max-height: 100%; width: 200px; height: 618px; border: 1px solid green'; // increase window/container height to original height
+      'max-height: 100%; width: 200px; height: 620px; border: 1px solid green'; // increase window/container height to original height
     await sleep(100); // let didResizeModifier run
     // expected behavior: panel height percentages would remain consistent
-    assert.hasNumericStyle('.panel-1-content', 'height', 345, 1);
-    assert.hasNumericStyle('.panel-2-content', 'height', 253, 1);
+    assert.hasNumericStyle('.panel-1-content', 'height', 360, 1);
+    assert.hasNumericStyle('.panel-2-content', 'height', 240, 1);
   });
 });
