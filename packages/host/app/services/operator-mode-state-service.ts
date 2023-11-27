@@ -527,6 +527,9 @@ export default class OperatorModeStateService extends Service {
         );
       },
       onRedirect: (url: string) => {
+        if (!url) {
+          return;
+        }
         this.replaceCodePath(new URL(url));
       },
     }));
