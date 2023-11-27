@@ -105,7 +105,7 @@ export default class CardService extends Service {
   async createFromSerialized(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
-    relativeTo: URL | undefined,
+    relativeTo?: URL | undefined,
     loader?: Loader,
   ): Promise<CardDef> {
     loader = loader ?? this.loaderService.loader;

@@ -170,6 +170,15 @@ export default class CreateFileModal extends Component<Signature> {
 
     let { ref } = this.selectedCatalogEntry;
 
+    let relativeTo = new URL(this.selectedCatalogEntry.id);
+    // we make the code ref use an absolute URL for safety in
+    // the case it's being created in a different realm than where the card
+    // definition comes from
+    let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
+    if ('name' in maybeRef && 'module' in maybeRef) {
+      ref = maybeRef;
+    }
+
     let doc: LooseSingleCardDocument = {
       data: {
         meta: {
@@ -179,23 +188,7 @@ export default class CreateFileModal extends Component<Signature> {
       },
     };
 
-    let relativeTo = new URL(this.selectedCatalogEntry.id);
-    let cardModule = new URL(moduleFrom(ref), relativeTo);
-    // we make the code ref use an absolute URL for safety in
-    // the case it's being created in a different realm than where the card
-    // definition comes from
-    if (!new RealmPaths(this.selectedRealmURL).inRealm(cardModule)) {
-      let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
-      if ('name' in maybeRef && 'module' in maybeRef) {
-        ref = maybeRef;
-      }
-    }
-
-    let card = await this.cardService.createFromSerialized(
-      doc.data,
-      doc,
-      relativeTo,
-    );
+    let card = await this.cardService.createFromSerialized(doc.data, doc);
 
     if (!card) {
       throw new Error(
