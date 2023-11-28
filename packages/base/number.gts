@@ -1,6 +1,6 @@
 import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { TextInputFilter } from './text-input-filter';
+import { TextInputValidator } from './text-input-validator';
 
 function serialize(val: number): string {
   return val.toString();
@@ -60,7 +60,7 @@ export default class NumberField extends FieldDef {
       />
     </template>
 
-    textInputFilter: TextInputFilter<number> = new TextInputFilter(
+    textInputFilter: TextInputValidator<number> = new TextInputValidator(
       () => this.args.model,
       (inputVal) => this.args.set(inputVal),
       deserialize,

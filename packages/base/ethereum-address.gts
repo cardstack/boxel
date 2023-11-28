@@ -1,7 +1,7 @@
 import { isAddress, getAddress } from 'ethers';
 import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { TextInputFilter } from './text-input-filter';
+import { TextInputValidator } from './text-input-validator';
 
 function isChecksumAddress(address: string): boolean {
   return getAddress(address) === address;
@@ -47,7 +47,7 @@ class Edit extends Component<typeof EthereumAddressField> {
     />
   </template>
 
-  textInputFilter: TextInputFilter<string> = new TextInputFilter(
+  textInputFilter: TextInputValidator<string> = new TextInputValidator(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
     deserialize,

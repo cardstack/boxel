@@ -1,6 +1,6 @@
 import { primitive, Component, serialize, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { TextInputFilter } from './text-input-filter';
+import { TextInputValidator } from './text-input-validator';
 
 function _serialize(val: bigint): string {
   return val.toString();
@@ -42,7 +42,7 @@ class Edit extends Component<typeof BigIntegerField> {
     />
   </template>
 
-  textInputFilter: TextInputFilter<bigint> = new TextInputFilter(
+  textInputFilter: TextInputValidator<bigint> = new TextInputValidator(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
     deserialize,
