@@ -37,3 +37,5 @@ export { WatchedArray };
 
 // Ensure instanceof works correctly
 Object.setPrototypeOf(WatchedArray.prototype, Array.prototype);
+
+// Maybe it needs to be a tracked array?
