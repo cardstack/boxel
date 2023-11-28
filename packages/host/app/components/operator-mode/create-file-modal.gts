@@ -16,7 +16,7 @@ import {
   BoxelInput,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   catalogEntryRef,
@@ -37,8 +37,15 @@ import ModalContainer from '../modal-container';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 import Pill from '../pill';
 
-export type NewFileType = 'card-instance' | 'card-definition'; // TODO: add more types
-export const newFileTypes: NewFileType[] = ['card-instance', 'card-definition'];
+export type NewFileType =
+  | 'card-instance'
+  | 'card-definition'
+  | 'field-definition';
+export const newFileTypes: NewFileType[] = [
+  'card-instance',
+  'card-definition',
+  'field-definition',
+];
 const waiter = buildWaiter('create-file-modal:on-setup-waiter');
 
 interface Signature {
@@ -96,11 +103,20 @@ export default class CreateFileModal extends Component<Signature> {
               </Button>
             </div>
           </FieldContainer>
-          {{#if (eq @fileType.id 'card-definition')}}
+          {{#if
+            (or
+              (eq @fileType.id 'card-definition')
+              (eq @fileType.id 'field-definition')
+            )
+          }}
             <FieldContainer @label='Display Name' @tag='label' class='field'>
               <BoxelInput
                 data-test-display-name-field
-                placeholder='My Card'
+                placeholder={{if
+                  (eq @fileType.id 'card-definition')
+                  'My Card'
+                  'My Field'
+                }}
                 @value={{this.displayName}}
                 @onInput={{this.setDisplayName}}
               />
@@ -109,7 +125,11 @@ export default class CreateFileModal extends Component<Signature> {
               {{! TODO add ".gts" suffix }}
               <BoxelInput
                 data-test-file-name-field
-                placeholder='my-card.gts'
+                placeholder={{if
+                  (eq @fileType.id 'card-definition')
+                  'my-card.gts'
+                  'my-field.gts'
+                }}
                 @value={{this.fileName}}
                 @onInput={{this.setFileName}}
               />
@@ -143,10 +163,10 @@ export default class CreateFileModal extends Component<Signature> {
               <Button
                 @kind='primary'
                 @size='tall'
-                @loading={{this.createCardDefinition.isRunning}}
-                @disabled={{this.isCreateCardDefinitionButtonDisabled}}
-                {{on 'click' (perform this.createCardDefinition)}}
-                data-test-create-card-definition
+                @loading={{this.createDefinition.isRunning}}
+                @disabled={{this.isCreateDefinitionButtonDisabled}}
+                {{on 'click' (perform this.createDefinition)}}
+                data-test-create-definition
               >
                 Create
               </Button>
@@ -220,13 +240,13 @@ export default class CreateFileModal extends Component<Signature> {
     );
   }
 
-  private get isCreateCardDefinitionButtonDisabled() {
+  private get isCreateDefinitionButtonDisabled() {
     return (
       !this.selectedCatalogEntry ||
       !this.selectedRealmURL ||
       !this.fileName ||
       !this.displayName ||
-      this.createCardDefinition.isRunning
+      this.createDefinition.isRunning
     );
   }
 
@@ -234,6 +254,7 @@ export default class CreateFileModal extends Component<Signature> {
     let token = waiter.beginAsync();
     try {
       if (this.args.fileType.id === 'card-definition') {
+        // TODO prepopulate with FieldDef catalog entry when this is a new field-definition
         let resource = getCard(this, () => `${baseRealm.url}types/card`, {
           isLive: () => false,
         });
@@ -249,12 +270,14 @@ export default class CreateFileModal extends Component<Signature> {
     this.selectedCatalogEntry = await chooseCard({
       filter: {
         on: catalogEntryRef,
+        // TODO we'll want to change this to isField: true when this is a new field-definition
         eq: { isField: false },
       },
     });
   });
 
-  private createCardDefinition = restartableTask(async () => {
+  // this can be used for CardDefs or FieldDefs
+  private createDefinition = restartableTask(async () => {
     if (!this.selectedRealmURL) {
       throw new Error(
         `bug: cannot call createCardDefinition without a selected realm URL`,
