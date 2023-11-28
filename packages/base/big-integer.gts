@@ -2,8 +2,8 @@ import { primitive, Component, serialize, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 
-function _serialize(val: bigint): string {
-  return val.toString();
+function _serialize(val: bigint | null): string {
+  return String(val);
 }
 
 function deserialize(string: string | null | undefined): bigint | null {
@@ -21,14 +21,14 @@ function validate(value: string | null): string | null {
   try {
     BigInt(value);
   } catch (error: any) {
-    return 'Invalid big integer';
+    return 'Not a valid big int';
   }
   return null;
 }
 
 class View extends Component<typeof BigIntegerField> {
   <template>
-    {{@model}}
+    {{_serialize @model}}
   </template>
 }
 
