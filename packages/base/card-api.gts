@@ -1719,11 +1719,8 @@ class MissingEmbeddedTemplate extends GlimmerComponent<{
 }> {
   <template>
     <div
-      class={{if
-        (isCardDef @cardOrField)
-        'missing-embedded-template card'
-        'missing-embedded-template field'
-      }}
+      class='missing-embedded-template
+        {{if (isCardDef @cardOrField) "card" "field"}}'
     >
       <span data-test-missing-embedded-template-text>Missing embedded component
         for
