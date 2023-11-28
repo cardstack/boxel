@@ -1,6 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 
-export class TextInputValidator<T> {
+export class TextInputFilter<T> {
   constructor(
     private getValue: () => T | null,
     private setValue: (val: T | null | undefined) => void,
