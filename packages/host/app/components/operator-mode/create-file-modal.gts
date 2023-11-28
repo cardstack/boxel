@@ -100,9 +100,7 @@ export default class CreateFileModal extends Component<Signature> {
               <BoxelInput
                 data-test-display-name-field
                 placeholder='My Card'
-                @state={{this.displayNameState}}
                 @value={{this.displayName}}
-                @errorMessage={{this.displayNameError}}
                 @onInput={{this.setDisplayName}}
               />
             </FieldContainer>
@@ -111,9 +109,7 @@ export default class CreateFileModal extends Component<Signature> {
               <BoxelInput
                 data-test-file-name-field
                 placeholder='my-card.gts'
-                @state={{this.fileNameState}}
                 @value={{this.fileName}}
-                @errorMessage={{this.fileNameError}}
                 @onInput={{this.setFileName}}
               />
             </FieldContainer>
@@ -196,9 +192,7 @@ export default class CreateFileModal extends Component<Signature> {
   @tracked private selectedRealmURL: URL | undefined = this.args.realmURL;
   @tracked private selectedCatalogEntry: CatalogEntry | undefined = undefined;
   @tracked private displayName = '';
-  @tracked private displayNameError: string | undefined;
   @tracked private fileName = '';
-  @tracked private fileNameError: string | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -210,21 +204,11 @@ export default class CreateFileModal extends Component<Signature> {
   }
 
   @action private setDisplayName(name: string) {
-    this.displayNameError = undefined;
     this.displayName = name;
   }
 
   @action private setFileName(name: string) {
-    this.fileNameError = undefined;
     this.fileName = name;
-  }
-
-  private get displayNameState() {
-    return this.displayNameError ? 'invalid' : 'initial';
-  }
-
-  private get fileNameState() {
-    return this.fileNameError ? 'invalid' : 'initial';
   }
 
   private get isCreateCardInstanceButtonDisabled() {
@@ -239,6 +223,8 @@ export default class CreateFileModal extends Component<Signature> {
     return (
       !this.selectedCatalogEntry ||
       !this.selectedRealmURL ||
+      !this.fileName ||
+      !this.displayName ||
       this.createCardDefinition.isRunning
     );
   }
@@ -298,12 +284,12 @@ export default class CreateFileModal extends Component<Signature> {
 import { ${exportName} } from '${module}';
 export class ${className} extends ${exportName} {
   static displayName = "${safeName}";
-}
-    `;
+}`;
     let realmPath = new RealmPaths(this.selectedRealmURL);
-    let basename = this.fileName.split('.');
-    basename.pop();
-    let fileName = `${basename.join()}.gts`.replace(/^\//, '');
+    let fileName = `${this.fileName.replace(/\.[^\.].+$/, '')}.gts`.replace(
+      /^\//,
+      '',
+    );
     let url = realmPath.fileURL(fileName);
     await this.cardService.saveSource(url, src);
     this.args.onSave(url);
