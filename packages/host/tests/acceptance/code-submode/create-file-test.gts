@@ -258,7 +258,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       deferred.fulfill();
     });
 
-    await click('[data-test-create-file]');
+    await click('[data-test-create-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert.dom('[data-test-card-resource-loaded]').containsText('Person');
@@ -315,7 +315,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       deferred.fulfill();
     });
 
-    await click('[data-test-create-file]');
+    await click('[data-test-create-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor(
@@ -387,7 +387,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       deferred.fulfill();
     });
 
-    await click('[data-test-create-file]');
+    await click('[data-test-create-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert
@@ -455,7 +455,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       deferred.fulfill();
     });
 
-    await click('[data-test-create-file]');
+    await click('[data-test-create-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert
