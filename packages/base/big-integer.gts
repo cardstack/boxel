@@ -1,56 +1,35 @@
-import {
-  primitive,
-  Component,
-  serialize,
-  BaseInstanceType,
-  BaseDefConstructor,
-  deserialize,
-  queryableValue,
-  FieldDef,
-} from './card-api';
+import { primitive, Component, serialize, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { TextInputFilter, DeserializedResult } from './text-input-filter';
-
-function _deserialize(
-  bigintString: string | null | undefined,
-): DeserializedResult<bigint> {
-  if (bigintString == null || bigintString == undefined) {
-    return { value: null };
-  }
-  try {
-    let bigintVal = BigInt(bigintString);
-    return { value: bigintVal };
-  } catch (e: any) {
-    if (
-      (e.message &&
-        e.message.match(/Cannot convert (.*) to a BigInt/) &&
-        e instanceof SyntaxError) ||
-      (e.message.match(
-        /The number (.*) cannot be converted to a BigInt because it is not an integer/,
-      ) &&
-        e instanceof RangeError)
-    ) {
-      return { value: null, errorMessage: 'Not a valid big int' };
-    }
-    throw e;
-  }
-}
+import { TextInputFilter } from './text-input-filter';
 
 function _serialize(val: bigint): string {
   return val.toString();
 }
 
+function deserialize(string: string | null | undefined): bigint | null {
+  if (string == null || string === '') {
+    return null;
+  }
+  return BigInt(string);
+}
+
+function validate(value: string | null): string | null {
+  if (value == null || value === '') {
+    return null;
+  }
+
+  try {
+    BigInt(value);
+  } catch (error: any) {
+    return 'Invalid big integer';
+  }
+  return null;
+}
+
 class View extends Component<typeof BigIntegerField> {
   <template>
-    {{this.formatted}}
+    {{@model}}
   </template>
-
-  get formatted() {
-    if (!this.args.model) {
-      return;
-    }
-    return _serialize(this.args.model);
-  }
 }
 
 class Edit extends Component<typeof BigIntegerField> {
@@ -66,8 +45,9 @@ class Edit extends Component<typeof BigIntegerField> {
   textInputFilter: TextInputFilter<bigint> = new TextInputFilter(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
-    _deserialize,
+    deserialize,
     _serialize,
+    validate,
   );
 }
 
@@ -76,19 +56,6 @@ export default class BigIntegerField extends FieldDef {
   static [primitive]: bigint;
   static [serialize](val: bigint) {
     return _serialize(val);
-  }
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    bigintString: any,
-  ): Promise<BaseInstanceType<T>> {
-    return _deserialize(bigintString).value as BaseInstanceType<T>;
-  }
-  static [queryableValue](val: bigint | undefined): string | undefined {
-    if (val) {
-      return BigIntegerField[serialize](val);
-    } else {
-      return undefined;
-    }
   }
 
   static embedded = View;
