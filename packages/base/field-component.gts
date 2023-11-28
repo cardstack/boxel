@@ -194,6 +194,10 @@ function fieldsComponentsFor<T extends BaseDef>(
   defaultFormat: Format,
   context?: CardContext,
 ): FieldsTypeFor<T> {
+  // This is a cache of the fields we've already created components for
+  // so that they do not get recreated
+  let stableComponents = new Map<string, BoxComponent>();
+
   return new Proxy(target, {
     get(target, property, received) {
       if (
@@ -204,6 +208,12 @@ function fieldsComponentsFor<T extends BaseDef>(
         // don't handle symbols or nulls
         return Reflect.get(target, property, received);
       }
+
+      let stable = stableComponents.get(property);
+      if (stable) {
+        return stable;
+      }
+
       let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above
       let maybeField: Field<BaseDefConstructor> | undefined = getField(
         modelValue.constructor,
@@ -215,11 +225,13 @@ function fieldsComponentsFor<T extends BaseDef>(
       }
       let field = maybeField;
 
-      return field.component(
+      let result = field.component(
         model as unknown as Box<BaseDef>,
         defaultFormat,
         context,
       );
+      stableComponents.set(property, result);
+      return result;
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
