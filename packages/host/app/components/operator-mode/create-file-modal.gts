@@ -24,6 +24,8 @@ import type CardService from '../../services/card-service';
 import ModalContainer from '../modal-container';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 import Pill from '../pill';
+import RealmInfoProvider from './realm-info-provider';
+import RealmIcon from './realm-icon';
 
 export type NewFileType = 'card-instance' | 'card-definition'; // TODO: add more types
 export const newFileTypes: NewFileType[] = ['card-instance', 'card-definition'];
@@ -50,9 +52,9 @@ export default class CreateFileModal extends Component<Signature> {
       <:content>
         <FieldContainer @label='Realm' @tag='label' class='field'>
           <RealmDropdown
-            class='realm-dropdown-trigger'
             @selectedRealmURL={{this.selectedRealmURL}}
             @onSelect={{this.onSelectRealm}}
+            @dropdownWidth='15rem'
           />
         </FieldContainer>
         {{#if (eq @fileType.id 'card-instance')}}
@@ -65,9 +67,24 @@ export default class CreateFileModal extends Component<Signature> {
               {{#if this.selectedCatalogEntry}}
                 <Pill
                   @inert={{true}}
+                  class='selected-type'
                   data-test-selected-type={{this.selectedCatalogEntry.title}}
                 >
-                  {{this.selectedCatalogEntry.title}}
+                  <:icon>
+                    <RealmInfoProvider
+                      @fileURL={{this.selectedCatalogEntry.id}}
+                    >
+                      <:ready as |realmInfo|>
+                        <RealmIcon
+                          @realmIconURL={{realmInfo.iconURL}}
+                          @realmName={{realmInfo.name}}
+                        />
+                      </:ready>
+                    </RealmInfoProvider>
+                  </:icon>
+                  <:default>
+                    {{this.selectedCatalogEntry.title}}
+                  </:default>
                 </Pill>
               {{/if}}
               <Button
@@ -120,13 +137,18 @@ export default class CreateFileModal extends Component<Signature> {
         --boxel-field-label-size: 8rem;
         padding-right: 0;
       }
-      .realm-dropdown-trigger {
-        --realm-dropdown-trigger-width: 15.25rem;
-      }
       .field-contents {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
+      }
+      .selected-type {
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs) var(--boxel-sp-xxxs)
+          var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xxxs);
+      }
+      .selected-type :deep(.icon) {
+        margin-right: 0;
       }
       .change-trigger {
         margin-left: auto;
