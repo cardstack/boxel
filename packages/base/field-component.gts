@@ -101,6 +101,7 @@ export function getBoxComponent(
             ...attributes
           >
             <f.Implementation
+              @cardOrField={{card}}
               @model={{model.value}}
               @fields={{f.fields}}
               @set={{model.set}}
@@ -116,6 +117,7 @@ export function getBoxComponent(
             ...attributes
           >
             <f.Implementation
+              @cardOrField={{card}}
               @model={{model.value}}
               @fields={{f.fields}}
               @set={{model.set}}
@@ -125,6 +127,7 @@ export function getBoxComponent(
           </div>
         {{else}}
           <f.Implementation
+            @cardOrField={{card}}
             @model={{model.value}}
             @fields={{f.fields}}
             @set={{model.set}}

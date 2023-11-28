@@ -27,13 +27,18 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
+  identifyCard,
   moduleFrom,
   codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common/code-ref';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type {
+  BaseDef,
+  CardDef,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -228,6 +233,10 @@ export default class InteractSubmode extends Component<Signature> {
           }
         }
         await changeSizeCallback();
+      },
+      openCodeSubmode: (url: URL): void => {
+        here.operatorModeStateService.updateCodePath(url);
+        here.operatorModeStateService.updateSubmode('code');
       },
     };
   }

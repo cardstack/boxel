@@ -91,6 +91,50 @@ module('Acceptance | operator mode tests', function (hooks) {
           }
         }
       `,
+      'country-with-no-embedded-template.gts': `
+        import {
+          contains,
+          field,
+          Component,
+          CardDef,
+        } from 'https://cardstack.com/base/card-api';
+        import StringField from 'https://cardstack.com/base/string';
+        
+        export class CountryWithNoEmbedded extends CardDef {
+          static displayName = 'Country';
+          @field name = contains(StringField);
+          @field title = contains(StringField, {
+            computeVia(this: Country) {
+              return this.name;
+            },
+          });
+        }
+      `,
+      'address-with-no-embedded-template.gts': `
+        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        import { ShippingInfo } from "./shipping-info";
+        import { FieldContainer } from '@cardstack/boxel-ui/components';
+
+        export class AddressWithNoEmbedded extends FieldDef {
+          static displayName = 'Address';
+          @field city = contains(StringCard);
+          @field country = contains(StringCard);
+          @field shippingInfo = contains(ShippingInfo);
+
+          static edit = class Edit extends Component<typeof this> {
+            <template>
+              <FieldContainer @label='city' @tag='label' data-test-boxel-input-city>
+                <@fields.city />
+              </FieldContainer>
+              <FieldContainer @label='country' @tag='label' data-test-boxel-input-country>
+                <@fields.country />
+              </FieldContainer>
+              <div data-test-shippingInfo-field><@fields.shippingInfo/></div>
+            </template>
+          };
+        }
+      `,
       'address.gts': `
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
@@ -132,6 +176,8 @@ module('Acceptance | operator mode tests', function (hooks) {
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
+        import { AddressWithNoEmbedded } from "./address-with-no-embedded-template";
+        import { CountryWithNoEmbedded } from "./country-with-no-embedded-template";
 
         export class Person extends CardDef {
           static displayName = 'Person';
@@ -152,6 +198,8 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           });
           @field address = contains(Address);
+          @field addressWithNoEmbedded = contains(AddressWithNoEmbedded);
+          @field countryWithNoEmbedded = linksTo(CountryWithNoEmbedded);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
               <h2 data-test-person={{@model.firstName}}>
@@ -163,6 +211,8 @@ module('Acceptance | operator mode tests', function (hooks) {
               Pet: <@fields.pet/>
               Friends: <@fields.friends/>
               Address: <@fields.address/>
+              <div data-test-address-with-no-embedded> Address With No Embedded: <@fields.addressWithNoEmbedded/> </div>
+              <div data-test-country-with-no-embedded>Country With No Embedded: <@fields.countryWithNoEmbedded/> </div>
             </template>
           }
         }
@@ -387,6 +437,68 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
       ],
       submode: Submodes.Interact,
+    });
+  });
+
+  test('can open code submode when card or field has no embedded template', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ]
+      ],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    
+    await waitFor('[data-test-stack-card="http://test-realm/test/Person/fadhlan"]');
+    await percySnapshot(assert);
+    assert.dom('[data-test-address-with-no-embedded] [data-test-missing-embedded-template-text]').hasText('Missing embedded component for FieldDef: Address');
+    assert.dom('[data-test-country-with-no-embedded] [data-test-missing-embedded-template-text]').hasText('Missing embedded component for CardDef: Country');
+
+    await click('[data-test-address-with-no-embedded] [data-test-open-code-submode]');
+    assert.operatorModeParametersMatch(currentURL(), {
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: Submodes.Code,
+      codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
+      fileView: 'inspector',
+      openDirs: {},
+      codeSelection: {},
+    });
+
+    // Toggle back to interactive mode
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+
+    await click('[data-test-country-with-no-embedded] [data-test-open-code-submode]');
+    assert.operatorModeParametersMatch(currentURL(), {
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: Submodes.Code,
+      codePath: `${testRealmURL}country-with-no-embedded-template.gts`,
+      fileView: 'inspector',
+      openDirs: {},
+      codeSelection: {},
     });
   });
 
