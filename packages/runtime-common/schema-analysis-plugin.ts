@@ -265,24 +265,18 @@ const reExportVisitor = {
       //definition doesn't exist
       path.node.specifiers.forEach((specifier) => {
         if (t.isExportSpecifier(specifier)) {
-          const localName = specifier.local.name; //local doesn't seem to be detected
-          // let importInfo = getNamedImportInfo(path.scope, localName);
-          // if (!importInfo) {
-          //   console.log(
-          //     `${localName} doesn't have import info bcos its locally defined`,
-          //   );
-          //   return;
-          //   //it sometimes is undefined
-          // }
-          // const importedName = importInfo.specifier.node.imported
-          //   ? getName(importInfo.specifier.node.imported)
-          //   : importInfo.specifier.node.local.name; // 1st is imported name, 2nd is local name which is importing a default
-          state.opts.declarations.push({
-            path,
-            exportedAs: getExportedAsName(path, localName),
-            localName: localName, //importedName
-            type: 'reexport',
-          });
+          const localName = specifier.local.name;
+          let codeDeclarationExists = state.opts.declarations.find(
+            (d) => d.localName === localName,
+          );
+          if (!codeDeclarationExists) {
+            state.opts.declarations.push({
+              path,
+              exportedAs: getExportedAsName(path, localName),
+              localName: localName,
+              type: 'reexport',
+            });
+          }
         } else {
           throw new Error('Unsupported export specifier');
         }
@@ -451,12 +445,13 @@ function getNamedImportInfo(
     }
   | undefined {
   let binding = scope.getBinding(name);
-  if (binding?.path.isImportDefaultSpecifier()) {
-    return {
-      declaration: binding.path.parentPath,
-      specifier: binding.path,
-    };
-  }
+  // if (binding?.path.isImportDefaultSpecifier()) {
+  //   debugger;
+  //   return {
+  //     declaration: binding.path.parentPath,
+  //     specifier: binding.path,
+  //   };
+  // }
   if (!binding?.path.isImportSpecifier()) {
     return undefined;
   }
