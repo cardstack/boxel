@@ -4,7 +4,9 @@ export class TextInputValidator<T> {
   constructor(
     private getValue: () => T | null,
     private setValue: (val: T | null | undefined) => void,
-    private deserialize: (inputValue: string | null | undefined) => T | null,
+    private deserialize: (
+      inputValue: string | null | undefined,
+    ) => T | null | undefined,
     private serialize: (val: T) => string = (v) => String(v),
     private validate: (val: string) => string | null = () => null,
   ) {}

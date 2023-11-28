@@ -10,7 +10,13 @@ function deserialize(string: string | null | undefined): bigint | null {
   if (string == null || string === '') {
     return null;
   }
-  return BigInt(string);
+
+  let errorMessage = validate(string);
+  if (errorMessage) {
+    return null;
+  } else {
+    return BigInt(string);
+  }
 }
 
 function validate(value: string | null): string | null {
