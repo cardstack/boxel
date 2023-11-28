@@ -270,7 +270,7 @@ export default class CreateFileModal extends Component<Signature> {
     this.selectedCatalogEntry = await chooseCard({
       filter: {
         on: catalogEntryRef,
-        // TODO we'll want to change this to isField: true when this is a new field-definition
+        // TODO we'll want to change this to `isField: true` when this is a new field-definition
         eq: { isField: false },
       },
     });
