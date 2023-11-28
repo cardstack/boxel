@@ -448,7 +448,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             id: `${testRealmURL}Person/fadhlan`,
             format: 'isolated',
           },
-        ]
+        ],
       ],
     })!;
 
@@ -457,13 +457,25 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    
-    await waitFor('[data-test-stack-card="http://test-realm/test/Person/fadhlan"]');
-    await percySnapshot(assert);
-    assert.dom('[data-test-address-with-no-embedded] [data-test-missing-embedded-template-text]').hasText('Missing embedded component for FieldDef: Address');
-    assert.dom('[data-test-country-with-no-embedded] [data-test-missing-embedded-template-text]').hasText('Missing embedded component for CardDef: Country');
 
-    await click('[data-test-address-with-no-embedded] [data-test-open-code-submode]');
+    await waitFor(
+      '[data-test-stack-card="http://test-realm/test/Person/fadhlan"]',
+    );
+    await percySnapshot(assert);
+    assert
+      .dom(
+        '[data-test-address-with-no-embedded] [data-test-missing-embedded-template-text]',
+      )
+      .hasText('Missing embedded component for FieldDef: Address');
+    assert
+      .dom(
+        '[data-test-country-with-no-embedded] [data-test-missing-embedded-template-text]',
+      )
+      .hasText('Missing embedded component for CardDef: Country');
+
+    await click(
+      '[data-test-address-with-no-embedded] [data-test-open-code-submode]',
+    );
     assert.operatorModeParametersMatch(currentURL(), {
       stacks: [
         [
@@ -484,7 +496,9 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
 
-    await click('[data-test-country-with-no-embedded] [data-test-open-code-submode]');
+    await click(
+      '[data-test-country-with-no-embedded] [data-test-open-code-submode]',
+    );
     assert.operatorModeParametersMatch(currentURL(), {
       stacks: [
         [
