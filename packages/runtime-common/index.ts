@@ -33,7 +33,7 @@ export interface DirectoryEntryRelationship {
     kind: 'directory' | 'file';
   };
 }
-import { RealmPaths } from './paths';
+import { RealmPaths, type LocalPath } from './paths';
 import { Query } from './query';
 import { Loader } from './loader';
 export {
@@ -45,7 +45,7 @@ export {
   primitive,
 } from './constants';
 export { makeLogDefinitions, logger } from './log';
-export { RealmPaths, Loader };
+export { RealmPaths, Loader, LocalPath };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
 export { NotReady, isNotReadyError } from './not-ready';
 export { cardTypeDisplayName } from './helpers/card-type-display-name';

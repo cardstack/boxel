@@ -23,6 +23,7 @@ import {
   chooseCard,
   baseRealm,
   RealmPaths,
+  type LocalPath,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
@@ -286,10 +287,11 @@ export class ${className} extends ${exportName} {
   static displayName = "${safeName}";
 }`;
     let realmPath = new RealmPaths(this.selectedRealmURL);
-    let fileName = `${this.fileName.replace(/\.[^\.].+$/, '')}.gts`.replace(
-      /^\//,
+    // assert that filename is a GTS file and is a LocalPath
+    let fileName: LocalPath = `${this.fileName.replace(
+      /\.[^\.].+$/,
       '',
-    );
+    )}.gts`.replace(/^\//, '');
     let url = realmPath.fileURL(fileName);
     await this.cardService.saveSource(url, src);
     this.args.onSave(url);
