@@ -307,7 +307,7 @@ export function getPluralViewComponent(
         .containsMany-field.atom-format {
           padding: var(--boxel-sp-sm);
           background-color: var(--boxel-100);
-          border: var(--boxel-border);
+          border: none !important;
           border-radius: var(--boxel-border-radius);
         }
       </style>
