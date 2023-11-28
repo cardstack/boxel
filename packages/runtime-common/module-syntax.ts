@@ -8,6 +8,9 @@ import {
   type Declaration,
   type BaseDeclaration,
   type ClassReference,
+  type FunctionDeclaration,
+  type ClassDeclaration,
+  type Reexport,
   isInternalReference,
 } from './schema-analysis-plugin';
 import {
@@ -39,7 +42,14 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type { PossibleCardOrFieldDeclaration, Declaration, BaseDeclaration };
+export type {
+  PossibleCardOrFieldDeclaration,
+  Declaration,
+  BaseDeclaration,
+  FunctionDeclaration,
+  ClassDeclaration,
+  Reexport,
+};
 export { isInternalReference };
 
 export class ModuleSyntax {

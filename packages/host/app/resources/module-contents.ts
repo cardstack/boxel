@@ -12,10 +12,9 @@ import {
   type FunctionDeclaration,
   type ClassDeclaration,
   type Reexport,
-  type ModuleDeclaration,
   type BaseDeclaration,
+  type Declaration,
   isInternalReference,
-  Declaration,
 } from '@cardstack/runtime-common/module-syntax';
 
 import {
@@ -95,6 +94,9 @@ export class ModuleContentsResource extends Resource<Args> {
     //==loading module
     let moduleResource = importResource(this, () => executableFile.url);
     await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
+    if (moduleResource.module === undefined) {
+      return;
+    }
     let exportedCardsOrFields = getExportedCardsOrFields(moduleResource.module);
 
     //==building declaration structure
@@ -199,8 +201,8 @@ export function moduleContentsResource(
 
 function getExportedCardsOrFields(moduleProxy: object) {
   return new Map(
-    Object.entries(moduleProxy).filter(
-      ([_, declaration]) => isBaseDef(declaration), //do obtain exports
+    Object.entries(moduleProxy).filter(([_, declaration]) =>
+      isBaseDef(declaration),
     ),
   );
 }
