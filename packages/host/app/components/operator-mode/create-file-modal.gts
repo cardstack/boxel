@@ -147,7 +147,6 @@ export default class CreateFileModal extends Component<Signature> {
             >
               Cancel
             </Button>
-            {{! TODO can we collapse these? }}
             {{#if (eq @fileType.id 'card-instance')}}
               <Button
                 @kind='primary'
@@ -159,7 +158,12 @@ export default class CreateFileModal extends Component<Signature> {
               >
                 Create
               </Button>
-            {{else if (eq @fileType.id 'card-definition')}}
+            {{else if
+              (or
+                (eq @fileType.id 'card-definition')
+                (eq @fileType.id 'field-definition')
+              )
+            }}
               <Button
                 @kind='primary'
                 @size='tall'
