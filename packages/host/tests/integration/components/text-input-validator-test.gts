@@ -39,7 +39,7 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 let loader: Loader;
 
-module('Integration | text-input-filter', function (hooks) {
+module('Integration | text-input-validator', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
@@ -125,18 +125,19 @@ module('Integration | text-input-filter', function (hooks) {
       },
     );
     await fillIn(
-      'div[data-test-field="someBigInt"] [data-test-boxel-input]',
+      '[data-test-field="someBigInt"] [data-test-boxel-input]',
       'a-string-text',
     );
     assert
       .dom(
-        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
+        '[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
       )
       .hasText('Not a valid big int');
     assert
-      .dom('div[data-test-field="someBigInt"] input[aria-invalid="true"]')
+      .dom('[data-test-field="someBigInt"] input[aria-invalid="true"]')
       .exists();
   });
+
   test('when user starts typing adding wrong input to the correct input, the input box should show invalid state and error message', async function (assert) {
     let card = await loadCard(`${testRealmURL}Sample/1`);
     await renderComponent(
@@ -150,20 +151,20 @@ module('Integration | text-input-filter', function (hooks) {
       },
     );
     await fillIn(
-      'div[data-test-field="someBigInt"] [data-test-boxel-input]',
+      '[data-test-field="someBigInt"] [data-test-boxel-input]',
       '1000000',
     );
     await typeIn(
-      'div[data-test-field="someBigInt"] [data-test-boxel-input]',
+      '[data-test-field="someBigInt"] [data-test-boxel-input]',
       'extra',
     );
     assert
       .dom(
-        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
+        '[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
       )
       .hasText('Not a valid big int');
     assert
-      .dom('div[data-test-field="someBigInt"] input[aria-invalid="true"]')
+      .dom('[data-test-field="someBigInt"] input[aria-invalid="true"]')
       .exists();
   });
 
@@ -188,18 +189,19 @@ module('Integration | text-input-filter', function (hooks) {
       },
     );
     assert
-      .dom('div[data-test-field="anotherBigInt"] [data-test-boxel-input]')
+      .dom('[data-test-field="anotherBigInt"] [data-test-boxel-input]')
       .hasText('');
     assert
       .dom(
-        'div[data-test-field="anotherBigInt"] [data-test-boxel-input-error-message]',
+        '[data-test-field="anotherBigInt"] [data-test-boxel-input-error-message]',
       )
       .doesNotExist();
     assert
-      .dom('div[data-test-field="anotherBigInt"] input[aria-invalid="true"]')
+      .dom('[data-test-field="anotherBigInt"] input[aria-invalid="true"]')
       .doesNotExist();
   });
-  test('when a user inserts wrong input and hits save, the saved document should insert a null value. The resulting value in the isolated view is empty', async function (assert) {
+
+  test('when a user inserts wrong input and saves, it should not save the value', async function (assert) {
     let card = await loadCard(`${testRealmURL}Sample/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -212,26 +214,28 @@ module('Integration | text-input-filter', function (hooks) {
       },
     );
     await fillIn(
-      'div[data-test-field="someBigInt"] [data-test-boxel-input]',
-      'a-string-text',
+      '[data-test-field="anotherBigInt"] [data-test-boxel-input]',
+      'invalid-big-int',
     );
     assert
       .dom(
-        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
+        '[data-test-field="anotherBigInt"] [data-test-boxel-input-error-message]',
       )
       .hasText('Not a valid big int');
     assert
-      .dom('div[data-test-field="someBigInt"] input[aria-invalid="true"]')
+      .dom('[data-test-field="anotherBigInt"] input[aria-invalid="true"]')
       .exists();
+
     await click('[data-test-save-card]');
     await waitUntil(() => !document.querySelector('[data-test-saving]'));
-    assert
-      .dom('div[data-test-field="someBigInt"]')
-      .doesNotIncludeText('a-string-text');
+
+    assert.dom('[data-test-field="anotherBigInt"]').includesText('123'); // Unchanged
+
+    assert.equal((card as any).anotherBigInt, 123); // Unchanged
   });
 
   // -- below here are happy path test --
-  test('when user inserts field with correct values and hits save, the saved document should insert a serialized value into the field', async function (assert) {
+  test('when user inserts field with correct values and saves, the saved document should insert a serialized value into the field', async function (assert) {
     let card = await loadCard(`${testRealmURL}Sample/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -244,21 +248,22 @@ module('Integration | text-input-filter', function (hooks) {
       },
     );
     await fillIn(
-      'div[data-test-field="someBigInt"] [data-test-boxel-input]',
+      '[data-test-field="someBigInt"] [data-test-boxel-input]',
       '333',
     );
     assert
       .dom(
-        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
+        '[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
       )
       .doesNotExist();
     assert
-      .dom('div[data-test-field="someBigInt"] input[aria-invalid="true"]')
+      .dom('[data-test-field="someBigInt"] input[aria-invalid="true"]')
       .doesNotExist();
     await click('[data-test-save-card]');
     await waitUntil(() => !document.querySelector('[data-test-saving]'));
-    await assert.dom('div[data-test-field="someBigInt"]').containsText('333');
+    await assert.dom('[data-test-field="someBigInt"]').containsText('333');
   });
+
   test('when user starts with empty field, the input box should NOT show invalid state', async function (assert) {
     // 'when user starts typing inserting correct input, the input box should show valid state',
     let card = await loadCard(`${testRealmURL}Sample/1`);
@@ -272,11 +277,12 @@ module('Integration | text-input-filter', function (hooks) {
         </template>
       },
     );
-    await focus('div[data-test-field="someBigInt"] [data-test-boxel-input]');
+    await focus('[data-test-field="someBigInt"] [data-test-boxel-input]');
     assert
-      .dom('div[data-test-field="someBigInt"] input[aria-invalid="true"]')
+      .dom('[data-test-field="someBigInt"] input[aria-invalid="true"]')
       .doesNotExist();
   });
+
   test('if we modify a model from outside the input box, the input box should update with new value', async function (assert) {
     //a use case for this test is for exmplae, populating the fields with valid values once the user hits a button "fill in"
     let card = await loadCard(`${testRealmURL}Sample/1`);
@@ -294,7 +300,7 @@ module('Integration | text-input-filter', function (hooks) {
     await saveCard(card, `${testRealmURL}Sample/1`, loader);
     await waitFor('[data-test-field="someBigInt"]');
     await assert
-      .dom('div[data-test-field="someBigInt"] [data-test-boxel-input]')
+      .dom('[data-test-field="someBigInt"] [data-test-boxel-input]')
       .hasValue('444');
   });
 });
