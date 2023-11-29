@@ -26,8 +26,8 @@ import {
   setupOnSave,
   setupServerSentEvents,
   TestRealmAdapter,
-  TestRealm,
   type TestContextWithSSE,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -103,83 +103,84 @@ module('Integration | card-delete', function (hooks) {
       ].filter((a) => a.length > 0);
       await operatorModeStateService.restore({ stacks });
     };
-    adapter = new TestRealmAdapter({
-      'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
 
-        export class Pet extends CardDef {
-          static displayName = 'Pet';
-          @field firstName = contains(StringCard);
-          @field title = contains(StringCard, {
-            computeVia: function (this: Pet) {
-              return this.firstName;
-            },
-          });
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h2 data-test-pet={{@model.firstName}}><@fields.firstName/></h2>
-              <@fields.pet/>
-            </template>
-          }
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h3 data-test-pet={{@model.firstName}}><@fields.name/></h3>
-            </template>
-          }
-        }
-      `,
-      'index.json': {
-        data: {
-          type: 'card',
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
-            },
-          },
-        },
-      },
-      'Pet/mango.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../pet',
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Pet/vangogh.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../pet',
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      '.realm.json': {
-        name: 'Test Workspace 1',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
-    });
+    let { field, contains, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
 
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      realmURL: testRealmURL,
-    });
-    await realm.ready;
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.firstName;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
+        </template>
+      };
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
+        </template>
+      };
+    }
+    ({ realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'pet.gts': { Pet },
+        'index.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'Pet/mango.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/vangogh.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        '.realm.json': {
+          name: 'Test Workspace 1',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        },
+      },
+    }));
   });
 
   test<TestContextWithSSE>('can delete a card from the index card stack item', async function (assert) {
@@ -223,7 +224,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await click('[data-test-confirm-delete-button]');
@@ -301,7 +301,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
@@ -364,7 +363,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
@@ -430,7 +428,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
@@ -504,7 +501,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(
@@ -568,7 +564,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(
@@ -645,7 +640,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(
@@ -709,7 +703,6 @@ module('Integration | card-delete', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await waitFor(

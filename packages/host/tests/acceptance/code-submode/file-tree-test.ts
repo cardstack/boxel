@@ -16,17 +16,12 @@ import stringify from 'safe-stable-stringify';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
-import { Realm } from '@cardstack/runtime-common/realm';
-
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
-  TestRealm,
-  TestRealmAdapter,
   setupLocalIndexing,
   testRealmURL,
-  sourceFetchRedirectHandle,
-  sourceFetchReturnUrlHandle,
+  setupAcceptanceTestRealm,
   waitForCodeEditor,
 } from '../../helpers';
 
@@ -193,9 +188,6 @@ const realmInfo = {
 };
 
 module('Acceptance | code submode | file-tree tests', function (hooks) {
-  let realm: Realm;
-  let adapter: TestRealmAdapter;
-
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupWindowMock(hooks);
@@ -207,102 +199,93 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
 
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
-    adapter = new TestRealmAdapter({
-      'index.gts': indexCardSource,
-      'pet-person.gts': personCardSource,
-      'person.gts': personCardSource,
-      'friend.gts': friendCardSource,
-      'employee.gts': employeeCardSource,
-      'in-this-file.gts': inThisFileSource,
-      'person-entry.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Person',
-            description: 'Catalog entry',
-            ref: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'index.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './index',
-              name: 'Index',
-            },
-          },
-        },
-      },
-      'not-json.json': 'I am not JSON.',
-      'Person/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'z00.json': '{}',
-      'z01.json': '{}',
-      'z02.json': '{}',
-      'z03.json': '{}',
-      'z04.json': '{}',
-      'z05.json': '{}',
-      'z06.json': '{}',
-      'z07.json': '{}',
-      'z08.json': '{}',
-      'z09.json': '{}',
-      'z10.json': '{}',
-      'z11.json': '{}',
-      'z12.json': '{}',
-      'z13.json': '{}',
-      'z14.json': '{}',
-      'z15.json': '{}',
-      'z16.json': '{}',
-      'z17.json': '{}',
-      'z18.json': '{}',
-      'z19.json': '{}',
-      'zzz/zzz/file.json': '{}',
-      '.realm.json': realmInfo,
-    });
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      isAcceptanceTest: true,
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+    // this seeds the loader used during index which obtains url mappings
+    // from the global loader
+    await setupAcceptanceTestRealm({
+      loader,
+      contents: {
+        'index.gts': indexCardSource,
+        'pet-person.gts': personCardSource,
+        'person.gts': personCardSource,
+        'friend.gts': friendCardSource,
+        'employee.gts': employeeCardSource,
+        'in-this-file.gts': inThisFileSource,
+        'person-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Person',
+              description: 'Catalog entry',
+              ref: {
+                module: `./person`,
+                name: 'Person',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}catalog-entry`,
+                name: 'CatalogEntry',
+              },
+            },
+          },
         },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './index',
+                name: 'Index',
+              },
+            },
+          },
         },
-      ],
+        'not-json.json': 'I am not JSON.',
+        'Person/1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Hassan',
+              lastName: 'Abdel-Rahman',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'z00.json': '{}',
+        'z01.json': '{}',
+        'z02.json': '{}',
+        'z03.json': '{}',
+        'z04.json': '{}',
+        'z05.json': '{}',
+        'z06.json': '{}',
+        'z07.json': '{}',
+        'z08.json': '{}',
+        'z09.json': '{}',
+        'z10.json': '{}',
+        'z11.json': '{}',
+        'z12.json': '{}',
+        'z13.json': '{}',
+        'z14.json': '{}',
+        'z15.json': '{}',
+        'z16.json': '{}',
+        'z17.json': '{}',
+        'z18.json': '{}',
+        'z19.json': '{}',
+        'zzz/zzz/file.json': '{}',
+        '.realm.json': realmInfo,
+      },
     });
-    await realm.ready;
   });
+
   test('can navigate file tree, file view mode is persisted in query parameter', async function (assert) {
     let codeModeStateParam = stringify({
       stacks: [

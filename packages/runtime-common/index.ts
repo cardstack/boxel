@@ -310,6 +310,9 @@ export interface Actions {
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
+  openCodeSubmode: (
+    url: URL,
+  ) => void;
   // more CRUD ops to come...
 }
 

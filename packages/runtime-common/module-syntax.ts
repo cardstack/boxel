@@ -97,16 +97,25 @@ export class ModuleSyntax {
 
   // A note about incomingRelativeTo and outgoingRelativeTo - path parameters in input (e.g. field module path) and output (e.g. field import path) are
   // relative to some path, and we use these parameters to determine what that path is so that the emitted code has correct relative paths.
-  addField(
-    cardBeingModified: CodeRef,
-    fieldName: string,
-    fieldRef: { name: string; module: string }, // module could be a relative path
-    fieldType: FieldType,
-    incomingRelativeTo: URL | undefined, // can be undefined when you know the url is not going to be relative
-    outgoingRelativeTo: URL | undefined, // can be undefined when you know url is not going to be relative
-    outgoingRealmURL: URL | undefined, // should be provided when the other 2 params are provided
-    addFieldAtIndex?: number, // if provided, the field will be added at the specified index in the card's possibleFields map
-  ) {
+  addField({
+    cardBeingModified,
+    fieldName,
+    fieldRef,
+    fieldType,
+    incomingRelativeTo,
+    outgoingRelativeTo,
+    outgoingRealmURL,
+    addFieldAtIndex,
+  }: {
+    cardBeingModified: CodeRef;
+    fieldName: string;
+    fieldRef: { name: string; module: string }; // module could be a relative path
+    fieldType: FieldType;
+    incomingRelativeTo: URL | undefined; // can be undefined when you know the url is not going to be relative
+    outgoingRelativeTo: URL | undefined; // can be undefined when you know url is not going to be relative
+    outgoingRealmURL: URL | undefined; // should be provided when the other 2 params are provided
+    addFieldAtIndex?: number; // if provided, the field will be added at the specified index in the card's possibleFields map
+  }) {
     let card = this.getCard(cardBeingModified);
     if (card.possibleFields.has(fieldName)) {
       // At this level, we can only see this specific module. we'll need the
@@ -132,48 +141,70 @@ export class ModuleSyntax {
     card = this.getCard(cardBeingModified); // re-get the card to get the updated node positions
 
     let insertPosition: number;
-
     if (
       addFieldAtIndex !== undefined &&
       addFieldAtIndex < card.possibleFields.size
     ) {
       let field = Array.from(card.possibleFields.entries())[addFieldAtIndex][1];
-
-      if (typeof field.path.node.start !== 'number') {
-        throw new Error(
-          `bug: could not determine the string start position to insert the new field`,
-        );
-      }
-
-      insertPosition = field.path.node.start; // squeeze the new field in before the existing field
+      ({ insertPosition, indentedField: newField } = insertFieldBeforePath(
+        newField,
+        field.path,
+        src,
+      ));
     } else {
       let lastField = [...card.possibleFields.values()].pop();
       if (lastField) {
         lastField = [...card.possibleFields.values()].pop()!;
-        if (typeof lastField.path.node.end !== 'number') {
-          throw new Error(
-            `bug: could not determine the string end position to insert the new field`,
-          );
-        }
-        insertPosition = lastField.path.node.end;
+        ({ insertPosition, indentedField: newField } = insertFieldAfterPath(
+          newField,
+          lastField.path,
+          src,
+        ));
       } else {
-        let bodyStart = card.path.get('body').node.start;
-        if (typeof bodyStart !== 'number') {
-          throw new Error(
-            `bug: could not determine the string end position to insert the new field`,
-          );
+        // calculate the position and indent based on an existing class member
+        // and barring that use the class body with an indentation of 2 spaces
+        let body = card.path.get('body');
+        let [classMember] = body.get('body');
+        if (classMember) {
+          ({ insertPosition, indentedField: newField } = insertFieldBeforePath(
+            newField,
+            classMember,
+            src,
+          ));
+        } else {
+          if (typeof body.node.start !== 'number') {
+            throw new Error(
+              `bug: could not determine the string start position of the class body to insert the new field`,
+            );
+          }
+          if (typeof body.node.end !== 'number') {
+            throw new Error(
+              `bug: could not determine the string start position of the class body to insert the new field`,
+            );
+          }
+          let startOfLine =
+            src.substring(0, body.node.start).lastIndexOf('\n') + 1;
+          let indent = src.substring(startOfLine).search(/\S/); // location of first non-whitespace char
+          insertPosition =
+            src.substring(0, body.node.end).lastIndexOf('\n') + 1;
+          if (insertPosition < body.node.start + 1) {
+            // need to manufacture new lines
+            insertPosition = body.node.end - 1;
+            newField = `\n${' '.repeat(indent + 2)}${newField}\n${' '.repeat(
+              indent,
+            )}`;
+          } else {
+            newField = `${' '.repeat(indent + 2)}${newField}\n`;
+          }
         }
-        insertPosition = bodyStart + 1;
       }
     }
 
     // we use string manipulation to add the field into the src so that we
     // don't have to suffer babel's decorator transpilation
-    src = `
-      ${src.substring(0, insertPosition)}
-      ${newField}
-      ${src.substring(insertPosition)}
-    `;
+    src = `${src.substring(0, insertPosition)}${newField}${src.substring(
+      insertPosition,
+    )}`;
     // analyze one more time to incorporate the new field
     this.analyze(src);
   }
@@ -419,4 +450,43 @@ function suggestedCardName(ref: { name: string; module: string }): string {
     name = ref.module.split('/').pop()!;
   }
   return upperFirst(camelCase(`${name} card`));
+}
+
+function insertFieldBeforePath(
+  field: string,
+  path: NodePath,
+  src: string,
+): { insertPosition: number; indentedField: string } {
+  if (typeof path.node.start !== 'number') {
+    throw new Error(
+      `bug: could not determine the string start position of the class member prior to the new field`,
+    );
+  }
+  let startOfLine = src.substring(0, path.node.start).lastIndexOf('\n');
+  let insertPosition = startOfLine + 1; // add new field before the existing field
+  let indent = path.node.start - startOfLine - 1;
+  let indentedField = `${' '.repeat(indent)}${field}\n`;
+  return { insertPosition, indentedField };
+}
+
+function insertFieldAfterPath(
+  field: string,
+  path: NodePath,
+  src: string,
+): { insertPosition: number; indentedField: string } {
+  if (typeof path.node.start !== 'number') {
+    throw new Error(
+      `bug: could not determine the string start position of the field prior to the new field`,
+    );
+  }
+  if (typeof path.node.end !== 'number') {
+    throw new Error(
+      `bug: could not determine the string end position to the field prior to the new field`,
+    );
+  }
+  let insertPosition = src.indexOf('\n', path.node.end);
+  let indent =
+    path.node.start - src.substring(0, path.node.start).lastIndexOf('\n') - 1;
+  let indentedField = `\n${' '.repeat(indent)}${field}`;
+  return { insertPosition, indentedField };
 }

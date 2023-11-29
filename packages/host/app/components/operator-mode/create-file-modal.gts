@@ -72,6 +72,7 @@ export default class CreateFileModal extends Component<Signature> {
               {{/if}}
               <Button
                 class={{if this.selectedCatalogEntry 'change-trigger'}}
+                @kind='text-only'
                 @size='small'
                 @disabled={{this.createCardInstance.isRunning}}
                 {{on 'click' (perform this.chooseCardInstanceType)}}
@@ -117,6 +118,7 @@ export default class CreateFileModal extends Component<Signature> {
       }
       .field {
         --boxel-field-label-size: 8rem;
+        padding-right: 0;
       }
       .realm-dropdown-trigger {
         --realm-dropdown-trigger-width: 15.25rem;

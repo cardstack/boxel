@@ -11,7 +11,8 @@ export type BoxelButtonKind =
   | 'secondary-dark'
   | 'secondary-light'
   | 'danger'
-  | 'primary-dark';
+  | 'primary-dark'
+  | 'text-only';
 
 export type BoxelButtonSize =
   | 'extra-small'
@@ -241,6 +242,17 @@ export default class ButtonComponent extends Component<Signature> {
         .kind-primary-dark:not(:disabled):active {
           --boxel-button-border: 1px solid var(--boxel-purple-800);
           --boxel-button-color: var(--boxel-purple-800);
+        }
+
+        .kind-text-only:not(:disabled) {
+          --boxel-button-color: transparent;
+          --boxel-button-border: 1px solid transparent;
+          --boxel-button-text-color: var(--boxel-highlight);
+          --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+        }
+
+        .kind-text-only:not(:disabled):hover {
+          --boxel-button-text-color: var(--boxel-highlight-hover);
         }
 
         /**

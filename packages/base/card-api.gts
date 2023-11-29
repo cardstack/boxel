@@ -1,4 +1,5 @@
 import Modifier from 'ember-modifier';
+import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
@@ -27,10 +28,12 @@ import {
   isField,
   primitive,
   identifyCard,
+  isCardDef,
   loadCard,
   humanReadable,
   maybeURL,
   maybeRelativeURL,
+  moduleFrom,
   getCard,
   trackCard,
   type Meta,
@@ -1706,6 +1709,80 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
   </template>
 }
 
+class MissingEmbeddedTemplate extends GlimmerComponent<{
+  Args: {
+    cardOrField: typeof BaseDef;
+    model: CardDef;
+    fields: Record<string, new () => GlimmerComponent>;
+    context?: CardContext;
+  };
+}> {
+  <template>
+    <div
+      class='missing-embedded-template
+        {{if (isCardDef @cardOrField) "card" "field"}}'
+    >
+      <span data-test-missing-embedded-template-text>Missing embedded component
+        for
+        {{if (isCardDef @cardOrField) 'CardDef' 'FieldDef'}}:
+        {{@cardOrField.displayName}}</span>
+      {{#if @context.actions.openCodeSubmode}}
+        <span
+          class='open-code-submode'
+          {{on 'click' this.openCodeSubmode}}
+          data-test-open-code-submode
+        >
+          Open In Code Mode
+        </span>
+      {{/if}}
+    </div>
+    <style>
+      .missing-embedded-template {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        box-sizing: border-box;
+        min-height: 3.75rem;
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-100);
+        border: none;
+        border-radius: var(--boxel-form-control-border-radius);
+        color: var(--boxel-dark);
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        transition: background-color var(--boxel-transition);
+      }
+      .card {
+        width: calc(100% + calc(2 * var(--boxel-sp)));
+        margin: calc(-1 * var(--boxel-sp));
+      }
+      .field {
+        width: 100%;
+        margin: 0;
+      }
+      .open-code-submode {
+        cursor: pointer;
+        color: var(--boxel-highlight);
+      }
+      .open-code-submode:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </template>
+
+  @action
+  openCodeSubmode() {
+    let ref = identifyCard(this.args.cardOrField);
+    if (!ref) {
+      return;
+    }
+    let moduleId = moduleFrom(ref);
+    this.args.context?.actions?.openCodeSubmode(new URL(moduleId));
+  }
+}
+
 class DefaultAtomViewTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;
@@ -1769,6 +1846,7 @@ export type BaseDefComponent = ComponentLike<{
   Blocks: {};
   Element: any;
   Args: {
+    cardOrField: typeof BaseDef;
     fields: any;
     model: any;
     set: Setter;
@@ -1783,16 +1861,7 @@ export class FieldDef extends BaseDef {
   static isFieldDef = true;
   static displayName = 'Field';
 
-  static embedded: BaseDefComponent = class Embedded extends Component<
-    typeof this
-  > {
-    <template>
-      <div>
-        Missing embedded component for FieldDef:
-        {{@model.constructor.displayName}}.
-      </div>
-    </template>
-  };
+  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
 }
@@ -1869,16 +1938,7 @@ export class CardDef extends BaseDef {
     }
   }
 
-  static embedded: BaseDefComponent = class Embedded extends Component<
-    typeof this
-  > {
-    <template>
-      <div>
-        Missing embedded component for CardDef:
-        {{@model.constructor.displayName}}.
-      </div>
-    </template>
-  };
+  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
@@ -2450,6 +2510,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
 
   deferred.fulfill(instance);
   return instance;
+}
+
+export function setCardAsSavedForTest(instance: CardDef): void {
+  instance[isSavedInstance] = true;
 }
 
 export async function searchDoc<CardT extends BaseDefConstructor>(

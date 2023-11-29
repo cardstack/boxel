@@ -11,13 +11,10 @@ import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import {
-  TestRealm,
-  TestRealmAdapter,
   setupLocalIndexing,
   testRealmURL,
-  sourceFetchRedirectHandle,
-  sourceFetchReturnUrlHandle,
   setupOnSave,
+  setupAcceptanceTestRealm,
   setupServerSentEvents,
   type TestContextWithSave,
 } from '../../helpers';
@@ -140,44 +137,15 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     window.localStorage.removeItem('recent-files');
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    let realm = await TestRealm.create(loader, files, this.owner, {
-      realmURL: testRealmURL,
-      isAcceptanceTest: true,
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(
-            req,
-            new TestRealmAdapter(files),
-            testRealmURL,
-          );
-        },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
-        },
-      ],
+    await setupAcceptanceTestRealm({
+      loader,
+      contents: files,
     });
-    await realm.ready;
-
-    let realm2 = await TestRealm.create(loader, filesB, this.owner, {
+    await setupAcceptanceTestRealm({
+      loader,
+      contents: filesB,
       realmURL: testRealmURL2,
-      isAcceptanceTest: true,
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(
-            req,
-            new TestRealmAdapter(files),
-            testRealmURL,
-          );
-        },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(
-            req,
-            realm2.maybeHandle.bind(realm2),
-          );
-        },
-      ],
     });
-    await realm2.ready;
 
     let realmService = this.owner.lookup(
       'service:realm-info-service',
