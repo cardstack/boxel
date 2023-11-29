@@ -1006,13 +1006,11 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
   ): void {
     if (!this.#didSetup) {
       this.#didSetup = true;
-      window.rsp = this;
       this.element = element;
 
       this.#listener = this.handleScrollEnd.bind(this);
       element.addEventListener('scrollend', this.#listener);
       this.#keyToPreviousScrollTop = keyToPreviousScrollTop;
-      console.log('moddy');
 
       let mutationObserver = new MutationObserver(
         debounce(this.setScrollTop.bind(this), 50),
@@ -1022,14 +1020,8 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
         subtree: true,
         characterData: true,
       });
-
-      // if (keyToPreviousScrollTop.has(key)) {
-      //   console.log(`restoring pst ${keyToPreviousScrollTop.get(key)}`);
-      //   element.scrollTop = keyToPreviousScrollTop.get(key)!;
-      // }
     }
 
-    console.log(`element with key ${key} is being added`);
     if (this.#keyToPreviousScrollTop.has(key)) {
       let previousScrollTop = this.#keyToPreviousScrollTop.get(key);
       console.log(`next render restoring pst ${previousScrollTop}`);
