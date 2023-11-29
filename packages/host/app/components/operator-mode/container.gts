@@ -6,7 +6,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { Modal } from '@cardstack/boxel-ui/components';
@@ -14,9 +14,10 @@ import { Modal } from '@cardstack/boxel-ui/components';
 import { type Loader } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
-import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
+import config from '@cardstack/host/config/environment';
+import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 
 import {
   getLiveSearchResults,
@@ -26,13 +27,11 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { Submodes } from '../submode-switcher';
 import CardCatalogModal from '../card-catalog/modal';
+import { Submodes } from '../submode-switcher';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-
-import config from '@cardstack/host/config/environment';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -56,7 +55,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       });
     }
 
-    this.constructRecentCards.perform();
     registerDestructor(this, () => {
       this.operatorModeStateService.clearStacks();
     });
@@ -105,10 +103,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       doWhileRefreshing ? () => doWhileRefreshing : undefined,
     );
   }
-
-  private constructRecentCards = restartableTask(async () => {
-    return await this.operatorModeStateService.constructRecentCards();
-  });
 
   private saveSource = task(async (url: URL, content: string) => {
     await this.withTestWaiters(async () => {

@@ -2512,6 +2512,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   return instance;
 }
 
+export function setCardAsSavedForTest(instance: CardDef): void {
+  instance[isSavedInstance] = true;
+}
+
 export async function searchDoc<CardT extends BaseDefConstructor>(
   instance: InstanceType<CardT>,
 ): Promise<Record<string, any>> {

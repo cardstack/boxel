@@ -211,30 +211,31 @@ export default class EditFieldModal extends Component<Signature> {
       );
     }
 
-    let identifiedCard = identifyCard(this.args.card)!;
+    let cardBeingModified = identifyCard(this.args.card)!;
     let addFieldAtIndex = undefined;
 
     if (!this.isNewField) {
       // We are editing a field, so we need to first remove the old one, and then add the new one
       addFieldAtIndex = this.args.moduleSyntax.removeField(
-        identifiedCard,
+        cardBeingModified,
         this.args.field!.name,
       );
     }
 
+    let { fieldName, fieldRef, fieldType, cardURL: incomingRelativeTo } = this;
     try {
-      this.args.moduleSyntax.addField(
-        identifiedCard,
-        this.fieldName,
-        this.fieldRef as { module: string; name: string },
-        this.fieldType,
-        this.cardURL,
-        this.loaderService.loader.reverseResolution(
+      this.args.moduleSyntax.addField({
+        cardBeingModified,
+        fieldName,
+        fieldRef: fieldRef as { module: string; name: string },
+        fieldType,
+        incomingRelativeTo,
+        outgoingRelativeTo: this.loaderService.loader.reverseResolution(
           makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
         ),
-        new URL(this.args.file.realmURL),
+        outgoingRealmURL: new URL(this.args.file.realmURL),
         addFieldAtIndex,
-      );
+      });
     } catch (error) {
       let errorMessage = (error as Error).message;
       if (errorMessage.includes('already exists')) {
@@ -329,15 +330,6 @@ export default class EditFieldModal extends Component<Signature> {
         display: flex;
       }
 
-      .card-chooser-area button.change {
-        background-color: transparent;
-        border: none;
-        color: var(--boxel-highlight);
-        font-size: var(--boxel-font-sm);
-        font-weight: 600;
-        height: 1em;
-      }
-
       .card-chooser-area button.pull-right {
         margin-left: auto;
         height: auto;
@@ -383,13 +375,15 @@ export default class EditFieldModal extends Component<Signature> {
               </Pill>
             {{/if}}
 
-            <button
+            <BoxelButton
+              @kind='text-only'
+              @size='small'
               {{on 'click' this.chooseCard}}
               class='change {{if this.fieldCard "pull-right"}}'
               data-test-choose-card-button
             >
               Change
-            </button>
+            </BoxelButton>
           </div>
         </FieldContainer>
 

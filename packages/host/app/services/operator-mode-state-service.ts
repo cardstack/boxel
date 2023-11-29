@@ -6,7 +6,6 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
@@ -22,6 +21,7 @@ import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -79,13 +79,13 @@ export default class OperatorModeStateService extends Service {
     openDirs: new TrackedMap<string, string[]>(),
     codeSelection: new TrackedObject({}),
   });
-  @tracked recentCards = new TrackedArray<CardDef>([]);
 
   private cachedRealmURL: URL | null = null;
 
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
+  @service declare recentCardsService: RecentCardsService;
   @service declare recentFilesService: RecentFilesService;
   @service declare realmInfoService: RealmInfoService;
   @service declare router: RouterService;
@@ -102,7 +102,7 @@ export default class OperatorModeStateService extends Service {
       this.state.stacks[stackIndex] = new TrackedArray([]);
     }
     this.state.stacks[stackIndex].push(item);
-    this.addRecentCard(item.card);
+    this.recentCardsService.add(item.card);
     this.schedulePersist();
   }
 
@@ -132,7 +132,7 @@ export default class OperatorModeStateService extends Service {
     for (let item of items) {
       this.trimItemsFromStack(item);
     }
-    this.removeRecentCard(card.id);
+    this.recentCardsService.remove(card.id);
 
     let cardRealmUrl = await this.cardService.getRealmURL(card);
 
@@ -434,58 +434,6 @@ export default class OperatorModeStateService extends Service {
     return newState;
   }
 
-  async constructRecentCards() {
-    const recentCardIdsString = window.localStorage.getItem('recent-cards');
-    if (!recentCardIdsString) {
-      return;
-    }
-
-    const recentCardIds = JSON.parse(recentCardIdsString) as string[];
-    for (const recentCardId of recentCardIds) {
-      const cardResource = getCard(this, () => recentCardId);
-      await cardResource.loaded;
-      let { card } = cardResource;
-      if (!card) {
-        console.warn(`cannot load card ${recentCardId}`);
-        continue;
-      }
-      this.recentCards.push(card);
-    }
-  }
-
-  addRecentCard(card: CardDef) {
-    const existingCardIndex = this.recentCards.findIndex(
-      (recentCard) => recentCard.id === card.id,
-    );
-    if (existingCardIndex !== -1) {
-      this.recentCards.splice(existingCardIndex, 1);
-    }
-
-    this.recentCards.push(card);
-    if (this.recentCards.length > 10) {
-      this.recentCards.splice(0, 1);
-    }
-    const recentCardIds = this.recentCards
-      .map((recentCard) => recentCard.id)
-      .filter(Boolean); // don't include cards that don't have an ID
-    window.localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
-  }
-
-  removeRecentCard(id: string) {
-    let index = this.recentCards.findIndex((c) => c.id === id);
-    if (index === -1) {
-      return;
-    }
-    while (index !== -1) {
-      this.recentCards.splice(index, 1);
-      index = this.recentCards.findIndex((c) => c.id === id);
-    }
-    window.localStorage.setItem(
-      'recent-cards',
-      JSON.stringify(this.recentCards.map((c) => c.id)),
-    );
-  }
-
   get openDirs() {
     return this.state.openDirs ?? new TrackedMap();
   }
@@ -579,6 +527,9 @@ export default class OperatorModeStateService extends Service {
         );
       },
       onRedirect: (url: string) => {
+        if (!url) {
+          return;
+        }
         this.replaceCodePath(new URL(url));
       },
     }));
