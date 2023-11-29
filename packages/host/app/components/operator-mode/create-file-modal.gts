@@ -327,16 +327,31 @@ export default class CreateFileModal extends Component<Signature> {
       );
     }
     let { name: exportName, module } = this.selectedCatalogEntry.ref;
-    let className = camelCase(this.displayName).replace(/^./, (c) =>
-      c.toUpperCase(),
-    );
+    let className = camelize(this.displayName);
+    let absoluteModule = new URL(module, this.selectedCatalogEntry.id).href;
     // sanitize the name since it will be used in javascript code
     let safeName = this.displayName.replace(/[^A-Za-z \d-_]/g, '').trim();
-    let src = `
-import { ${exportName} } from '${module}';
+    let src: string;
+    if (exportName === 'default') {
+      // we don't have to worry about declaration collisions with 'parent' since we own the entire module
+      let parent = camelize(
+        module
+          .split('/')
+          .pop()!
+          .replace(/\.[^\.]+$/, ''),
+      );
+      src = `
+import ${parent} from '${absoluteModule}';
+export class ${className} extends ${parent} {
+  static displayName = "${safeName}";
+}`;
+    } else {
+      src = `
+import { ${exportName} } from '${absoluteModule}';
 export class ${className} extends ${exportName} {
   static displayName = "${safeName}";
 }`;
+    }
     let realmPath = new RealmPaths(this.selectedRealmURL);
     // assert that filename is a GTS file and is a LocalPath
     let fileName: LocalPath = `${this.fileName.replace(
@@ -386,4 +401,8 @@ export class ${className} extends ${exportName} {
     this.args.onSave(new URL(`${card.id}.json`));
     this.args.onClose();
   });
+}
+
+function camelize(name: string) {
+  return camelCase(name).replace(/^./, (c) => c.toUpperCase());
 }

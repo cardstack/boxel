@@ -18,6 +18,7 @@ import {
   setupServerSentEvents,
   waitForCodeEditor,
   getMonacoContent,
+  TestRealmAdapter,
   type TestContextWithSave,
 } from '../../helpers';
 
@@ -46,7 +47,7 @@ const files: Record<string, any> = {
     import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
     import StringField from "https://cardstack.com/base/string";
 
-    export class Pet extends CardDef {
+    export default class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
 
@@ -60,7 +61,7 @@ const files: Record<string, any> = {
   'person.gts': `
     import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
     import StringField from "https://cardstack.com/base/string";
-    import { Pet } from "./pet";
+    import Pet from "./pet";
 
     export class Person extends CardDef {
       static displayName = 'Person';
@@ -75,7 +76,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Pet',
         description: 'Catalog entry for Pet',
-        ref: { module: `../pet`, name: 'Pet' },
+        ref: { module: `../pet`, name: 'default' },
       },
       meta: {
         adoptsFrom: {
@@ -125,6 +126,8 @@ const filesB: Record<string, any> = {
 };
 
 module('Acceptance | code submode | create-file tests', function (hooks) {
+  let adapter: TestRealmAdapter;
+
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
@@ -153,10 +156,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       contents: filesB,
       realmURL: testRealmURL2,
     });
-    await setupAcceptanceTestRealm({
+    ({ adapter } = await setupAcceptanceTestRealm({
       loader,
       contents: files,
-    });
+    }));
 
     let realmService = this.owner.lookup(
       'service:realm-info-service',
@@ -485,7 +488,7 @@ export class TestCard extends CardDef {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
-      assert.strictEqual(content, expectedSrc);
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
     });
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
@@ -507,15 +510,166 @@ export class TestCard extends CardDef {
     // TODO include percy snapshot
   });
 
-  skip<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (_assert) {});
+  test<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
 
-  skip<TestContextWithSave>('can sanitize display name when creating a new definition', async function (_assert) {});
+    // select card type
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Pet"]`);
 
-  skip<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (_assert) {});
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import Pet from '${testRealmURL}pet';
+export class TestCard extends Pet {
+  static displayName = "Test Card";
+}`,
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
 
-  skip<TestContextWithSave>('can handle filename with .gts extension in filename when creating a new definition', async function (_assert) {});
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
 
-  skip<TestContextWithSave>('can sanitize filename when creating a new definition', async function (_assert) {});
+  test<TestContextWithSave>('can sanitize display name when creating a new definition', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
 
-  skip<TestContextWithSave>('can handle leading "/" in filename when creating a new definition', async function (_assert) {});
+    await fillIn('[data-test-display-name-field]', 'Test Card; { }');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
+}`,
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (assert) {
+    assert.expect(2);
+    let expectedSrc = `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
+}`;
+
+    await openNewFileModal('Card Definition');
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-dir/test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    let file = await adapter.openFile('test-dir/test-card.gts');
+    assert.strictEqual(
+      file?.content,
+      expectedSrc,
+      'the source exists at the correct location',
+    );
+  });
+
+  test<TestContextWithSave>('can handle filename with .gts extension in filename when creating a new definition', async function (assert) {
+    assert.expect(2);
+    let expectedSrc = `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
+}`;
+
+    await openNewFileModal('Card Definition');
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-card.gts');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    let file = await adapter.openFile('test-card.gts');
+    assert.strictEqual(
+      file?.content,
+      expectedSrc,
+      'the source exists at the correct location',
+    );
+  });
+
+  test<TestContextWithSave>('can handle leading "/" in filename when creating a new definition', async function (assert) {
+    assert.expect(2);
+    let expectedSrc = `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
+}`;
+
+    await openNewFileModal('Card Definition');
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', '/test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    let file = await adapter.openFile('test-card.gts');
+    assert.strictEqual(
+      file?.content,
+      expectedSrc,
+      'the source exists at the correct location',
+    );
+  });
 });

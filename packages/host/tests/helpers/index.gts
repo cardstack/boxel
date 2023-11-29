@@ -40,7 +40,10 @@ import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 import type MessageService from '@cardstack/host/services/message-service';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import {
+  type CardDef,
+  type FieldDef,
+} from 'https://cardstack.com/base/card-api';
 
 import { renderComponent } from './render-component';
 import { WebMessageStream, messageCloseHandler } from './stream';
@@ -378,6 +381,7 @@ let runnerOptsMgr = new RunnerOptionsManager();
 interface RealmContents {
   [key: string]:
     | CardDef
+    | FieldDef
     | LooseSingleCardDocument
     | RealmInfo
     | Record<string, unknown>
