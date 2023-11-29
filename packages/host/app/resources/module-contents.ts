@@ -4,12 +4,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Resource } from 'ember-resources';
 
-import {
-  getAncestor,
-  getField,
-  isBaseDef,
-  loadCard,
-} from '@cardstack/runtime-common';
+import { getAncestor, getField, isBaseDef } from '@cardstack/runtime-common';
 
 import {
   ModuleSyntax,
@@ -138,12 +133,14 @@ export class ModuleContentsResource extends Resource<Args> {
             } as CardOrFieldDeclaration);
           } else {
             // case where things statically look like cards or fields but are not
-            this._declarations.push({
-              localName: value.localName,
-              exportedAs: value.exportedAs,
-              path: value.path,
-              type: 'class',
-            }) as ClassDeclaration;
+            if (value.exportedAs !== undefined) {
+              this._declarations.push({
+                localName: value.localName,
+                exportedAs: value.exportedAs,
+                path: value.path,
+                type: 'class',
+              }) as ClassDeclaration;
+            }
           }
         }
       } else if (value.type === 'reexport') {
