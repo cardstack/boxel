@@ -9,7 +9,7 @@ import compact from 'ember-composable-helpers/helpers/compact';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import { DiagonalArrowLeftUp, ReExportArrow } from '@cardstack/boxel-ui/icons';
+import { DiagonalArrowLeftUp } from '@cardstack/boxel-ui/icons';
 
 import {
   isCardDef,

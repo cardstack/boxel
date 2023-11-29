@@ -11,8 +11,8 @@ import {
   type PossibleCardOrFieldDeclaration,
   type FunctionDeclaration,
   type ClassDeclaration,
-  type Reexport,
   type Declaration,
+  type Reexport,
   isInternalReference,
 } from '@cardstack/runtime-common/module-syntax';
 
@@ -35,11 +35,13 @@ interface CardOrField {
 export type CardOrFieldDeclaration = CardOrField &
   Partial<PossibleCardOrFieldDeclaration>;
 
+export type CardOrFieldReexport = CardOrField & Reexport;
+
 export type ModuleDeclaration =
   | CardOrFieldDeclaration
   | ClassDeclaration
   | FunctionDeclaration
-  | Reexport;
+  | CardOrFieldReexport;
 
 export function isCardOrFieldDeclaration(
   declaration: ModuleDeclaration,
@@ -52,13 +54,13 @@ export function isCardOrFieldDeclaration(
 
 export function isReexportCardOrField(
   declaration: ModuleDeclaration,
-): declaration is CardOrFieldDeclaration {
+): declaration is CardOrFieldReexport {
   return (
     declaration.type === 'reexport' && hasCardOrFieldProperties(declaration)
   );
 }
 
-function hasCardOrFieldProperties(declaration: ModuleDeclaration) {
+export function hasCardOrFieldProperties(declaration: ModuleDeclaration) {
   return (
     (declaration as CardOrField).cardType !== undefined &&
     (declaration as CardOrField).cardOrField !== undefined
@@ -148,7 +150,7 @@ export class ModuleContentsResource extends Resource<Args> {
               ...value,
               cardOrField,
               cardType: getCardType(this, () => cardOrField as typeof BaseDef),
-            } as Reexport);
+            } as CardOrFieldReexport);
           }
         }
       } else if (value.type === 'class' || value.type === 'function') {
