@@ -18,7 +18,11 @@ import {
 } from '@cardstack/runtime-common/code-ref';
 
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
-import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
+import {
+  type ModuleDeclaration,
+  isCardOrFieldDeclaration,
+  isReexportCardOrField,
+} from '@cardstack/host/resources/module-contents';
 import { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface SelectorItemOptions {
@@ -104,9 +108,9 @@ export default class Selector extends Component<Signature> {
   }
 
   getType(declaration: ModuleDeclaration) {
-    if (declaration.type === 'possibleCardOrField' && declaration.cardOrField) {
+    if (isCardOrFieldDeclaration(declaration)) {
       return typeOfCardOrField(declaration.cardOrField);
-    } else if (declaration.type === 'reexport' && declaration.cardOrField) {
+    } else if (isReexportCardOrField(declaration)) {
       return typeOfCardOrField(declaration.cardOrField);
     } else if (declaration.type === 'class') {
       return 'class';
