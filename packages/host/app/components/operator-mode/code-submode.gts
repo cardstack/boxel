@@ -994,7 +994,7 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
   #previousKey: String | undefined;
   #keyToPreviousScrollTop: Map<String, number>;
   #didSetup = false;
-  #listener: (Event) => void;
+  #scrollEndListener: (Event) => void;
 
   modify(
     element: Element,
@@ -1007,8 +1007,8 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
       this.#didSetup = true;
       this.element = element;
 
-      this.#listener = this.handleScrollEnd.bind(this);
-      element.addEventListener('scrollend', this.#listener);
+      this.#scrollEndListener = this.handleScrollEnd.bind(this);
+      element.addEventListener('scrollend', this.#scrollEndListener);
       this.#keyToPreviousScrollTop = keyToPreviousScrollTop;
 
       let mutationObserver = new MutationObserver(
@@ -1024,7 +1024,7 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
     this.#previousKey = key;
 
     return () => {
-      element.removeEventListener('scrollend', this.#listener);
+      element.removeEventListener('scrollend', this.#scrollEndListener);
     };
   }
 
