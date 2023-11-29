@@ -756,7 +756,6 @@ module('Acceptance | code submode tests', function (hooks) {
       .hasText(
         'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
       );
-
     await percySnapshot(assert);
   });
 
