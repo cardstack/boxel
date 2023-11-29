@@ -91,7 +91,8 @@ export default class DetailPanel extends Component<Signature> {
 
   get showInheritancePanel() {
     return (
-      (this.args.selectedDeclaration && this.isModule) || this.isCardInstance
+      (this.args.selectedDeclaration && this.isModule && this.cardType) ||
+      this.isCardInstance
     );
   }
 
