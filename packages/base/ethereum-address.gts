@@ -55,14 +55,14 @@ class View extends Component<typeof EthereumAddressField> {
 class Edit extends Component<typeof EthereumAddressField> {
   <template>
     <BoxelInput
-      @value={{this.textInputFilter.asString}}
-      @onInput={{this.textInputFilter.onInput}}
-      @errorMessage={{this.textInputFilter.errorMessage}}
-      @state={{if this.textInputFilter.isInvalid 'invalid' 'none'}}
+      @value={{this.textInputValidator.asString}}
+      @onInput={{this.textInputValidator.onInput}}
+      @errorMessage={{this.textInputValidator.errorMessage}}
+      @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
     />
   </template>
 
-  textInputFilter: TextInputValidator<string> = new TextInputValidator(
+  textInputValidator: TextInputValidator<string> = new TextInputValidator(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
     _deserialize,

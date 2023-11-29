@@ -50,14 +50,14 @@ class View extends Component<typeof BigIntegerField> {
 class Edit extends Component<typeof BigIntegerField> {
   <template>
     <BoxelInput
-      @value={{this.textInputFilter.asString}}
-      @onInput={{this.textInputFilter.onInput}}
-      @errorMessage={{this.textInputFilter.errorMessage}}
-      @state={{if this.textInputFilter.isInvalid 'invalid' 'none'}}
+      @value={{this.textInputValidator.asString}}
+      @onInput={{this.textInputValidator.onInput}}
+      @errorMessage={{this.textInputValidator.errorMessage}}
+      @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
     />
   </template>
 
-  textInputFilter: TextInputValidator<bigint> = new TextInputValidator(
+  textInputValidator: TextInputValidator<bigint> = new TextInputValidator(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
     _deserialize,
