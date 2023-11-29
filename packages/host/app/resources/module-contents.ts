@@ -136,6 +136,14 @@ export class ModuleContentsResource extends Resource<Args> {
               cardOrField,
               cardType: getCardType(this, () => cardOrField as typeof BaseDef),
             } as CardOrFieldDeclaration);
+          } else {
+            // case where things statically look like cards or fields but are not
+            this._declarations.push({
+              localName: value.localName,
+              exportedAs: value.exportedAs,
+              path: value.path,
+              type: 'class',
+            }) as ClassDeclaration;
           }
         }
       } else if (value.type === 'reexport') {
