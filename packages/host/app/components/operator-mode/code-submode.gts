@@ -993,8 +993,8 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
   element!: Element;
   #previousKey: String | undefined;
   #keyToPreviousScrollTop: Map<String, number>;
-  #didSetup = false;
   #scrollEndListener: (Event) => void;
+  #mutationObserver: MutationObserver;
 
   modify(
     element: Element,
@@ -1003,8 +1003,7 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
       keyToPreviousScrollTop,
     ]: PositionalArgs<RestoreScrollPositionModifierSignature>,
   ): void {
-    if (!this.#didSetup) {
-      this.#didSetup = true;
+    if (!this.#mutationObserver) {
       this.element = element;
 
       this.#scrollEndListener = this.handleScrollEnd.bind(this);
@@ -1019,12 +1018,15 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
         subtree: true,
         characterData: true,
       });
+
+      this.#mutationObserver = mutationObserver;
     }
 
     this.#previousKey = key;
 
     return () => {
       element.removeEventListener('scrollend', this.#scrollEndListener);
+      this.#mutationObserver.disconnect();
     };
   }
 
