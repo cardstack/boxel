@@ -645,39 +645,39 @@ export default class CodeSubmode extends Component<Signature> {
                       >
                         File Tree</Button>
                     </header>
-                    {{#if this.isFileTreeShowing}}
-                      <FileTree
-                        @realmURL={{this.realmURL}}
-                        {{RestoreScrollPosition
-                          this.scrollPositionKey
-                          this.scrollPositions
-                        }}
-                        class='inner-container__content'
-                      />
-                    {{else}}
-                      {{#if this.isReady}}
-                        {{#if this.inspectorFileIncompatibilityMessage}}
-                          <div
-                            class='file-incompatible-message'
-                            data-test-detail-panel-file-incompatibility-message
-                          >
-                            {{this.inspectorFileIncompatibilityMessage}}
-                          </div>
-                        {{else}}
-                          <DetailPanel
-                            class='inner-container__content'
-                            @cardInstance={{this.card}}
-                            @readyFile={{this.readyFile}}
-                            @selectedDeclaration={{this.selectedDeclaration}}
-                            @declarations={{this.declarations}}
-                            @selectDeclaration={{this.selectDeclaration}}
-                            @delete={{perform this.delete}}
-                            @openDefinition={{this.openDefinition}}
-                            data-test-card-inspector-panel
-                          />
+                    <section
+                      class='inner-container__content'
+                      {{RestoreScrollPosition
+                        this.scrollPositionKey
+                        this.scrollPositions
+                      }}
+                    >
+                      {{#if this.isFileTreeShowing}}
+                        <FileTree @realmURL={{this.realmURL}} />
+                      {{else}}
+                        {{#if this.isReady}}
+                          {{#if this.inspectorFileIncompatibilityMessage}}
+                            <div
+                              class='file-incompatible-message'
+                              data-test-detail-panel-file-incompatibility-message
+                            >
+                              {{this.inspectorFileIncompatibilityMessage}}
+                            </div>
+                          {{else}}
+                            <DetailPanel
+                              @cardInstance={{this.card}}
+                              @readyFile={{this.readyFile}}
+                              @selectedDeclaration={{this.selectedDeclaration}}
+                              @declarations={{this.declarations}}
+                              @selectDeclaration={{this.selectDeclaration}}
+                              @delete={{perform this.delete}}
+                              @openDefinition={{this.openDefinition}}
+                              data-test-card-inspector-panel
+                            />
+                          {{/if}}
                         {{/if}}
                       {{/if}}
-                    {{/if}}
+                    </section>
                   </div>
                 </VerticallyResizablePanel>
                 <VerticallyResizablePanel
