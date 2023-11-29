@@ -129,17 +129,6 @@ export default class DetailPanel extends Component<Signature> {
     return hasExecutableExtension(this.args.readyFile.url);
   }
 
-  get isBinary() {
-    return this.args.readyFile.isBinary;
-  }
-
-  private get isNonCardJson() {
-    return (
-      this.args.readyFile.url.endsWith('.json') &&
-      !isCardDocumentString(this.args.readyFile.content)
-    );
-  }
-
   get isField() {
     if (
       this.args.selectedDeclaration &&
@@ -353,21 +342,19 @@ export default class DetailPanel extends Component<Signature> {
             {{/if}}
           </div>
         {{else}}
-          {{#if (or this.isBinary this.isNonCardJson)}}
-            <div class='details-panel'>
-              <header class='panel-header' aria-label='Details Panel Header'>
-                Details
-              </header>
-              <FileDefinitionContainer
-                @fileURL={{@readyFile.url}}
-                @fileExtension={{this.fileExtension}}
-                @infoText={{this.lastModified.value}}
-                @actions={{array
-                  (hash label='Delete' handler=@delete icon=IconTrash)
-                }}
-              />
-            </div>
-          {{/if}}
+          <div class='details-panel'>
+            <header class='panel-header' aria-label='Details Panel Header'>
+              Details
+            </header>
+            <FileDefinitionContainer
+              @fileURL={{@readyFile.url}}
+              @fileExtension={{this.fileExtension}}
+              @infoText={{this.lastModified.value}}
+              @actions={{array
+                (hash label='Delete' handler=@delete icon=IconTrash)
+              }}
+            />
+          </div>
         {{/if}}
       {{/if}}
     </div>
