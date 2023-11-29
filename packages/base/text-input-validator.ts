@@ -4,10 +4,8 @@ export class TextInputValidator<T> {
   constructor(
     private getValue: () => T | null,
     private setValue: (val: T | null | undefined) => void,
-    private deserialize: (
-      inputValue: string | null | undefined,
-    ) => T | null | undefined,
-    private serialize: (val: T) => string = (v) => String(v),
+    private deserialize: (inputValue: string | null) => T | null,
+    private serialize: (val: T | null) => string | undefined = (v) => String(v),
     private validate: (val: string) => string | null = () => null,
   ) {}
 
@@ -17,7 +15,7 @@ export class TextInputValidator<T> {
   get asString(): string {
     let modelValue = this.getValue();
     if (modelValue != null) {
-      return this.serialize(modelValue);
+      return this.serialize(modelValue) || '';
     }
     return this.lastEditedInputValue || '';
   }

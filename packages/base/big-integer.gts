@@ -1,13 +1,22 @@
-import { primitive, Component, serialize, FieldDef } from './card-api';
+import {
+  primitive,
+  Component,
+  serialize,
+  FieldDef,
+  BaseDefConstructor,
+  deserialize,
+  BaseInstanceType,
+  queryableValue,
+} from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 
-function _serialize(val: bigint | null): string {
-  return String(val);
+function _serialize(val: bigint | null): string | undefined {
+  return val == null ? undefined : String(val);
 }
 
-function deserialize(string: string | null | undefined): bigint | null {
-  if (string == null || string === '') {
+function _deserialize(string: string | null): bigint | null {
+  if (!string) {
     return null;
   }
 
@@ -20,7 +29,7 @@ function deserialize(string: string | null | undefined): bigint | null {
 }
 
 function validate(value: string | null): string | null {
-  if (value == null || value === '') {
+  if (!value) {
     return null;
   }
 
@@ -51,7 +60,7 @@ class Edit extends Component<typeof BigIntegerField> {
   textInputFilter: TextInputValidator<bigint> = new TextInputValidator(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
-    deserialize,
+    _deserialize,
     _serialize,
     validate,
   );
@@ -60,10 +69,18 @@ class Edit extends Component<typeof BigIntegerField> {
 export default class BigIntegerField extends FieldDef {
   static displayName = 'BigInteger';
   static [primitive]: bigint;
-  static [serialize](val: bigint) {
+  static [serialize](val: bigint | null) {
     return _serialize(val);
   }
-
+  static async [deserialize]<T extends BaseDefConstructor>(
+    this: T,
+    bigintString: any,
+  ): Promise<BaseInstanceType<T>> {
+    return _deserialize(bigintString ?? null) as BaseInstanceType<T>;
+  }
+  static [queryableValue](val: bigint | undefined): string | undefined {
+    return _serialize(val ?? null);
+  }
   static embedded = View;
   static atom = View;
   static edit = Edit;

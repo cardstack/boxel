@@ -10,17 +10,15 @@ import {
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 
-function serialize(val: number): string {
-  return val.toString();
+function serialize(val: number | null): string | undefined {
+  return val ? val.toString() : undefined;
 }
 
-function _deserialize(
-  number: number | string | null | undefined,
-): number | null {
+function _deserialize(number: number | string | null): number | null {
   if (number == null) {
     return null;
   }
-  debugger;
+
   let errorMessage = validate(number);
 
   if (errorMessage) {
@@ -36,25 +34,25 @@ function validate(value: string | number | null): string | null {
   }
 
   if (typeof value === 'number') {
-    if (Number.isNaN(value) || !Number.isFinite(value)) {
-      return 'Input cannot be converted to a number. Please enter a valid number.';
+    if (!Number.isFinite(value)) {
+      return 'Input must be a finite number. Please enter a valid number.';
     }
   } else {
     if (value.endsWith('.')) {
       return 'Input cannot end with a decimal point. Please enter a valid number.';
     }
 
-    let number = Number(value);
+    const number = Number(value);
 
     if (Number.isNaN(number)) {
-      return 'Input cannot be converted to a number. Please enter a valid number.';
+      return 'Input must be a valid number. Please enter a valid number.';
     }
 
-    if (number > Number.MAX_SAFE_INTEGER) {
-      return 'Input number is too large. Please enter a smaller number or consider using BigInteger base card.';
-    }
-    if (number < Number.MIN_SAFE_INTEGER) {
-      return 'Input number is too small. Please enter a more positive number or consider using BigInteger base card.';
+    let minSafe = Number.MIN_SAFE_INTEGER;
+    let maxSafe = Number.MAX_SAFE_INTEGER;
+
+    if (number > maxSafe || number < minSafe) {
+      return `Input number is out of safe range. Please enter a number between ${minSafe} and ${maxSafe}.`;
     }
   }
 

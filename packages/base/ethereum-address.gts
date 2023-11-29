@@ -7,6 +7,7 @@ import {
   deserialize,
   BaseInstanceType,
   BaseDefConstructor,
+  queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
@@ -15,8 +16,8 @@ function isChecksumAddress(address: string): boolean {
   return getAddress(address) === address;
 }
 
-function validate(value?: string | null): string | null {
-  if (value == null || value === '') {
+function validate(value: string | null): string | null {
+  if (!value) {
     return null;
   }
 
@@ -31,11 +32,11 @@ function validate(value?: string | null): string | null {
   return null;
 }
 
-function serialize(val: string): string {
-  return val;
+function serialize(val: string | null): string | undefined {
+  return val ? val : undefined;
 }
 
-function _deserialize(string?: string | null): string | null | undefined {
+function _deserialize(string: string | null): string | null {
   let errorMessage = validate(string);
 
   if (errorMessage) {
@@ -79,6 +80,9 @@ export default class EthereumAddressField extends FieldDef {
     address: any,
   ): Promise<BaseInstanceType<T>> {
     return _deserialize(address) as BaseInstanceType<T>;
+  }
+  static [queryableValue](val: string | undefined): string | undefined {
+    return serialize(val ?? null);
   }
   static embedded = View;
   static atom = View;
