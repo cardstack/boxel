@@ -284,9 +284,10 @@ export function getPluralViewComponent(
   ) => typeof BaseDef,
   context?: CardContext,
 ): BoxComponent {
-  let components = model.children.map((child) =>
-    getBoxComponent(cardTypeFor(field, child), format, child, field, context),
-  );
+  let components = () =>
+    model.children.map((child) =>
+      getBoxComponent(cardTypeFor(field, child), format, child, field, context),
+    ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
   let pluralViewComponent: TemplateOnlyComponent<BoxComponentSignature> =
     <template>
       {{#let (if @format @format format) as |format|}}
@@ -298,7 +299,7 @@ export function getPluralViewComponent(
           data-test-plural-view={{field.fieldType}}
           data-test-plural-view-format={{format}}
         >
-          {{#each components as |Item i|}}
+          {{#each (components) as |Item i|}}
             <div data-test-plural-view-item={{i}}>
               <Item @format={{format}} />
             </div>
