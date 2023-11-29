@@ -31,6 +31,7 @@ export default class InputUsage extends Component {
   @tracked placeholder = '';
   @tracked errorMessage = '';
   @tracked helperText = '';
+  @tracked max = '';
   @tracked state: InputValidationState = 'initial';
   @tracked variant: 'large' | 'default' = 'default';
 
@@ -87,6 +88,7 @@ export default class InputUsage extends Component {
           @variant={{this.variant}}
           @errorMessage={{this.errorMessage}}
           @helperText={{this.helperText}}
+          @max={{this.max}}
           style={{cssVar boxel-input-height=this.boxelInputHeight.value}}
           @onBlur={{this.validate}}
           @onFocus={{this.logValue}}
@@ -144,6 +146,12 @@ export default class InputUsage extends Component {
           @name='helperText'
           @value={{this.helperText}}
           @onInput={{fn (mut this.helperText)}}
+        />
+        <Args.String
+          @name='max'
+          @value={{this.max}}
+          @onInput={{fn (mut this.max)}}
+          @description='Native <input> attribute, works with number, range, date, datetime-local, month, time and week types'
         />
         <Args.String
           @name='placeholder'

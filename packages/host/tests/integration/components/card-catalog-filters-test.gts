@@ -4,6 +4,8 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
+import { baseRealm } from '@cardstack/runtime-common';
+
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -13,8 +15,7 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import {
   testRealmURL,
   setupLocalIndexing,
-  TestRealmAdapter,
-  TestRealm,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -24,141 +25,142 @@ module('Integration | card-catalog filters', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
 
-  let adapter = new TestRealmAdapter({
-    '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
-    'index.json': {
-      data: {
-        type: 'card',
-        attributes: {},
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/cards-grid',
-            name: 'CardsGrid',
-          },
-        },
-      },
-    },
-    'blog-post.gts': `
-      import StringCard from 'https://cardstack.com/base/string';
-      import TextAreaCard from 'https://cardstack.com/base/text-area';
-      import { CardDef, field, contains, linksTo } from 'https://cardstack.com/base/card-api';
-      import { Author } from './author';
-      export class BlogPost extends CardDef {
-        @field title = contains(StringCard);
-        @field body = contains(TextAreaCard);
-        @field authorBio = linksTo(Author);
-      }
-    `,
-    'address.gts': `
-      import StringCard from 'https://cardstack.com/base/string';
-      import { FieldDef, field, contains } from 'https://cardstack.com/base/card-api';
-      export class Address extends FieldDef {
-        @field street = contains(StringCard);
-        @field city = contains(StringCard);
-        @field state = contains(StringCard);
-        @field zip = contains(StringCard);
-      }
-    `,
-    'author.gts': `
-      import StringCard from 'https://cardstack.com/base/string';
-      import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-      export class Author extends CardDef {
-        @field firstName = contains(StringCard);
-        @field lastName = contains(StringCard);
-      }
-    `,
-    'publishing-packet.gts': `
-      import { CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
-      import { BlogPost } from './blog-post';
-      export class PublishingPacket extends CardDef {
-        @field blogPost = linksTo(BlogPost);
-      }
-    `,
-    'CatalogEntry/publishing-packet.json': {
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'Publishing Packet',
-          description: 'Catalog entry for PublishingPacket',
-          ref: {
-            module: `../publishing-packet`,
-            name: 'PublishingPacket',
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/catalog-entry',
-            name: 'CatalogEntry',
-          },
-        },
-      },
-    },
-    'CatalogEntry/author.json': {
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'Author',
-          description: 'Catalog entry for Author',
-          ref: {
-            module: `${testRealmURL}author`,
-            name: 'Author',
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/catalog-entry',
-            name: 'CatalogEntry',
-          },
-        },
-      },
-    },
-    'CatalogEntry/blog-post.json': {
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'BlogPost',
-          description: 'Catalog entry for BlogPost',
-          ref: {
-            module: `${testRealmURL}blog-post`,
-            name: 'BlogPost',
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/catalog-entry',
-            name: 'CatalogEntry',
-          },
-        },
-      },
-    },
-    'CatalogEntry/address.json': {
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'Address',
-          description: 'Catalog entry for Address field',
-          ref: {
-            module: `${testRealmURL}address`,
-            name: 'Address',
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/catalog-entry',
-            name: 'CatalogEntry',
-          },
-        },
-      },
-    },
-  });
-
   let noop = () => {};
 
   hooks.beforeEach(async function () {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    let textArea: typeof import('https://cardstack.com/base/text-area');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+    textArea = await loader.import(`${baseRealm.url}text-area`);
+
+    let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: TextAreaField } = textArea;
+
+    class Author extends CardDef {
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+    }
+
+    class BlogPost extends CardDef {
+      @field title = contains(StringField);
+      @field body = contains(TextAreaField);
+      @field authorBio = linksTo(Author);
+    }
+
+    class Address extends FieldDef {
+      @field street = contains(StringField);
+      @field city = contains(StringField);
+      @field state = contains(StringField);
+      @field zip = contains(StringField);
+    }
+
+    class PublishingPacket extends CardDef {
+      @field blogPost = linksTo(BlogPost);
+    }
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'blog-post.gts': { BlogPost },
+        'address.gts': { Address },
+        'author.gts': { Author },
+        'publishing-packet.gts': { PublishingPacket },
+        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'CatalogEntry/publishing-packet.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Publishing Packet',
+              description: 'Catalog entry for PublishingPacket',
+              ref: {
+                module: `../publishing-packet`,
+                name: 'PublishingPacket',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'CatalogEntry/author.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Author',
+              description: 'Catalog entry for Author',
+              ref: {
+                module: `${testRealmURL}author`,
+                name: 'Author',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'CatalogEntry/blog-post.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'BlogPost',
+              description: 'Catalog entry for BlogPost',
+              ref: {
+                module: `${testRealmURL}blog-post`,
+                name: 'BlogPost',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+        'CatalogEntry/address.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Address',
+              description: 'Catalog entry for Address field',
+              ref: {
+                module: `${testRealmURL}address`,
+                name: 'Address',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/catalog-entry',
+                name: 'CatalogEntry',
+              },
+            },
+          },
+        },
+      },
+    });
 
     let operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',

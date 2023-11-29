@@ -43,7 +43,7 @@ import type MessageService from '@cardstack/host/services/message-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import FileTree from '../editor/file-tree';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
@@ -105,6 +105,7 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
+  @tracked private previewFormat: Format = 'isolated';
 
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -516,6 +517,15 @@ export default class CodeSubmode extends Component<Signature> {
     this.operatorModeStateService.updateCodePath(codePath);
   }
 
+  @action private setPreviewFormat(format: Format) {
+    this.previewFormat = format;
+  }
+
+  @action private onNewFileSave(fileURL: URL) {
+    this.operatorModeStateService.updateCodePath(fileURL);
+    this.setPreviewFormat('edit');
+  }
+
   <template>
     <RealmInfoProvider @realmURL={{this.realmURL}}>
       <:ready as |realmInfo|>
@@ -533,7 +543,10 @@ export default class CodeSubmode extends Component<Signature> {
         @dismissURLError={{this.dismissURLError}}
         @realmURL={{this.realmURL}}
       />
-      <NewFileButton @realmURL={{this.realmURL}} />
+      <NewFileButton
+        @realmURL={{this.realmURL}}
+        @onSave={{this.onNewFileSave}}
+      />
     </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
       <div
@@ -711,6 +724,8 @@ export default class CodeSubmode extends Component<Signature> {
                     <CardPreviewPanel
                       @card={{this.loadedCard}}
                       @realmURL={{this.realmURL}}
+                      @format={{this.previewFormat}}
+                      @setFormat={{this.setPreviewFormat}}
                       data-test-card-resource-loaded
                     />
                   {{else if this.selectedCardOrField}}

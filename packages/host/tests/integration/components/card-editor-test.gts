@@ -27,9 +27,8 @@ import {
   shimModule,
   setupCardLogs,
   setupLocalIndexing,
-  TestRealmAdapter,
-  TestRealm,
   saveCard,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -39,7 +38,6 @@ let string: typeof import('https://cardstack.com/base/string');
 let loader: Loader;
 
 module('Integration | card-editor', function (hooks) {
-  let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
 
@@ -77,164 +75,159 @@ module('Integration | card-editor', function (hooks) {
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
 
-    adapter = new TestRealmAdapter({
-      'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+    let { field, contains, linksTo, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
 
-        export class Pet extends CardDef {
-          @field name = contains(StringCard);
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h3 data-test-pet={{@model.name}}>
-                <@fields.name/>
-              </h3>
-            </template>
-          }
-        }
-      `,
-      'fancy-pet.gts': `
-        import { contains, field, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { Pet } from "./pet";
+    class Pet extends CardDef {
+      @field name = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h3 data-test-pet={{@model.name}}>
+            <@fields.name />
+          </h3>
+        </template>
+      };
+    }
+    class FancyPet extends Pet {
+      @field favoriteToy = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h3 data-test-pet={{@model.name}}>
+            <@fields.name />
+            (plays with
+            <@fields.favoriteToy />)
+          </h3>
+        </template>
+      };
+    }
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field pet = linksTo(Pet);
+      static isolated = class Embedded extends Component<typeof this> {
+        <template>
+          <h2 data-test-person={{@model.firstName}}>
+            <@fields.firstName />
+          </h2>
+          Pet:
+          <@fields.pet />
+        </template>
+      };
+    }
 
-        export class FancyPet extends Pet {
-          @field favoriteToy = contains(StringCard);
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h3 data-test-pet={{@model.name}}>
-                <@fields.name/>
-                (plays with <@fields.favoriteToy/>)
-              </h3>
-            </template>
-          }
-        }
-      `,
-      'person.gts': `
-        import { contains, linksTo, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { Pet } from "./pet";
-
-        export class Person extends CardDef {
-          @field firstName = contains(StringCard);
-          @field pet = linksTo(Pet);
-          static isolated = class Embedded extends Component<typeof this> {
-            <template>
-              <h2 data-test-person={{@model.firstName}}>
-                <@fields.firstName/>
-              </h2>
-              Pet: <@fields.pet/>
-            </template>
-          }
-        }
-      `,
-      'Pet/mango.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/mango`,
-          attributes: {
-            name: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
+    ({ realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'pet.gts': { Pet },
+        'fancy-pet.gts': { FancyPet },
+        'person.gts': { Person },
+        'Pet/mango.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              name: 'Mango',
             },
-          },
-        },
-      },
-      'Pet/vangogh.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/vangogh`,
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Pet/ringo.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/ringo`,
-          attributes: {
-            name: 'Ringo',
-            favoriteToy: 'sneaky snake',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}fancy-pet`,
-              name: 'FancyPet',
-            },
-          },
-        },
-      },
-      'Person/hassan.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Person/hassan`,
-          attributes: {
-            firstName: 'Hassan',
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: `${testRealmURL}Pet/mango`,
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
         },
-      },
-      'Person/mariko.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Person/mariko`,
-          attributes: {
-            firstName: 'Mariko',
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: null,
+        'Pet/vangogh.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/vangogh`,
+            attributes: {
+              name: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
+        },
+        'Pet/ringo.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/ringo`,
+            attributes: {
+              name: 'Ringo',
+              favoriteToy: 'sneaky snake',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}fancy-pet`,
+                name: 'FancyPet',
+              },
+            },
+          },
+        },
+        'Person/hassan.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Person/hassan`,
+            attributes: {
+              firstName: 'Hassan',
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/mariko.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Person/mariko`,
+            attributes: {
+              firstName: 'Mariko',
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: null,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
             },
           },
         },
       },
-    });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    }));
   });
 
   test('renders card in edit (default) format', async function (assert) {
     let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class TestCard extends CardDef {
-      @field firstName = contains(StringCard);
-      @field nickName = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field nickName = contains(StringField, {
         computeVia: function (this: TestCard) {
           return `${this.firstName}-poo`;
         },
       });
-      @field lastName = contains(StringCard);
+      @field lastName = contains(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-firstName><@fields.firstName /></div>
@@ -267,9 +260,9 @@ module('Integration | card-editor', function (hooks) {
 
   test('can change card format', async function (assert) {
     let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class TestCard extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-isolated-firstName><@fields.firstName /></div>
@@ -317,9 +310,9 @@ module('Integration | card-editor', function (hooks) {
 
   test('edited card data is visible in different formats', async function (assert) {
     let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class TestCard extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-isolated-firstName><@fields.firstName /></div>

@@ -1,7 +1,4 @@
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
-import { trackedFunction } from 'ember-resources/util/function';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
@@ -9,9 +6,9 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
-import type CardService from '../../../services/card-service';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -32,9 +29,15 @@ export default class SearchResult extends Component<Signature> {
       <header class='search-result__title'>{{@card.title}}</header>
       <p class='search-result__subtitle'>
         <span class='search-result__display-name'>
-          {{cardTypeDisplayName @card}}
+          {{cardTypeDisplayName @card}}{{if @compact ', in' ''}}
         </span>
-        <span class='search-result__realm-name'>In {{this.realmName}}</span>
+        <span class='search-result__realm-name'>
+          <RealmInfoProvider @fileURL={{@card.id}}>
+            <:ready as |realmInfo|>
+              {{realmInfo.name}}
+            </:ready>
+          </RealmInfoProvider>
+        </span>
       </p>
     </CardContainer>
     <style>
@@ -76,20 +79,6 @@ export default class SearchResult extends Component<Signature> {
         color: var(--boxel-teal);
         font-size: var(--boxel-font-size-xs);
       }
-      .is-compact .search-result__display-name:after {
-        content: ', ';
-      }
     </style>
   </template>
-
-  @service declare cardService: CardService;
-
-  fetchRealmName = trackedFunction(this, async () => {
-    let realmInfoSymbol = await this.cardService.getRealmInfo(this.args.card);
-    return realmInfoSymbol?.name;
-  });
-
-  get realmName() {
-    return this.fetchRealmName.value ?? '';
-  }
 }

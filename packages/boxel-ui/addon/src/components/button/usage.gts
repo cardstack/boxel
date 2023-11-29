@@ -22,6 +22,7 @@ export default class ButtonUsage extends Component {
       'secondary-light',
       'secondary-dark',
       'danger',
+      'text-only',
     ],
     light: ['primary', 'secondary-light'],
     dark: ['primary', 'secondary-dark'],

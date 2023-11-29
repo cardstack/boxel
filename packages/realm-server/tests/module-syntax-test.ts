@@ -14,6 +14,27 @@ module('module-syntax', function () {
   );
   shimExternals(loader);
 
+  function addField(src: string, addFieldAtIndex?: number) {
+    let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person.gts`));
+    mod.addField({
+      cardBeingModified: {
+        module: `${testRealm}dir/person.gts`,
+        name: 'Person',
+      },
+      fieldName: 'age',
+      fieldRef: {
+        module: 'https://cardstack.com/base/number',
+        name: 'default',
+      },
+      fieldType: 'contains',
+      addFieldAtIndex,
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
+    return mod;
+  }
+
   test('can get the code for a card', async function (assert) {
     let src = `
       import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
@@ -32,7 +53,8 @@ module('module-syntax', function () {
   });
 
   test('can add a field to a card', async function (assert) {
-    let src = `
+    let mod = addField(
+      `
       import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       export class Person extends CardDef {
@@ -41,52 +63,38 @@ module('module-syntax', function () {
           <template><h1><@fields.firstName/></h1></template>
         }
       }
-    `;
-
-    let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person.gts`));
-    mod.addField(
-      { module: `${testRealm}dir/person.gts`, name: 'Person' },
-      'age',
-      {
-        module: 'https://cardstack.com/base/number',
-        name: 'default',
-      },
-      'contains',
-      undefined,
-      undefined,
-      undefined,
+      `,
     );
 
     assert.codeEqual(
       mod.code(),
-      `
-        import NumberCard from "https://cardstack.com/base/number";
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        export class Person extends CardDef {
-          @field firstName = contains(StringCard);
-          @field age = contains(NumberCard);
-          static embedded = class Embedded extends Component<typeof this> {
-            <template><h1><@fields.firstName/></h1></template>
-          }
-        }
-      `,
-    );
-    assert.strictEqual(
-      mod.code().trim(),
       `
       import NumberCard from "https://cardstack.com/base/number";
       import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       export class Person extends CardDef {
         @field firstName = contains(StringCard);
-      @field age = contains(NumberCard);
-      
+        @field age = contains(NumberCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.firstName/></h1></template>
+        }
+      }
+      `,
+    );
+    assert.strictEqual(
+      mod.code(),
+      `
+      import NumberCard from "https://cardstack.com/base/number";
+      import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      export class Person extends CardDef {
+        @field firstName = contains(StringCard);
+        @field age = contains(NumberCard);
         static embedded = class Embedded extends Component<typeof this> {
           <template><h1><@fields.firstName/></h1></template>                
         }
       }
-      `.trim(),
+      `,
       'original code formatting is preserved',
     );
 
@@ -123,18 +131,21 @@ module('module-syntax', function () {
 
     // add another field which will assert that the field path is correct since
     // the new field must go after this field
-    mod.addField(
-      { module: `${testRealm}dir/person.gts`, name: 'Person' },
-      'lastName',
-      {
+    mod.addField({
+      cardBeingModified: {
+        module: `${testRealm}dir/person.gts`,
+        name: 'Person',
+      },
+      fieldName: 'lastName',
+      fieldRef: {
         module: 'https://cardstack.com/base/string',
         name: 'default',
       },
-      'contains',
-      undefined,
-      undefined,
-      undefined,
-    );
+      fieldType: 'contains',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
     assert.codeEqual(
       mod.code(),
       `
@@ -154,6 +165,166 @@ module('module-syntax', function () {
     );
   });
 
+  test('added field respects indentation of previous field', async function (assert) {
+    // 4 space indent
+    let mod = addField(
+      `
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends CardDef {
+            @field firstName = contains(StringCard);
+            static embedded = class Embedded extends Component<typeof this> {
+                <template><h1><@fields.firstName/></h1></template>
+            }
+        }
+      `,
+    );
+    assert.strictEqual(
+      mod.code(),
+      `
+        import NumberCard from "https://cardstack.com/base/number";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends CardDef {
+            @field firstName = contains(StringCard);
+            @field age = contains(NumberCard);
+            static embedded = class Embedded extends Component<typeof this> {
+                <template><h1><@fields.firstName/></h1></template>                
+            }
+        }
+      `,
+      'original code formatting is preserved',
+    );
+  });
+
+  test('added field respects indentation of previous class member', async function (assert) {
+    // 2 space indent
+    let mod = addField(
+      `
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends CardDef {
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><h1><@fields.firstName/></h1></template>
+          }
+        }
+      `,
+    );
+    assert.strictEqual(
+      mod.code(),
+      `
+        import NumberCard from "https://cardstack.com/base/number";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends CardDef {
+          @field age = contains(NumberCard);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><h1><@fields.firstName/></h1></template>                
+          }
+        }
+      `,
+      'original code formatting is preserved',
+    );
+  });
+
+  test(`added field defaults to a 2 space indent if it's the only class member`, async function (assert) {
+    let mod = addField(
+      `
+      import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      export class Person extends CardDef {
+      }
+      `,
+    );
+
+    assert.strictEqual(
+      mod.code(),
+      `
+      import NumberCard from "https://cardstack.com/base/number";
+      import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      export class Person extends CardDef {
+        @field age = contains(NumberCard);
+      }
+      `,
+      'original code formatting is preserved',
+    );
+    mod = addField(
+      `
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends CardDef { }
+      `,
+    );
+
+    assert.strictEqual(
+      mod.code(),
+      `
+        import NumberCard from "https://cardstack.com/base/number";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends CardDef { 
+          @field age = contains(NumberCard);
+        }
+      `,
+      'original code formatting is preserved',
+    );
+
+    mod = addField(
+      `
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends CardDef {}
+      `,
+    );
+
+    assert.strictEqual(
+      mod.code(),
+      `
+        import NumberCard from "https://cardstack.com/base/number";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends CardDef {
+          @field age = contains(NumberCard);
+        }
+      `,
+      'original code formatting is preserved',
+    );
+  });
+
+  test(`added field respects the indentation of the next field when adding field at specific position`, async function (assert) {
+    // 4 space indent
+    let mod = addField(
+      `
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends CardDef {
+            @field firstName = contains(StringCard);
+            static embedded = class Embedded extends Component<typeof this> {
+                <template><h1><@fields.firstName/></h1></template>
+            }
+        }
+      `,
+      0,
+    );
+    assert.strictEqual(
+      mod.code(),
+      `
+        import NumberCard from "https://cardstack.com/base/number";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends CardDef {
+            @field age = contains(NumberCard);
+            @field firstName = contains(StringCard);
+            static embedded = class Embedded extends Component<typeof this> {
+                <template><h1><@fields.firstName/></h1></template>                
+            }
+        }
+      `,
+      'original code formatting is preserved',
+    );
+  });
+
   test('can add a field to a card when the module url is relative', async function (assert) {
     let src = `
       import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
@@ -165,18 +336,20 @@ module('module-syntax', function () {
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
 
-    mod.addField(
-      { module: `${testRealm}dir/pet`, name: 'Pet' }, // Card we want to add to
-      'bestFriend',
-      {
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // Card we want to add to
+      fieldName: 'bestFriend',
+      fieldRef: {
         module: '../person',
         name: 'Person',
       },
-      'linksTo',
-      new URL(`http://localhost:4202/node-test/catalog-entry/1`), // hypothethical catalog entry that lives at this id
-      new URL('http://localhost:4202/node-test/pet'), // outgoing card
-      new URL('http://localhost:4202/node-test/'), // the realm that the catalog entry lives in
-    );
+      fieldType: 'linksTo',
+      incomingRelativeTo: new URL(
+        `http://localhost:4202/node-test/catalog-entry/1`,
+      ), // hypothethical catalog entry that lives at this id
+      outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
+      outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that the catalog entry lives in
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -203,18 +376,18 @@ module('module-syntax', function () {
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
 
-    mod.addField(
-      { module: `${testRealm}dir/pet`, name: 'Pet' }, // card we want to add to
-      'bestFriend',
-      {
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // card we want to add to
+      fieldName: 'bestFriend',
+      fieldRef: {
         module: '../person', // the other realm (will be from the /test realm not the /node-test)
         name: 'Person',
       },
-      'linksTo',
-      new URL(`http://localhost:4202/test/catalog-entry/1`), // hypothethical catalog entry that lives at this id
-      new URL('http://localhost:4202/node-test/pet'), // outgoing card
-      new URL('http://localhost:4202/node-test/'), // the realm that the catalog entry lives in
-    );
+      fieldType: 'linksTo',
+      incomingRelativeTo: new URL(`http://localhost:4202/test/catalog-entry/1`), // hypothethical catalog entry that lives at this id
+      outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
+      outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that the catalog entry lives in
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -238,18 +411,18 @@ module('module-syntax', function () {
       `;
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    mod.addField(
-      { module: `${testRealm}dir/person`, name: 'Person' },
-      'firstName',
-      {
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+      fieldName: 'firstName',
+      fieldRef: {
         module: 'https://cardstack.com/base/string',
         name: 'default',
       },
-      'contains',
-      undefined,
-      undefined,
-      undefined,
-    );
+      fieldType: 'contains',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -283,22 +456,22 @@ module('module-syntax', function () {
     `;
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    mod.addField(
-      {
+    mod.addField({
+      cardBeingModified: {
         type: 'fieldOf',
         field: 'details',
         card: { module: `${testRealm}dir/person`, name: 'Person' },
       },
-      'age',
-      {
+      fieldName: 'age',
+      fieldRef: {
         module: 'https://cardstack.com/base/number',
         name: 'default',
       },
-      'contains',
-      undefined,
-      undefined,
-      undefined,
-    );
+      fieldType: 'contains',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -341,21 +514,21 @@ module('module-syntax', function () {
     `;
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    mod.addField(
-      {
+    mod.addField({
+      cardBeingModified: {
         type: 'ancestorOf',
         card: { module: `${testRealm}dir/person`, name: 'FancyPerson' },
       },
-      'age',
-      {
+      fieldName: 'age',
+      fieldRef: {
         module: 'https://cardstack.com/base/number',
         name: 'default',
       },
-      'contains',
-      undefined,
-      undefined,
-      undefined,
-    );
+      fieldType: 'contains',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -400,22 +573,22 @@ module('module-syntax', function () {
     `;
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    mod.addField(
-      {
+    mod.addField({
+      cardBeingModified: {
         type: 'fieldOf',
         field: 'details',
         card: { module: `${testRealm}dir/person`, name: 'Person' },
       },
-      'age',
-      {
+      fieldName: 'age',
+      fieldRef: {
         module: 'https://cardstack.com/base/number',
         name: 'default',
       },
-      'contains',
-      undefined,
-      undefined,
-      undefined,
-    );
+      fieldType: 'contains',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -456,18 +629,18 @@ module('module-syntax', function () {
     `;
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    mod.addField(
-      { module: `${testRealm}dir/person`, name: 'Person' },
-      'aliases',
-      {
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+      fieldName: 'aliases',
+      fieldRef: {
         module: 'https://cardstack.com/base/string',
         name: 'default',
       },
-      'containsMany',
-      undefined,
-      undefined,
-      undefined,
-    );
+      fieldType: 'containsMany',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -518,18 +691,18 @@ module('module-syntax', function () {
       }
     `;
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    mod.addField(
-      { module: `${testRealm}dir/person`, name: 'Person' },
-      'pet',
-      {
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+      fieldName: 'pet',
+      fieldRef: {
         module: `${testRealm}dir/pet`,
         name: 'Pet',
       },
-      'linksTo',
-      undefined,
-      undefined,
-      undefined,
-    );
+      fieldType: 'linksTo',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -567,18 +740,18 @@ module('module-syntax', function () {
       }
     `;
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    mod.addField(
-      { module: `${testRealm}dir/person`, name: 'Person' },
-      'friend',
-      {
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+      fieldName: 'friend',
+      fieldRef: {
         module: `${testRealm}dir/person`,
         name: 'Person',
       },
-      'linksTo',
-      undefined,
-      undefined,
-      undefined,
-    );
+      fieldType: 'linksTo',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -619,18 +792,18 @@ module('module-syntax', function () {
     `;
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    mod.addField(
-      { module: `${testRealm}dir/person`, name: 'Person' },
-      'age',
-      {
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+      fieldName: 'age',
+      fieldRef: {
         module: 'https://cardstack.com/base/number',
         name: 'default',
       },
-      'contains',
-      undefined,
-      undefined,
-      undefined,
-    );
+      fieldType: 'contains',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -663,18 +836,18 @@ module('module-syntax', function () {
     `;
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
     try {
-      mod.addField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
-        'firstName',
-        {
+      mod.addField({
+        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        fieldName: 'firstName',
+        fieldRef: {
           module: 'https://cardstack.com/base/string',
           name: 'default',
         },
-        'contains',
-        undefined,
-        undefined,
-        undefined,
-      );
+        fieldType: 'contains',
+        incomingRelativeTo: undefined,
+        outgoingRelativeTo: undefined,
+        outgoingRealmURL: undefined,
+      });
       throw new Error('expected error was not thrown');
     } catch (err: any) {
       assert.ok(
@@ -743,24 +916,24 @@ module('module-syntax', function () {
     `;
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    let fieldIndex = mod.removeField(
+    let addFieldAtIndex = mod.removeField(
       { module: `${testRealm}dir/person`, name: 'Person' },
       'artistName',
     );
 
-    mod.addField(
-      { module: `${testRealm}dir/person`, name: 'Person' },
-      'artistNames',
-      {
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+      fieldName: 'artistNames',
+      fieldRef: {
         module: 'https://cardstack.com/base/string',
         name: 'default',
       },
-      'containsMany',
-      undefined,
-      undefined,
-      undefined,
-      fieldIndex,
-    );
+      fieldType: 'containsMany',
+      addFieldAtIndex,
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -792,24 +965,24 @@ module('module-syntax', function () {
     `;
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    let fieldIndex = mod.removeField(
+    let addFieldAtIndex = mod.removeField(
       { module: `${testRealm}dir/person`, name: 'Person' },
       'firstName',
     );
 
-    mod.addField(
-      { module: `${testRealm}dir/person`, name: 'Person' },
-      'firstNameAdjusted',
-      {
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+      fieldName: 'firstNameAdjusted',
+      fieldRef: {
         module: 'https://cardstack.com/base/string',
         name: 'default',
       },
-      'contains',
-      undefined,
-      undefined,
-      undefined,
-      fieldIndex,
-    );
+      fieldType: 'contains',
+      addFieldAtIndex,
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),
@@ -841,24 +1014,24 @@ module('module-syntax', function () {
     `;
 
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    let fieldIndex = mod.removeField(
+    let addFieldAtIndex = mod.removeField(
       { module: `${testRealm}dir/person`, name: 'Person' },
       'streetName',
     );
 
-    mod.addField(
-      { module: `${testRealm}dir/person`, name: 'Person' },
-      'streetNameAdjusted',
-      {
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+      fieldName: 'streetNameAdjusted',
+      fieldRef: {
         module: 'https://cardstack.com/base/string',
         name: 'default',
       },
-      'contains',
-      undefined,
-      undefined,
-      undefined,
-      fieldIndex,
-    );
+      fieldType: 'contains',
+      addFieldAtIndex,
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+    });
 
     assert.codeEqual(
       mod.code(),

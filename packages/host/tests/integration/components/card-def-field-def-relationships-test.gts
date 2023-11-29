@@ -1,13 +1,9 @@
 import { click, waitFor } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
-
-import {
-  baseRealm,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import percySnapshot from '@percy/ember';
+import { baseRealm } from '@cardstack/runtime-common';
 import { type Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -15,14 +11,10 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import {
-  saveCard,
   setupCardLogs,
   setupLocalIndexing,
-  shimModule,
-  TestRealm,
-  TestRealmAdapter,
   testRealmURL,
-  type CardDocFiles,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent, renderCard } from '../../helpers/render-component';
 
@@ -31,10 +23,6 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   let cardApi: typeof import('https://cardstack.com/base/card-api');
   let string: typeof import('https://cardstack.com/base/string');
   let number: typeof import('https://cardstack.com/base/number');
-
-  let createTestRealm: (
-    files: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
-  ) => Promise<void>;
 
   let setCardInOperatorModeState: (
     card: string,
@@ -60,16 +48,6 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     number = await loader.import(`${baseRealm.url}number`);
-
-    createTestRealm = async (files) => {
-      let adapter = new TestRealmAdapter(files);
-      let realm = await TestRealm.createWithAdapter(
-        adapter,
-        loader,
-        this.owner,
-      );
-      await realm.ready;
-    };
 
     setCardInOperatorModeState = async (cardURL, format = 'isolated') => {
       let operatorModeStateService = this.owner.lookup(
@@ -463,16 +441,15 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       }),
     });
 
-    await shimModule(`${testRealmURL}currency`, { CurrencyCard }, loader);
-    await shimModule(`${testRealmURL}tx`, { TxCard }, loader);
-
-    let usdCardDoc = await saveCard(usdCard, `${testRealmURL}usd`, loader);
-    let txCardDoc = await saveCard(txCard, `${testRealmURL}Tx/1`, loader);
-
-    await createTestRealm({
-      '.realm.json': `{ "name": "Local Workspace" }`,
-      'usd.json': usdCardDoc,
-      'Tx/1.json': txCardDoc,
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'currency.gts': { CurrencyCard },
+        'tx.gts': { TxCard },
+        '.realm.json': `{ "name": "Local Workspace" }`,
+        'usd.json': usdCard,
+        'Tx/1.json': txCard,
+      },
     });
 
     await renderComponent(OperatorModeComponent);
@@ -533,89 +510,42 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('CardDef field (plural) linked to from a FieldDef renders in atom format', async function (assert) {
-    await createTestRealm({
-      'country.gts': `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+    let { field, contains, linksToMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
 
-        export class Country extends CardDef {
-          static displayName = 'Country';
-          @field name = contains(StringField);
-          @field title = contains(StringField, {
-            computeVia(this: Country) {
-              return this.name;
-            },
-          });
-        }`,
-      'trips.gts': `
-        import { linksToMany, field, FieldDef } from "https://cardstack.com/base/card-api";
-        import { Country } from "./country";
+    class Country extends CardDef {
+      static displayName = 'Country';
+      @field name = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia(this: Country) {
+          return this.name;
+        },
+      });
+    }
+    class Trips extends FieldDef {
+      static displayName = 'Trips';
+      @field countries = linksToMany(Country);
+    }
+    class Person extends CardDef {
+      static displayName = 'Person';
+      @field firstName = contains(StringField);
+      @field trips = contains(Trips);
+    }
 
-        export class Trips extends FieldDef {
-          static displayName = 'Trips';
-          @field countries = linksToMany(Country);
-        }
-      `,
-      'person.gts': `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-        import { Trips } from "./trips";
+    let usa = new Country({ name: 'United States' });
+    let japan = new Country({ name: 'Japan' });
+    let fadhlan = new Person({
+      firstName: 'Fadhlan',
+    });
 
-        export class Person extends CardDef {
-          static displayName = 'Person';
-          @field firstName = contains(StringField);
-          @field trips = contains(Trips);
-        }
-      `,
-      'usa.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            name: 'United States',
-            description: null,
-            thumbnailURL: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}country`,
-              name: 'Country',
-            },
-          },
-        },
-      },
-      'japan.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            name: 'Japan',
-            description: null,
-            thumbnailURL: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}country`,
-              name: 'Country',
-            },
-          },
-        },
-      },
-      'Person/fadhlan.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Fadhlan',
-            title: null,
-            description: null,
-            thumbnailURL: null,
-            trips: {},
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'country.gts': { Country },
+        'person.gts': { Person },
+        'usa.json': usa,
+        'japan.json': japan,
+        'Person/fadhlan.json': fadhlan,
       },
     });
 
