@@ -1140,14 +1140,14 @@ export class Realm {
     doc: LooseSingleCardDocument,
     relativeTo: URL,
   ): Promise<LooseSingleCardDocument> {
-    let api = await this.searchIndex.loader.import<typeof CardAPI>(
+    let api = await this.loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api',
     );
     let card = (await api.createFromSerialized(
       doc.data,
       doc,
       relativeTo,
-      this.searchIndex.loader as unknown as LoaderType,
+      this.loader as unknown as LoaderType,
     )) as CardDef;
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
@@ -1218,6 +1218,10 @@ export class Realm {
     waitForClose(writable);
 
     return response;
+  }
+
+  unsubscribe() {
+    this.#adapter.unsubscribe();
   }
 
   private async drainUpdates() {

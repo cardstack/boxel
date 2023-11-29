@@ -29,9 +29,8 @@ import {
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
-  TestRealmAdapter,
-  TestRealm,
   saveCard,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -40,7 +39,6 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 let loader: Loader;
 
 module('Integration | text-input-validator', function (hooks) {
-  let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -74,37 +72,40 @@ module('Integration | text-input-validator', function (hooks) {
       new URL('http://localhost:4201/base/'),
     );
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    let bigInteger: typeof import('https://cardstack.com/base/big-integer');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    bigInteger = await loader.import(`${baseRealm.url}big-integer`);
 
-    adapter = new TestRealmAdapter({
-      'sample.gts': `
-        import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-        import BigIntegerCard from 'https://cardstack.com/base/big-integer';
+    let { field, contains, CardDef } = cardApi;
+    let { default: BigIntegerField } = bigInteger;
 
-        export class Sample extends CardDef {
-        static displayName = 'Sample';
-        @field someBigInt = contains(BigIntegerCard);
-        @field anotherBigInt = contains(BigIntegerCard);
-        }
-      `,
-      'Sample/1.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Sample/1`,
-          attributes: {
-            someBigInt: null,
-            anotherBigInt: '123',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}sample`,
-              name: 'Sample',
+    class Sample extends CardDef {
+      static displayName = 'Sample';
+      @field someBigInt = contains(BigIntegerField);
+      @field anotherBigInt = contains(BigIntegerField);
+    }
+    ({ realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'sample.gts': { Sample },
+        'Sample/1.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Sample/1`,
+            attributes: {
+              someBigInt: null,
+              anotherBigInt: '123',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}sample`,
+                name: 'Sample',
+              },
             },
           },
         },
       },
-    });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    }));
   });
 
   setupCardLogs(

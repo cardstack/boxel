@@ -29,10 +29,9 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupServerSentEvents,
-  TestRealmAdapter,
-  TestRealm,
   type TestContextWithSave,
   type TestContextWithSSE,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -47,8 +46,6 @@ type TestContextForCopy = TestContextWithSave & TestContextWithSSE;
 
 module('Integration | card-copy', function (hooks) {
   let onFetch: ((req: Request, body: string) => void) | undefined;
-  let adapter1: TestRealmAdapter;
-  let adapter2: TestRealmAdapter;
   let realm1: Realm;
   let realm2: Realm;
   let noop = () => {};
@@ -110,164 +107,163 @@ module('Integration | card-copy', function (hooks) {
       ].filter((a) => a.length > 0);
       await operatorModeStateService.restore({ stacks });
     };
-    adapter1 = new TestRealmAdapter({
-      'person.gts': `
-        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { Pet } from "./pet";
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
 
-        export class Person extends CardDef {
-          static displayName = 'Person';
-          @field firstName = contains(StringCard);
-          @field pet = linksTo(Pet);
-          @field title = contains(StringCard, {
-            computeVia: function (this: Person) { return this.firstName; }
-          });
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h2 data-test-person={{@model.firstName}}><@fields.firstName/></h2>
-              <@fields.pet/>
-            </template>
-          }
-        }
-      `,
-      'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+    let { field, contains, linksTo, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
 
-        export class Pet extends CardDef {
-          static displayName = 'Pet';
-          @field firstName = contains(StringCard);
-          @field title = contains(StringCard, {
-            computeVia: function (this: Pet) {
-              return this.firstName;
-            },
-          });
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h2 data-test-pet={{@model.firstName}}><@fields.firstName/></h2>
-              <@fields.pet/>
-            </template>
-          }
-          static embedded = class Embedded extends Component<typeof this> {
-            <template>
-              <h3 data-test-pet={{@model.firstName}}><@fields.name/></h3>
-            </template>
-          }
-        }
-      `,
-      'index.json': {
-        data: {
-          type: 'card',
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
-            },
-          },
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.firstName;
         },
-      },
-      'Person/hassan.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Hassan',
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: '../Pet/mango',
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
+        </template>
+      };
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
+        </template>
+      };
+    }
+
+    class Person extends CardDef {
+      static displayName = 'Person';
+      @field firstName = contains(StringField);
+      @field pet = linksTo(Pet);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-person={{@model.firstName}}><@fields.firstName /></h2>
+          <@fields.pet />
+        </template>
+      };
+    }
+
+    ({ realm: realm1 } = await setupIntegrationTestRealm({
+      loader,
+      onFetch: wrappedOnFetch(),
+      contents: {
+        'person.gts': { Person },
+        'pet.gts': { Pet },
+        'index.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: `../person`,
-              name: 'Person',
+        },
+        'Person/hassan.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Hassan',
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: '../Pet/mango',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `../person`,
+                name: 'Person',
+              },
             },
           },
         },
-      },
-      'Pet/mango.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../pet',
-              name: 'Pet',
+        'Pet/mango.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'Pet/vangogh.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../pet',
-              name: 'Pet',
+        'Pet/vangogh.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
             },
           },
         },
+        '.realm.json': {
+          name: 'Test Workspace 1',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        },
       },
-      '.realm.json': {
-        name: 'Test Workspace 1',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
-    });
+    }));
 
-    adapter2 = new TestRealmAdapter({
-      'index.json': {
-        data: {
-          type: 'card',
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
-            },
-          },
-        },
-      },
-      'Pet/paper.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Paper',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      '.realm.json': {
-        name: 'Test Workspace 2',
-        backgroundURL:
-          'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
-      },
-    });
-
-    realm1 = await TestRealm.createWithAdapter(adapter1, loader, this.owner, {
-      realmURL: testRealmURL,
-      onFetch: wrappedOnFetch(),
-    });
-    await realm1.ready;
-
-    realm2 = await TestRealm.createWithAdapter(adapter2, loader, this.owner, {
+    ({ realm: realm2 } = await setupIntegrationTestRealm({
+      loader,
       realmURL: testRealm2URL,
-    });
-    await realm2.ready;
+      contents: {
+        'index.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'Pet/paper.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Paper',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        '.realm.json': {
+          name: 'Test Workspace 2',
+          backgroundURL:
+            'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+        },
+      },
+    }));
 
     // write in the new record last because it's link didn't exist until realm2 was created
     await realm1.write(
@@ -649,7 +645,6 @@ module('Integration | card-copy', function (hooks) {
     await this.expectEvents({
       assert,
       realm: realm2,
-      adapter: adapter2,
       expectedNumberOfEvents: 1,
       onEvents: ([event]) => {
         if (event.type === 'index') {
@@ -746,7 +741,6 @@ module('Integration | card-copy', function (hooks) {
     await this.expectEvents({
       assert,
       realm: realm2,
-      adapter: adapter2,
       expectedNumberOfEvents: 2,
       onEvents: (events) => {
         assert.deepEqual(
@@ -870,7 +864,6 @@ module('Integration | card-copy', function (hooks) {
     await this.expectEvents({
       assert,
       realm: realm2,
-      adapter: adapter2,
       expectedNumberOfEvents: 1,
       onEvents: ([event]) => {
         if (event.type === 'index') {
@@ -988,7 +981,6 @@ module('Integration | card-copy', function (hooks) {
     await this.expectEvents({
       assert,
       realm: realm2,
-      adapter: adapter2,
       expectedNumberOfEvents: 1,
       onEvents: ([event]) => {
         if (event.type === 'index') {
