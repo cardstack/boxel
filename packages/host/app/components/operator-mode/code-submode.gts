@@ -10,8 +10,10 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 //@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
+
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+
 import {
   Button,
   LoadingIndicator,
@@ -20,12 +22,14 @@ import {
 import type { PanelContext } from '@cardstack/boxel-ui/components';
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
+
 import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
@@ -43,8 +47,11 @@ import type MessageService from '@cardstack/host/services/message-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
+
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
 import FileTree from '../editor/file-tree';
+
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
