@@ -11,11 +11,11 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 
 function serialize(val: number | null): string | undefined {
-  return val ? val.toString() : undefined;
+  return val != null && val !== 0 ? val?.toString() : undefined;
 }
 
 function _deserialize(number: number | string | null): number | null {
-  if (number == null) {
+  if (number == null || number === '') {
     return null;
   }
 

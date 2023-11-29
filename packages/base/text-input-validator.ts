@@ -13,11 +13,11 @@ export class TextInputValidator<T> {
   @tracked errorMessage: string | undefined;
 
   get asString(): string {
-    let modelValue = this.getValue();
-    if (modelValue != null) {
-      return this.serialize(modelValue) || '';
+    if (this.lastEditedInputValue != undefined) {
+      return this.lastEditedInputValue;
     }
-    return this.lastEditedInputValue || '';
+    let modelValue = this.getValue();
+    return this.serialize(modelValue) ?? '';
   }
 
   get isInvalid() {
@@ -34,6 +34,7 @@ export class TextInputValidator<T> {
     } else {
       this.errorMessage = undefined;
       this.setValue(this.deserialize(inputVal));
+      this.lastEditedInputValue = undefined;
     }
   };
 }
