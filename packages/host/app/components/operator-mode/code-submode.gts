@@ -276,7 +276,7 @@ export default class CodeSubmode extends Component<Signature> {
     if (this.moduleContentsResource.isLoading) {
       return null;
     }
-    if (!this.card && !this.isModule && !this.isIncompatibleFile) {
+    if (!this.card && !this.isModule && this.isIncompatibleFile) {
       return 'Inspector cannot be used with this file type. Select a file with a .json, .gts or .ts extension.';
     }
     return null;

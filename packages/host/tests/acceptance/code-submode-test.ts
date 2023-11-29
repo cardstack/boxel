@@ -738,24 +738,15 @@ module('Acceptance | code submode tests', function (hooks) {
 
     await waitFor('[data-test-binary-info]');
 
-    assert.dom('[data-test-definition-file-extension]').hasText('.png');
-    await waitFor('[data-test-definition-realm-name]');
-    assert
-      .dom('[data-test-definition-realm-name]')
-      .hasText('in Test Workspace A');
-    assert.dom('[data-test-definition-info-text]').containsText('Last saved');
-    assert
-      .dom('[data-test-binary-info] [data-test-file-name]')
-      .hasText('mango.png');
-    assert.dom('[data-test-binary-info] [data-test-size]').hasText('114.71 kB');
-    assert
-      .dom('[data-test-binary-info] [data-test-last-modified]')
-      .containsText('Last modified');
     assert
       .dom('[data-test-file-incompatibility-message]')
       .hasText(
         'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
       );
+    assert
+      .dom('[data-test-detail-panel-file-incompatibility-message]')
+      .exists();
+
     await percySnapshot(assert);
   });
 
