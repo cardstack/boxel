@@ -11,7 +11,10 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 
 function serialize(val: number | null): string | undefined {
-  return val != null && val !== 0 ? val?.toString() : undefined;
+  if (val != null && val === 0) {
+    return val.toString();
+  }
+  return val ? val.toString() : undefined;
 }
 
 function _deserialize(number: number | string | null): number | null {
@@ -35,17 +38,17 @@ function validate(value: string | number | null): string | null {
 
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
-      return 'Input must be a finite number. Please enter a valid number.';
+      return 'Input must be a finite number.';
     }
   } else {
     if (value.endsWith('.')) {
-      return 'Input cannot end with a decimal point. Please enter a valid number.';
+      return 'Input cannot end with a decimal point.';
     }
 
     const number = Number(value);
 
     if (Number.isNaN(number)) {
-      return 'Input must be a valid number. Please enter a valid number.';
+      return 'Input must be a valid number.';
     }
 
     let minSafe = Number.MIN_SAFE_INTEGER;
