@@ -196,11 +196,7 @@ function fieldsComponentsFor<T extends BaseDef>(
 ): FieldsTypeFor<T> {
   // This is a cache of the fields we've already created components for
   // so that they do not get recreated
-  let stableComponentsForPrimitives = new Map<string, BoxComponent>();
-  let stableComponentsForCompoundFields = new WeakMap<
-    object,
-    Map<string, BoxComponent>
-  >();
+  let stableComponents = new Map<string, BoxComponent>();
 
   return new Proxy(target, {
     get(target, property, received) {
@@ -213,32 +209,7 @@ function fieldsComponentsFor<T extends BaseDef>(
         return Reflect.get(target, property, received);
       }
 
-      let stable: BoxComponent | undefined;
-
-      // debugger;
-      let propertyValue = isCard(model.value)
-        ? model.value[property as keyof BaseDef]
-        : undefined;
-      if (
-        isCard(model.value) &&
-        typeof propertyValue === 'object' &&
-        propertyValue !== null
-      ) {
-        let stableComponents =
-          stableComponentsForCompoundFields.get(propertyValue);
-
-        if (!stableComponents && propertyValue !== undefined) {
-          stableComponents = new Map();
-          stableComponentsForCompoundFields.set(
-            propertyValue,
-            stableComponents,
-          );
-        }
-        stable = stableComponents?.get(property);
-      } else {
-        stable = stableComponentsForPrimitives.get(property);
-      }
-
+      let stable = stableComponents.get(property);
       if (stable) {
         return stable;
       }
@@ -259,15 +230,7 @@ function fieldsComponentsFor<T extends BaseDef>(
         defaultFormat,
         context,
       );
-
-      if (typeof propertyValue === 'object') {
-        stableComponentsForCompoundFields
-          .get(propertyValue)
-          ?.set(property, result);
-      } else {
-        stableComponentsForPrimitives.set(property, result);
-      }
-
+      stableComponents.set(property, result);
       return result;
     },
     getPrototypeOf() {
