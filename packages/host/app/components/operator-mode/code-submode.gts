@@ -1062,51 +1062,9 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
     }
   }
 
-  elementRemoving(key: string) {
-    console.log(`removing key! ${key}`);
-    console.log('from', this);
-    // this.#keyToPreviousScrollTop.set(key, this.element.scrollTop);
-    // console.log(`storing st for key '${key}': ${this.element.scrollTop}`);
-  }
-
-  elementAdding(key: string) {
-    console.log(`element with key ${key} is being added`);
-    if (this.#keyToPreviousScrollTop.has(key)) {
-      let previousScrollTop = this.#keyToPreviousScrollTop.get(key);
-      console.log(`next render restoring pst ${previousScrollTop}`);
-      console.log(`st before: ${this.element.scrollTop}`);
-      console.log(`scroll height: ${this.element.scrollHeight}`);
-      this.element.scrollTop = previousScrollTop;
-      console.log(`st after: ${this.element.scrollTop}`);
-    } else {
-      console.log(`no previous scroll top stored for ${key}`);
-    }
-  }
-
   handleScrollEnd(e) {
     console.log('scrollend, key is ' + this.#previousKey, e);
     console.log('scrolltop ' + e.target.scrollTop);
     this.#keyToPreviousScrollTop.set(this.#previousKey, e.target.scrollTop);
-  }
-}
-
-export class ElementRemovalBus {
-  #listeners: RestoreScrollPosition[] = [];
-
-  listen(listener: RestoreScrollPosition) {
-    if (!this.#listeners.includes(listener)) {
-      this.#listeners.push(listener);
-      console.log(`received listener, count: ${this.#listeners.length}`);
-    }
-  }
-
-  removing(key: string) {
-    console.log(`calling listeners with removal of ${key}`);
-    this.#listeners.forEach((listener) => listener.elementRemoving(key));
-  }
-
-  adding(key: string) {
-    console.log(`calling listeners with addition of ${key}`);
-    this.#listeners.forEach((listener) => listener.elementAdding(key));
   }
 }
