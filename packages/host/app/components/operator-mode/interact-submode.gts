@@ -229,6 +229,10 @@ export default class InteractSubmode extends Component<Signature> {
         }
         await changeSizeCallback();
       },
+      openCodeSubmode: (url: URL): void => {
+        here.operatorModeStateService.updateCodePath(url);
+        here.operatorModeStateService.updateSubmode('code');
+      },
     };
   }
   stackBackgroundsState = stackBackgroundsResource(this);
