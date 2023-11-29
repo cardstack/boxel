@@ -101,6 +101,7 @@ export function getBoxComponent(
             ...attributes
           >
             <f.Implementation
+              @cardOrField={{card}}
               @model={{model.value}}
               @fields={{f.fields}}
               @set={{model.set}}
@@ -116,6 +117,7 @@ export function getBoxComponent(
             ...attributes
           >
             <f.Implementation
+              @cardOrField={{card}}
               @model={{model.value}}
               @fields={{f.fields}}
               @set={{model.set}}
@@ -125,6 +127,7 @@ export function getBoxComponent(
           </div>
         {{else}}
           <f.Implementation
+            @cardOrField={{card}}
             @model={{model.value}}
             @fields={{f.fields}}
             @set={{model.set}}
@@ -306,7 +309,8 @@ export function getPluralViewComponent(
         }
         .containsMany-field.atom-format {
           padding: var(--boxel-sp-sm);
-          border: var(--boxel-border);
+          background-color: var(--boxel-100);
+          border: none !important;
           border-radius: var(--boxel-border-radius);
         }
       </style>

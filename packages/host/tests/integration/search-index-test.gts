@@ -2640,6 +2640,7 @@ module('Integration | search-index', function (hooks) {
         '@ember/component/template-only',
         '@ember/helper',
         '@ember/modifier',
+        '@ember/object',
         '@ember/template-factory',
         '@glimmer/component',
         '@glimmer/tracking',
