@@ -1011,28 +1011,13 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
       this.#listener = this.handleScrollEnd.bind(this);
       element.addEventListener('scrollend', this.#listener);
       this.#keyToPreviousScrollTop = keyToPreviousScrollTop;
-
-      let mutationObserver = new MutationObserver(
-        debounce(this.setScrollTop.bind(this), 50),
-      );
-      mutationObserver.observe(element, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-      });
     }
 
     if (this.#keyToPreviousScrollTop.has(key)) {
       let previousScrollTop = this.#keyToPreviousScrollTop.get(key);
       console.log(`next render restoring pst ${previousScrollTop} key ${key}`);
-      scheduleOnce('afterRender', this, () => {
-        next(this, () => {
-          console.log(`st before: ${this.element.scrollTop}`);
-          console.log(`scroll height: ${this.element.scrollHeight}`);
-          this.element.scrollTop = previousScrollTop;
-          console.log(`st after: ${this.element.scrollTop}`);
-        });
-      });
+
+      scheduleOnce('afterRender', this, this.nextSetScrollTop);
     } else {
       console.log(`no previous scroll top stored for ${key}`);
     }
@@ -1044,6 +1029,10 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
     };
   }
 
+  nextSetScrollTop() {
+    next(this, this.setScrollTop);
+  }
+
   setScrollTop() {
     let key = this.#previousKey;
     if (this.#keyToPreviousScrollTop.has(key)) {
@@ -1051,14 +1040,10 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
       console.log(
         `ummm next render restoring pst ${previousScrollTop} key ${key}`,
       );
-      scheduleOnce('afterRender', this, () => {
-        next(this, () => {
-          console.log(`st before: ${this.element.scrollTop}`);
-          console.log(`scroll height: ${this.element.scrollHeight}`);
-          this.element.scrollTop = previousScrollTop;
-          console.log(`st after: ${this.element.scrollTop}`);
-        });
-      });
+      console.log(`st before: ${this.element.scrollTop}`);
+      console.log(`scroll height: ${this.element.scrollHeight}`);
+      this.element.scrollTop = previousScrollTop;
+      console.log(`st after: ${this.element.scrollTop}`);
     }
   }
 
