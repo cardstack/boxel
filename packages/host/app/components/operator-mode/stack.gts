@@ -99,6 +99,16 @@ export default class OperatorModeStack extends Component<Signature> {
         );
       }
 
+      .operator-mode-stack
+        :deep(
+          .field-component-card.embedded-format .missing-embedded-template
+        ) {
+        margin-top: calc(-1 * var(--boxel-sp-lg));
+        border-radius: 0;
+        border-bottom-left-radius: var(--boxel-form-control-border-radius);
+        border-bottom-right-radius: var(--boxel-form-control-border-radius);
+      }
+
       .inner {
         height: calc(
           100% - var(--search-sheet-closed-height) - var(--boxel-sp)
