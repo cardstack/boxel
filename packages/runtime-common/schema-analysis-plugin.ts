@@ -500,14 +500,13 @@ export function isInternalReference(
 }
 
 function insertOrReplace(item: Declaration, arr: Declaration[]) {
-  console.log('===');
   let localName = item.localName;
   let existingDeclaration = arr.find((i) => {
     return i.localName === localName;
   });
   if (existingDeclaration) {
     console.log(
-      `declaration of name ${localName} already exists. It is of type ${item.type}`,
+      `declaration of name ${localName} already exists. It is of type ${existingDeclaration.type}. Attempting to replace with type ${item.type}`,
     );
     if (
       item.type === 'possibleCardOrField' &&
