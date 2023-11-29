@@ -2653,7 +2653,7 @@ module('Integration | search-index', function (hooks) {
         'http://localhost:4201/base/links-to-many-component',
         'http://localhost:4201/base/number',
         'http://localhost:4201/base/string',
-        'http://localhost:4201/base/text-input-filter',
+        'http://localhost:4201/base/text-input-validator',
         'http://localhost:4201/base/watched-array',
         'http://localhost:4202/test/person',
         'lodash',
