@@ -1,4 +1,5 @@
 import { hash, array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
@@ -6,6 +7,8 @@ import Component from '@glimmer/component';
 
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
+
+import { use, resource } from 'ember-resources';
 
 import {
   CardContainer,
@@ -15,6 +18,8 @@ import {
 
 import { or, and } from '@cardstack/boxel-ui/helpers';
 
+import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
+
 import {
   hasExecutableExtension,
   getPlural,
@@ -23,8 +28,10 @@ import {
 
 import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
 
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+
+import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
-import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
 
 import {
   type ModuleDeclaration,
@@ -50,13 +57,6 @@ import Selector from './detail-panel-selector';
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { fn } from '@ember/helper';
-
-import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
-
-import { use, resource } from 'ember-resources';
-
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 interface Signature {
   Element: HTMLElement;
