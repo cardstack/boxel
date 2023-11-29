@@ -3,7 +3,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { next, scheduleOnce } from '@ember/runloop';
+import { debounce, next } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
@@ -15,7 +15,6 @@ import { cached, tracked } from '@glimmer/tracking';
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier, { PositionalArgs } from 'ember-modifier';
-import debounce from 'lodash/debounce';
 
 import {
   Button,
@@ -1011,15 +1010,15 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
       this.#listener = this.handleScrollEnd.bind(this);
       element.addEventListener('scrollend', this.#listener);
       this.#keyToPreviousScrollTop = keyToPreviousScrollTop;
-    }
 
-    if (this.#keyToPreviousScrollTop.has(key)) {
-      let previousScrollTop = this.#keyToPreviousScrollTop.get(key);
-      console.log(`next render restoring pst ${previousScrollTop} key ${key}`);
-
-      scheduleOnce('afterRender', this, this.nextSetScrollTop);
-    } else {
-      console.log(`no previous scroll top stored for ${key}`);
+      let mutationObserver = new MutationObserver(
+        this.debouncedSetScrollTop.bind(this),
+      );
+      mutationObserver.observe(element, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
     }
 
     this.#previousKey = key;
@@ -1027,6 +1026,10 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
     return () => {
       element.removeEventListener('scrollend', this.#listener);
     };
+  }
+
+  debouncedSetScrollTop() {
+    debounce(this, this.setScrollTop, 50);
   }
 
   nextSetScrollTop() {
