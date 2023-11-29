@@ -3,6 +3,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { next, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
@@ -10,8 +11,12 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 //@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
+
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import Modifier, { PositionalArgs } from 'ember-modifier';
+import debounce from 'lodash/debounce';
+
 import {
   Button,
   LoadingIndicator,
@@ -20,12 +25,14 @@ import {
 import type { PanelContext } from '@cardstack/boxel-ui/components';
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
+
 import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
@@ -43,8 +50,11 @@ import type MessageService from '@cardstack/host/services/message-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
+
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
 import FileTree from '../editor/file-tree';
+
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
@@ -114,6 +124,8 @@ export default class CodeSubmode extends Component<Signature> {
     | ((declaration: ModuleDeclaration) => void)
     | undefined;
   #currentCard: CardDef | undefined;
+
+  private scrollPositions = new Map();
 
   private deleteModal: DeleteModal | undefined;
   private cardResource = getCard(
@@ -276,7 +288,7 @@ export default class CodeSubmode extends Component<Signature> {
     if (this.moduleContentsResource.isLoading) {
       return null;
     }
-    if (!this.card && !this.isModule && !this.isIncompatibleFile) {
+    if (!this.card && !this.isModule && this.isIncompatibleFile) {
       return 'Inspector cannot be used with this file type. Select a file with a .json, .gts or .ts extension.';
     }
     return null;
@@ -399,6 +411,18 @@ export default class CodeSubmode extends Component<Signature> {
       this.hasUnsavedCardChanges = false;
     }
   });
+
+  private get scrollPositionKey() {
+    if (this.isFileTreeShowing) {
+      return this.fileTreeScrolLPositionKey;
+    } else {
+      return `whoknows!!!`;
+    }
+  }
+
+  private get fileTreeScrolLPositionKey() {
+    return `file-tree-for-${this.realmURL}`;
+  }
 
   private saveCard = restartableTask(async (card: CardDef) => {
     // these saves can happen so fast that we'll make sure to wait at
@@ -621,33 +645,39 @@ export default class CodeSubmode extends Component<Signature> {
                       >
                         File Tree</Button>
                     </header>
-                    <section class='inner-container__content'>
-                      {{#if this.isFileTreeShowing}}
-                        <FileTree @realmURL={{this.realmURL}} />
-                      {{else}}
-                        {{#if this.isReady}}
-                          {{#if this.inspectorFileIncompatibilityMessage}}
-                            <div
-                              class='file-incompatible-message'
-                              data-test-detail-panel-file-incompatibility-message
-                            >
-                              {{this.inspectorFileIncompatibilityMessage}}
-                            </div>
-                          {{else}}
-                            <DetailPanel
-                              @cardInstance={{this.card}}
-                              @readyFile={{this.readyFile}}
-                              @selectedDeclaration={{this.selectedDeclaration}}
-                              @declarations={{this.declarations}}
-                              @selectDeclaration={{this.selectDeclaration}}
-                              @delete={{perform this.delete}}
-                              @openDefinition={{this.openDefinition}}
-                              data-test-card-inspector-panel
-                            />
-                          {{/if}}
+                    {{#if this.isFileTreeShowing}}
+                      <FileTree
+                        @realmURL={{this.realmURL}}
+                        {{RestoreScrollPosition
+                          this.scrollPositionKey
+                          this.scrollPositions
+                        }}
+                        class='inner-container__content'
+                      />
+                    {{else}}
+                      {{#if this.isReady}}
+                        {{#if this.inspectorFileIncompatibilityMessage}}
+                          <div
+                            class='file-incompatible-message'
+                            data-test-detail-panel-file-incompatibility-message
+                          >
+                            {{this.inspectorFileIncompatibilityMessage}}
+                          </div>
+                        {{else}}
+                          <DetailPanel
+                            class='inner-container__content'
+                            @cardInstance={{this.card}}
+                            @readyFile={{this.readyFile}}
+                            @selectedDeclaration={{this.selectedDeclaration}}
+                            @declarations={{this.declarations}}
+                            @selectDeclaration={{this.selectDeclaration}}
+                            @delete={{perform this.delete}}
+                            @openDefinition={{this.openDefinition}}
+                            data-test-card-inspector-panel
+                          />
                         {{/if}}
                       {{/if}}
-                    </section>
+                    {{/if}}
                   </div>
                 </VerticallyResizablePanel>
                 <VerticallyResizablePanel
@@ -949,4 +979,140 @@ export default class CodeSubmode extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+interface RestoreScrollPositionModifierArgs {
+  Positional: [String, Map<String, number>];
+}
+
+interface RestoreScrollPositionModifierSignature {
+  Element: Element;
+  Args: RestoreScrollPositionModifierArgs;
+}
+
+class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignature> {
+  element!: Element;
+  #previousKey: String | undefined;
+  #keyToPreviousScrollTop: Map<String, number>;
+  #didSetup = false;
+  #listener: (Event) => void;
+
+  modify(
+    element: Element,
+    [
+      key,
+      keyToPreviousScrollTop,
+    ]: PositionalArgs<RestoreScrollPositionModifierSignature>,
+  ): void {
+    if (!this.#didSetup) {
+      this.#didSetup = true;
+      window.rsp = this;
+      this.element = element;
+
+      this.#listener = this.handleScrollEnd.bind(this);
+      element.addEventListener('scrollend', this.#listener);
+      this.#keyToPreviousScrollTop = keyToPreviousScrollTop;
+      console.log('moddy');
+
+      let mutationObserver = new MutationObserver(
+        debounce(this.setScrollTop.bind(this), 50),
+      );
+      mutationObserver.observe(element, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+
+      // if (keyToPreviousScrollTop.has(key)) {
+      //   console.log(`restoring pst ${keyToPreviousScrollTop.get(key)}`);
+      //   element.scrollTop = keyToPreviousScrollTop.get(key)!;
+      // }
+    }
+
+    console.log(`element with key ${key} is being added`);
+    if (this.#keyToPreviousScrollTop.has(key)) {
+      let previousScrollTop = this.#keyToPreviousScrollTop.get(key);
+      console.log(`next render restoring pst ${previousScrollTop}`);
+      scheduleOnce('afterRender', this, () => {
+        next(this, () => {
+          console.log(`st before: ${this.element.scrollTop}`);
+          console.log(`scroll height: ${this.element.scrollHeight}`);
+          this.element.scrollTop = previousScrollTop;
+          console.log(`st after: ${this.element.scrollTop}`);
+        });
+      });
+    } else {
+      console.log(`no previous scroll top stored for ${key}`);
+    }
+
+    this.#previousKey = key;
+
+    return () => {
+      element.removeEventListener('scrollend', this.#listener);
+    };
+  }
+
+  setScrollTop() {
+    let key = this.#previousKey;
+    if (this.#keyToPreviousScrollTop.has(key)) {
+      let previousScrollTop = this.#keyToPreviousScrollTop.get(key);
+      console.log(`next render restoring pst ${previousScrollTop}`);
+      scheduleOnce('afterRender', this, () => {
+        next(this, () => {
+          console.log(`st before: ${this.element.scrollTop}`);
+          console.log(`scroll height: ${this.element.scrollHeight}`);
+          this.element.scrollTop = previousScrollTop;
+          console.log(`st after: ${this.element.scrollTop}`);
+        });
+      });
+    }
+  }
+
+  elementRemoving(key: string) {
+    console.log(`removing key! ${key}`);
+    console.log('from', this);
+    // this.#keyToPreviousScrollTop.set(key, this.element.scrollTop);
+    // console.log(`storing st for key '${key}': ${this.element.scrollTop}`);
+  }
+
+  elementAdding(key: string) {
+    console.log(`element with key ${key} is being added`);
+    if (this.#keyToPreviousScrollTop.has(key)) {
+      let previousScrollTop = this.#keyToPreviousScrollTop.get(key);
+      console.log(`next render restoring pst ${previousScrollTop}`);
+      console.log(`st before: ${this.element.scrollTop}`);
+      console.log(`scroll height: ${this.element.scrollHeight}`);
+      this.element.scrollTop = previousScrollTop;
+      console.log(`st after: ${this.element.scrollTop}`);
+    } else {
+      console.log(`no previous scroll top stored for ${key}`);
+    }
+  }
+
+  handleScrollEnd(e) {
+    console.log('scrollend, key is ' + this.#previousKey, e);
+    console.log('scrolltop ' + e.target.scrollTop);
+    this.#keyToPreviousScrollTop.set(this.#previousKey, e.target.scrollTop);
+  }
+}
+
+export class ElementRemovalBus {
+  #listeners: RestoreScrollPosition[] = [];
+
+  listen(listener: RestoreScrollPosition) {
+    if (!this.#listeners.includes(listener)) {
+      this.#listeners.push(listener);
+      console.log(`received listener, count: ${this.#listeners.length}`);
+    }
+  }
+
+  removing(key: string) {
+    console.log(`calling listeners with removal of ${key}`);
+    this.#listeners.forEach((listener) => listener.elementRemoving(key));
+  }
+
+  adding(key: string) {
+    console.log(`calling listeners with addition of ${key}`);
+    this.#listeners.forEach((listener) => listener.elementAdding(key));
+  }
 }

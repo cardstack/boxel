@@ -7,14 +7,15 @@ import Component from '@glimmer/component';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+
 import { RealmPaths, type LocalPath } from '@cardstack/runtime-common/paths';
 
+import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { directory } from '@cardstack/host/resources/directory';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
-import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 
 interface Args {
   Args: {
@@ -32,9 +33,9 @@ export default class Directory extends Component<Args> {
             <button
               data-test-file={{entryPath}}
               {{on 'click' (fn this.openFile entryPath)}}
-              {{scrollIntoViewModifier
+              {{!-- {{scrollIntoViewModifier
                 (fileIsSelected entryPath this.operatorModeStateService)
-              }}
+              }} --}}
               class='file
                 {{if
                   (fileIsSelected entryPath this.operatorModeStateService)
