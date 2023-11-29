@@ -116,32 +116,31 @@ export class ModuleContentsResource extends Resource<Args> {
     this._declarations = [];
     moduleSyntax.declarations.forEach((value: Declaration) => {
       if (value.type === 'possibleCardOrField') {
-        // case where things statically look like cards or fields
         let cardOrField: typeof BaseDef | undefined;
-        if (value.localName) {
-          let foundCardOrField = exportedCardsOrFields.get(value.localName);
-          if (foundCardOrField) {
-            cardOrField = foundCardOrField;
-          } else if (localCardsOrFields.has(value)) {
-            cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
-          }
-          if (cardOrField !== undefined) {
-            this._declarations.push({
-              ...value,
-              cardOrField,
-              cardType: getCardType(this, () => cardOrField as typeof BaseDef),
-            } as CardOrFieldDeclaration);
-          } else {
-            // case where things statically look like cards or fields but are not
-            if (value.exportedAs !== undefined) {
-              this._declarations.push({
-                localName: value.localName,
-                exportedAs: value.exportedAs,
-                path: value.path,
-                type: 'class',
-              }) as ClassDeclaration;
-            }
-          }
+        let foundCardOrField = exportedCardsOrFields.get(value.exportedAs);
+        debugger;
+        if (foundCardOrField) {
+          cardOrField = foundCardOrField;
+        } else if (localCardsOrFields.has(value)) {
+          debugger;
+          cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
+        }
+        if (cardOrField !== undefined) {
+          this._declarations.push({
+            ...value,
+            cardOrField,
+            cardType: getCardType(this, () => cardOrField as typeof BaseDef),
+          } as CardOrFieldDeclaration);
+          return;
+        }
+        // case where things statically look like cards or fields but are not
+        if (value.exportedAs !== undefined) {
+          this._declarations.push({
+            localName: value.localName,
+            exportedAs: value.exportedAs,
+            path: value.path,
+            type: 'class',
+          }) as ClassDeclaration;
         }
       } else if (value.type === 'reexport') {
         let cardOrField: typeof BaseDef | undefined;
