@@ -116,15 +116,9 @@ export class ModuleContentsResource extends Resource<Args> {
     this._declarations = [];
     moduleSyntax.declarations.forEach((value: Declaration) => {
       if (value.type === 'possibleCardOrField') {
-        let cardOrField: typeof BaseDef | undefined;
-        let foundCardOrField = exportedCardsOrFields.get(value.exportedAs);
-        debugger;
-        if (foundCardOrField) {
-          cardOrField = foundCardOrField;
-        } else if (localCardsOrFields.has(value)) {
-          debugger;
-          cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
-        }
+        let cardOrField = value.exportedAs
+          ? exportedCardsOrFields.get(value.exportedAs)
+          : localCardsOrFields.get(value);
         if (cardOrField !== undefined) {
           this._declarations.push({
             ...value,
@@ -140,7 +134,7 @@ export class ModuleContentsResource extends Resource<Args> {
             exportedAs: value.exportedAs,
             path: value.path,
             type: 'class',
-          }) as ClassDeclaration;
+          } as ClassDeclaration);
         }
       } else if (value.type === 'reexport') {
         let cardOrField: typeof BaseDef | undefined;
@@ -267,12 +261,14 @@ function findLocalField(
             let ancestorValue = possibleCardsOrFields.find(
               (o) => o.localName === field.card.name,
             );
-            findLocalAncestor(
-              ancestorValue,
-              ancestor,
-              possibleCardsOrFields,
-              localCardsOrFields,
-            );
+            if (ancestorValue) {
+              findLocalAncestor(
+                ancestorValue,
+                ancestor,
+                possibleCardsOrFields,
+                localCardsOrFields,
+              );
+            }
           }
         }
       }
