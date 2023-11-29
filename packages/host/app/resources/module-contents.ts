@@ -132,16 +132,6 @@ export class ModuleContentsResource extends Resource<Args> {
               cardType: getCardType(this, () => cardOrField as typeof BaseDef),
             } as CardOrFieldDeclaration);
           }
-        } else if (localCardsOrFields.has(value)) {
-          let cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
-          // we don't check for loader here because cards or fields not defined in module will not have a loader
-          if (cardOrField) {
-            this._declarations.push({
-              ...value,
-              cardOrField,
-              cardType: getCardType(this, () => cardOrField),
-            } as CardOrFieldDeclaration);
-          }
         }
       } else if (value.type === 'reexport') {
         let cardOrField: typeof BaseDef | undefined;
