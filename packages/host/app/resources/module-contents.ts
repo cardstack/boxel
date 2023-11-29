@@ -4,7 +4,12 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Resource } from 'ember-resources';
 
-import { getAncestor, getField, isBaseDef } from '@cardstack/runtime-common';
+import {
+  getAncestor,
+  getField,
+  isBaseDef,
+  loadCard,
+} from '@cardstack/runtime-common';
 
 import {
   ModuleSyntax,
@@ -209,7 +214,7 @@ function collectLocalCardsOrFields(
 }
 
 function findLocalAncestor(
-  value: ModuleDeclaration,
+  value: Declaration,
   cardOrField: typeof BaseDef,
   possibleCardsOrFields: PossibleCardOrFieldDeclaration[],
   localCardsOrFields: Map<PossibleCardOrFieldDeclaration, typeof BaseDef>,
@@ -225,11 +230,17 @@ function findLocalAncestor(
 
     if (parentCardOrField == undefined) return;
     localCardsOrFields.set(parentCardOrFieldClass, parentCardOrField);
+    findLocalAncestor(
+      parentCardOrFieldClass,
+      parentCardOrField,
+      possibleCardsOrFields,
+      localCardsOrFields,
+    );
   }
 }
 
 function findLocalField(
-  value: ModuleDeclaration,
+  value: Declaration,
   cardOrField: typeof BaseDef,
   possibleCardsOrFields: PossibleCardOrFieldDeclaration[],
   localCardsOrFields: Map<PossibleCardOrFieldDeclaration, typeof BaseDef>,
@@ -247,6 +258,18 @@ function findLocalField(
           const field = getField(cardOrField, fieldName);
           if (field === undefined || field.card === undefined) return;
           localCardsOrFields.set(parentFieldClass, field.card);
+          let ancestor = getAncestor(field.card);
+          if (ancestor) {
+            let ancestorValue = possibleCardsOrFields.find(
+              (o) => o.localName === field.card.name,
+            );
+            findLocalAncestor(
+              ancestorValue,
+              ancestor,
+              possibleCardsOrFields,
+              localCardsOrFields,
+            );
+          }
         }
       }
     }
