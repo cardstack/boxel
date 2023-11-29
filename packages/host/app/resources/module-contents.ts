@@ -12,7 +12,6 @@ import {
   type FunctionDeclaration,
   type ClassDeclaration,
   type Reexport,
-  type BaseDeclaration,
   type Declaration,
   isInternalReference,
 } from '@cardstack/runtime-common/module-syntax';
@@ -28,6 +27,11 @@ import { importResource } from '@cardstack/host/resources/import';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
+interface CardOrField {
+  cardType: CardType;
+  cardOrField: typeof BaseDef;
+}
+
 export type CardOrFieldDeclaration = CardOrField &
   Partial<PossibleCardOrFieldDeclaration>;
 
@@ -36,11 +40,6 @@ export type ModuleDeclaration =
   | ClassDeclaration
   | FunctionDeclaration
   | Reexport;
-
-export interface CardOrField {
-  cardType: CardType;
-  cardOrField: typeof BaseDef;
-}
 
 export function isCardOrFieldDeclaration(
   declaration: ModuleDeclaration,
@@ -97,7 +96,8 @@ export class ModuleContentsResource extends Resource<Args> {
     if (moduleResource.module === undefined) {
       return;
     }
-    let exportedCardsOrFields = getExportedCardsOrFields(moduleResource.module);
+    let exportedCardsOrFields: Map<string, typeof BaseDef> =
+      getExportedCardsOrFields(moduleResource.module);
 
     //==building declaration structure
     // This loop
@@ -113,78 +113,57 @@ export class ModuleContentsResource extends Resource<Args> {
       moduleSyntax,
       exportedCardsOrFields,
     );
-    this._declarations = moduleSyntax.declarations.reduce(
-      (acc: ModuleDeclaration[], value: Declaration) => {
-        if (value.type === 'possibleCardOrField') {
-          // case where things statically look like cards or fields
-          let cardOrField: typeof BaseDef | undefined;
-          if (value.localName) {
-            let foundCardOrField = exportedCardsOrFields.get(value.localName);
-            if (foundCardOrField) {
-              cardOrField = foundCardOrField;
-            } else if (localCardsOrFields.has(value)) {
-              cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
-            }
-            if (cardOrField !== undefined) {
-              return [
-                ...acc,
-                {
-                  ...value,
-                  cardOrField,
-                  cardType: getCardType(
-                    this,
-                    () => cardOrField as typeof BaseDef,
-                  ),
-                } as CardOrField & Partial<PossibleCardOrFieldDeclaration>,
-              ];
-            }
+    this._declarations = [];
+    moduleSyntax.declarations.forEach((value: Declaration) => {
+      if (value.type === 'possibleCardOrField') {
+        // case where things statically look like cards or fields
+        let cardOrField: typeof BaseDef | undefined;
+        if (value.localName) {
+          let foundCardOrField = exportedCardsOrFields.get(value.localName);
+          if (foundCardOrField) {
+            cardOrField = foundCardOrField;
+          } else if (localCardsOrFields.has(value)) {
+            cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
           }
-          if (localCardsOrFields.has(value)) {
-            let cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
-            // we don't check for loader here because cards or fields not defined in module will not have a loader
-            if (cardOrField) {
-              return [
-                ...acc,
-                {
-                  ...value,
-                  cardOrField,
-                  cardType: getCardType(this, () => cardOrField),
-                } as CardOrField & Partial<PossibleCardOrFieldDeclaration>,
-              ];
-            }
+          if (cardOrField !== undefined) {
+            this._declarations.push({
+              ...value,
+              cardOrField,
+              cardType: getCardType(this, () => cardOrField as typeof BaseDef),
+            } as CardOrFieldDeclaration);
           }
-        } else if (value.type === 'reexport') {
-          let cardOrField: typeof BaseDef | undefined;
-          if (value.exportedAs) {
-            let foundCardOrField = exportedCardsOrFields.get(value.exportedAs);
-            if (foundCardOrField) {
-              cardOrField = foundCardOrField;
-            }
-            if (cardOrField !== undefined) {
-              return [
-                ...acc,
-                {
-                  ...value,
-                  cardOrField,
-                  cardType: getCardType(
-                    this,
-                    () => cardOrField as typeof BaseDef,
-                  ),
-                },
-              ];
-            }
+        } else if (localCardsOrFields.has(value)) {
+          let cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
+          // we don't check for loader here because cards or fields not defined in module will not have a loader
+          if (cardOrField) {
+            this._declarations.push({
+              ...value,
+              cardOrField,
+              cardType: getCardType(this, () => cardOrField),
+            } as CardOrFieldDeclaration);
           }
         }
+      } else if (value.type === 'reexport') {
+        let cardOrField: typeof BaseDef | undefined;
+        if (value.exportedAs) {
+          let foundCardOrField = exportedCardsOrFields.get(value.exportedAs);
+          if (foundCardOrField) {
+            cardOrField = foundCardOrField;
+          }
+          if (cardOrField !== undefined) {
+            this._declarations.push({
+              ...value,
+              cardOrField,
+              cardType: getCardType(this, () => cardOrField as typeof BaseDef),
+            } as Reexport);
+          }
+        }
+      } else if (value.type === 'class' || value.type === 'function') {
         if (value.exportedAs !== undefined) {
-          //TODO: need to refine this you are excluding classes without exported name
-          // some classes that look like cards may still be included,
-          // we should only non-card or fields which are exported
-          return [...acc, { ...value } as BaseDeclaration];
+          this.declarations.push(value as ModuleDeclaration);
         }
-        return acc;
-      },
-      [],
-    );
+      }
+    });
   });
 }
 

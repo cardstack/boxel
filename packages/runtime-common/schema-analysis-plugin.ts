@@ -77,20 +77,23 @@ const coreVisitor = {
       let localName = getLocalName(path);
       if (t.isExportDeclaration(path.parentPath)) {
         // == handle direct export ==
-        state.opts.declarations.push({
-          localName,
-          exportedAs: getExportedAsName(path, localName),
-          path,
-          type: 'function',
-        });
+        insertOrReplace(
+          {
+            localName,
+            exportedAs: getExportedAsName(path, localName),
+            path,
+            type: 'function',
+          },
+          state.opts.declarations,
+        );
       }
     },
   },
   ClassDeclaration: {
     enter(path: NodePath<t.ClassDeclaration>, state: State) {
+      let localName = getLocalName(path);
       // == handle class that doesn't inherit from super ==
       if (!path.node.superClass) {
-        let localName = getLocalName(path);
         // == handle base def ==
         if (isBaseDefClass(path)) {
           let possibleCardOrField: PossibleCardOrFieldDeclaration = {
@@ -101,18 +104,21 @@ const coreVisitor = {
             type: 'possibleCardOrField',
           };
           state.opts.possibleCardsOrFields.push(possibleCardOrField);
-          state.opts.declarations.push(possibleCardOrField);
+          insertOrReplace(possibleCardOrField, state.opts.declarations);
           return;
         }
 
         // == handle direct exports ==
         if (t.isExportDeclaration(path.parentPath)) {
-          state.opts.declarations.push({
-            localName,
-            exportedAs: getExportedAsName(path, localName),
-            path,
-            type: 'class',
-          });
+          insertOrReplace(
+            {
+              localName,
+              exportedAs: getExportedAsName(path, localName),
+              path,
+              type: 'class',
+            },
+            state.opts.declarations,
+          );
           return;
         }
 
@@ -122,12 +128,15 @@ const coreVisitor = {
           localName,
         );
         if (maybeExportSpecifierLocal !== undefined) {
-          state.opts.declarations.push({
-            localName,
-            exportedAs: getExportedAsName(path, localName),
-            path,
-            type: 'class',
-          });
+          insertOrReplace(
+            {
+              localName,
+              exportedAs: getExportedAsName(path, localName),
+              path,
+              type: 'class',
+            },
+            state.opts.declarations,
+          );
         }
         return;
       }
@@ -139,7 +148,6 @@ const coreVisitor = {
         if (classRef) {
           // == handle card or field ==
           state.insideCard = true;
-          let localName = getLocalName(path);
 
           let possibleCardOrField: PossibleCardOrFieldDeclaration = {
             super: classRef,
@@ -150,17 +158,19 @@ const coreVisitor = {
             type: 'possibleCardOrField',
           };
           state.opts.possibleCardsOrFields.push(possibleCardOrField);
-          state.opts.declarations.push(possibleCardOrField);
+          insertOrReplace(possibleCardOrField, state.opts.declarations);
         } else {
           // == handle non-card or non-field ==
           if (t.isExportDeclaration(path.parentPath)) {
-            let localName = getLocalName(path);
-            state.opts.declarations.push({
-              localName,
-              exportedAs: getExportedAsName(path, localName),
-              path,
-              type: 'class',
-            });
+            insertOrReplace(
+              {
+                localName,
+                exportedAs: getExportedAsName(path, localName),
+                path,
+                type: 'class',
+              },
+              state.opts.declarations,
+            );
           }
         }
       }
@@ -266,17 +276,15 @@ const reExportVisitor = {
       path.node.specifiers.forEach((specifier) => {
         if (t.isExportSpecifier(specifier)) {
           const localName = specifier.local.name;
-          let codeDeclarationExists = state.opts.declarations.find(
-            (d) => d.localName === localName,
-          );
-          if (!codeDeclarationExists) {
-            state.opts.declarations.push({
+          insertOrReplace(
+            {
               path,
               exportedAs: getExportedAsName(path, localName),
               localName: localName,
               type: 'reexport',
-            });
-          }
+            },
+            state.opts.declarations,
+          );
         } else {
           throw new Error('Unsupported export specifier');
         }
@@ -293,12 +301,15 @@ const reExportVisitor = {
     // Check if the exported value is an identifier (variable/reference)
     if (path.node.declaration.type === 'Identifier') {
       const localName = path.node.declaration.name;
-      state.opts.declarations.push({
-        path,
-        exportedAs: 'default',
-        localName,
-        type: 'reexport',
-      });
+      insertOrReplace(
+        {
+          path,
+          exportedAs: 'default',
+          localName,
+          type: 'reexport',
+        },
+        state.opts.declarations,
+      );
     }
   },
 
@@ -445,13 +456,6 @@ function getNamedImportInfo(
     }
   | undefined {
   let binding = scope.getBinding(name);
-  // if (binding?.path.isImportDefaultSpecifier()) {
-  //   debugger;
-  //   return {
-  //     declaration: binding.path.parentPath,
-  //     specifier: binding.path,
-  //   };
-  // }
   if (!binding?.path.isImportSpecifier()) {
     return undefined;
   }
@@ -493,4 +497,27 @@ export function isInternalReference(
   classReference: any,
 ): classReference is InternalReference {
   return classReference && classReference.type === 'internal';
+}
+
+function insertOrReplace(item: Declaration, arr: Declaration[]) {
+  console.log('===');
+  let localName = item.localName;
+  let existingDeclaration = arr.find((i) => {
+    return i.localName === localName;
+  });
+  if (existingDeclaration) {
+    console.log(
+      `declaration of name ${localName} already exists. It is of type ${item.type}`,
+    );
+    if (
+      item.type === 'possibleCardOrField' &&
+      existingDeclaration.type === 'reexport'
+    ) {
+      let index = arr.indexOf(existingDeclaration);
+      arr.splice(index, 1, item);
+    }
+  } else {
+    arr.push(item);
+  }
+  return arr;
 }
