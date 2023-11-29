@@ -1,6 +1,6 @@
-import { visit, click, waitFor } from '@ember/test-helpers';
+import { visit, click, fillIn, waitFor } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import stringify from 'safe-stable-stringify';
 import percySnapshot from '@percy/ember';
 import window from 'ember-window-mock';
@@ -16,10 +16,12 @@ import {
   setupOnSave,
   setupAcceptanceTestRealm,
   setupServerSentEvents,
+  waitForCodeEditor,
+  getMonacoContent,
   type TestContextWithSave,
 } from '../../helpers';
 
-const testRealmURL2 = 'http://localhost:4202/test2/';
+const testRealmURL2 = 'http://test-realm/test2/';
 
 const files: Record<string, any> = {
   '.realm.json': {
@@ -129,6 +131,15 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupOnSave(hooks);
   setupWindowMock(hooks);
 
+  async function openNewFileModal(menuSelection: string) {
+    await waitFor('[data-test-code-mode][data-test-save-idle]');
+    await waitFor('[data-test-new-file-button]');
+    await click('[data-test-new-file-button]');
+    await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
+    await waitFor('[data-test-create-file-modal][data-test-ready]');
+    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+  }
+
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
   });
@@ -139,12 +150,12 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       .loader;
     await setupAcceptanceTestRealm({
       loader,
-      contents: files,
+      contents: filesB,
+      realmURL: testRealmURL2,
     });
     await setupAcceptanceTestRealm({
       loader,
-      contents: filesB,
-      realmURL: testRealmURL2,
+      contents: files,
     });
 
     let realmService = this.owner.lookup(
@@ -176,7 +187,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
     await click('[data-test-new-file-button]');
     await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal]');
+    await waitFor('[data-test-create-file-modal][data-test-ready]');
     await waitFor(`[data-test-realm-name="Test Workspace A"]`);
     assert
       .dom('[data-test-realm-dropdown-trigger]')
@@ -201,13 +212,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
-    // open modal via new-file button
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-new-file-button]');
-    await click('[data-test-new-file-button]');
-    await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    assert.expect(8);
+    await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
 
     // card type selection
@@ -269,13 +275,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from a remote realm', async function (assert) {
-    // open modal via new-file button
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-new-file-button]');
-    await click('[data-test-new-file-button]');
-    await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    assert.expect(8);
+    await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
 
     // card type selection
@@ -332,13 +333,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from another realm', async function (assert) {
-    // open modal via new-file button
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-new-file-button]');
-    await click('[data-test-new-file-button]');
-    await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    assert.expect(9);
+    await openNewFileModal('Card Instance');
 
     // realm selection
     await click(`[data-test-realm-dropdown-trigger]`);
@@ -401,13 +397,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from a local realm', async function (assert) {
-    // open modal via new-file button
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-new-file-button]');
-    await click('[data-test-new-file-button]');
-    await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    assert.expect(8);
+    await openNewFileModal('Card Instance');
 
     // realm selection
     await click(`[data-test-realm-dropdown-trigger]`);
@@ -467,4 +458,64 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
     await deferred.promise;
   });
+
+  test<TestContextWithSave>('can create a new card definition', async function (assert) {
+    assert.expect(7);
+    let expectedSrc = `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
+}`;
+    await openNewFileModal('Card Definition');
+    assert
+      .dom('[data-test-create-definition]')
+      .isDisabled('create button is disabled');
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    assert
+      .dom('[data-test-create-definition]')
+      .isDisabled('create button is disabled');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    assert
+      .dom('[data-test-create-definition]')
+      .isEnabled('create button is enabled');
+
+    await percySnapshot(assert);
+
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc);
+    });
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await waitForCodeEditor();
+    assert.strictEqual(
+      getMonacoContent(),
+      expectedSrc,
+      'monaco displays the new definition',
+    );
+
+    await waitFor('[data-test-card-schema="Test Card"]');
+    assert
+      .dom('[data-test-card-schema]')
+      .exists({ count: 3 }, 'the card hierarchy is displayed in schema editor');
+    assert.dom('[data-test-total-fields]').containsText('3 Fields');
+  });
+
+  skip<TestContextWithSave>('TODO can create a new field definition', async function (_assert) {
+    // TODO include percy snapshot
+  });
+
+  skip<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (_assert) {});
+
+  skip<TestContextWithSave>('can sanitize display name when creating a new definition', async function (_assert) {});
+
+  skip<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (_assert) {});
+
+  skip<TestContextWithSave>('can handle filename with .gts extension in filename when creating a new definition', async function (_assert) {});
+
+  skip<TestContextWithSave>('can sanitize filename when creating a new definition', async function (_assert) {});
+
+  skip<TestContextWithSave>('can handle leading "/" in filename when creating a new definition', async function (_assert) {});
 });

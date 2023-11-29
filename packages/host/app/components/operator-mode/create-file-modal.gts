@@ -126,7 +126,6 @@ export default class CreateFileModal extends Component<Signature> {
               @tag='label'
               class='field gts-extension'
             >
-              {{! TODO add ".gts" suffix }}
               <BoxelInput
                 data-test-file-name-field
                 placeholder={{if
