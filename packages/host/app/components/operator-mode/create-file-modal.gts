@@ -121,7 +121,11 @@ export default class CreateFileModal extends Component<Signature> {
                 @onInput={{this.setDisplayName}}
               />
             </FieldContainer>
-            <FieldContainer @label='File Name' @tag='label' class='field'>
+            <FieldContainer
+              @label='File Name'
+              @tag='label'
+              class='field gts-extension'
+            >
               {{! TODO add ".gts" suffix }}
               <BoxelInput
                 data-test-file-name-field
@@ -208,6 +212,27 @@ export default class CreateFileModal extends Component<Signature> {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xxs);
+      }
+      .gts-extension {
+        position: relative;
+      }
+      .gts-extension input {
+        padding-right: var(--boxel-sp-xxl);
+      }
+      .gts-extension:after {
+        content: '.gts';
+        width: var(--boxel-sp-xxl);
+        height: 20px;
+        position: absolute;
+        display: block;
+        right: -5px;
+        top: 10px;
+        color: var(--boxel-450);
+        font: var(--boxel-font-sm);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: var(--boxel-lsp-lg);
+        line-height: 1.82;
       }
     </style>
   </template>
