@@ -30,7 +30,6 @@ import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
   isReexportCardOrField,
-  hasCardOrFieldProperties,
 } from '@cardstack/host/resources/module-contents';
 
 import {
@@ -153,9 +152,8 @@ export default class DetailPanel extends Component<Signature> {
   get isField() {
     if (
       this.args.selectedDeclaration &&
-      (this.args.selectedDeclaration.type === 'possibleCardOrField' ||
-        this.args.selectedDeclaration.type === 'reexport') &&
-      hasCardOrFieldProperties(this.args.selectedDeclaration)
+      (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
+        isReexportCardOrField(this.args.selectedDeclaration))
     ) {
       return (
         this.isModule && isFieldDef(this.args.selectedDeclaration.cardOrField)
@@ -167,9 +165,8 @@ export default class DetailPanel extends Component<Signature> {
   get isCard() {
     if (
       this.args.selectedDeclaration &&
-      (this.args.selectedDeclaration.type === 'possibleCardOrField' ||
-        this.args.selectedDeclaration.type === 'reexport') &&
-      hasCardOrFieldProperties(this.args.selectedDeclaration)
+      (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
+        isReexportCardOrField(this.args.selectedDeclaration))
     ) {
       return (
         this.isModule && isCardDef(this.args.selectedDeclaration.cardOrField)

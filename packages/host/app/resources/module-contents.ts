@@ -60,7 +60,7 @@ export function isReexportCardOrField(
   );
 }
 
-export function hasCardOrFieldProperties(declaration: ModuleDeclaration) {
+function hasCardOrFieldProperties(declaration: ModuleDeclaration) {
   return (
     (declaration as CardOrField).cardType !== undefined &&
     (declaration as CardOrField).cardOrField !== undefined
