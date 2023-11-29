@@ -78,11 +78,15 @@ module('Integration | text-input-validator', function (hooks) {
 
     let { field, contains, CardDef } = cardApi;
     let { default: BigIntegerField } = bigInteger;
+    let { default: NumberField } = (await loader.import(
+      `${baseRealm.url}number`,
+    )) as typeof import('https://cardstack.com/base/number');
 
     class Sample extends CardDef {
       static displayName = 'Sample';
       @field someBigInt = contains(BigIntegerField);
       @field anotherBigInt = contains(BigIntegerField);
+      @field someNumber = contains(NumberField);
     }
     ({ realm } = await setupIntegrationTestRealm({
       loader,
@@ -95,6 +99,7 @@ module('Integration | text-input-validator', function (hooks) {
             attributes: {
               someBigInt: null,
               anotherBigInt: '123',
+              someNumber: 0,
             },
             meta: {
               adoptsFrom: {
@@ -303,5 +308,77 @@ module('Integration | text-input-validator', function (hooks) {
     await assert
       .dom('[data-test-field="someBigInt"] [data-test-boxel-input]')
       .hasValue('444');
+  });
+
+  test('number input validation gymnastics', async function (assert) {
+    let card = await loadCard(`${testRealmURL}Sample/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardEditor @card={{card}} />
+          <CardCatalogModal />
+          <CreateCardModal />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await fillIn('[data-test-field="someNumber"] [data-test-boxel-input]', '');
+    assert
+      .dom(
+        '[data-test-field="someNumber"] [data-test-boxel-input-error-message]',
+      )
+      .doesNotExist();
+    assert
+      .dom('[data-test-field="someNumber"] [data-test-boxel-input]')
+      .hasText('');
+
+    await fillIn('[data-test-field="someNumber"] [data-test-boxel-input]', '-');
+    assert
+      .dom(
+        '[data-test-field="someNumber"] [data-test-boxel-input-error-message]',
+      )
+      .hasText('Input must be a valid number.');
+
+    await fillIn(
+      '[data-test-field="someNumber"] [data-test-boxel-input]',
+      '-3',
+    );
+    assert
+      .dom(
+        '[data-test-field="someNumber"] [data-test-boxel-input-error-message]',
+      )
+      .doesNotExist();
+
+    await fillIn(
+      '[data-test-field="someNumber"] [data-test-boxel-input]',
+      '-3.',
+    );
+    assert
+      .dom(
+        '[data-test-field="someNumber"] [data-test-boxel-input-error-message]',
+      )
+      .hasText('Input cannot end with a decimal point.');
+    await fillIn(
+      '[data-test-field="someNumber"] [data-test-boxel-input]',
+      '-3.6',
+    );
+    assert
+      .dom(
+        '[data-test-field="someNumber"] [data-test-boxel-input-error-message]',
+      )
+      .doesNotExist();
+    await fillIn('[data-test-field="someNumber"] [data-test-boxel-input]', '');
+    assert
+      .dom(
+        '[data-test-field="someNumber"] [data-test-boxel-input-error-message]',
+      )
+      .doesNotExist();
+    await fillIn('[data-test-field="someNumber"] [data-test-boxel-input]', '1');
+    assert
+      .dom(
+        '[data-test-field="someNumber"] [data-test-boxel-input-error-message]',
+      )
+      .doesNotExist();
   });
 });
