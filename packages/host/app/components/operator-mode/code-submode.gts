@@ -1024,7 +1024,7 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
 
     if (this.#keyToPreviousScrollTop.has(key)) {
       let previousScrollTop = this.#keyToPreviousScrollTop.get(key);
-      console.log(`next render restoring pst ${previousScrollTop}`);
+      console.log(`next render restoring pst ${previousScrollTop} key ${key}`);
       scheduleOnce('afterRender', this, () => {
         next(this, () => {
           console.log(`st before: ${this.element.scrollTop}`);
@@ -1048,7 +1048,9 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
     let key = this.#previousKey;
     if (this.#keyToPreviousScrollTop.has(key)) {
       let previousScrollTop = this.#keyToPreviousScrollTop.get(key);
-      console.log(`next render restoring pst ${previousScrollTop}`);
+      console.log(
+        `ummm next render restoring pst ${previousScrollTop} key ${key}`,
+      );
       scheduleOnce('afterRender', this, () => {
         next(this, () => {
           console.log(`st before: ${this.element.scrollTop}`);
