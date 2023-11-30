@@ -345,6 +345,64 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-field]').hasValue('');
     });
 
+    test('Can add a card by URL using the add button', async function (assert) {
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({ stacks: [] })!,
+        )}`,
+      );
+
+      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
+
+      await click('[data-test-add-card-button]');
+      await waitFor('[data-test-card-catalog]');
+      await fillIn(
+        '[data-test-card-catalog-modal] [data-test-search-field]',
+        `${testRealmURL}index`,
+      );
+
+      await waitFor(`[data-test-card-catalog-item="${testRealmURL}index"]`, {
+        timeout: 2000,
+      });
+      assert.dom('[data-test-card-catalog-item]').hasText('Test Workspace B');
+
+      await click(`[data-test-select="${testRealmURL}index"]`);
+      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-catalog]', { count: 0 });
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      assert.dom('[data-test-stack-card-header]').hasText('Test Workspace B');
+    });
+
+    test('Can add an index card by URL (without "index" in path) using the add button', async function (assert) {
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({ stacks: [] })!,
+        )}`,
+      );
+
+      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
+
+      await click('[data-test-add-card-button]');
+      await waitFor('[data-test-card-catalog]');
+      await fillIn(
+        '[data-test-card-catalog-modal] [data-test-search-field]',
+        testRealmURL,
+      );
+
+      await waitFor(`[data-test-card-catalog-item="${testRealmURL}index"]`, {
+        timeout: 2000,
+      });
+      assert.dom('[data-test-card-catalog-item]').hasText('Test Workspace B');
+
+      await click(`[data-test-select="${testRealmURL}index"]`);
+      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-catalog]', { count: 0 });
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      assert.dom('[data-test-stack-card-header]').hasText('Test Workspace B');
+    });
+
     test('Can open a recent card in empty stack', async function (assert) {
       let operatorModeStateParam = stringify({ stacks: [] })!;
 
