@@ -677,10 +677,12 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('persisted scroll position is restored on refresh', async function (assert) {
-    // FIXME key should be file-specific, not realm
+    // FIXME must clear position when file changes, also is it weird to know this key structure here?
     window.localStorage.setItem(
       'scroll-positions',
-      JSON.stringify({ 'file-tree-for-http://test-realm/test/': 300 }),
+      JSON.stringify({
+        'file-tree-for-http://test-realm/test/Person/1.json': 300,
+      }),
     );
 
     let codeModeStateParam = stringify({

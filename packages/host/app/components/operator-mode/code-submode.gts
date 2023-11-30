@@ -419,7 +419,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileTreeScrollPositionKey() {
-    return `file-tree-for-${this.realmURL}`;
+    return `file-tree-for-${this.codePath}`;
   }
 
   private get inspectorScrollPositionKey() {

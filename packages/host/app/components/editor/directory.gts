@@ -33,9 +33,10 @@ export default class Directory extends Component<Args> {
             <button
               data-test-file={{entryPath}}
               {{on 'click' (fn this.openFile entryPath)}}
-              {{!-- {{scrollIntoViewModifier
+              {{scrollIntoViewModifier
                 (fileIsSelected entryPath this.operatorModeStateService)
-              }} --}}
+                key=this.scrollKey
+              }}
               class='file
                 {{if
                   (fileIsSelected entryPath this.operatorModeStateService)
@@ -142,6 +143,13 @@ export default class Directory extends Component<Args> {
   @action
   toggleDirectory(entryPath: string) {
     this.operatorModeStateService.toggleOpenDir(entryPath);
+  }
+
+  get scrollKey() {
+    // FIXME is this wasteful to compute for every entry just for the modifier? Could it be passed in?
+    return `file-tree-for-${new RealmPaths(this.args.realmURL).fileURL(
+      this.args.relativePath,
+    )}`;
   }
 }
 
