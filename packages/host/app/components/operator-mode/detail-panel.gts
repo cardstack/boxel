@@ -422,11 +422,11 @@ function getDefinitionTitle(declaration: ModuleDeclaration) {
   }
   if (isReexportCardOrField(declaration)) {
     if (isCardDef(declaration.cardOrField)) {
-      return 'Card Definition';
+      return 'Re-exported Card Definition';
     } else if (isFieldDef(declaration.cardOrField)) {
-      return 'Field Definition';
+      return 'Re-exported Field Definition';
     } else if (isBaseDef(declaration.cardOrField)) {
-      return 'Base Definition';
+      return 'Re-exported Base Definition';
     }
   }
   return '';

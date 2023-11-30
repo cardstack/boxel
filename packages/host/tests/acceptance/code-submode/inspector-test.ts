@@ -1292,7 +1292,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} base`);
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert.dom('[data-test-card-module-definition]').exists();
-    assert.dom('[data-test-definition-header]').includesText('Base Definition');
+    assert
+      .dom('[data-test-definition-header]')
+      .includesText('Re-exported Base Definition');
     assert.dom('[data-test-card-module-definition]').includesText('Base');
     assert.true(monacoService.getLineCursorOn()?.includes('BDef'));
   });
