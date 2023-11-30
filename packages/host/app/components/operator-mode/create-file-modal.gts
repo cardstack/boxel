@@ -326,7 +326,7 @@ export default class CreateFileModal extends Component<Signature> {
         `Cannot select realm when there is no this.currentRequest`,
       );
     }
-    this.currentRequest.realmURL = new URL(path);
+    this.currentRequest = { ...this.currentRequest, realmURL: new URL(path) };
   }
 
   @action private setDisplayName(name: string) {
@@ -391,11 +391,7 @@ export default class CreateFileModal extends Component<Signature> {
   }
 
   private onSetup = restartableTask(async () => {
-    if (this.fileType.id === 'card-instance') {
-      return;
-    }
     let token = waiter.beginAsync();
-
     try {
       if (!this.definitionClass) {
         let fieldOrCard =
