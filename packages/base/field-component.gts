@@ -284,7 +284,7 @@ export function getPluralViewComponent(
   ) => typeof BaseDef,
   context?: CardContext,
 ): BoxComponent {
-  let components = () =>
+  let getComponents = () =>
     model.children.map((child) =>
       getBoxComponent(cardTypeFor(field, child), format, child, field, context),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
@@ -299,7 +299,7 @@ export function getPluralViewComponent(
           data-test-plural-view={{field.fieldType}}
           data-test-plural-view-format={{format}}
         >
-          {{#each (components) as |Item i|}}
+          {{#each (getComponents) as |Item i|}}
             <div data-test-plural-view-item={{i}}>
               <Item @format={{format}} />
             </div>
@@ -328,8 +328,12 @@ export function getPluralViewComponent(
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
+      let components = getComponents();
+
       if (property === Symbol.iterator) {
-        return components[Symbol.iterator];
+        if (property === Symbol.iterator) {
+          return components[Symbol.iterator];
+        }
       }
       if (property === 'length') {
         return components.length;
