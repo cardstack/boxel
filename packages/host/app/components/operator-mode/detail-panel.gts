@@ -72,6 +72,7 @@ interface Signature {
     openDefinition: (
       moduleHref: string,
       codeRef: ResolvedCodeRef | undefined,
+      localName: string | undefined,
     ) => void;
     delete: (
       card: CardDef | typeof CardDef | undefined,
@@ -309,6 +310,7 @@ export default class DetailPanel extends Component<Signature> {
                         @openDefinition={{@openDefinition}}
                         @moduleHref={{this.cardType.type.super.module}}
                         @codeRef={{codeRef}}
+                        @localName={{this.cardType.type.super.localName}}
                       />
                     {{/let}}
                   {{/if}}
@@ -323,6 +325,7 @@ export default class DetailPanel extends Component<Signature> {
                         @openDefinition={{@openDefinition}}
                         @moduleHref={{this.cardType.type.module}}
                         @codeRef={{codeRef}}
+                        @localName={{this.cardType.type.localName}}
                       />
                     {{/let}}
                   {{/if}}

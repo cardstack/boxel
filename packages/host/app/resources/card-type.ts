@@ -60,6 +60,7 @@ export interface Type {
   fields: FieldOfType[];
   codeRef: CodeRef;
   moduleInfo: ModuleInfo;
+  localName: string;
 }
 
 interface ModuleInfo {
@@ -159,6 +160,7 @@ export class CardType extends Resource<Args> {
       fields: fieldTypes,
       moduleInfo,
       codeRef: ref,
+      localName: card.name,
     };
     this.typeCache.set(id, type);
     return type;
