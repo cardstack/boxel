@@ -5,8 +5,9 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { capitalize } from '@ember/string';
 
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import camelCase from 'lodash/camelCase';
 
@@ -23,8 +24,10 @@ import {
   chooseCard,
   baseRealm,
   RealmPaths,
+  Deferred,
   type LocalPath,
   type LooseSingleCardDocument,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
@@ -50,12 +53,14 @@ export const newFileTypes: NewFileType[] = [
 ];
 const waiter = buildWaiter('create-file-modal:on-setup-waiter');
 
+export interface FileType {
+  id: NewFileType;
+  displayName: string;
+}
+
 interface Signature {
   Args: {
-    fileType: { id: NewFileType; displayName: string };
-    onClose: () => void;
-    onSave: (fileURL: URL) => void;
-    realmURL?: URL;
+    onCreate: (instance: CreateFileModal) => void;
   };
 }
 
@@ -64,124 +69,135 @@ export default class CreateFileModal extends Component<Signature> {
     <ModalContainer
       class='create-file-modal'
       @cardContainerClass='create-file'
-      @title='New {{@fileType.displayName}}'
+      @title='New {{this.maybeFileType.displayName}}'
       @size='medium'
-      @onClose={{@onClose}}
+      @isOpen={{this.isModalOpen}}
+      @onClose={{this.onCancel}}
       data-test-ready={{this.onSetup.isIdle}}
       data-test-create-file-modal
     >
       <:content>
-        {{#if this.onSetup.isRunning}}
-          <LoadingIndicator />
-        {{else}}
-          <FieldContainer @label='Realm' @tag='label' class='field'>
-            <RealmDropdown
-              class='realm-dropdown-trigger'
-              @selectedRealmURL={{this.selectedRealmURL}}
-              @onSelect={{this.onSelectRealm}}
-            />
-          </FieldContainer>
-          <FieldContainer
-            @label='Inherits From'
-            class='field'
-            data-test-inherits-from-field
-          >
-            <div class='field-contents'>
-              <Pill
-                @inert={{true}}
-                data-test-selected-type={{this.selectedCatalogEntry.title}}
-              >
-                {{this.selectedCatalogEntry.title}}
-              </Pill>
-              <Button
-                class={{if this.selectedCatalogEntry 'change-trigger'}}
-                @kind='text-only'
-                @size='small'
-                @disabled={{this.createCardInstance.isRunning}}
-                {{on 'click' (perform this.chooseCardInstanceType)}}
-                data-test-select-card-type
-              >
-                {{if this.selectedCatalogEntry 'Change' 'Select'}}
-              </Button>
-            </div>
-          </FieldContainer>
-          {{#if
-            (or
-              (eq @fileType.id 'card-definition')
-              (eq @fileType.id 'field-definition')
-            )
-          }}
-            <FieldContainer @label='Display Name' @tag='label' class='field'>
-              <BoxelInput
-                data-test-display-name-field
-                placeholder={{if
-                  (eq @fileType.id 'card-definition')
-                  'My Card'
-                  'My Field'
-                }}
-                @value={{this.displayName}}
-                @onInput={{this.setDisplayName}}
+        {{#if this.isModalOpen}}
+          {{#if this.onSetup.isRunning}}
+            <LoadingIndicator />
+          {{else}}
+            <FieldContainer @label='Realm' @tag='label' class='field'>
+              <RealmDropdown
+                class='realm-dropdown-trigger'
+                @selectedRealmURL={{this.selectedRealmURL}}
+                @onSelect={{this.onSelectRealm}}
               />
             </FieldContainer>
             <FieldContainer
-              @label='File Name'
-              @tag='label'
-              class='field gts-extension'
+              @label='Inherits From'
+              class='field'
+              data-test-inherits-from-field
             >
-              <BoxelInput
-                data-test-file-name-field
-                placeholder={{if
-                  (eq @fileType.id 'card-definition')
-                  'my-card.gts'
-                  'my-field.gts'
-                }}
-                @value={{this.fileName}}
-                @onInput={{this.setFileName}}
-              />
+              <div class='field-contents'>
+                <Pill
+                  @inert={{true}}
+                  data-test-selected-type={{this.selectedCatalogEntry.title}}
+                >
+                  {{#if this.definitionClass}}
+                    {{this.definitionClass.displayName}}
+                  {{else}}
+                    {{this.selectedCatalogEntry.title}}
+                  {{/if}}
+                </Pill>
+                {{#unless this.definitionClass}}
+                  <Button
+                    class={{if this.selectedCatalogEntry 'change-trigger'}}
+                    @kind='text-only'
+                    @size='small'
+                    @disabled={{this.createCardInstance.isRunning}}
+                    {{on 'click' (perform this.chooseCardInstanceType)}}
+                    data-test-select-card-type
+                  >
+                    {{if this.selectedCatalogEntry 'Change' 'Select'}}
+                  </Button>
+                {{/unless}}
+              </div>
             </FieldContainer>
+            {{#if
+              (or
+                (eq this.fileType.id 'card-definition')
+                (eq this.fileType.id 'field-definition')
+              )
+            }}
+              <FieldContainer @label='Display Name' @tag='label' class='field'>
+                <BoxelInput
+                  data-test-display-name-field
+                  placeholder={{if
+                    (eq this.fileType.id 'card-definition')
+                    'My Card'
+                    'My Field'
+                  }}
+                  @value={{this.displayName}}
+                  @onInput={{this.setDisplayName}}
+                />
+              </FieldContainer>
+              <FieldContainer
+                @label='File Name'
+                @tag='label'
+                class='field gts-extension'
+              >
+                <BoxelInput
+                  data-test-file-name-field
+                  placeholder={{if
+                    (eq this.fileType.id 'card-definition')
+                    'my-card.gts'
+                    'my-field.gts'
+                  }}
+                  @value={{this.fileName}}
+                  @onInput={{this.setFileName}}
+                />
+              </FieldContainer>
+            {{/if}}
           {{/if}}
         {{/if}}
       </:content>
       <:footer>
-        {{#unless this.onSetup.isRunning}}
-          <div class='footer-buttons'>
-            <Button
-              {{on 'click' @onClose}}
-              @size='tall'
-              data-test-cancel-create-file
-            >
-              Cancel
-            </Button>
-            {{#if (eq @fileType.id 'card-instance')}}
+        {{#if this.isModalOpen}}
+          {{#unless this.onSetup.isRunning}}
+            <div class='footer-buttons'>
               <Button
-                @kind='primary'
+                {{on 'click' this.onCancel}}
                 @size='tall'
-                @loading={{this.createCardInstance.isRunning}}
-                @disabled={{this.isCreateCardInstanceButtonDisabled}}
-                {{on 'click' (perform this.createCardInstance)}}
-                data-test-create-card-instance
+                data-test-cancel-create-file
               >
-                Create
+                Cancel
               </Button>
-            {{else if
-              (or
-                (eq @fileType.id 'card-definition')
-                (eq @fileType.id 'field-definition')
-              )
-            }}
-              <Button
-                @kind='primary'
-                @size='tall'
-                @loading={{this.createDefinition.isRunning}}
-                @disabled={{this.isCreateDefinitionButtonDisabled}}
-                {{on 'click' (perform this.createDefinition)}}
-                data-test-create-definition
-              >
-                Create
-              </Button>
-            {{/if}}
-          </div>
-        {{/unless}}
+              {{#if (eq this.fileType.id 'card-instance')}}
+                <Button
+                  @kind='primary'
+                  @size='tall'
+                  @loading={{this.createCardInstance.isRunning}}
+                  @disabled={{this.isCreateCardInstanceButtonDisabled}}
+                  {{on 'click' (perform this.createCardInstance)}}
+                  data-test-create-card-instance
+                >
+                  Create
+                </Button>
+              {{else if
+                (or
+                  (eq this.fileType.id 'card-definition')
+                  (eq this.fileType.id 'field-definition')
+                )
+              }}
+                <Button
+                  @kind='primary'
+                  @size='tall'
+                  @loading={{this.createDefinition.isRunning}}
+                  @disabled={{this.isCreateDefinitionButtonDisabled}}
+                  {{on 'click' (perform this.createDefinition)}}
+                  data-test-create-definition
+                >
+                  Create
+                </Button>
+              {{/if}}
+            </div>
+          {{/unless}}
+        {{/if}}
       </:footer>
     </ModalContainer>
     <style>
@@ -240,18 +256,80 @@ export default class CreateFileModal extends Component<Signature> {
 
   @service private declare cardService: CardService;
 
-  @tracked private selectedRealmURL: URL | undefined = this.args.realmURL;
   @tracked private selectedCatalogEntry: CatalogEntry | undefined = undefined;
   @tracked private displayName = '';
   @tracked private fileName = '';
+  @tracked private currentRequest:
+    | {
+        fileType: FileType;
+        newFileDeferred: Deferred<URL | undefined>; // user may close the modal without creating a new file
+        realmURL?: URL;
+        definitionClass?: {
+          displayName: string;
+          ref: ResolvedCodeRef;
+        };
+      }
+    | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    this.onSetup.perform();
+    this.args.onCreate(this);
+  }
+
+  // public API for callers to use this component
+  async createNewFile(
+    fileType: FileType,
+    realmURL?: URL,
+    definitionClass?: {
+      displayName: string;
+      ref: ResolvedCodeRef;
+    },
+  ) {
+    return await this.makeCreateFileRequst.perform(
+      fileType,
+      realmURL,
+      definitionClass,
+    );
+  }
+
+  // public API
+  get isModalOpen() {
+    return !!this.currentRequest;
+  }
+
+  private makeCreateFileRequst = enqueueTask(
+    async (
+      fileType: FileType,
+      realmURL?: URL,
+      definitionClass?: {
+        displayName: string;
+        ref: ResolvedCodeRef;
+      },
+    ) => {
+      this.currentRequest = {
+        fileType,
+        newFileDeferred: new Deferred(),
+        realmURL,
+        definitionClass,
+      };
+      await this.onSetup.perform();
+      let url = await this.currentRequest.newFileDeferred.promise;
+      this.currentRequest = undefined;
+      return url;
+    },
+  );
+
+  @action private onCancel() {
+    this.currentRequest?.newFileDeferred.fulfill(undefined);
   }
 
   @action private onSelectRealm({ path }: RealmDropdownItem) {
-    this.selectedRealmURL = new URL(path);
+    if (!this.currentRequest) {
+      throw new Error(
+        `Cannot select realm when there is no this.currentRequest`,
+      );
+    }
+    this.currentRequest.realmURL = new URL(path);
   }
 
   @action private setDisplayName(name: string) {
@@ -260,6 +338,37 @@ export default class CreateFileModal extends Component<Signature> {
 
   @action private setFileName(name: string) {
     this.fileName = name;
+  }
+
+  private get maybeFileType() {
+    return this.currentRequest?.fileType;
+  }
+
+  private get fileType() {
+    if (!this.currentRequest) {
+      throw new Error(
+        `Cannot determine fileType when there is no this.currentRequest`,
+      );
+    }
+    return this.currentRequest.fileType;
+  }
+
+  private get selectedRealmURL() {
+    if (!this.currentRequest) {
+      throw new Error(
+        `Cannot determine selectedRealmURL when there is no this.currentRequest`,
+      );
+    }
+    return this.currentRequest.realmURL;
+  }
+
+  private get definitionClass() {
+    if (!this.currentRequest) {
+      throw new Error(
+        `Cannot determine definitionClass when there is no this.currentRequest`,
+      );
+    }
+    return this.currentRequest.definitionClass;
   }
 
   private get isCreateCardInstanceButtonDisabled() {
@@ -272,7 +381,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateDefinitionButtonDisabled() {
     return (
-      !this.selectedCatalogEntry ||
+      (!this.selectedCatalogEntry && !this.definitionClass) ||
       !this.selectedRealmURL ||
       !this.fileName ||
       !this.displayName ||
@@ -281,32 +390,35 @@ export default class CreateFileModal extends Component<Signature> {
   }
 
   private onSetup = restartableTask(async () => {
-    if (this.args.fileType.id === 'card-instance') {
+    if (this.fileType.id === 'card-instance') {
       return;
     }
 
     let token = waiter.beginAsync();
 
-    let fieldOrCard =
-      this.args.fileType.id === 'field-definition' ? 'field' : 'card';
-
     try {
-      let resource = getCard(
-        this,
-        () => `${baseRealm.url}types/${fieldOrCard}`,
-        {
-          isLive: () => false,
-        },
-      );
-      await resource.loaded;
-      this.selectedCatalogEntry = resource.card as CatalogEntry;
+      if (!this.definitionClass) {
+        let fieldOrCard =
+          this.fileType.id === 'field-definition' ? 'field' : 'card';
+
+        let resource = getCard(
+          this,
+          () => `${baseRealm.url}types/${fieldOrCard}`,
+          {
+            isLive: () => false,
+          },
+        );
+        await resource.loaded;
+
+        this.selectedCatalogEntry = resource.card as CatalogEntry;
+      }
     } finally {
       waiter.endAsync(token);
     }
   });
 
   private chooseCardInstanceType = restartableTask(async () => {
-    let isField = this.args.fileType.id === 'field-definition';
+    let isField = this.fileType.id === 'field-definition';
     this.selectedCatalogEntry = await chooseCard({
       filter: {
         on: catalogEntryRef,
@@ -317,14 +429,19 @@ export default class CreateFileModal extends Component<Signature> {
 
   // this can be used for CardDefs or FieldDefs
   private createDefinition = restartableTask(async () => {
+    if (!this.currentRequest) {
+      throw new Error(
+        `Cannot createDefinition when there is no this.currentRequest`,
+      );
+    }
     if (!this.selectedRealmURL) {
       throw new Error(
         `bug: cannot call createCardDefinition without a selected realm URL`,
       );
     }
-    if (!this.selectedCatalogEntry) {
+    if (!this.selectedCatalogEntry && !this.definitionClass) {
       throw new Error(
-        `bug: cannot call createCardDefinition without a selected catalog entry`,
+        `bug: cannot call createCardDefinition without a selected catalog entry or definitionClass `,
       );
     }
     if (!this.fileName) {
@@ -337,9 +454,11 @@ export default class CreateFileModal extends Component<Signature> {
         `bug: cannot call createCardDefinition without a display name`,
       );
     }
-    let { name: exportName, module } = this.selectedCatalogEntry.ref;
+    let {
+      ref: { name: exportName, module },
+    } = (this.definitionClass ?? this.selectedCatalogEntry)!; // we just checked above to make sure one of these exists
     let className = camelize(this.displayName);
-    let absoluteModule = new URL(module, this.selectedCatalogEntry.id).href;
+    let absoluteModule = new URL(module, this.selectedCatalogEntry?.id).href;
     // sanitize the name since it will be used in javascript code
     let safeName = this.displayName.replace(/[^A-Za-z \d-_]/g, '').trim();
     let src: string;
@@ -371,16 +490,22 @@ export class ${className} extends ${exportName} {
     )}.gts`.replace(/^\//, '');
     let url = realmPath.fileURL(fileName);
     await this.cardService.saveSource(url, src);
-    this.args.onSave(url);
-    this.args.onClose();
+    this.currentRequest.newFileDeferred.fulfill(url);
   });
 
   private createCardInstance = restartableTask(async () => {
+    if (!this.currentRequest) {
+      throw new Error(
+        `Cannot createCardInstance when there is no this.currentRequest`,
+      );
+    }
     if (!this.selectedCatalogEntry?.ref || !this.selectedRealmURL) {
       return;
     }
 
-    let { ref } = this.selectedCatalogEntry;
+    let { ref } = this.definitionClass
+      ? this.definitionClass
+      : this.selectedCatalogEntry;
 
     let relativeTo = new URL(this.selectedCatalogEntry.id);
     // we make the code ref use an absolute URL for safety in
@@ -409,11 +534,10 @@ export class ${className} extends ${exportName} {
     }
 
     await this.cardService.saveModel(this, card);
-    this.args.onSave(new URL(`${card.id}.json`));
-    this.args.onClose();
+    this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
   });
 }
 
 function camelize(name: string) {
-  return camelCase(name).replace(/^./, (c) => c.toUpperCase());
+  return capitalize(camelCase(name));
 }

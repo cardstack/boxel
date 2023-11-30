@@ -20,6 +20,7 @@ interface Signature {
     size?: 'small' | 'medium' | 'large';
     centered?: boolean;
     cardContainerClass?: string;
+    isOpen?: boolean;
   };
   Blocks: {
     content: [];
@@ -32,11 +33,14 @@ export default class ModalContainer extends Component<Signature> {
   get size() {
     return this.args.size ?? 'large';
   }
+  get isOpen() {
+    return this.args.isOpen ?? true;
+  }
 
   <template>
     <Modal
       @size={{this.size}}
-      @isOpen={{true}}
+      @isOpen={{this.isOpen}}
       @onClose={{@onClose}}
       @centered={{@centered}}
       style={{this.styleString}}

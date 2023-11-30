@@ -18,14 +18,14 @@ import {
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { cn, and, not } from '@cardstack/boxel-ui/helpers';
+import { cn, and, not, bool } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
@@ -52,6 +52,7 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+import CreateFileModal, { type FileType } from './create-file-modal';
 
 interface Signature {
   Args: {
@@ -116,6 +117,7 @@ export default class CodeSubmode extends Component<Signature> {
   #currentCard: CardDef | undefined;
 
   private deleteModal: DeleteModal | undefined;
+  private createFileModal: CreateFileModal | undefined;
   private cardResource = getCard(
     this,
     () => {
@@ -435,6 +437,11 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
+  @action
+  private onSelectNewFileType(fileType: FileType) {
+    this.createFile.perform(fileType);
+  }
+
   private get isFileTreeShowing() {
     return this.fileView === 'browser' || !this.isFileOpen;
   }
@@ -487,6 +494,31 @@ export default class CodeSubmode extends Component<Signature> {
     }
   });
 
+  // dropTask will ignore any subsequent delete requests until the one in progress is done
+  private createFile = dropTask(
+    async (
+      fileType: FileType,
+
+      definitionClass?: {
+        displayName: string;
+        ref: ResolvedCodeRef;
+      },
+    ) => {
+      if (!this.createFileModal) {
+        throw new Error(`bug: CreateFileModal not instantiated`);
+      }
+      let url = await this.createFileModal.createNewFile(
+        fileType,
+        this.realmURL,
+        definitionClass,
+      );
+      if (url) {
+        this.operatorModeStateService.updateCodePath(url);
+        this.setPreviewFormat('edit');
+      }
+    },
+  );
+
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
     try {
@@ -506,6 +538,10 @@ export default class CodeSubmode extends Component<Signature> {
     this.deleteModal = deleteModal;
   };
 
+  private setupCreateFileModal = (createFileModal: CreateFileModal) => {
+    this.createFileModal = createFileModal;
+  };
+
   private setupCodeEditor = (
     updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
   ) => {
@@ -519,11 +555,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private setPreviewFormat(format: Format) {
     this.previewFormat = format;
-  }
-
-  @action private onNewFileSave(fileURL: URL) {
-    this.operatorModeStateService.updateCodePath(fileURL);
-    this.setPreviewFormat('edit');
   }
 
   <template>
@@ -544,8 +575,8 @@ export default class CodeSubmode extends Component<Signature> {
         @realmURL={{this.realmURL}}
       />
       <NewFileButton
-        @realmURL={{this.realmURL}}
-        @onSave={{this.onNewFileSave}}
+        @onSelectNewFileType={{this.onSelectNewFileType}}
+        @isCreateModalShown={{bool this.createFileModal.isModalOpen}}
       />
     </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
@@ -641,6 +672,7 @@ export default class CodeSubmode extends Component<Signature> {
                               @declarations={{this.declarations}}
                               @selectDeclaration={{this.selectDeclaration}}
                               @delete={{perform this.delete}}
+                              @createFile={{perform this.createFile}}
                               @openDefinition={{this.openDefinition}}
                               data-test-card-inspector-panel
                             />
@@ -758,6 +790,7 @@ export default class CodeSubmode extends Component<Signature> {
         </ResizablePanelGroup>
       </div>
       <DeleteModal @onCreate={{this.setupDeleteModal}} />
+      <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
     </SubmodeLayout>
 
     <style>

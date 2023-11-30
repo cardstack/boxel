@@ -4,7 +4,7 @@ import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
@@ -1184,4 +1184,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-boxel-selector-item-selected]')
       .hasText(`${elementName} card`);
   });
+
+  skip('Can inherit from an exported card def declaration', async function (_assert) {});
+
+  skip('Can inherit from an exported field def declaration', async function (_assert) {});
+
+  skip('Inherit action item is not displayed when definition is not exported', async function (_assert) {});
 });

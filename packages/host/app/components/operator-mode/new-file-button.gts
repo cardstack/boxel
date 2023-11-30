@@ -1,20 +1,15 @@
 import Component from '@glimmer/component';
-import { fn } from '@ember/helper';
-import { action } from '@ember/object';
 import { capitalize } from '@ember/string';
-import { tracked } from '@glimmer/tracking';
+import startCase from 'lodash/startCase';
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
-import CreateFileModal, {
-  type NewFileType,
-  newFileTypes,
-} from './create-file-modal';
+import { type FileType, newFileTypes } from './create-file-modal';
 
 interface Signature {
   Args: {
-    realmURL: URL;
-    onSave: (fileURL: URL) => void;
+    onSelectNewFileType: (fileType: FileType) => void;
+    isCreateModalShown: boolean;
   };
 }
 
@@ -26,7 +21,7 @@ export default class NewFileButton extends Component<Signature> {
           class='new-file-button'
           @kind='primary'
           @size='small'
-          @disabled={{this.newFileType}}
+          @disabled={{@isCreateModalShown}}
           {{bindings}}
           data-test-new-file-button
         >
@@ -50,15 +45,6 @@ export default class NewFileButton extends Component<Signature> {
       </:content>
     </BoxelDropdown>
 
-    {{#if this.newFileType}}
-      <CreateFileModal
-        @fileType={{this.newFileType}}
-        @realmURL={{@realmURL}}
-        @onSave={{@onSave}}
-        @onClose={{fn this.setNewFileType undefined}}
-      />
-    {{/if}}
-
     <style>
       .new-file-button {
         --new-file-button-width: 7.5rem;
@@ -77,22 +63,11 @@ export default class NewFileButton extends Component<Signature> {
     </style>
   </template>
 
-  @tracked newFileType?: { id: NewFileType; displayName: string } = undefined;
-
-  @action setNewFileType(
-    type: { id: NewFileType; displayName: string } | undefined,
-  ) {
-    this.newFileType = type;
-  }
-
-  get menuItems() {
+  private get menuItems() {
     return newFileTypes.map((id) => {
-      let displayName = id
-        .split('-')
-        .map((el) => capitalize(el))
-        .join(' ');
+      let displayName = capitalize(startCase(id));
       return new MenuItem(displayName, 'action', {
-        action: () => this.setNewFileType({ id, displayName }),
+        action: () => this.args.onSelectNewFileType({ id, displayName }),
       });
     });
   }

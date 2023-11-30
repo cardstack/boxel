@@ -39,7 +39,7 @@ export class Search extends Resource<Args> {
   @tracked private staleInstances: CardDef[] = [];
   @tracked private staleInstancesByRealm: RealmCards[] = [];
   @tracked private realmsToSearch: string[] = [];
-  private ready: Promise<void> | undefined;
+  loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
 
   modify(_positional: never[], named: Args['named']) {
@@ -53,7 +53,7 @@ export class Search extends Resource<Args> {
         ],
       ),
     ];
-    this.ready = this.search.perform(query);
+    this.loaded = this.search.perform(query);
 
     if (isLive) {
       // TODO this triggers a new search against all realms if any single realm
@@ -99,7 +99,7 @@ export class Search extends Resource<Args> {
     async (
       doWhileRefreshing: (ready: Promise<void> | undefined) => Promise<void>,
     ) => {
-      await doWhileRefreshing(this.ready);
+      await doWhileRefreshing(this.loaded);
     },
   );
 
