@@ -922,7 +922,7 @@ module('Acceptance | code submode tests', function (hooks) {
     assert.dom('[data-test-file-incompatibility-message]').exists();
   });
 
-  test('displays clear message on inspector-panel and schema-editor when file is completely unsupported', async function (assert) {
+  test('displays clear message on schema-editor when file is completely unsupported', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
       submode: 'code',
@@ -942,12 +942,8 @@ module('Acceptance | code submode tests', function (hooks) {
         'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.',
       );
 
-    await waitFor('[data-test-detail-panel-file-incompatibility-message]');
-    assert
-      .dom('[data-test-detail-panel-file-incompatibility-message]')
-      .hasText(
-        'Inspector cannot be used with this file type. Select a file with a .json, .gts or .ts extension.',
-      );
+    await waitFor('[data-test-definition-file-extension]');
+    assert.dom('[data-test-definition-file-extension]').hasText('.txt');
   });
 
   test('Clicking card in search panel opens card JSON in editor', async function (assert) {

@@ -1,4 +1,5 @@
 import { hash, array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
@@ -7,6 +8,8 @@ import Component from '@glimmer/component';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 
+import { use, resource } from 'ember-resources';
+
 import {
   CardContainer,
   Header,
@@ -14,6 +17,8 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { or, and } from '@cardstack/boxel-ui/helpers';
+
+import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
 
 import {
   hasExecutableExtension,
@@ -25,8 +30,10 @@ import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
 
 import { capitalize } from '@ember/string';
 import startCase from 'lodash/startCase';
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+
+import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
-import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
 
 import {
   type ModuleDeclaration,
@@ -54,13 +61,6 @@ import Selector from './detail-panel-selector';
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { fn } from '@ember/helper';
-
-import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
-
-import { use, resource } from 'ember-resources';
-
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 interface Signature {
   Element: HTMLElement;
@@ -188,17 +188,6 @@ export default class DetailPanel extends Component<Signature> {
 
   private get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
-  }
-
-  private get isBinary() {
-    return this.args.readyFile.isBinary;
-  }
-
-  private get isNonCardJson() {
-    return (
-      this.args.readyFile.url.endsWith('.json') &&
-      !isCardDocumentString(this.args.readyFile.content)
-    );
   }
 
   private get isField() {
@@ -410,21 +399,19 @@ export default class DetailPanel extends Component<Signature> {
             {{/if}}
           </div>
         {{else}}
-          {{#if (or this.isBinary this.isNonCardJson)}}
-            <div class='details-panel'>
-              <header class='panel-header' aria-label='Details Panel Header'>
-                Details
-              </header>
-              <FileDefinitionContainer
-                @fileURL={{@readyFile.url}}
-                @fileExtension={{this.fileExtension}}
-                @infoText={{this.lastModified.value}}
-                @actions={{array
-                  (hash label='Delete' handler=@delete icon=IconTrash)
-                }}
-              />
-            </div>
-          {{/if}}
+          <div class='details-panel'>
+            <header class='panel-header' aria-label='Details Panel Header'>
+              Details
+            </header>
+            <FileDefinitionContainer
+              @fileURL={{@readyFile.url}}
+              @fileExtension={{this.fileExtension}}
+              @infoText={{this.lastModified.value}}
+              @actions={{array
+                (hash label='Delete' handler=@delete icon=IconTrash)
+              }}
+            />
+          </div>
         {{/if}}
       {{/if}}
     </div>
