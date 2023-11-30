@@ -312,14 +312,6 @@ const reExportVisitor = {
       );
     }
   },
-
-  ExportAllDeclaration(path: NodePath<t.ExportAllDeclaration>) {
-    // Handle export all from another module
-    // Example: export * from './module';
-    if (path.node.source) {
-      console.log('TODO: skipping handling this');
-    }
-  },
 };
 
 export function error(path: NodePath<any>, message: string) {
@@ -472,7 +464,7 @@ function getLocalName(
   return path.node.id ? path.node.id.name : undefined;
 }
 
-function getName(node: t.Identifier | t.StringLiteral) {
+export function getName(node: t.Identifier | t.StringLiteral) {
   if (node.type === 'Identifier') {
     return node.name;
   } else {
