@@ -13,15 +13,17 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
-import { or, and } from '@cardstack/boxel-ui/helpers';
-
 import {
   hasExecutableExtension,
   getPlural,
   isCardDocumentString,
 } from '@cardstack/runtime-common';
 
-import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
+import {
+  isCardDef,
+  isFieldDef,
+  isBaseDef,
+} from '@cardstack/runtime-common/code-ref';
 
 import { type Ready } from '@cardstack/host/resources/file';
 import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
@@ -89,11 +91,22 @@ export default class DetailPanel extends Component<Signature> {
     return undefined;
   });
 
+  get showInThisFilePanel() {
+    return this.isModule && this.args.declarations.length > 0;
+  }
+
   get showInheritancePanel() {
     return (
-      (this.isModule && this.args.selectedDeclaration && this.cardType) ||
+      (this.isModule &&
+        this.args.selectedDeclaration &&
+        (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
+          isReexportCardOrField(this.args.selectedDeclaration))) ||
       this.isCardInstance
     );
+  }
+
+  get showDetailsPanel() {
+    return this.isBinary || this.isNonCardJson;
   }
 
   get cardType() {
@@ -149,32 +162,6 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
-  get isField() {
-    if (
-      this.args.selectedDeclaration &&
-      (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
-        isReexportCardOrField(this.args.selectedDeclaration))
-    ) {
-      return (
-        this.isModule && isFieldDef(this.args.selectedDeclaration.cardOrField)
-      );
-    }
-    return false;
-  }
-
-  get isCard() {
-    if (
-      this.args.selectedDeclaration &&
-      (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
-        isReexportCardOrField(this.args.selectedDeclaration))
-    ) {
-      return (
-        this.isModule && isCardDef(this.args.selectedDeclaration.cardOrField)
-      );
-    }
-    return false;
-  }
-
   private get fileExtension() {
     if (!this.args.cardInstance) {
       return '.' + this.args.readyFile.url.split('.').pop() || '';
@@ -201,10 +188,6 @@ export default class DetailPanel extends Component<Signature> {
     });
   }
 
-  get numberOfElementsGreaterThanZero() {
-    return this.args.declarations.length > 0;
-  }
-
   get numberOfItems() {
     let numberOfElements = this.args.declarations.length || 0;
     return `${numberOfElements} ${getPlural('item', numberOfElements)}`;
@@ -217,7 +200,7 @@ export default class DetailPanel extends Component<Signature> {
           <LoadingIndicator />
         </div>
       {{else}}
-        {{#if (and this.isModule this.numberOfElementsGreaterThanZero)}}
+        {{#if this.showInThisFilePanel}}
           <div class='in-this-file-panel'>
             <div class='in-this-file-panel-banner'>
               <header class='panel-header' aria-label='In This File Header'>
@@ -289,141 +272,79 @@ export default class DetailPanel extends Component<Signature> {
                 {{/let}}
               {{/if}}
             {{else if @selectedDeclaration}}
-              {{#if (isCardOrFieldDeclaration @selectedDeclaration)}}
-                {{#if this.isField}}
-                  {{#let 'Field Definition' as |definitionTitle|}}
-                    <ModuleDefinitionContainer
-                      @title={{definitionTitle}}
-                      @fileURL={{this.cardType.type.module}}
-                      @name={{this.cardType.type.displayName}}
-                      @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                      @infoText={{this.lastModified.value}}
-                      @isActive={{true}}
-                      @actions={{array
-                        (hash label='Delete' handler=@delete icon=IconTrash)
-                      }}
-                    />
-                    {{#if this.cardType.type.super}}
-                      {{#let
-                        (getCodeRef this.cardType.type.super)
-                        as |codeRef|
-                      }}
-                        <div class='chain'>
-                          <IconInherit
-                            class='chain-icon'
-                            width='24px'
-                            height='24px'
-                            role='presentation'
-                          />
-                          Inherits from
-                        </div>
-                        <ClickableModuleDefinitionContainer
-                          @title={{definitionTitle}}
-                          @fileURL={{this.cardType.type.super.module}}
-                          @name={{this.cardType.type.super.displayName}}
-                          @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                          @openDefinition={{@openDefinition}}
-                          @moduleHref={{this.cardType.type.super.module}}
-                          @codeRef={{codeRef}}
+              {{! Module case when selection exists}}
+              {{#let
+                (getDefinitionTitle @selectedDeclaration)
+                as |definitionTitle|
+              }}
+                {{#if (isCardOrFieldDeclaration @selectedDeclaration)}}
+
+                  <ModuleDefinitionContainer
+                    @title={{definitionTitle}}
+                    @fileURL={{this.cardType.type.module}}
+                    @name={{this.cardType.type.displayName}}
+                    @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                    @infoText={{this.lastModified.value}}
+                    @isActive={{true}}
+                    @actions={{array
+                      (hash label='Delete' handler=@delete icon=IconTrash)
+                    }}
+                  />
+                  {{#if this.cardType.type.super}}
+                    {{#let (getCodeRef this.cardType.type.super) as |codeRef|}}
+                      <div class='chain'>
+                        <IconInherit
+                          class='chain-icon'
+                          width='24px'
+                          height='24px'
+                          role='presentation'
                         />
-                      {{/let}}
-                    {{/if}}
-                  {{/let}}
-                {{else if this.isCard}}
-                  {{#let 'Card Definition' as |definitionTitle|}}
-                    <ModuleDefinitionContainer
-                      @title={{definitionTitle}}
-                      @fileURL={{this.cardType.type.module}}
-                      @name={{this.cardType.type.displayName}}
-                      @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                      @infoText={{this.lastModified.value}}
-                      @isActive={{true}}
-                      @actions={{array
-                        (hash label='Delete' handler=@delete icon=IconTrash)
-                      }}
-                    />
-                    {{#if this.cardType.type.super}}
-                      {{#let
-                        (getCodeRef this.cardType.type.super)
-                        as |codeRef|
-                      }}
-                        <div class='chain'>
-                          <IconInherit
-                            class='chain-icon'
-                            width='24px'
-                            height='24px'
-                            role='presentation'
-                          />
-                          Inherits from
-                        </div>
-                        <ClickableModuleDefinitionContainer
-                          @title={{definitionTitle}}
-                          @fileURL={{this.cardType.type.super.module}}
-                          @name={{this.cardType.type.super.displayName}}
-                          @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                          @openDefinition={{@openDefinition}}
-                          @moduleHref={{this.cardType.type.super.module}}
-                          @codeRef={{codeRef}}
-                        />
-                      {{/let}}
-                    {{/if}}
-                  {{/let}}
-                {{/if}}
-              {{else if (isReexportCardOrField @selectedDeclaration)}}
-                {{#if this.isCard}}
+                        Inherits from
+                      </div>
+                      <ClickableModuleDefinitionContainer
+                        @title={{definitionTitle}}
+                        @fileURL={{this.cardType.type.super.module}}
+                        @name={{this.cardType.type.super.displayName}}
+                        @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                        @openDefinition={{@openDefinition}}
+                        @moduleHref={{this.cardType.type.super.module}}
+                        @codeRef={{codeRef}}
+                      />
+                    {{/let}}
+                  {{/if}}
+                {{else if (isReexportCardOrField @selectedDeclaration)}}
                   {{#if this.cardType.type}}
                     {{#let (getCodeRef this.cardType.type) as |codeRef|}}
-                      {{#let 'Re-exported Card' as |definitionTitle|}}
-                        <ClickableModuleDefinitionContainer
-                          @title={{definitionTitle}}
-                          @fileURL={{this.cardType.type.module}}
-                          @name={{this.cardType.type.displayName}}
-                          @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                          @openDefinition={{@openDefinition}}
-                          @moduleHref={{this.cardType.type.module}}
-                          @codeRef={{codeRef}}
-                        />
-                      {{/let}}
+                      <ClickableModuleDefinitionContainer
+                        @title={{definitionTitle}}
+                        @fileURL={{this.cardType.type.module}}
+                        @name={{this.cardType.type.displayName}}
+                        @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                        @openDefinition={{@openDefinition}}
+                        @moduleHref={{this.cardType.type.module}}
+                        @codeRef={{codeRef}}
+                      />
                     {{/let}}
                   {{/if}}
                 {{/if}}
-                {{#if this.isField}}
-                  {{#if this.cardType.type}}
-                    {{#let (getCodeRef this.cardType.type) as |codeRef|}}
-                      {{#let 'Re-exported Field' as |definitionTitle|}}
-                        <ClickableModuleDefinitionContainer
-                          @title={{definitionTitle}}
-                          @fileURL={{this.cardType.type.module}}
-                          @name={{this.cardType.type.displayName}}
-                          @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                          @openDefinition={{@openDefinition}}
-                          @moduleHref={{this.cardType.type.module}}
-                          @codeRef={{codeRef}}
-                        />
-                      {{/let}}
-                    {{/let}}
-                  {{/if}}
-                {{/if}}
-              {{/if}}
+              {{/let}}
             {{/if}}
 
           </div>
-        {{else}}
-          {{#if (or this.isBinary this.isNonCardJson)}}
-            <div class='details-panel'>
-              <header class='panel-header' aria-label='Details Panel Header'>
-                Details
-              </header>
-              <FileDefinitionContainer
-                @fileURL={{@readyFile.url}}
-                @fileExtension={{this.fileExtension}}
-                @infoText={{this.lastModified.value}}
-                @actions={{array
-                  (hash label='Delete' handler=@delete icon=IconTrash)
-                }}
-              />
-            </div>
-          {{/if}}
+        {{else if this.showDetailsPanel}}
+          <div class='details-panel'>
+            <header class='panel-header' aria-label='Details Panel Header'>
+              Details
+            </header>
+            <FileDefinitionContainer
+              @fileURL={{@readyFile.url}}
+              @fileExtension={{this.fileExtension}}
+              @infoText={{this.lastModified.value}}
+              @actions={{array
+                (hash label='Delete' handler=@delete icon=IconTrash)
+              }}
+            />
+          </div>
         {{/if}}
       {{/if}}
     </div>
@@ -487,4 +408,26 @@ export default class DetailPanel extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+function getDefinitionTitle(declaration: ModuleDeclaration) {
+  if (isCardOrFieldDeclaration(declaration)) {
+    if (isCardDef(declaration.cardOrField)) {
+      return 'Card Definition';
+    } else if (isFieldDef(declaration.cardOrField)) {
+      return 'Field Definition';
+    } else if (isBaseDef(declaration.cardOrField)) {
+      return 'Base Definition';
+    }
+  }
+  if (isReexportCardOrField(declaration)) {
+    if (isCardDef(declaration.cardOrField)) {
+      return 'Card Definition';
+    } else if (isFieldDef(declaration.cardOrField)) {
+      return 'Field Definition';
+    } else if (isBaseDef(declaration.cardOrField)) {
+      return 'Base Definition';
+    }
+  }
+  return '';
 }
