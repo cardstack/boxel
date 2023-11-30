@@ -331,9 +331,7 @@ export function getPluralViewComponent(
       let components = getComponents();
 
       if (property === Symbol.iterator) {
-        if (property === Symbol.iterator) {
-          return components[Symbol.iterator];
-        }
+        return components[Symbol.iterator];
       }
       if (property === 'length') {
         return components.length;
