@@ -290,9 +290,6 @@ const reExportVisitor = {
         }
       });
     }
-    if (path.node.source) {
-      console.log('in export named blabal');
-    }
   },
   ExportDefaultDeclaration(
     path: NodePath<t.ExportDefaultDeclaration>,
