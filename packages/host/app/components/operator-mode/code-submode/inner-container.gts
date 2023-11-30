@@ -1,7 +1,5 @@
 import Component from '@glimmer/component';
 
-import { cn } from '@cardstack/boxel-ui/helpers';
-
 import type { ComponentLike } from '@glint/template';
 
 interface ContentSignature {
@@ -50,9 +48,7 @@ class InnerContainerHeader extends Component<HeaderSignature> {
 
 interface Signature {
   Element: HTMLDivElement;
-  Args: {
-    isEmpty?: boolean;
-  };
+  Args: {};
   Blocks: {
     default: [ComponentLike<ContentSignature>, ComponentLike<HeaderSignature>];
   };
@@ -60,10 +56,7 @@ interface Signature {
 
 export default class CodeSubmodeInnerContainer extends Component<Signature> {
   <template>
-    <div
-      class={{cn 'inner-container' inner-container--empty=@isEmpty}}
-      ...attributes
-    >
+    <div class='inner-container' ...attributes>
       {{yield
         (component InnerContainerContent)
         (component InnerContainerHeader)
@@ -79,14 +72,6 @@ export default class CodeSubmodeInnerContainer extends Component<Signature> {
         border-radius: var(--boxel-border-radius-xl);
         box-shadow: var(--boxel-deep-box-shadow);
         overflow: hidden;
-      }
-      .inner-container--empty {
-        background-color: var(--boxel-light-100);
-        align-items: center;
-        justify-content: center;
-      }
-      .inner-container--empty > :deep(svg) {
-        --icon-color: var(--boxel-highlight);
       }
     </style>
   </template>

@@ -683,7 +683,7 @@ export default class CodeSubmode extends Component<Signature> {
               @defaultLengthFraction={{defaultPanelWidths.emptyCodeModePanel}}
               @lengthPx={{this.panelWidths.emptyCodeModePanel}}
             >
-              <InnerContainer @isEmpty={{true}} data-test-empty-code-mode>
+              <InnerContainer class='empty-container' data-test-empty-code-mode>
                 <File width='40' height='40' role='presentation' />
                 <h3 class='choose-file-prompt'>
                   Choose a file on the left to open it
@@ -820,6 +820,14 @@ export default class CodeSubmode extends Component<Signature> {
         color: var(--boxel-450);
         font-weight: 500;
         padding: var(--boxel-sp-xl);
+      }
+      .empty-container {
+        background-color: var(--boxel-light-100);
+        align-items: center;
+        justify-content: center;
+      }
+      .empty-container > :deep(svg) {
+        --icon-color: var(--boxel-highlight);
       }
     </style>
   </template>
