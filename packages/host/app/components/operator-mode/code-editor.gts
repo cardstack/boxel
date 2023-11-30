@@ -14,6 +14,7 @@ import { Position } from 'monaco-editor';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { logger } from '@cardstack/runtime-common';
+import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
@@ -148,6 +149,26 @@ export default class CodeEditor extends Component<Signature> {
       ) {
         this.monacoService.updateCursorPosition(
           new Position(start.line, start.column),
+        );
+      }
+    } else if (
+      declaration.path?.node &&
+      'loc' in declaration.path?.node &&
+      declaration.path.node.loc &&
+      declaration.path?.isExportNamedDeclaration()
+    ) {
+      //capturing position of named export declarations
+      let specifier = declaration.path?.node.specifiers.find(
+        (specifier) => getName(specifier.exported) === declaration.exportedAs,
+      );
+      if (
+        specifier &&
+        specifier.exported.loc !== null &&
+        specifier.exported.loc !== undefined
+      ) {
+        let { start, end } = specifier.exported.loc;
+        this.monacoService.updateCursorPosition(
+          new Position(start.line, end.column + 1),
         );
       }
     }
