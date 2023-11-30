@@ -36,6 +36,8 @@ import ModalContainer from '../modal-container';
 
 import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
+import RealmInfoProvider from './realm-info-provider';
+import RealmIcon from './realm-icon';
 
 import type CardService from '../../services/card-service';
 
@@ -76,7 +78,7 @@ export default class CreateFileModal extends Component<Signature> {
         {{else}}
           <FieldContainer @label='Realm' @tag='label' class='field'>
             <RealmDropdown
-              class='realm-dropdown-trigger'
+              @dropdownWidth='15rem'
               @selectedRealmURL={{this.selectedRealmURL}}
               @onSelect={{this.onSelectRealm}}
             />
@@ -87,12 +89,29 @@ export default class CreateFileModal extends Component<Signature> {
             data-test-inherits-from-field
           >
             <div class='field-contents'>
-              <Pill
-                @inert={{true}}
-                data-test-selected-type={{this.selectedCatalogEntry.title}}
-              >
-                {{this.selectedCatalogEntry.title}}
-              </Pill>
+              {{#if this.selectedCatalogEntry}}
+                <Pill
+                  @inert={{true}}
+                  class='selected-type'
+                  data-test-selected-type={{this.selectedCatalogEntry.title}}
+                >
+                  <:icon>
+                    <RealmInfoProvider
+                      @fileURL={{this.selectedCatalogEntry.id}}
+                    >
+                      <:ready as |realmInfo|>
+                        <RealmIcon
+                          @realmIconURL={{realmInfo.iconURL}}
+                          @realmName={{realmInfo.name}}
+                        />
+                      </:ready>
+                    </RealmInfoProvider>
+                  </:icon>
+                  <:default>
+                    {{this.selectedCatalogEntry.title}}
+                  </:default>
+                </Pill>
+              {{/if}}
               <Button
                 class={{if this.selectedCatalogEntry 'change-trigger'}}
                 @kind='text-only'
@@ -204,8 +223,7 @@ export default class CreateFileModal extends Component<Signature> {
         gap: var(--boxel-sp-xs);
       }
       .selected-type {
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs) var(--boxel-sp-xxxs)
-          var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-xxxs);
         gap: var(--boxel-sp-xxxs);
       }
       .selected-type :deep(.icon) {
