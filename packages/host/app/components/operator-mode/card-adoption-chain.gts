@@ -7,7 +7,7 @@ import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
-import { CardInheritance } from '@cardstack/host/components/operator-mode/schema-editor-column';
+import { CardInheritance } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 
 import { Type } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
