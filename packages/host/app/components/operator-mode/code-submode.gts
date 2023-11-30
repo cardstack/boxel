@@ -205,10 +205,6 @@ export default class CodeSubmode extends Component<Signature> {
     return this.operatorModeStateService.realmURL;
   }
 
-  private get isReady() {
-    return isReady(this.currentOpenFile);
-  }
-
   private get isIncompatibleFile() {
     return this.readyFile.isBinary || this.isNonCardJson;
   }
@@ -222,12 +218,12 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get hasCardDefOrFieldDef() {
-    return this.declarations.some((d) => isCardOrFieldDeclaration(d));
+    return this.declarations.some(isCardOrFieldDeclaration);
   }
 
   private get isSelectedItemIncompatibleWithSchemaEditor() {
     if (!this.selectedDeclaration) {
-      return;
+      return undefined;
     }
     return !isCardOrFieldDeclaration(this.selectedDeclaration);
   }
@@ -278,6 +274,14 @@ export default class CodeSubmode extends Component<Signature> {
     return null;
   }
 
+  private get currentOpenFile() {
+    return this.operatorModeStateService.openFile.current;
+  }
+
+  private get isReady() {
+    return isReady(this.currentOpenFile);
+  }
+
   private get readyFile() {
     if (isReady(this.currentOpenFile)) {
       return this.currentOpenFile;
@@ -297,10 +301,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private dismissURLError() {
     this.userHasDismissedURLError = true;
-  }
-
-  private get currentOpenFile() {
-    return this.operatorModeStateService.openFile.current;
   }
 
   private onCardLoaded = (
@@ -366,7 +366,7 @@ export default class CodeSubmode extends Component<Signature> {
     ) {
       return this.selectedDeclaration;
     }
-    return;
+    return undefined;
   }
 
   @action
