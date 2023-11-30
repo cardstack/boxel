@@ -1,6 +1,6 @@
 import { visit, click, fillIn, waitFor } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 import percySnapshot from '@percy/ember';
 import window from 'ember-window-mock';
@@ -506,8 +506,45 @@ export class TestCard extends CardDef {
     assert.dom('[data-test-total-fields]').containsText('3 Fields');
   });
 
-  skip<TestContextWithSave>('TODO can create a new field definition', async function (_assert) {
-    // TODO include percy snapshot
+  test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
+    await openNewFileModal('Field Definition');
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+
+    await waitFor(
+      `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+    );
+    await click(
+      `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    assert.dom('[data-test-create-definition]').isDisabled();
+    await fillIn(
+      '[data-test-display-name-field]',
+      'Field that extends from big int',
+    );
+    await fillIn('[data-test-file-name-field]', 'big-int-v2');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import BigInteger from 'https://cardstack.com/base/big-integer';
+export class FieldThatExtendsFromBigInt extends BigInteger {
+  static displayName = "Field that extends from big int";
+}`,
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+    await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
   });
 
   test<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (assert) {
@@ -541,6 +578,7 @@ export class TestCard extends Pet {
       deferred.fulfill();
     });
 
+    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;

@@ -1,10 +1,10 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import type Owner from '@ember/owner';
-import { buildWaiter } from '@ember/test-waiters';
 
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -27,15 +27,17 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
+
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
-import type CardService from '../../services/card-service';
-
 import ModalContainer from '../modal-container';
-import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
+
 import Pill from '../pill';
+import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
+
+import type CardService from '../../services/card-service';
 
 export type NewFileType =
   | 'card-instance'
@@ -279,27 +281,36 @@ export default class CreateFileModal extends Component<Signature> {
   }
 
   private onSetup = restartableTask(async () => {
+    if (this.args.fileType.id === 'card-instance') {
+      return;
+    }
+
     let token = waiter.beginAsync();
+
+    let fieldOrCard =
+      this.args.fileType.id === 'field-definition' ? 'field' : 'card';
+
     try {
-      if (this.args.fileType.id === 'card-definition') {
-        // TODO prepopulate with FieldDef catalog entry when this is a new field-definition
-        let resource = getCard(this, () => `${baseRealm.url}types/card`, {
+      let resource = getCard(
+        this,
+        () => `${baseRealm.url}types/${fieldOrCard}`,
+        {
           isLive: () => false,
-        });
-        await resource.loaded;
-        this.selectedCatalogEntry = resource.card as CatalogEntry;
-      }
+        },
+      );
+      await resource.loaded;
+      this.selectedCatalogEntry = resource.card as CatalogEntry;
     } finally {
       waiter.endAsync(token);
     }
   });
 
   private chooseCardInstanceType = restartableTask(async () => {
+    let isField = this.args.fileType.id === 'field-definition';
     this.selectedCatalogEntry = await chooseCard({
       filter: {
         on: catalogEntryRef,
-        // TODO we'll want to change this to `isField: true` when this is a new field-definition
-        eq: { isField: false },
+        eq: { isField },
       },
     });
   });
