@@ -10,8 +10,10 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 //@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
+
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+
 import {
   Button,
   LoadingIndicator,
@@ -20,12 +22,14 @@ import {
 import type { PanelContext } from '@cardstack/boxel-ui/components';
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
+
 import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
@@ -43,8 +47,11 @@ import type MessageService from '@cardstack/host/services/message-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
+
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
 import FileTree from '../editor/file-tree';
+
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
@@ -268,17 +275,6 @@ export default class CodeSubmode extends Component<Signature> {
       return `card preview error ${this.cardError.message}`;
     }
 
-    return null;
-  }
-
-  private get inspectorFileIncompatibilityMessage() {
-    //this will prevent displaying message during a page refresh
-    if (this.moduleContentsResource.isLoading) {
-      return null;
-    }
-    if (!this.card && !this.isModule && !this.isIncompatibleFile) {
-      return 'Inspector cannot be used with this file type. Select a file with a .json, .gts or .ts extension.';
-    }
     return null;
   }
 
@@ -626,25 +622,16 @@ export default class CodeSubmode extends Component<Signature> {
                         <FileTree @realmURL={{this.realmURL}} />
                       {{else}}
                         {{#if this.isReady}}
-                          {{#if this.inspectorFileIncompatibilityMessage}}
-                            <div
-                              class='file-incompatible-message'
-                              data-test-detail-panel-file-incompatibility-message
-                            >
-                              {{this.inspectorFileIncompatibilityMessage}}
-                            </div>
-                          {{else}}
-                            <DetailPanel
-                              @cardInstance={{this.card}}
-                              @readyFile={{this.readyFile}}
-                              @selectedDeclaration={{this.selectedDeclaration}}
-                              @declarations={{this.declarations}}
-                              @selectDeclaration={{this.selectDeclaration}}
-                              @delete={{perform this.delete}}
-                              @openDefinition={{this.openDefinition}}
-                              data-test-card-inspector-panel
-                            />
-                          {{/if}}
+                          <DetailPanel
+                            @cardInstance={{this.card}}
+                            @readyFile={{this.readyFile}}
+                            @selectedDeclaration={{this.selectedDeclaration}}
+                            @declarations={{this.declarations}}
+                            @selectDeclaration={{this.selectDeclaration}}
+                            @delete={{perform this.delete}}
+                            @openDefinition={{this.openDefinition}}
+                            data-test-card-inspector-panel
+                          />
                         {{/if}}
                       {{/if}}
                     </section>
