@@ -507,8 +507,6 @@ export class TestCard extends CardDef {
   });
 
   test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
-    // TODO include percy snapshot
-
     await openNewFileModal('Field Definition');
     await click('[data-test-select-card-type]');
     await waitFor('[data-test-card-catalog-modal]');
