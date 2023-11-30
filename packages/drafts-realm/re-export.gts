@@ -3,7 +3,6 @@ import {
   FieldDef,
   BaseDef as BDef,
   contains,
-  Component,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import NumberCard from 'https://cardstack.com/base/number';
