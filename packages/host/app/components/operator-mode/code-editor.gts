@@ -154,21 +154,29 @@ export default class CodeEditor extends Component<Signature> {
     } else if (
       declaration.path?.node &&
       'loc' in declaration.path?.node &&
-      declaration.path.node.loc &&
-      declaration.path?.isExportNamedDeclaration()
+      declaration.path.node.loc
     ) {
-      //capturing position of named export declarations
-      let specifier = declaration.path?.node.specifiers.find(
-        (specifier) => getName(specifier.exported) === declaration.exportedAs,
-      );
-      if (
-        specifier &&
-        specifier.exported.loc !== null &&
-        specifier.exported.loc !== undefined
-      ) {
-        let { start, end } = specifier.exported.loc;
+      //This is a fallback path if we cannot find declaration / code for element
+      if (declaration.path?.isExportNamedDeclaration()) {
+        //capturing position of named export declarations
+        //this will always divert to the end of the specifier
+        let specifier = declaration.path?.node.specifiers.find(
+          (specifier) => getName(specifier.exported) === declaration.exportedAs,
+        );
+        if (
+          specifier &&
+          specifier.exported.loc !== null &&
+          specifier.exported.loc !== undefined
+        ) {
+          let { start, end } = specifier.exported.loc;
+          this.monacoService.updateCursorPosition(
+            new Position(start.line, end.column + 1), //need to +1 for specifier positions
+          );
+        }
+      } else if (declaration.path.isExportDefaultDeclaration()) {
+        let { start, end } = declaration.path.node.loc;
         this.monacoService.updateCursorPosition(
-          new Position(start.line, end.column + 1),
+          new Position(start.line, end.column),
         );
       }
     }
