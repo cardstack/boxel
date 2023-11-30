@@ -116,8 +116,8 @@ export default class CreateFileModal extends Component<Signature> {
                 class={{if this.selectedCatalogEntry 'change-trigger'}}
                 @kind='text-only'
                 @size='small'
-                @disabled={{this.createCardInstance.isRunning}}
-                {{on 'click' (perform this.chooseCardInstanceType)}}
+                @disabled={{this.isCreateRunning}}
+                {{on 'click' (perform this.chooseType)}}
                 data-test-select-card-type
               >
                 {{if this.selectedCatalogEntry 'Change' 'Select'}}
@@ -303,11 +303,11 @@ export default class CreateFileModal extends Component<Signature> {
     );
   }
 
-  private onSetup = restartableTask(async () => {
-    if (this.args.fileType.id === 'card-instance') {
-      return;
-    }
+  private get isCreateRunning() {
+    return this.createCardInstance.isRunning || this.createDefinition.isRunning;
+  }
 
+  private onSetup = restartableTask(async () => {
     let token = waiter.beginAsync();
 
     let fieldOrCard =
@@ -328,7 +328,7 @@ export default class CreateFileModal extends Component<Signature> {
     }
   });
 
-  private chooseCardInstanceType = restartableTask(async () => {
+  private chooseType = restartableTask(async () => {
     let isField = this.args.fileType.id === 'field-definition';
     this.selectedCatalogEntry = await chooseCard({
       filter: {
