@@ -97,19 +97,25 @@ export default class CreateFileModal extends Component<Signature> {
               data-test-inherits-from-field
             >
               <div class='field-contents'>
-                {{#if this.selectedCatalogEntry}}
-                  <SelectedTypePill @entry={{this.selectedCatalogEntry}} />
+                {{#if this.definitionClass}}
+                  <Pill @inert={{true}}>
+                    {{this.definitionClass.displayName}}
+                  </Pill>
+                {{else}}
+                  {{#if this.selectedCatalogEntry}}
+                    <SelectedTypePill @entry={{this.selectedCatalogEntry}} />
+                  {{/if}}
+                  <Button
+                    class={{if this.selectedCatalogEntry 'change-trigger'}}
+                    @kind='text-only'
+                    @size='small'
+                    @disabled={{this.isCreateRunning}}
+                    {{on 'click' (perform this.chooseType)}}
+                    data-test-select-card-type
+                  >
+                    {{if this.selectedCatalogEntry 'Change' 'Select'}}
+                  </Button>
                 {{/if}}
-                <Button
-                  class={{if this.selectedCatalogEntry 'change-trigger'}}
-                  @kind='text-only'
-                  @size='small'
-                  @disabled={{this.isCreateRunning}}
-                  {{on 'click' (perform this.chooseType)}}
-                  data-test-select-card-type
-                >
-                  {{if this.selectedCatalogEntry 'Change' 'Select'}}
-                </Button>
               </div>
             </FieldContainer>
             {{#if
@@ -131,74 +137,21 @@ export default class CreateFileModal extends Component<Signature> {
                 />
               </FieldContainer>
               <FieldContainer
-                @label='Inherits From'
-                class='field'
-                data-test-inherits-from-field
+                @label='File Name'
+                @tag='label'
+                class='field gts-extension'
               >
-                <div class='field-contents'>
-                  <Pill
-                    @inert={{true}}
-                    data-test-selected-type={{this.selectedCatalogEntry.title}}
-                  >
-                    {{#if this.definitionClass}}
-                      {{this.definitionClass.displayName}}
-                    {{else}}
-                      {{this.selectedCatalogEntry.title}}
-                    {{/if}}
-                  </Pill>
-                  {{#unless this.definitionClass}}
-                    <Button
-                      class={{if this.selectedCatalogEntry 'change-trigger'}}
-                      @kind='text-only'
-                      @size='small'
-                      @disabled={{this.createCardInstance.isRunning}}
-                      {{on 'click' (perform this.chooseType)}}
-                      data-test-select-card-type
-                    >
-                      {{if this.selectedCatalogEntry 'Change' 'Select'}}
-                    </Button>
-                  {{/unless}}
-                </div>
+                <BoxelInput
+                  data-test-file-name-field
+                  placeholder={{if
+                    (eq this.fileType.id 'card-definition')
+                    'my-card.gts'
+                    'my-field.gts'
+                  }}
+                  @value={{this.fileName}}
+                  @onInput={{this.setFileName}}
+                />
               </FieldContainer>
-              {{#if
-                (or
-                  (eq this.fileType.id 'card-definition')
-                  (eq this.fileType.id 'field-definition')
-                )
-              }}
-                <FieldContainer
-                  @label='Display Name'
-                  @tag='label'
-                  class='field'
-                >
-                  <BoxelInput
-                    data-test-display-name-field
-                    placeholder={{if
-                      (eq this.fileType.id 'card-definition')
-                      'My Card'
-                      'My Field'
-                    }}
-                    @value={{this.displayName}}
-                    @onInput={{this.setDisplayName}}
-                  />
-                </FieldContainer>
-                <FieldContainer
-                  @label='File Name'
-                  @tag='label'
-                  class='field gts-extension'
-                >
-                  <BoxelInput
-                    data-test-file-name-field
-                    placeholder={{if
-                      (eq this.fileType.id 'card-definition')
-                      'my-card.gts'
-                      'my-field.gts'
-                    }}
-                    @value={{this.fileName}}
-                    @onInput={{this.setFileName}}
-                  />
-                </FieldContainer>
-              {{/if}}
             {{/if}}
           {{/if}}
         {{/if}}
