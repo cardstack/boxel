@@ -4,6 +4,7 @@ import {
   waitFor,
   find,
   fillIn,
+  settled,
   triggerKeyEvent,
 } from '@ember/test-helpers';
 
@@ -673,6 +674,42 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     }
 
     // FIXME extend to show different positions across realms?
+  });
+
+  test('persisted scroll position is restored on refresh', async function (assert) {
+    // FIXME key should be file-specific, not realm
+    window.localStorage.setItem(
+      'scroll-positions',
+      JSON.stringify({ 'file-tree-for-http://test-realm/test/': 300 }),
+    );
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+      openDirs: { [testRealmURL]: ['Person/'] },
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-togglable-left-panel]');
+    await settled();
+
+    let scrollablePanel = find('[data-test-togglable-left-panel]');
+
+    assert.strictEqual(scrollablePanel?.scrollTop, 300);
   });
 
   test('can open files in base realm', async function (assert) {

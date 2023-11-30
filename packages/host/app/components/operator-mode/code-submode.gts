@@ -49,6 +49,7 @@ import type MessageService from '@cardstack/host/services/message-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
+import ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -123,8 +124,6 @@ export default class CodeSubmode extends Component<Signature> {
     | ((declaration: ModuleDeclaration) => void)
     | undefined;
   #currentCard: CardDef | undefined;
-
-  private scrollPositions = new Map();
 
   private deleteModal: DeleteModal | undefined;
   private cardResource = getCard(
@@ -646,10 +645,8 @@ export default class CodeSubmode extends Component<Signature> {
                     </header>
                     <section
                       class='inner-container__content'
-                      {{RestoreScrollPosition
-                        this.scrollPositionKey
-                        this.scrollPositions
-                      }}
+                      data-test-togglable-left-panel
+                      {{RestoreScrollPosition this.scrollPositionKey}}
                     >
                       {{#if this.isFileTreeShowing}}
                         <FileTree @realmURL={{this.realmURL}} />
@@ -981,7 +978,7 @@ export default class CodeSubmode extends Component<Signature> {
 }
 
 interface RestoreScrollPositionModifierArgs {
-  Positional: [String, Map<String, number>];
+  Positional: [String];
 }
 
 interface RestoreScrollPositionModifierSignature {
@@ -990,25 +987,22 @@ interface RestoreScrollPositionModifierSignature {
 }
 
 class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignature> {
+  @service declare scrollPositionService: ScrollPositionService;
+
   element!: Element;
   #previousKey: String | undefined;
-  #keyToPreviousScrollTop: Map<String, number>;
   #scrollEndListener: (Event) => void;
   #mutationObserver: MutationObserver;
 
   modify(
     element: Element,
-    [
-      key,
-      keyToPreviousScrollTop,
-    ]: PositionalArgs<RestoreScrollPositionModifierSignature>,
+    [key]: PositionalArgs<RestoreScrollPositionModifierSignature>,
   ): void {
     if (!this.#mutationObserver) {
       this.element = element;
 
       this.#scrollEndListener = this.handleScrollEnd.bind(this);
       element.addEventListener('scrollend', this.#scrollEndListener);
-      this.#keyToPreviousScrollTop = keyToPreviousScrollTop;
 
       let mutationObserver = new MutationObserver(
         this.debouncedSetScrollTop.bind(this),
@@ -1040,8 +1034,8 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
 
   setScrollTop() {
     let key = this.#previousKey;
-    if (this.#keyToPreviousScrollTop.has(key)) {
-      let previousScrollTop = this.#keyToPreviousScrollTop.get(key);
+    if (this.scrollPositionService.keyHasScrollPosition(key)) {
+      let previousScrollTop = this.scrollPositionService.get(key);
       console.log(
         `ummm next render restoring pst ${previousScrollTop} key ${key}`,
       );
@@ -1055,6 +1049,9 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
   handleScrollEnd(e) {
     console.log('scrollend, key is ' + this.#previousKey, e);
     console.log('scrolltop ' + e.target.scrollTop);
-    this.#keyToPreviousScrollTop.set(this.#previousKey, e.target.scrollTop);
+    this.scrollPositionService.setKeyScrollPosition(
+      this.#previousKey,
+      e.target.scrollTop,
+    );
   }
 }
