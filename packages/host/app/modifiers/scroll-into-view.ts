@@ -31,7 +31,7 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
       this.#didSetup = true;
 
       if (shouldScrollIntoView) {
-        if (key && !this.scrollPositionService.has(key)) {
+        if (key && !this.scrollPositionService.keyHasScrollPosition(key)) {
           this.element.scrollIntoView({ block: 'center' });
         }
       }
