@@ -1031,7 +1031,7 @@ class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignat
   }
 
   debouncedSetScrollTop() {
-    debounce(this, this.setScrollTop, 50);
+    debounce(this, this.setScrollTop, 100);
   }
 
   nextSetScrollTop() {
