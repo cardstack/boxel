@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -90,27 +91,7 @@ export default class CreateFileModal extends Component<Signature> {
           >
             <div class='field-contents'>
               {{#if this.selectedCatalogEntry}}
-                <Pill
-                  @inert={{true}}
-                  class='selected-type'
-                  data-test-selected-type={{this.selectedCatalogEntry.title}}
-                >
-                  <:icon>
-                    <RealmInfoProvider
-                      @fileURL={{this.selectedCatalogEntry.id}}
-                    >
-                      <:ready as |realmInfo|>
-                        <RealmIcon
-                          @realmIconURL={{realmInfo.iconURL}}
-                          @realmName={{realmInfo.name}}
-                        />
-                      </:ready>
-                    </RealmInfoProvider>
-                  </:icon>
-                  <:default>
-                    {{this.selectedCatalogEntry.title}}
-                  </:default>
-                </Pill>
+                <SelectedTypePill @entry={{this.selectedCatalogEntry}} />
               {{/if}}
               <Button
                 class={{if this.selectedCatalogEntry 'change-trigger'}}
@@ -221,13 +202,6 @@ export default class CreateFileModal extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
-      }
-      .selected-type {
-        padding: var(--boxel-sp-xxxs);
-        gap: var(--boxel-sp-xxxs);
-      }
-      .selected-type :deep(.icon) {
-        margin-right: 0;
       }
       .change-trigger {
         margin-left: auto;
@@ -440,3 +414,36 @@ export class ${className} extends ${exportName} {
 function camelize(name: string) {
   return camelCase(name).replace(/^./, (c) => c.toUpperCase());
 }
+
+const SelectedTypePill: TemplateOnlyComponent<{
+  entry: CatalogEntry;
+}> = <template>
+  <Pill
+    @inert={{true}}
+    class='selected-type'
+    data-test-selected-type={{@entry.title}}
+  >
+    <:icon>
+      <RealmInfoProvider @fileURL={{@entry.id}}>
+        <:ready as |realmInfo|>
+          <RealmIcon
+            @realmIconURL={{realmInfo.iconURL}}
+            @realmName={{realmInfo.name}}
+          />
+        </:ready>
+      </RealmInfoProvider>
+    </:icon>
+    <:default>
+      {{@entry.title}}
+    </:default>
+  </Pill>
+  <style>
+    .selected-type {
+      padding: var(--boxel-sp-xxxs);
+      gap: var(--boxel-sp-xxxs);
+    }
+    .selected-type :deep(.icon) {
+      margin-right: 0;
+    }
+  </style>
+</template>;
