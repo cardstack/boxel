@@ -313,7 +313,6 @@ export default class CreateFileModal extends Component<Signature> {
         eq: { isField },
       },
     });
-    debugger;
   });
 
   // this can be used for CardDefs or FieldDefs
