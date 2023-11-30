@@ -125,7 +125,10 @@ export default class Selector extends Component<Signature> {
                 }}
                 data-test-boxel-selector-item
                 data-test-boxel-selector-item-selected={{selectorItem.selected}}
-                {{scrollIntoViewModifier selectorItem.selected}}
+                {{scrollIntoViewModifier
+                  selectorItem.selected
+                  key=@readyFile._url
+                }}
               >
                 {{! template-lint-disable require-context-role }}
                 <div

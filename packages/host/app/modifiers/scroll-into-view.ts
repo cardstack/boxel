@@ -1,7 +1,12 @@
-import Modifier, { PositionalArgs } from 'ember-modifier';
+import { inject as service } from '@ember/service';
+
+import Modifier, { NamedArgs, PositionalArgs } from 'ember-modifier';
+
+import ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 
 interface ScrollIntoViewModifierArgs {
   Positional: [boolean];
+  Named: { key?: string };
 }
 
 interface ScrollIntoViewModifierSignature {
@@ -10,12 +15,15 @@ interface ScrollIntoViewModifierSignature {
 }
 
 export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModifierSignature> {
+  @service declare scrollPositionService: ScrollPositionService;
+
   element!: Element;
   #didSetup = false;
 
   modify(
     element: Element,
     [shouldScrollIntoView]: PositionalArgs<ScrollIntoViewModifierSignature>,
+    { key }: NamedArgs<ScrollIntoViewModifierSignature>,
   ): void {
     this.element = element;
 
@@ -23,7 +31,9 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
       this.#didSetup = true;
 
       if (shouldScrollIntoView) {
-        this.element.scrollIntoView({ block: 'center' });
+        if (key && !this.scrollPositionService.has(key)) {
+          this.element.scrollIntoView({ block: 'center' });
+        }
       }
     }
   }

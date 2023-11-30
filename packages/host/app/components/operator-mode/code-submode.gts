@@ -414,12 +414,16 @@ export default class CodeSubmode extends Component<Signature> {
     if (this.isFileTreeShowing) {
       return this.fileTreeScrollPositionKey;
     } else {
-      return `whoknows!!!`;
+      return this.inspectorScrollPositionKey;
     }
   }
 
   private get fileTreeScrollPositionKey() {
     return `file-tree-for-${this.realmURL}`;
+  }
+
+  private get inspectorScrollPositionKey() {
+    return `inspector-${this.codePath}`;
   }
 
   private saveCard = restartableTask(async (card: CardDef) => {
