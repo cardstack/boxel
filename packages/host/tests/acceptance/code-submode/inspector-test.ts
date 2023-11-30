@@ -299,6 +299,59 @@ const importsSource = `
   }
 `;
 
+const reExportSource = `
+  import {
+    CardDef,
+    FieldDef,
+    BaseDef as BDef,
+    contains,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+  import NumberCard from 'https://cardstack.com/base/number';
+
+  export const exportedVar = 'exported var';
+
+  export { StringCard as StrCard };
+
+  export { FieldDef as FDef, CardDef, contains, BDef };
+
+  export * from './in-this-file'; //Will not display inside "in-this-file"
+
+  export default NumberCard;
+`;
+
+const localInheritSource = `
+  import {
+    contains,
+    field,
+    CardDef,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+
+  class GrandParent extends CardDef {
+    static displayName = 'local grandparent';
+  }
+
+  class Parent extends GrandParent {
+    static displayName = 'local parent';
+  }
+
+  class Activity extends FieldDef {
+    static displayName = 'my activity';
+  }
+  class Hobby extends Activity {
+    static displayName = 'my hobby';
+  }
+  class Sport extends Hobby {
+    static displayName = 'my sport';
+  }
+
+  export class Child extends Parent {
+    static displayName = 'exported child';
+    @field sport = contains(Sport);
+  }
+`;
+
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -334,6 +387,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'exports.gts': exportsSource,
         'special-exports.gts': specialExportsSource,
         'imports.gts': importsSource,
+        're-export.gts': reExportSource,
+        'local-inherit.gts': localInheritSource,
         'person-entry.json': {
           data: {
             type: 'card',
@@ -1183,5 +1238,146 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert
       .dom('[data-test-boxel-selector-item-selected]')
       .hasText(`${elementName} card`);
+  });
+
+  test('in-this-file panel displays re-exports', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}re-export.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    //default is the 1st index
+    let elementName = 'StrCard (StringCard) field';
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(elementName);
+    //TODO: intentionally not care about default line position for exports
+    //currently, only focus cursor if selecting declaration; not the reverse
+    //assert.true(monacoService.getLineCursorOn()?.includes('Str'));
+
+    // elements must be ordered by the way they appear in the source code
+    const expectedElementNames = [
+      'StrCard (StringCard) field',
+      'FDef (FieldDef) field',
+      'CardDef card',
+      'BDef base',
+      'default (NumberCard) field',
+    ];
+    expectedElementNames.forEach(async (elementName, index) => {
+      await waitFor(
+        `[data-test-boxel-selector-item]:nth-of-type(${index + 1})`,
+      );
+      assert
+        .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
+        .hasText(elementName);
+    });
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 5 });
+
+    //clicking on a base card
+    elementName = 'BDef';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} base`);
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert.dom('[data-test-definition-header]').includesText('Base Definition');
+    assert.dom('[data-test-card-module-definition]').includesText('Base');
+    assert.true(monacoService.getLineCursorOn()?.includes('BDef'));
+  });
+
+  test('in-this-file displays local grandfather card or local grandfather field', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}local-inherit.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    //default is the 1st index
+    let elementName = 'GrandParent card';
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(elementName);
+    assert.true(monacoService.getLineCursorOn()?.includes('GrandParent'));
+    // elements must be ordered by the way they appear in the source code
+    const expectedElementNames = [
+      'GrandParent card',
+      'Parent card',
+      'Activity field',
+      'Hobby field',
+      'Sport field',
+      'Child card',
+    ];
+    expectedElementNames.forEach(async (elementName, index) => {
+      await waitFor(
+        `[data-test-boxel-selector-item]:nth-of-type(${index + 1})`,
+      );
+      assert
+        .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
+        .hasText(elementName);
+    });
+
+    //select parent card defined locally
+    elementName = 'Parent';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert.dom('[data-test-definition-header]').includesText('Card Definition');
+    assert
+      .dom('[data-test-card-module-definition]')
+      .includesText('local parent');
+    await waitFor('[data-test-card-schema="local parent"]');
+    assert
+      .dom('[data-test-card-schema="local grandparent"]')
+      .exists({ count: 1 });
+    assert.dom(`[data-test-card-schema="local parent"]`).exists();
+    assert.dom(`[data-test-card-schema="local grandparent"]`).exists();
+    assert.dom(`[data-test-total-fields]`).containsText('3 Fields');
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+
+    //select child field defined locally
+    elementName = 'Sport';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert
+      .dom('[data-test-definition-header]')
+      .includesText('Field Definition');
+    assert.dom('[data-test-card-module-definition]').includesText('my sport');
+    await waitFor('[data-test-card-schema="my sport"]');
+    assert.dom('[data-test-card-schema="my sport"]').exists({ count: 1 });
+    assert.dom(`[data-test-card-schema="my hobby"]`).exists();
+    assert.dom(`[data-test-card-schema="my sport"]`).exists();
+    assert.dom(`[data-test-total-fields]`).containsText('0 Fields');
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
   });
 });
