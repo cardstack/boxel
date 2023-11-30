@@ -412,13 +412,13 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get scrollPositionKey() {
     if (this.isFileTreeShowing) {
-      return this.fileTreeScrolLPositionKey;
+      return this.fileTreeScrollPositionKey;
     } else {
       return `whoknows!!!`;
     }
   }
 
-  private get fileTreeScrolLPositionKey() {
+  private get fileTreeScrollPositionKey() {
     return `file-tree-for-${this.realmURL}`;
   }
 
