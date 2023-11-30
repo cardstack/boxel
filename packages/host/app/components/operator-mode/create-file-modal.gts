@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -39,6 +40,8 @@ import ModalContainer from '../modal-container';
 
 import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
+import RealmInfoProvider from './realm-info-provider';
+import RealmIcon from './realm-icon';
 
 import type CardService from '../../services/card-service';
 
@@ -83,7 +86,7 @@ export default class CreateFileModal extends Component<Signature> {
           {{else}}
             <FieldContainer @label='Realm' @tag='label' class='field'>
               <RealmDropdown
-                class='realm-dropdown-trigger'
+                @dropdownWidth='15rem'
                 @selectedRealmURL={{this.selectedRealmURL}}
                 @onSelect={{this.onSelectRealm}}
               />
@@ -94,28 +97,19 @@ export default class CreateFileModal extends Component<Signature> {
               data-test-inherits-from-field
             >
               <div class='field-contents'>
-                <Pill
-                  @inert={{true}}
-                  data-test-selected-type={{this.selectedCatalogEntry.title}}
+                {{#if this.selectedCatalogEntry}}
+                  <SelectedTypePill @entry={{this.selectedCatalogEntry}} />
+                {{/if}}
+                <Button
+                  class={{if this.selectedCatalogEntry 'change-trigger'}}
+                  @kind='text-only'
+                  @size='small'
+                  @disabled={{this.isCreateRunning}}
+                  {{on 'click' (perform this.chooseType)}}
+                  data-test-select-card-type
                 >
-                  {{#if this.definitionClass}}
-                    {{this.definitionClass.displayName}}
-                  {{else}}
-                    {{this.selectedCatalogEntry.title}}
-                  {{/if}}
-                </Pill>
-                {{#unless this.definitionClass}}
-                  <Button
-                    class={{if this.selectedCatalogEntry 'change-trigger'}}
-                    @kind='text-only'
-                    @size='small'
-                    @disabled={{this.createCardInstance.isRunning}}
-                    {{on 'click' (perform this.chooseCardInstanceType)}}
-                    data-test-select-card-type
-                  >
-                    {{if this.selectedCatalogEntry 'Change' 'Select'}}
-                  </Button>
-                {{/unless}}
+                  {{if this.selectedCatalogEntry 'Change' 'Select'}}
+                </Button>
               </div>
             </FieldContainer>
             {{#if
@@ -137,21 +131,74 @@ export default class CreateFileModal extends Component<Signature> {
                 />
               </FieldContainer>
               <FieldContainer
-                @label='File Name'
-                @tag='label'
-                class='field gts-extension'
+                @label='Inherits From'
+                class='field'
+                data-test-inherits-from-field
               >
-                <BoxelInput
-                  data-test-file-name-field
-                  placeholder={{if
-                    (eq this.fileType.id 'card-definition')
-                    'my-card.gts'
-                    'my-field.gts'
-                  }}
-                  @value={{this.fileName}}
-                  @onInput={{this.setFileName}}
-                />
+                <div class='field-contents'>
+                  <Pill
+                    @inert={{true}}
+                    data-test-selected-type={{this.selectedCatalogEntry.title}}
+                  >
+                    {{#if this.definitionClass}}
+                      {{this.definitionClass.displayName}}
+                    {{else}}
+                      {{this.selectedCatalogEntry.title}}
+                    {{/if}}
+                  </Pill>
+                  {{#unless this.definitionClass}}
+                    <Button
+                      class={{if this.selectedCatalogEntry 'change-trigger'}}
+                      @kind='text-only'
+                      @size='small'
+                      @disabled={{this.createCardInstance.isRunning}}
+                      {{on 'click' (perform this.chooseType)}}
+                      data-test-select-card-type
+                    >
+                      {{if this.selectedCatalogEntry 'Change' 'Select'}}
+                    </Button>
+                  {{/unless}}
+                </div>
               </FieldContainer>
+              {{#if
+                (or
+                  (eq this.fileType.id 'card-definition')
+                  (eq this.fileType.id 'field-definition')
+                )
+              }}
+                <FieldContainer
+                  @label='Display Name'
+                  @tag='label'
+                  class='field'
+                >
+                  <BoxelInput
+                    data-test-display-name-field
+                    placeholder={{if
+                      (eq this.fileType.id 'card-definition')
+                      'My Card'
+                      'My Field'
+                    }}
+                    @value={{this.displayName}}
+                    @onInput={{this.setDisplayName}}
+                  />
+                </FieldContainer>
+                <FieldContainer
+                  @label='File Name'
+                  @tag='label'
+                  class='field gts-extension'
+                >
+                  <BoxelInput
+                    data-test-file-name-field
+                    placeholder={{if
+                      (eq this.fileType.id 'card-definition')
+                      'my-card.gts'
+                      'my-field.gts'
+                    }}
+                    @value={{this.fileName}}
+                    @onInput={{this.setFileName}}
+                  />
+                </FieldContainer>
+              {{/if}}
             {{/if}}
           {{/if}}
         {{/if}}
@@ -213,9 +260,6 @@ export default class CreateFileModal extends Component<Signature> {
       .field {
         --boxel-field-label-size: 8rem;
         padding-right: 0;
-      }
-      .realm-dropdown-trigger {
-        --realm-dropdown-trigger-width: 15.25rem;
       }
       .field-contents {
         display: flex;
@@ -389,11 +433,14 @@ export default class CreateFileModal extends Component<Signature> {
     );
   }
 
+  private get isCreateRunning() {
+    return this.createCardInstance.isRunning || this.createDefinition.isRunning;
+  }
+
   private onSetup = restartableTask(async () => {
     if (this.fileType.id === 'card-instance') {
       return;
     }
-
     let token = waiter.beginAsync();
 
     try {
@@ -417,7 +464,7 @@ export default class CreateFileModal extends Component<Signature> {
     }
   });
 
-  private chooseCardInstanceType = restartableTask(async () => {
+  private chooseType = restartableTask(async () => {
     let isField = this.fileType.id === 'field-definition';
     this.selectedCatalogEntry = await chooseCard({
       filter: {
@@ -541,3 +588,36 @@ export class ${className} extends ${exportName} {
 function camelize(name: string) {
   return capitalize(camelCase(name));
 }
+
+const SelectedTypePill: TemplateOnlyComponent<{
+  entry: CatalogEntry;
+}> = <template>
+  <Pill
+    @inert={{true}}
+    class='selected-type'
+    data-test-selected-type={{@entry.title}}
+  >
+    <:icon>
+      <RealmInfoProvider @fileURL={{@entry.id}}>
+        <:ready as |realmInfo|>
+          <RealmIcon
+            @realmIconURL={{realmInfo.iconURL}}
+            @realmName={{realmInfo.name}}
+          />
+        </:ready>
+      </RealmInfoProvider>
+    </:icon>
+    <:default>
+      {{@entry.title}}
+    </:default>
+  </Pill>
+  <style>
+    .selected-type {
+      padding: var(--boxel-sp-xxxs);
+      gap: var(--boxel-sp-xxxs);
+    }
+    .selected-type :deep(.icon) {
+      margin-right: 0;
+    }
+  </style>
+</template>;

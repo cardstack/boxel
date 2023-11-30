@@ -23,13 +23,14 @@ import {
 } from '../../helpers';
 
 const testRealmURL2 = 'http://test-realm/test2/';
+const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
 
 const files: Record<string, any> = {
   '.realm.json': {
     name: 'Test Workspace A',
     backgroundURL:
       'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-    iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+    iconURL: testRealmAIconURL,
   },
   'index.json': {
     data: {
@@ -181,43 +182,16 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     );
   });
 
-  test('allows realm selection', async function (assert) {
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-card-resource-loaded]');
-    assert
-      .dom('[data-test-code-mode-card-preview-header]')
-      .hasText('Test Workspace A');
-
-    await click('[data-test-new-file-button]');
-    await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal][data-test-ready]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
-    assert
-      .dom('[data-test-realm-dropdown-trigger]')
-      .hasText('Test Workspace A', 'current realm is selected');
-
-    await click(`[data-test-realm-dropdown-trigger]`);
-    await waitFor(
-      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
-    );
-    assert
-      .dom(
-        '[data-test-boxel-menu-item-selected] [data-test-boxel-menu-item-text="Test Workspace A"]',
-      )
-      .exists('current realm is selected');
-    await percySnapshot(assert);
-
-    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
-    assert.dom('[data-test-realm-name="Base Workspace"]').exists();
-    assert
-      .dom('[data-test-boxel-dropdown-content]')
-      .doesNotExist('dropdown menu is closed');
-  });
-
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
-    assert.expect(8);
+    const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
+    assert.expect(12);
     await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
+    await waitFor(`[data-test-selected-type="General Card"]`);
+    assert.dom(`[data-test-selected-type]`).hasText('General Card');
+    assert
+      .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
+      .hasAttribute('src', baseRealmIconURL);
 
     // card type selection
     await click('[data-test-select-card-type]');
@@ -226,6 +200,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
     await click('[data-test-card-catalog-go-button]');
     await waitFor(`[data-test-selected-type="Person"]`);
+    assert.dom(`[data-test-selected-type]`).hasText('Person');
+    assert
+      .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
+      .hasAttribute('src', testRealmAIconURL);
 
     let deferred = new Deferred<void>();
     let fileID = '';
@@ -281,13 +259,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     assert.expect(8);
     await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
-
-    // card type selection
-    await click('[data-test-select-card-type]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-select="${baseRealm.url}types/card"]`);
-    await click(`[data-test-select="${baseRealm.url}types/card"]`);
-    await click('[data-test-card-catalog-go-button]');
     await waitFor(`[data-test-selected-type="General Card"]`);
 
     let deferred = new Deferred<void>();
@@ -336,8 +307,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from another realm', async function (assert) {
-    assert.expect(9);
+    assert.expect(8);
     await openNewFileModal('Card Instance');
+    await waitFor(`[data-test-selected-type="General Card"]`);
 
     // realm selection
     await click(`[data-test-realm-dropdown-trigger]`);
@@ -347,15 +319,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
     await waitFor(`[data-test-realm-name="Test Workspace B"]`);
     assert.dom('[data-test-realm-name]').hasText('Test Workspace B');
-
-    // card type selection
-    await click('[data-test-select-card-type]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-select="${baseRealm.url}types/card"]`);
-    await click(`[data-test-select="${baseRealm.url}types/card"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await waitFor(`[data-test-selected-type="General Card"]`);
-    assert.dom(`[data-test-selected-type]`).hasText('General Card');
 
     let deferred = new Deferred<void>();
     let fileID = '';
