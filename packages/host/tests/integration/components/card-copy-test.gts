@@ -33,6 +33,7 @@ import {
   type TestContextWithSSE,
   setupIntegrationTestRealm,
 } from '../../helpers';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
 const testRealm2URL = `http://test-realm/test2/`;
@@ -78,6 +79,7 @@ module('Integration | card-copy', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
+  setupMatrixServiceMock(hooks);
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
   });

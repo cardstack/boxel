@@ -18,12 +18,14 @@ import {
   setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const realmName = 'Local Workspace';
 
 module('Integration | card-catalog filters', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+  setupMatrixServiceMock(hooks);
 
   let noop = () => {};
 

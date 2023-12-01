@@ -5,15 +5,18 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { Modal } from '@cardstack/boxel-ui/components';
+import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import { type Loader } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
+import Login from '@cardstack/host/components/matrix/login';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import config from '@cardstack/host/config/environment';
@@ -31,6 +34,7 @@ import CardCatalogModal from '../card-catalog/modal';
 import { Submodes } from '../submode-switcher';
 
 import type CardService from '../../services/card-service';
+import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
@@ -42,12 +46,17 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
+  //TODO: Remove after registration page is implemented.
+  @tracked isSignInSkipped = false;
+
   @service private declare cardService: CardService;
+  @service declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
 
+    this.loadMatrix.perform();
     if (config.environment === 'test') {
       (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
       registerDestructor(this, () => {
@@ -139,6 +148,21 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
+  private loadMatrix = task(async () => {
+    await this.matrixService.ready;
+    await this.matrixService.start();
+  });
+
+  private get showLoggedInMode() {
+    return this.matrixService.isLoggedIn || this.isSignInSkipped;
+  }
+
+  //TODO: Remove after registration page is implemented.
+  @action
+  skipSignIn() {
+    this.isSignInSkipped = true;
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -149,13 +173,22 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      {{#if this.isCodeMode}}
-        <CodeSubmode
-          @saveSourceOnClose={{perform this.saveSource}}
-          @saveCardOnClose={{perform this.write}}
-        />
+      {{#if this.loadMatrix.isRunning}}
+        <div class='loading'>
+          <LoadingIndicator />
+          <span class='loading__message'>Initializing Operator Mode...</span>
+        </div>
       {{else}}
-        <InteractSubmode @write={{perform this.write}} />
+        {{#if (and this.showLoggedInMode this.isCodeMode)}}
+          <CodeSubmode
+            @saveSourceOnClose={{perform this.saveSource}}
+            @saveCardOnClose={{perform this.write}}
+          />
+        {{else if (and this.showLoggedInMode (not this.isCodeMode))}}
+          <InteractSubmode @write={{perform this.write}} />
+        {{else}}
+          <Login @skipSignIn={{this.skipSignIn}} />
+        {{/if}}
       {{/if}}
     </Modal>
 
@@ -175,6 +208,13 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
       .operator-mode > div {
         align-items: flex-start;
+      }
+      .loading {
+        display: flex;
+        padding: var(--boxel-sp);
+      }
+      .loading__message {
+        margin-left: var(--boxel-sp-xs);
       }
     </style>
   </template>

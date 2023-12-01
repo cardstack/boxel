@@ -30,6 +30,7 @@ import {
   setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 let loader: Loader;
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -74,6 +75,7 @@ module('Integration | card-delete', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
+  setupMatrixServiceMock(hooks);
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
   });

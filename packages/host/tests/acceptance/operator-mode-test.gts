@@ -28,6 +28,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
 } from '../helpers';
+import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -35,6 +36,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
+  setupMatrixServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');
