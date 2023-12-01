@@ -6,7 +6,7 @@ import ScrollPositionService from '@cardstack/host/services/scroll-position-serv
 
 interface ScrollIntoViewModifierArgs {
   Positional: [boolean];
-  Named: { key?: string };
+  Named: { container?: string; key?: string };
 }
 
 interface ScrollIntoViewModifierSignature {
@@ -23,7 +23,7 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
   modify(
     element: Element,
     [shouldScrollIntoView]: PositionalArgs<ScrollIntoViewModifierSignature>,
-    { key }: NamedArgs<ScrollIntoViewModifierSignature>,
+    { container, key }: NamedArgs<ScrollIntoViewModifierSignature>,
   ): void {
     this.element = element;
 
@@ -31,7 +31,11 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
       this.#didSetup = true;
 
       if (shouldScrollIntoView) {
-        if (key && !this.scrollPositionService.keyHasScrollPosition(key)) {
+        if (
+          container &&
+          key &&
+          !this.scrollPositionService.keyHasScrollPosition(container, key)
+        ) {
           this.element.scrollIntoView({ block: 'center' });
         }
       }

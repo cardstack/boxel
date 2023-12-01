@@ -7,7 +7,7 @@ import Modifier, { PositionalArgs } from 'ember-modifier';
 import ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 
 interface RestoreScrollPositionModifierArgs {
-  Positional: [String];
+  Positional: [String, String];
 }
 
 interface RestoreScrollPositionModifierSignature {
@@ -19,13 +19,14 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
   @service declare scrollPositionService: ScrollPositionService;
 
   element!: Element;
+  #previousContainer: String | undefined;
   #previousKey: String | undefined;
   #scrollEndListener: (Event) => void;
   #mutationObserver: MutationObserver;
 
   modify(
     element: Element,
-    [key]: PositionalArgs<RestoreScrollPositionModifierSignature>,
+    [container, key]: PositionalArgs<RestoreScrollPositionModifierSignature>,
   ): void {
     if (!this.#mutationObserver) {
       this.element = element;
@@ -45,6 +46,7 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
       this.#mutationObserver = mutationObserver;
     }
 
+    this.#previousContainer = container;
     this.#previousKey = key;
 
     return () => {
@@ -66,11 +68,12 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
       return;
     }
 
+    let container = this.#previousContainer;
     let key = this.#previousKey;
-    if (this.scrollPositionService.keyHasScrollPosition(key)) {
-      let previousScrollTop = this.scrollPositionService.get(key);
+    if (this.scrollPositionService.keyHasScrollPosition(container, key)) {
+      let previousScrollTop = this.scrollPositionService.get(container, key);
       console.log(
-        `ummm next render restoring pst ${previousScrollTop} key ${key}`,
+        `ummm next render restoring pst ${previousScrollTop} container ${container} key ${key}`,
       );
       console.log(`st before: ${this.element.scrollTop}`);
       console.log(`scroll height: ${this.element.scrollHeight}`);
@@ -84,9 +87,16 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
       return;
     }
 
-    console.log('scrollend, key is ' + this.#previousKey, e);
+    console.log(
+      'scrollend, container is ' +
+        this.#previousContainer +
+        ' key is ' +
+        this.#previousKey,
+      e,
+    );
     console.log('scrolltop ' + e.target.scrollTop);
     this.scrollPositionService.setKeyScrollPosition(
+      this.#previousContainer,
       this.#previousKey,
       e.target.scrollTop,
     );

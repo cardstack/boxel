@@ -613,7 +613,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     );
   });
 
-  test('scroll position is restored when returning to file view', async function (assert) {
+  test('scroll position is restored when returning to file view but only for one file per realm', async function (assert) {
     let codeModeStateParam = stringify({
       stacks: [
         [
@@ -673,15 +673,37 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       );
     }
 
+    // Change to another file and back, persisted scroll position should be forgotten
+
+    await click('[data-test-file="pet-person.gts"]');
+    await click('[data-test-file="Person/1.json"]');
+
+    await click('[data-test-inspector-toggle]');
+    assert.dom(endDirectorySelector).doesNotExist();
+
+    await click('[data-test-file-browser-toggle]');
+    await waitFor(endDirectorySelector);
+
+    endDirectoryElement = find(endDirectorySelector);
+
+    if (!endDirectoryElement) {
+      assert.ok(endDirectoryElement, 'end directory should exist');
+    } else {
+      assert.notOk(
+        await elementIsVisible(endDirectoryElement),
+        'expected previously-stored scroll position to have been forgotten',
+      );
+    }
+
     // FIXME extend to show different positions across realms?
   });
 
   test('persisted scroll position is restored on refresh', async function (assert) {
-    // FIXME must clear position when file changes, also is it weird to know this key structure here?
+    // FIXME is it weird to know this key structure here?
     window.localStorage.setItem(
       'scroll-positions',
       JSON.stringify({
-        'file-tree-for-http://test-realm/test/Person/1.json': 300,
+        'file-tree': ['http://test-realm/test/Person/1.json', 300],
       }),
     );
 

@@ -397,20 +397,12 @@ export default class CodeSubmode extends Component<Signature> {
     }
   });
 
+  private get scrollPositionContainer() {
+    return this.isFileTreeShowing ? 'file-tree' : 'inspector';
+  }
+
   private get scrollPositionKey() {
-    if (this.isFileTreeShowing) {
-      return this.fileTreeScrollPositionKey;
-    } else {
-      return this.inspectorScrollPositionKey;
-    }
-  }
-
-  private get fileTreeScrollPositionKey() {
-    return `file-tree-for-${this.codePath}`;
-  }
-
-  private get inspectorScrollPositionKey() {
-    return `inspector-${this.codePath}`;
+    return this.codePath;
   }
 
   private saveCard = restartableTask(async (card: CardDef) => {
@@ -637,7 +629,10 @@ export default class CodeSubmode extends Component<Signature> {
                     <section
                       class='inner-container__content'
                       data-test-togglable-left-panel
-                      {{RestoreScrollPosition this.scrollPositionKey}}
+                      {{RestoreScrollPosition
+                        this.scrollPositionContainer
+                        this.scrollPositionKey.href
+                      }}
                     >
                       {{#if this.isFileTreeShowing}}
                         <FileTree @realmURL={{this.realmURL}} />

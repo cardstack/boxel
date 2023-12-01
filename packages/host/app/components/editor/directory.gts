@@ -35,7 +35,8 @@ export default class Directory extends Component<Args> {
               {{on 'click' (fn this.openFile entryPath)}}
               {{scrollIntoViewModifier
                 (fileIsSelected entryPath this.operatorModeStateService)
-                key=(concat 'file-tree-for-' @realmURL entryPath)
+                container='file-tree'
+                key=(concat @realmURL entryPath)
               }}
               class='file
                 {{if

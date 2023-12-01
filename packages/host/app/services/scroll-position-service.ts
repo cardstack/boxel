@@ -6,19 +6,32 @@ import window from 'ember-window-mock';
 import { TrackedMap } from 'tracked-built-ins';
 
 export default class ScrollPositionService extends Service {
-  @tracked keyToScrollPosition = new TrackedMap<string, number>();
+  @tracked keyToScrollPosition = new TrackedMap<string, [string, number]>();
 
   constructor(properties: object) {
     super(properties);
     this.extractFromStorage();
   }
 
-  keyHasScrollPosition(key: string) {
-    return this.keyToScrollPosition.has(key);
+  keyHasScrollPosition(container: string, key: string) {
+    return (
+      this.keyToScrollPosition.has(container) &&
+      this.keyToScrollPosition.get(container)[0] === key
+    );
   }
 
-  get(key: string) {
-    return this.keyToScrollPosition.get(key);
+  get(container: string, key: string) {
+    let entry = this.keyToScrollPosition.get(container);
+
+    if (!entry) {
+      return undefined;
+    }
+
+    if (entry[0] !== key) {
+      return undefined;
+    }
+
+    return entry[1];
   }
 
   clearKey(key: string) {
@@ -26,8 +39,8 @@ export default class ScrollPositionService extends Service {
     this.persist();
   }
 
-  setKeyScrollPosition(key: string, position: number) {
-    this.keyToScrollPosition.set(key, position);
+  setKeyScrollPosition(container: string, key: string, position: number) {
+    this.keyToScrollPosition.set(container, [key, position]);
     this.persist();
   }
 
