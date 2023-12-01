@@ -20,10 +20,12 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
   @service declare scrollPositionService: ScrollPositionService;
 
   element!: Element;
-  #previousContainer: String | undefined;
-  #previousKey: String | undefined;
-  #scrollEndListener: (Event) => void;
-  #mutationObserver: MutationObserver;
+
+  #mutationObserver: MutationObserver | undefined;
+  #scrollEndListener: ((e: Event) => void) | undefined;
+
+  #previousContainer: string | undefined;
+  #previousKey: string | undefined;
 
   modify(
     element: Element,
@@ -31,7 +33,7 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
     // eslint-disable-next-line no-empty-pattern
     []: [],
     { container, key }: NamedArgs<RestoreScrollPositionModifierSignature>,
-  ): void {
+  ): () => void {
     console.log(`wha`, container, key);
     if (!this.#mutationObserver) {
       this.element = element;
@@ -55,8 +57,11 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
     this.#previousKey = key;
 
     return () => {
-      element.removeEventListener('scrollend', this.#scrollEndListener);
-      this.#mutationObserver.disconnect();
+      if (this.#scrollEndListener) {
+        element.removeEventListener('scrollend', this.#scrollEndListener);
+      }
+
+      this.#mutationObserver?.disconnect();
     };
   }
 
@@ -75,8 +80,12 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
 
     let container = this.#previousContainer;
     let key = this.#previousKey;
-    if (this.scrollPositionService.keyHasScrollPosition(container, key)) {
-      let previousScrollTop = this.scrollPositionService.get(container, key);
+    if (
+      container &&
+      key &&
+      this.scrollPositionService.keyHasScrollPosition(container, key)
+    ) {
+      let previousScrollTop = this.scrollPositionService.get(container, key)!;
       console.log(
         `ummm next render restoring pst ${previousScrollTop} container ${container} key ${key}`,
       );
@@ -85,13 +94,19 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
       this.element.scrollTop = previousScrollTop;
       console.log(`st after: ${this.element.scrollTop}`);
     } else if (
+      container &&
+      key &&
       this.scrollPositionService.containerHasScrollPosition(container)
     ) {
-      this.#scrollEndListener({ target: this.element });
+      this.scrollPositionService.setKeyScrollPosition(
+        container,
+        key,
+        this.element.scrollTop,
+      );
     }
   }
 
-  handleScrollEnd(e) {
+  handleScrollEnd(e: Event) {
     if (isDestroying(this)) {
       return;
     }
@@ -103,11 +118,20 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
         this.#previousKey,
       e,
     );
-    console.log('scrolltop ' + e.target.scrollTop);
-    this.scrollPositionService.setKeyScrollPosition(
-      this.#previousContainer,
-      this.#previousKey,
-      e.target.scrollTop,
-    );
+
+    if (
+      e.target &&
+      e.target instanceof HTMLElement &&
+      e.target.scrollTop &&
+      this.#previousContainer &&
+      this.#previousKey
+    ) {
+      console.log('scrolltop ' + e.target.scrollTop);
+      this.scrollPositionService.setKeyScrollPosition(
+        this.#previousContainer,
+        this.#previousKey,
+        e.target.scrollTop,
+      );
+    }
   }
 }
