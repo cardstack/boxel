@@ -1327,4 +1327,26 @@ export class TestField extends ExportedField {
       .dom('[data-test-action-button="Inherit"]')
       .doesNotExist('non-exported cards do not display an inherit button');
   });
+
+  test('Inherit action item is not displayed for non Card/Field declarations', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedClass"]');
+
+    await click('[data-boxel-selector-item-text="ExportedClass"]');
+    await waitFor('[data-test-file-definition]');
+    assert
+      .dom('[data-test-action-button="Inherit"]')
+      .doesNotExist('non-exported cards do not display an inherit button');
+  });
 });
