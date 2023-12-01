@@ -1,6 +1,6 @@
 import { type EmptyObject } from '@ember/component/helper';
 
-import { fn } from '@ember/helper';
+import { fn, concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -131,7 +131,9 @@ export default class Selector extends Component<Signature> {
                 {{scrollIntoViewModifier
                   selectorItem.selected
                   container='inspector'
-                  key=selectorItem.url
+                  key=(concat
+                    selectorItem.url '#' selectorItem.declaration.path
+                  )
                 }}
               >
                 {{! template-lint-disable require-context-role }}

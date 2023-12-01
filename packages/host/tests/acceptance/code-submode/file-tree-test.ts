@@ -20,6 +20,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
+  elementIsVisible,
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -805,15 +806,3 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert.dom('[data-test-file="cards-grid.gts"]').hasClass('selected');
   });
 });
-
-async function elementIsVisible(element: Element) {
-  return new Promise((resolve) => {
-    let intersectionObserver = new IntersectionObserver(function (entries) {
-      intersectionObserver.unobserve(element);
-
-      resolve(entries[0].isIntersecting);
-    });
-
-    intersectionObserver.observe(element);
-  });
-}

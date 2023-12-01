@@ -402,7 +402,11 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get scrollPositionKey() {
-    return this.codePath;
+    if (this.isFileTreeShowing) {
+      return this.codePath?.toString();
+    } else {
+      return `${this.codePath}#${this.selectedDeclaration?.path}`;
+    }
   }
 
   private saveCard = restartableTask(async (card: CardDef) => {
@@ -631,7 +635,7 @@ export default class CodeSubmode extends Component<Signature> {
                       data-test-togglable-left-panel
                       {{RestoreScrollPosition
                         container=this.scrollPositionContainer
-                        key=this.scrollPositionKey.href
+                        key=this.scrollPositionKey
                       }}
                     >
                       {{#if this.isFileTreeShowing}}

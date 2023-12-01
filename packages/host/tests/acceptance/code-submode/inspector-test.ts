@@ -1,9 +1,10 @@
-import { visit, click, waitFor, currentURL } from '@ember/test-helpers';
+import { find, visit, click, waitFor, currentURL } from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
@@ -19,6 +20,7 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   TestRealmAdapter,
+  elementIsVisible,
   getMonacoContent,
   setupLocalIndexing,
   testRealmURL,
@@ -664,6 +666,68 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
       );
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+  });
+
+  test('inspector persists scroll position but choosing another element overrides it', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+
+    let deleteButtonSelector = '[data-test-action-button="Delete"]';
+    let deleteButtonElement = find(deleteButtonSelector);
+
+    await this.pauseTest();
+    if (!deleteButtonElement) {
+      assert.ok(deleteButtonElement, 'delete button should exist');
+    } else {
+      assert.notOk(
+        await elementIsVisible(deleteButtonElement),
+        'expected delete button not to be within view',
+      );
+
+      deleteButtonElement.scrollIntoView({ block: 'center' });
+      await this.pauseTest();
+
+      assert.ok(
+        await elementIsVisible(deleteButtonElement),
+        'expected delete button to now be within view',
+      );
+    }
+
+    await click('[data-test-file-browser-toggle]');
+    assert.dom(deleteButtonSelector).doesNotExist();
+
+    await click('[data-test-inspector-toggle]');
+    await waitFor(deleteButtonSelector);
+
+    let position = new MonacoSDK.Position(14, 0);
+    monacoService.updateCursorPosition(position);
+
+    let localClassSelector =
+      '[data-test-boxel-selector-item-text="LocalClass"]';
+    let localClassElement = find(localClassSelector);
+
+    if (!localClassElement) {
+      assert.ok(localClassElement, 'local class element should exist');
+    } else {
+      assert.ok(
+        await elementIsVisible(localClassElement),
+        'expected local class to have scrolled into view',
+      );
+    }
   });
 
   test<TestContextWithSSE>('Can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
