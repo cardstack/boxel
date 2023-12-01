@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, cssVar } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
 
@@ -19,6 +19,7 @@ interface Signature {
     selectedRealmURL: URL | undefined;
     disabled?: boolean;
     contentClass?: string;
+    dropdownWidth?: string;
   };
   Element: HTMLElement;
 }
@@ -35,6 +36,10 @@ export default class RealmDropdown extends Component<Signature> {
           @kind='secondary-light'
           @size='small'
           @disabled={{@disabled}}
+          style={{if
+            @dropdownWidth
+            (cssVar realm-dropdown-width=@dropdownWidth)
+          }}
           {{bindings}}
           data-test-realm-dropdown-trigger
           data-test-realm-name={{this.selectedRealm.name}}
@@ -59,6 +64,11 @@ export default class RealmDropdown extends Component<Signature> {
       </:trigger>
       <:content as |dd|>
         <Menu
+          class='realm-dropdown-menu'
+          style={{if
+            @dropdownWidth
+            (cssVar realm-dropdown-width=@dropdownWidth)
+          }}
           @items={{this.menuItems}}
           @closeMenu={{dd.close}}
           data-test-realm-dropdown-menu
@@ -67,10 +77,11 @@ export default class RealmDropdown extends Component<Signature> {
     </BoxelDropdown>
     <style>
       .realm-dropdown-trigger {
-        width: var(--realm-dropdown-trigger-width, auto);
+        width: var(--realm-dropdown-width, auto);
         display: flex;
         justify-content: flex-start;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xxxs);
+        padding: var(--boxel-sp-xxxs);
         border-radius: var(--boxel-border-radius);
       }
       .arrow-icon {
@@ -85,6 +96,10 @@ export default class RealmDropdown extends Component<Signature> {
         text-overflow: ellipsis;
         overflow: hidden;
         white-space: nowrap;
+      }
+      .realm-dropdown-menu {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+        width: var(--realm-dropdown-width, auto);
       }
     </style>
   </template>

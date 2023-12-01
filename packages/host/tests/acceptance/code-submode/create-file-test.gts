@@ -1,4 +1,4 @@
-import { visit, click, waitFor } from '@ember/test-helpers';
+import { visit, click, fillIn, waitFor } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
@@ -16,17 +16,21 @@ import {
   setupOnSave,
   setupAcceptanceTestRealm,
   setupServerSentEvents,
+  waitForCodeEditor,
+  getMonacoContent,
+  TestRealmAdapter,
   type TestContextWithSave,
 } from '../../helpers';
 
-const testRealmURL2 = 'http://localhost:4202/test2/';
+const testRealmURL2 = 'http://test-realm/test2/';
+const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
 
 const files: Record<string, any> = {
   '.realm.json': {
     name: 'Test Workspace A',
     backgroundURL:
       'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-    iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+    iconURL: testRealmAIconURL,
   },
   'index.json': {
     data: {
@@ -44,7 +48,7 @@ const files: Record<string, any> = {
     import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
     import StringField from "https://cardstack.com/base/string";
 
-    export class Pet extends CardDef {
+    export default class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
 
@@ -58,7 +62,7 @@ const files: Record<string, any> = {
   'person.gts': `
     import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
     import StringField from "https://cardstack.com/base/string";
-    import { Pet } from "./pet";
+    import Pet from "./pet";
 
     export class Person extends CardDef {
       static displayName = 'Person';
@@ -73,7 +77,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Pet',
         description: 'Catalog entry for Pet',
-        ref: { module: `../pet`, name: 'Pet' },
+        ref: { module: `../pet`, name: 'default' },
       },
       meta: {
         adoptsFrom: {
@@ -123,11 +127,22 @@ const filesB: Record<string, any> = {
 };
 
 module('Acceptance | code submode | create-file tests', function (hooks) {
+  let adapter: TestRealmAdapter;
+
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
+
+  async function openNewFileModal(menuSelection: string) {
+    await waitFor('[data-test-code-mode][data-test-save-idle]');
+    await waitFor('[data-test-new-file-button]');
+    await click('[data-test-new-file-button]');
+    await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
+    await waitFor('[data-test-create-file-modal][data-test-ready]');
+    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+  }
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
@@ -139,13 +154,13 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       .loader;
     await setupAcceptanceTestRealm({
       loader,
-      contents: files,
-    });
-    await setupAcceptanceTestRealm({
-      loader,
       contents: filesB,
       realmURL: testRealmURL2,
     });
+    ({ adapter } = await setupAcceptanceTestRealm({
+      loader,
+      contents: files,
+    }));
 
     let realmService = this.owner.lookup(
       'service:realm-info-service',
@@ -167,48 +182,16 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     );
   });
 
-  test('allows realm selection', async function (assert) {
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-card-resource-loaded]');
-    assert
-      .dom('[data-test-code-mode-card-preview-header]')
-      .hasText('Test Workspace A');
-
-    await click('[data-test-new-file-button]');
-    await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
-    assert
-      .dom('[data-test-realm-dropdown-trigger]')
-      .hasText('Test Workspace A', 'current realm is selected');
-
-    await click(`[data-test-realm-dropdown-trigger]`);
-    await waitFor(
-      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
-    );
-    assert
-      .dom(
-        '[data-test-boxel-menu-item-selected] [data-test-boxel-menu-item-text="Test Workspace A"]',
-      )
-      .exists('current realm is selected');
-    await percySnapshot(assert);
-
-    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
-    assert.dom('[data-test-realm-name="Base Workspace"]').exists();
-    assert
-      .dom('[data-test-boxel-dropdown-content]')
-      .doesNotExist('dropdown menu is closed');
-  });
-
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
-    // open modal via new-file button
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-new-file-button]');
-    await click('[data-test-new-file-button]');
-    await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
+    assert.expect(12);
+    await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
+    await waitFor(`[data-test-selected-type="General Card"]`);
+    assert.dom(`[data-test-selected-type]`).hasText('General Card');
+    assert
+      .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
+      .hasAttribute('src', baseRealmIconURL);
 
     // card type selection
     await click('[data-test-select-card-type]');
@@ -217,6 +200,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
     await click('[data-test-card-catalog-go-button]');
     await waitFor(`[data-test-selected-type="Person"]`);
+    assert.dom(`[data-test-selected-type]`).hasText('Person');
+    assert
+      .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
+      .hasAttribute('src', testRealmAIconURL);
 
     let deferred = new Deferred<void>();
     let fileID = '';
@@ -258,7 +245,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       deferred.fulfill();
     });
 
-    await click('[data-test-create-file]');
+    await click('[data-test-create-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert.dom('[data-test-card-resource-loaded]').containsText('Person');
@@ -269,21 +256,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from a remote realm', async function (assert) {
-    // open modal via new-file button
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-new-file-button]');
-    await click('[data-test-new-file-button]');
-    await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    assert.expect(8);
+    await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
-
-    // card type selection
-    await click('[data-test-select-card-type]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-select="${baseRealm.url}types/card"]`);
-    await click(`[data-test-select="${baseRealm.url}types/card"]`);
-    await click('[data-test-card-catalog-go-button]');
     await waitFor(`[data-test-selected-type="General Card"]`);
 
     let deferred = new Deferred<void>();
@@ -315,7 +290,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       deferred.fulfill();
     });
 
-    await click('[data-test-create-file]');
+    await click('[data-test-create-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor(
@@ -332,13 +307,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from another realm', async function (assert) {
-    // open modal via new-file button
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-new-file-button]');
-    await click('[data-test-new-file-button]');
-    await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    assert.expect(8);
+    await openNewFileModal('Card Instance');
+    await waitFor(`[data-test-selected-type="General Card"]`);
 
     // realm selection
     await click(`[data-test-realm-dropdown-trigger]`);
@@ -348,15 +319,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
     await waitFor(`[data-test-realm-name="Test Workspace B"]`);
     assert.dom('[data-test-realm-name]').hasText('Test Workspace B');
-
-    // card type selection
-    await click('[data-test-select-card-type]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-select="${baseRealm.url}types/card"]`);
-    await click(`[data-test-select="${baseRealm.url}types/card"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await waitFor(`[data-test-selected-type="General Card"]`);
-    assert.dom(`[data-test-selected-type]`).hasText('General Card');
 
     let deferred = new Deferred<void>();
     let fileID = '';
@@ -387,7 +349,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       deferred.fulfill();
     });
 
-    await click('[data-test-create-file]');
+    await click('[data-test-create-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert
@@ -401,13 +363,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from a local realm', async function (assert) {
-    // open modal via new-file button
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-new-file-button]');
-    await click('[data-test-new-file-button]');
-    await click('[data-test-boxel-menu-item-text="Card Instance"]');
-    await waitFor('[data-test-create-file-modal]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    assert.expect(8);
+    await openNewFileModal('Card Instance');
 
     // realm selection
     await click(`[data-test-realm-dropdown-trigger]`);
@@ -455,7 +412,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       deferred.fulfill();
     });
 
-    await click('[data-test-create-file]');
+    await click('[data-test-create-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert
@@ -466,5 +423,254 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
 
     await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can create a new card definition', async function (assert) {
+    assert.expect(7);
+    let expectedSrc = `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
+}`;
+    await openNewFileModal('Card Definition');
+    assert
+      .dom('[data-test-create-definition]')
+      .isDisabled('create button is disabled');
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    assert
+      .dom('[data-test-create-definition]')
+      .isDisabled('create button is disabled');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    assert
+      .dom('[data-test-create-definition]')
+      .isEnabled('create button is enabled');
+
+    await percySnapshot(assert);
+
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+    });
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await waitForCodeEditor();
+    assert.strictEqual(
+      getMonacoContent(),
+      expectedSrc,
+      'monaco displays the new definition',
+    );
+
+    await waitFor('[data-test-card-schema="Test Card"]');
+    assert
+      .dom('[data-test-card-schema]')
+      .exists({ count: 3 }, 'the card hierarchy is displayed in schema editor');
+    assert.dom('[data-test-total-fields]').containsText('3 Fields');
+  });
+
+  test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
+    await openNewFileModal('Field Definition');
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+
+    await waitFor(
+      `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+    );
+    await click(
+      `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    assert.dom('[data-test-create-definition]').isDisabled();
+    await fillIn(
+      '[data-test-display-name-field]',
+      'Field that extends from big int',
+    );
+    await fillIn('[data-test-file-name-field]', 'big-int-v2');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import BigInteger from 'https://cardstack.com/base/big-integer';
+export class FieldThatExtendsFromBigInt extends BigInteger {
+  static displayName = "Field that extends from big int";
+}`,
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+    await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
+
+    // select card type
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Pet"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import Pet from '${testRealmURL}pet';
+export class TestCard extends Pet {
+  static displayName = "Test Card";
+}`,
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can sanitize display name when creating a new definition', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
+
+    await fillIn('[data-test-display-name-field]', 'Test Card; { }');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
+}`,
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (assert) {
+    assert.expect(2);
+    let expectedSrc = `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
+}`;
+
+    await openNewFileModal('Card Definition');
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-dir/test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    let file = await adapter.openFile('test-dir/test-card.gts');
+    assert.strictEqual(
+      file?.content,
+      expectedSrc,
+      'the source exists at the correct location',
+    );
+  });
+
+  test<TestContextWithSave>('can handle filename with .gts extension in filename when creating a new definition', async function (assert) {
+    assert.expect(2);
+    let expectedSrc = `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
+}`;
+
+    await openNewFileModal('Card Definition');
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-card.gts');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    let file = await adapter.openFile('test-card.gts');
+    assert.strictEqual(
+      file?.content,
+      expectedSrc,
+      'the source exists at the correct location',
+    );
+  });
+
+  test<TestContextWithSave>('can handle leading "/" in filename when creating a new definition', async function (assert) {
+    assert.expect(2);
+    let expectedSrc = `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
+}`;
+
+    await openNewFileModal('Card Definition');
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', '/test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    let file = await adapter.openFile('test-card.gts');
+    assert.strictEqual(
+      file?.content,
+      expectedSrc,
+      'the source exists at the correct location',
+    );
   });
 });
