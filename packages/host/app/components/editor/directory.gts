@@ -150,11 +150,6 @@ function fileIsSelected(
   localPath: string,
   operatorModeStateService: OperatorModeStateService,
 ) {
-  if (operatorModeStateService.codePathRelativeToRealm === localPath) {
-    console.log(
-      `file is selected! ${operatorModeStateService.codePathRelativeToRealm} == ${localPath}`,
-    );
-  }
   return operatorModeStateService.codePathRelativeToRealm === localPath;
 }
 
