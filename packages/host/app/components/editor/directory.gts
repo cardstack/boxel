@@ -35,7 +35,7 @@ export default class Directory extends Component<Args> {
               {{on 'click' (fn this.openFile entryPath)}}
               {{scrollIntoViewModifier
                 (fileIsSelected entryPath this.operatorModeStateService)
-                key=this.scrollKey
+                key=(concat 'file-tree-for-' @realmURL entryPath)
               }}
               class='file
                 {{if
@@ -144,19 +144,17 @@ export default class Directory extends Component<Args> {
   toggleDirectory(entryPath: string) {
     this.operatorModeStateService.toggleOpenDir(entryPath);
   }
-
-  get scrollKey() {
-    // FIXME is this wasteful to compute for every entry just for the modifier? Could it be passed in?
-    return `file-tree-for-${new RealmPaths(this.args.realmURL).fileURL(
-      this.args.relativePath,
-    )}`;
-  }
 }
 
 function fileIsSelected(
   localPath: string,
   operatorModeStateService: OperatorModeStateService,
 ) {
+  if (operatorModeStateService.codePathRelativeToRealm === localPath) {
+    console.log(
+      `file is selected! ${operatorModeStateService.codePathRelativeToRealm} == ${localPath}`,
+    );
+  }
   return operatorModeStateService.codePathRelativeToRealm === localPath;
 }
 
