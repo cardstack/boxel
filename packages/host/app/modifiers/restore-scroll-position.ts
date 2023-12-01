@@ -84,6 +84,10 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
       console.log(`scroll height: ${this.element.scrollHeight}`);
       this.element.scrollTop = previousScrollTop;
       console.log(`st after: ${this.element.scrollTop}`);
+    } else if (
+      this.scrollPositionService.containerHasScrollPosition(container)
+    ) {
+      this.#scrollEndListener({ target: this.element });
     }
   }
 

@@ -13,6 +13,10 @@ export default class ScrollPositionService extends Service {
     this.extractFromStorage();
   }
 
+  containerHasScrollPosition(container: string) {
+    return this.keyToScrollPosition.has(container);
+  }
+
   keyHasScrollPosition(container: string, key: string) {
     return (
       this.keyToScrollPosition.has(container) &&

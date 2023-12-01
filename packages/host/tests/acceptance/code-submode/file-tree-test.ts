@@ -693,9 +693,50 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
         await elementIsVisible(endDirectoryElement),
         'expected previously-stored scroll position to have been forgotten',
       );
+
+      endDirectoryElement.scrollIntoView({ block: 'center' });
+
+      assert.ok(
+        await elementIsVisible(endDirectoryElement),
+        'expected end directory to again be within view',
+      );
     }
 
-    // FIXME extend to show different positions across realms?
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://localhost:4202/test/mango.png`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    await waitFor('[data-test-realm-name="Test Workspace A"]', {
+      timeout: 2000,
+    });
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://test-realm/test/Person/1.json`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor('[data-test-realm-name="Test Workspace B"]');
+
+    endDirectoryElement = find(endDirectorySelector);
+
+    if (!endDirectoryElement) {
+      assert.ok(endDirectoryElement, 'end directory should exist');
+    } else {
+      assert.notOk(
+        await elementIsVisible(endDirectoryElement),
+        'expected previously-stored scroll position to have been forgotten',
+      );
+    }
   });
 
   test('persisted scroll position is restored on refresh', async function (assert) {
