@@ -25,9 +25,8 @@ import {
 
 import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
-import { baseRealm, catalogEntryRef } from '@cardstack/runtime-common';
+import { catalogEntryRef } from '@cardstack/runtime-common';
 
-import ENV from '@cardstack/host/config/environment';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentCards from '@cardstack/host/services/recent-cards-service';
 
@@ -39,8 +38,6 @@ import { getCard } from '../../resources/card-resource';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
-
-const { otherRealmURLs } = ENV;
 
 export const SearchSheetModes = {
   Closed: 'closed',
@@ -155,15 +152,17 @@ export default class SearchSheet extends Component<Signature> {
   private getCard = restartableTask(async (cardURL: string) => {
     this.clearSearchCardResults();
 
-    const cardResource = getCard(this, () => cardURL);
+    let maybeIndexCardURL = this.cardService.realmURLs.find(
+      (u) => u === cardURL + '/',
+    );
+    const cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL);
     await cardResource.loaded;
     let { card } = cardResource;
-
-    if (card) {
-      this.searchCardResults.push(card);
-    } else {
+    if (!card) {
       console.warn(`Unable to fetch card at ${cardURL}`);
+      return;
     }
+    this.searchCardResults.push(card);
   });
 
   @action
@@ -255,11 +254,7 @@ export default class SearchSheet extends Component<Signature> {
 
     let cards = flatMap(
       await Promise.all(
-        [
-          this.cardService.defaultURL.href,
-          baseRealm.url,
-          ...otherRealmURLs,
-        ].map(
+        this.cardService.realmURLs.map(
           async (realm) => await this.cardService.search(query, new URL(realm)),
         ),
       ),

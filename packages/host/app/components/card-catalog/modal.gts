@@ -385,8 +385,11 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.searchResults = [];
   }
 
-  private getCard = task(async (cardID: string) => {
-    const cardResource = getCard(this, () => cardID);
+  private getCard = task(async (cardURL: string) => {
+    let maybeIndexCardURL = this.cardService.realmURLs.find(
+      (u) => u === cardURL + '/',
+    );
+    const cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL);
     await cardResource.loaded;
     let { card } = cardResource;
     if (!card) {
@@ -395,7 +398,7 @@ export default class CardCatalogModal extends Component<Signature> {
     }
     let realmInfo = await this.cardService.getRealmInfo(card);
     if (!realmInfo) {
-      this.setErrorState(`Encountered error getting realm info for ${cardID}`);
+      this.setErrorState(`Encountered error getting realm info for ${cardURL}`);
       return;
     }
     this.state.searchResults = [

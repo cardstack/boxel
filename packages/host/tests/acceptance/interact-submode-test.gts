@@ -62,8 +62,12 @@ module('Acceptance | interact submode tests', function (hooks) {
       .loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
+    let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
+    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
+    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
+    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
 
     let {
       field,
@@ -75,6 +79,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       FieldDef,
     } = cardApi;
     let { default: StringField } = string;
+    let { CatalogEntry } = catalogEntry;
+    let { CardsGrid } = cardsGrid;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -181,6 +187,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       };
     }
 
+    let mangoPet = new Pet({ name: 'Mango' });
+
     ({ realm } = await setupAcceptanceTestRealm({
       loader,
       contents: {
@@ -189,104 +197,30 @@ module('Acceptance | interact submode tests', function (hooks) {
         'pet.gts': { Pet },
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Person Card',
-              description: 'Catalog entry for Person Card',
-              ref: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
-              },
-            },
+        'person-entry.json': new CatalogEntry({
+          title: 'Person Card',
+          description: 'Catalog entry for Person Card',
+          ref: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
           },
-        },
-        'Pet/mango.json': {
-          data: {
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            attributes: {
-              name: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-
-        'Person/fadhlan.json': {
-          data: {
-            attributes: {
-              firstName: 'Fadhlan',
-              address: {
-                city: 'Bandung',
-                country: 'Indonesia',
-                shippingInfo: {
-                  preferredCarrier: 'DHL',
-                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-                },
-              },
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: `${testRealmURL}Pet/mango`,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'grid.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
+        }),
+        'Pet/mango.json': mangoPet,
+        'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
+        'Person/fadhlan.json': new Person({
+          firstName: 'Fadhlan',
+          address: new Address({
+            city: 'Bandung',
+            country: 'Indonesia',
+            shippingInfo: new ShippingInfo({
+              preferredCarrier: 'DHL',
+              remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+            }),
+          }),
+          pet: mangoPet,
+        }),
+        'grid.json': new CardsGrid(),
+        'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace B',
           backgroundURL:
