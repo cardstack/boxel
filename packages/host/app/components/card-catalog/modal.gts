@@ -19,13 +19,10 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 import {
   createNewCard,
   baseRealm,
-  type CardDocument,
   type CodeRef,
   type CreateNewCard,
   Deferred,
-  isSingleCardDocument,
   type RealmInfo,
-  RealmPaths,
 } from '@cardstack/runtime-common';
 
 import type { Query, Filter } from '@cardstack/runtime-common/query';
@@ -33,6 +30,7 @@ import type { Query, Filter } from '@cardstack/runtime-common/query';
 import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 
 import { getSearchResults, Search } from '../../resources/search';
+import { getCard } from '../../resources/card-resource';
 
 import {
   suggestCardChooserTitle,
@@ -302,7 +300,7 @@ export default class CardCatalogModal extends Component<Signature> {
     )) as T | undefined;
   }
 
-  private _chooseCard = task(
+  private _chooseCard = restartableTask(
     async <T extends CardDef>(
       query: Query,
       opts: {
@@ -387,41 +385,26 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.searchResults = [];
   }
 
-  private getCardByURL = restartableTask(async (cardURL: string) => {
-    let maybeCardDoc: CardDocument | undefined;
-    try {
-      maybeCardDoc = await this.cardService.fetchJSON(cardURL);
-    } catch (e) {
+  private getCard = task(async (cardID: string) => {
+    const cardResource = getCard(this, () => cardID);
+    await cardResource.loaded;
+    let { card } = cardResource;
+    if (!card) {
       this.setErrorState(`Could not find card at ${this.state.searchKey}`);
       return;
     }
-    if (isSingleCardDocument(maybeCardDoc)) {
-      let card = await this.cardService.createFromSerialized(
-        maybeCardDoc.data,
-        maybeCardDoc,
-        new URL(maybeCardDoc.data.id),
-      );
-      if (!card) {
-        this.setErrorState(
-          `Encountered error deserializing card for ${cardURL}`,
-        );
-        return;
-      }
-      let realmInfo = await this.cardService.getRealmInfo(card);
-      if (!realmInfo) {
-        this.setErrorState(
-          `Encountered error getting realm info for ${cardURL}`,
-        );
-        return;
-      }
-      this.state.searchResults = [
-        {
-          url: card.id,
-          realmInfo,
-          cards: [card],
-        },
-      ];
+    let realmInfo = await this.cardService.getRealmInfo(card);
+    if (!realmInfo) {
+      this.setErrorState(`Encountered error getting realm info for ${cardID}`);
+      return;
     }
+    this.state.searchResults = [
+      {
+        url: card.id,
+        realmInfo,
+        cards: [card],
+      },
+    ];
   });
 
   @action
@@ -433,8 +416,7 @@ export default class CardCatalogModal extends Component<Signature> {
     }
 
     if (this.searchKeyIsURL) {
-      let realmPath = new RealmPaths(this.state.searchKey);
-      this.getCardByURL.perform(realmPath.url);
+      this.getCard.perform(this.state.searchKey);
       return;
     }
 

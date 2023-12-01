@@ -25,12 +25,7 @@ import {
 
 import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
-import {
-  isSingleCardDocument,
-  baseRealm,
-  catalogEntryRef,
-  type CardDocument,
-} from '@cardstack/runtime-common';
+import { baseRealm, catalogEntryRef } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -39,6 +34,8 @@ import RecentCards from '@cardstack/host/services/recent-cards-service';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import SearchResult from './search-result';
+
+import { getCard } from '../../resources/card-resource';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
@@ -155,26 +152,17 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
-  getCard = restartableTask(async (cardURL: string) => {
+  private getCard = restartableTask(async (cardURL: string) => {
     this.clearSearchCardResults();
 
-    let maybeCardDoc: CardDocument | undefined;
-    try {
-      maybeCardDoc = await this.cardService.fetchJSON(cardURL);
-    } catch (e) {
-      // Not found message is displayed in getter for searchLabel
-      console.error(`Unable to fetch card at ${cardURL}`);
-    }
+    const cardResource = getCard(this, () => cardURL);
+    await cardResource.loaded;
+    let { card } = cardResource;
 
-    if (isSingleCardDocument(maybeCardDoc)) {
-      let card = await this.cardService.createFromSerialized(
-        maybeCardDoc.data,
-        maybeCardDoc,
-        new URL(maybeCardDoc.data.id),
-      );
-
-      this.clearSearchCardResults();
+    if (card) {
       this.searchCardResults.push(card);
+    } else {
+      console.warn(`Unable to fetch card at ${cardURL}`);
     }
   });
 
