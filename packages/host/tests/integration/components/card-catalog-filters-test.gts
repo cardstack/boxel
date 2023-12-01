@@ -17,8 +17,8 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../../helpers';
-import { renderComponent } from '../../helpers/render-component';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { renderComponent } from '../../helpers/render-component';
 
 const realmName = 'Local Workspace';
 

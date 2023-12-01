@@ -30,8 +30,8 @@ import {
   saveCard,
   setupIntegrationTestRealm,
 } from '../../helpers';
-import { renderComponent } from '../../helpers/render-component';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');

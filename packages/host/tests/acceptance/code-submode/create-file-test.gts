@@ -1,15 +1,19 @@
 import { visit, click, fillIn, waitFor } from '@ember/test-helpers';
-import { setupApplicationTest } from 'ember-qunit';
-import { module, test } from 'qunit';
-import stringify from 'safe-stable-stringify';
+
 import percySnapshot from '@percy/ember';
+import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, test } from 'qunit';
+import stringify from 'safe-stable-stringify';
+
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
-import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
+
 import type { Submode } from '@cardstack/host/components/submode-switcher';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+
 import {
   setupLocalIndexing,
   testRealmURL,

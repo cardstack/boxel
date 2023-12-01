@@ -29,8 +29,8 @@ import {
   type TestContextWithSSE,
   setupIntegrationTestRealm,
 } from '../../helpers';
-import { renderComponent } from '../../helpers/render-component';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { renderComponent } from '../../helpers/render-component';
 
 let loader: Loader;
 let cardApi: typeof import('https://cardstack.com/base/card-api');

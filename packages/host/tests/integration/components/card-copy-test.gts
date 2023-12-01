@@ -1,10 +1,12 @@
 import { waitUntil, waitFor, click } from '@ember/test-helpers';
-import { validate as uuidValidate } from 'uuid';
+
 import GlimmerComponent from '@glimmer/component';
 
 import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
+import flatMap from 'lodash/flatMap';
 import { module, test } from 'qunit';
+import { validate as uuidValidate } from 'uuid';
 
 import {
   baseRealm,
@@ -13,8 +15,6 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
-
-import flatMap from 'lodash/flatMap';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';

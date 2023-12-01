@@ -1,8 +1,9 @@
 import { click, waitFor } from '@ember/test-helpers';
 
+import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
-import percySnapshot from '@percy/ember';
+
 import { baseRealm } from '@cardstack/runtime-common';
 import { type Loader } from '@cardstack/runtime-common/loader';
 
@@ -10,14 +11,15 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import {
   setupCardLogs,
   setupLocalIndexing,
   testRealmURL,
   setupIntegrationTestRealm,
 } from '../../helpers';
-import { renderComponent, renderCard } from '../../helpers/render-component';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { renderComponent, renderCard } from '../../helpers/render-component';
 
 module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   let loader: Loader;

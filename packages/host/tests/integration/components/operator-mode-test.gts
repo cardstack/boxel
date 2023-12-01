@@ -15,9 +15,10 @@ import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
 
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
