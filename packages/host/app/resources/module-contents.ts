@@ -6,15 +6,14 @@ import { Resource } from 'ember-resources';
 
 import { getAncestor, getField, isBaseDef } from '@cardstack/runtime-common';
 
-import { Loader } from '@cardstack/runtime-common/loader';
-
 import {
   ModuleSyntax,
-  type PossibleCardOrFieldClass,
-  type BaseDeclaration,
+  type PossibleCardOrFieldDeclaration,
+  type FunctionDeclaration,
+  type ClassDeclaration,
+  type Declaration,
+  type Reexport,
   isInternalReference,
-  isPossibleCardOrFieldClass,
-  Declaration,
 } from '@cardstack/runtime-common/module-syntax';
 
 import {
@@ -28,23 +27,40 @@ import { importResource } from '@cardstack/host/resources/import';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
-// an declaration should be (an item of focus within a module)
-// - exported function or class
-// - exported card or field
-// - unexported card or field
-// This declaration (in code mode) is extended to include the cardType and cardOrField
-export type ModuleDeclaration =
-  | (CardOrField & Partial<PossibleCardOrFieldClass>)
-  | BaseDeclaration;
-
-export interface CardOrField {
+interface CardOrField {
   cardType: CardType;
   cardOrField: typeof BaseDef;
 }
 
+export type CardOrFieldDeclaration = CardOrField &
+  Partial<PossibleCardOrFieldDeclaration>;
+
+export type CardOrFieldReexport = CardOrField & Reexport;
+
+export type ModuleDeclaration =
+  | CardOrFieldDeclaration
+  | ClassDeclaration
+  | FunctionDeclaration
+  | CardOrFieldReexport;
+
 export function isCardOrFieldDeclaration(
   declaration: ModuleDeclaration,
-): declaration is CardOrField & Partial<PossibleCardOrFieldClass> {
+): declaration is CardOrFieldDeclaration {
+  return (
+    declaration.type === 'possibleCardOrField' &&
+    hasCardOrFieldProperties(declaration)
+  );
+}
+
+export function isReexportCardOrField(
+  declaration: ModuleDeclaration,
+): declaration is CardOrFieldReexport {
+  return (
+    declaration.type === 'reexport' && hasCardOrFieldProperties(declaration)
+  );
+}
+
+function hasCardOrFieldProperties(declaration: ModuleDeclaration) {
   return (
     (declaration as CardOrField).cardType !== undefined &&
     (declaration as CardOrField).cardOrField !== undefined
@@ -79,9 +95,11 @@ export class ModuleContentsResource extends Resource<Args> {
     //==loading module
     let moduleResource = importResource(this, () => executableFile.url);
     await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
-    let exportedCardsOrFields = Object.values(
-      moduleResource?.module || {},
-    ).filter(isBaseDef);
+    if (moduleResource.module === undefined) {
+      return;
+    }
+    let exportedCardsOrFields: Map<string, typeof BaseDef> =
+      getExportedCardsOrFields(moduleResource.module);
 
     //==building declaration structure
     // This loop
@@ -97,52 +115,50 @@ export class ModuleContentsResource extends Resource<Args> {
       moduleSyntax,
       exportedCardsOrFields,
     );
-    this._declarations = moduleSyntax.declarations.reduce(
-      (acc: ModuleDeclaration[], value: Declaration) => {
-        if (isPossibleCardOrFieldClass(value)) {
-          const cardOrField = exportedCardsOrFields.find(
-            (c) => c.name === value.localName,
-          );
-          let loader = Loader.getLoaderFor(cardOrField);
-          if (cardOrField && loader !== undefined) {
-            return [
-              ...acc,
-              {
-                ...value,
-                cardOrField,
-                cardType: getCardType(
-                  this,
-                  () => cardOrField as typeof BaseDef,
-                  () => loader as Loader,
-                ),
-              } as CardOrField & Partial<PossibleCardOrFieldClass>,
-            ];
-          } else {
-            if (localCardsOrFields.has(value)) {
-              let cardOrField = localCardsOrFields.get(value) as typeof BaseDef;
-              // we don't check for loader here because cards or fields not defined in module will not have a loader
-              if (cardOrField) {
-                return [
-                  ...acc,
-                  {
-                    ...value,
-                    cardOrField,
-                    cardType: getCardType(this, () => cardOrField),
-                  } as CardOrField & Partial<PossibleCardOrFieldClass>,
-                ];
-              }
-            }
+    this._declarations = [];
+    moduleSyntax.declarations.forEach((value: Declaration) => {
+      if (value.type === 'possibleCardOrField') {
+        let cardOrField = value.exportedAs
+          ? exportedCardsOrFields.get(value.exportedAs)
+          : localCardsOrFields.get(value);
+        if (cardOrField !== undefined) {
+          this._declarations.push({
+            ...value,
+            cardOrField,
+            cardType: getCardType(this, () => cardOrField as typeof BaseDef),
+          } as CardOrFieldDeclaration);
+          return;
+        }
+        // case where things statically look like cards or fields but are not
+        if (value.exportedAs !== undefined) {
+          this._declarations.push({
+            localName: value.localName,
+            exportedAs: value.exportedAs,
+            path: value.path,
+            type: 'class',
+          } as ClassDeclaration);
+        }
+      } else if (value.type === 'reexport') {
+        let cardOrField: typeof BaseDef | undefined;
+        if (value.exportedAs) {
+          let foundCardOrField = exportedCardsOrFields.get(value.exportedAs);
+          if (foundCardOrField) {
+            cardOrField = foundCardOrField;
+          }
+          if (cardOrField !== undefined) {
+            this._declarations.push({
+              ...value,
+              cardOrField,
+              cardType: getCardType(this, () => cardOrField as typeof BaseDef),
+            } as CardOrFieldReexport);
           }
         }
+      } else if (value.type === 'class' || value.type === 'function') {
         if (value.exportedAs !== undefined) {
-          // some classes that look like cards may still be included,
-          // we should only non-card or fields which are exported
-          return [...acc, { ...value } as BaseDeclaration];
+          this.declarations.push(value as ModuleDeclaration);
         }
-        return acc;
-      },
-      [],
-    );
+      }
+    });
   });
 }
 
@@ -157,18 +173,26 @@ export function moduleContentsResource(
   })) as unknown as ModuleContentsResource;
 }
 
+function getExportedCardsOrFields(moduleProxy: object) {
+  return new Map(
+    Object.entries(moduleProxy).filter(([_, declaration]) =>
+      isBaseDef(declaration),
+    ),
+  );
+}
+
 function collectLocalCardsOrFields(
   moduleSyntax: ModuleSyntax,
-  exportedCardsOrFields: (typeof BaseDef)[],
-): Map<PossibleCardOrFieldClass, typeof BaseDef> {
-  const localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef> =
-    new Map();
+  exportedCardsOrFields: any,
+): Map<PossibleCardOrFieldDeclaration, typeof BaseDef> {
+  const localCardsOrFields: Map<
+    PossibleCardOrFieldDeclaration,
+    typeof BaseDef
+  > = new Map();
   let possibleCardsOrFields = moduleSyntax.possibleCardsOrFields;
 
   for (const value of moduleSyntax.declarations) {
-    const cardOrField = exportedCardsOrFields.find(
-      (c) => c.name === value.localName,
-    );
+    const cardOrField = exportedCardsOrFields.get(value.localName);
 
     if (cardOrField !== undefined) {
       findLocalAncestor(
@@ -190,12 +214,15 @@ function collectLocalCardsOrFields(
 }
 
 function findLocalAncestor(
-  value: ModuleDeclaration,
+  value: Declaration,
   cardOrField: typeof BaseDef,
-  possibleCardsOrFields: PossibleCardOrFieldClass[],
-  localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef>,
+  possibleCardsOrFields: PossibleCardOrFieldDeclaration[],
+  localCardsOrFields: Map<PossibleCardOrFieldDeclaration, typeof BaseDef>,
 ) {
-  if (isPossibleCardOrFieldClass(value) && isInternalReference(value.super)) {
+  if (
+    value.type === 'possibleCardOrField' &&
+    isInternalReference(value.super)
+  ) {
     const indexOfParent = value.super.classIndex;
     if (indexOfParent === undefined) return;
     const parentCardOrFieldClass = possibleCardsOrFields[indexOfParent];
@@ -203,16 +230,22 @@ function findLocalAncestor(
 
     if (parentCardOrField == undefined) return;
     localCardsOrFields.set(parentCardOrFieldClass, parentCardOrField);
+    findLocalAncestor(
+      parentCardOrFieldClass,
+      parentCardOrField,
+      possibleCardsOrFields,
+      localCardsOrFields,
+    );
   }
 }
 
 function findLocalField(
-  value: ModuleDeclaration,
+  value: Declaration,
   cardOrField: typeof BaseDef,
-  possibleCardsOrFields: PossibleCardOrFieldClass[],
-  localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef>,
+  possibleCardsOrFields: PossibleCardOrFieldDeclaration[],
+  localCardsOrFields: Map<PossibleCardOrFieldDeclaration, typeof BaseDef>,
 ) {
-  if (isPossibleCardOrFieldClass(value)) {
+  if (value.type === 'possibleCardOrField') {
     if (value.possibleFields) {
       for (const [fieldName, v] of value.possibleFields) {
         if (isInternalReference(v.card)) {
@@ -225,6 +258,12 @@ function findLocalField(
           const field = getField(cardOrField, fieldName);
           if (field === undefined || field.card === undefined) return;
           localCardsOrFields.set(parentFieldClass, field.card);
+          findLocalAncestor(
+            parentFieldClass,
+            field.card,
+            possibleCardsOrFields,
+            localCardsOrFields,
+          );
         }
       }
     }
