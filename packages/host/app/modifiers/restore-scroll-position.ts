@@ -1,3 +1,4 @@
+import { isDestroying } from '@ember/destroyable';
 import { debounce, next } from '@ember/runloop';
 import { inject as service } from '@ember/service';
 
@@ -61,6 +62,10 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
   }
 
   setScrollTop() {
+    if (isDestroying(this)) {
+      return;
+    }
+
     let key = this.#previousKey;
     if (this.scrollPositionService.keyHasScrollPosition(key)) {
       let previousScrollTop = this.scrollPositionService.get(key);
@@ -75,6 +80,10 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
   }
 
   handleScrollEnd(e) {
+    if (isDestroying(this)) {
+      return;
+    }
+
     console.log('scrollend, key is ' + this.#previousKey, e);
     console.log('scrolltop ' + e.target.scrollTop);
     this.scrollPositionService.setKeyScrollPosition(
