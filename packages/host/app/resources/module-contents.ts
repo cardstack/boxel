@@ -258,20 +258,12 @@ function findLocalField(
           const field = getField(cardOrField, fieldName);
           if (field === undefined || field.card === undefined) return;
           localCardsOrFields.set(parentFieldClass, field.card);
-          let ancestor = getAncestor(field.card);
-          if (ancestor) {
-            let ancestorValue = possibleCardsOrFields.find(
-              (o) => o.localName === field.card.name,
-            );
-            if (ancestorValue) {
-              findLocalAncestor(
-                ancestorValue,
-                ancestor,
-                possibleCardsOrFields,
-                localCardsOrFields,
-              );
-            }
-          }
+          findLocalAncestor(
+            parentFieldClass,
+            field.card,
+            possibleCardsOrFields,
+            localCardsOrFields,
+          );
         }
       }
     }
