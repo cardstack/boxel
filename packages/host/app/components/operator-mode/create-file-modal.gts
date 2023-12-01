@@ -289,8 +289,7 @@ export default class CreateFileModal extends Component<Signature> {
     );
   }
 
-  // public API
-  get isModalOpen() {
+  private get isModalOpen() {
     return !!this.currentRequest;
   }
 

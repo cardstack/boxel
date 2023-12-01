@@ -113,6 +113,7 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
   @tracked private previewFormat: Format = 'isolated';
+  @tracked private isCreateModalOpen = false;
 
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -501,11 +502,13 @@ export default class CodeSubmode extends Component<Signature> {
       if (!this.createFileModal) {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
+      this.isCreateModalOpen = true;
       let url = await this.createFileModal.createNewFile(
         fileType,
         this.realmURL,
         definitionClass,
       );
+      this.isCreateModalOpen = false;
       if (url) {
         this.operatorModeStateService.updateCodePath(url);
         this.setPreviewFormat('edit');
@@ -570,7 +573,7 @@ export default class CodeSubmode extends Component<Signature> {
       />
       <NewFileButton
         @onSelectNewFileType={{this.onSelectNewFileType}}
-        @isCreateModalShown={{bool this.createFileModal.isModalOpen}}
+        @isCreateModalShown={{bool this.isCreateModalOpen}}
       />
     </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
