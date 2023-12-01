@@ -85,7 +85,10 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
       key &&
       this.scrollPositionService.keyHasScrollPosition(container, key)
     ) {
-      let previousScrollTop = this.scrollPositionService.get(container, key)!;
+      let previousScrollTop = this.scrollPositionService.getScrollPosition(
+        container,
+        key,
+      )!;
       console.log(
         `ummm next render restoring pst ${previousScrollTop} container ${container} key ${key}`,
       );

@@ -20,11 +20,11 @@ export default class ScrollPositionService extends Service {
   keyHasScrollPosition(container: string, key: string) {
     return (
       this.keyToScrollPosition.has(container) &&
-      this.keyToScrollPosition.get(container)[0] === key
+      this.keyToScrollPosition.get(container)?.[0] === key
     );
   }
 
-  get(container: string, key: string) {
+  getScrollPosition(container: string, key: string) {
     let entry = this.keyToScrollPosition.get(container);
 
     if (!entry) {
