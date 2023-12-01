@@ -3,7 +3,6 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { debounce, next } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
@@ -14,7 +13,6 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import Modifier, { PositionalArgs } from 'ember-modifier';
 
 import {
   Button,
@@ -36,6 +34,7 @@ import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
+import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
@@ -49,7 +48,6 @@ import type MessageService from '@cardstack/host/services/message-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
-import ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -959,83 +957,4 @@ export default class CodeSubmode extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-interface RestoreScrollPositionModifierArgs {
-  Positional: [String];
-}
-
-interface RestoreScrollPositionModifierSignature {
-  Element: Element;
-  Args: RestoreScrollPositionModifierArgs;
-}
-
-class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignature> {
-  @service declare scrollPositionService: ScrollPositionService;
-
-  element!: Element;
-  #previousKey: String | undefined;
-  #scrollEndListener: (Event) => void;
-  #mutationObserver: MutationObserver;
-
-  modify(
-    element: Element,
-    [key]: PositionalArgs<RestoreScrollPositionModifierSignature>,
-  ): void {
-    if (!this.#mutationObserver) {
-      this.element = element;
-
-      this.#scrollEndListener = this.handleScrollEnd.bind(this);
-      element.addEventListener('scrollend', this.#scrollEndListener);
-
-      let mutationObserver = new MutationObserver(
-        this.debouncedSetScrollTop.bind(this),
-      );
-      mutationObserver.observe(element, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-      });
-
-      this.#mutationObserver = mutationObserver;
-    }
-
-    this.#previousKey = key;
-
-    return () => {
-      element.removeEventListener('scrollend', this.#scrollEndListener);
-      this.#mutationObserver.disconnect();
-    };
-  }
-
-  debouncedSetScrollTop() {
-    debounce(this, this.setScrollTop, 100);
-  }
-
-  nextSetScrollTop() {
-    next(this, this.setScrollTop);
-  }
-
-  setScrollTop() {
-    let key = this.#previousKey;
-    if (this.scrollPositionService.keyHasScrollPosition(key)) {
-      let previousScrollTop = this.scrollPositionService.get(key);
-      console.log(
-        `ummm next render restoring pst ${previousScrollTop} key ${key}`,
-      );
-      console.log(`st before: ${this.element.scrollTop}`);
-      console.log(`scroll height: ${this.element.scrollHeight}`);
-      this.element.scrollTop = previousScrollTop;
-      console.log(`st after: ${this.element.scrollTop}`);
-    }
-  }
-
-  handleScrollEnd(e) {
-    console.log('scrollend, key is ' + this.#previousKey, e);
-    console.log('scrolltop ' + e.target.scrollTop);
-    this.scrollPositionService.setKeyScrollPosition(
-      this.#previousKey,
-      e.target.scrollTop,
-    );
-  }
 }
