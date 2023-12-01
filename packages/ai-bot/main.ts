@@ -14,7 +14,6 @@ import { ChatCompletionChunk } from 'openai/resources/chat';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
   constructHistory,
-  extractContentFromStream,
   processStream,
   getModifyPrompt,
   cleanContent,
@@ -83,63 +82,6 @@ async function sendOption(client: MatrixClient, room: Room, patch: any) {
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
-async function sendStream(
-  stream: AsyncIterable<ChatCompletionChunk>,
-  client: MatrixClient,
-  room: Room,
-  appendTo?: string,
-) {
-  let unsent = 0;
-  let lastUnsentMessage = undefined;
-  for await (const message of processStream(extractContentFromStream(stream))) {
-    // If we've not got a current message to edit and we're processing text
-    // rather than structured data, start a new message to update.
-    if (message.type == 'text') {
-      // remove general cruft
-      let cleanedContent = cleanContent(message.content!);
-      // If we're left with nothing after cleaning, don't send anything
-      if (cleanedContent) {
-        // If there's no message to append to, just send the message
-        // If there's more than 20 pending messages, send the message
-        if (!appendTo) {
-          let initialMessage = await sendMessage(
-            client,
-            room,
-            cleanedContent,
-            appendTo,
-          );
-          unsent = 0;
-          lastUnsentMessage = undefined;
-          appendTo = initialMessage.event_id;
-        }
-
-        if (unsent > 20 || message.complete) {
-          await sendMessage(client, room, cleanedContent, appendTo);
-          lastUnsentMessage = undefined;
-          unsent = 0;
-        } else {
-          lastUnsentMessage = message;
-          unsent += 1;
-        }
-      }
-    } else {
-      if (message.type == 'command') {
-        await sendOption(client, room, message.content);
-      }
-      unsent = 0;
-      appendTo = undefined;
-    }
-  }
-
-  // Make sure we send any remaining content at the end of the stream
-  if (lastUnsentMessage && lastUnsentMessage.content) {
-    let cleanedContent = cleanContent(lastUnsentMessage.content);
-    if (cleanedContent) {
-      await sendMessage(client, room, cleanedContent, appendTo);
-    }
-  }
-}
-
 function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
   for (let event of history.slice().reverse()) {
     const content = event.content;
@@ -151,15 +93,14 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
   return undefined;
 }
 
-async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
+function getResponse(history: IRoomEvent[], aiBotUsername: string) {
   let messages = getModifyPrompt(history, aiBotUsername);
   let functions = getFunctions(history, aiBotUsername);
-  return await openai.chat.completions.create({
+  return openai.beta.chat.completions.stream({
     model: 'gpt-4-1106-preview',
     messages: messages,
-    stream: false,
     functions: functions,
-    function_call: 'auto', //{ "name": "patchCard" }
+    function_call: 'auto',
   });
 }
 
@@ -265,29 +206,63 @@ async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
         );
       }
 
-      const responseFull = await getResponse(history, userId);
-      console.log(JSON.stringify(responseFull, undefined, 2));
-      if (responseFull.choices[0].finish_reason === 'function_call') {
-        let functionCall = responseFull.choices[0].message.function_call;
-        let args = JSON.parse(functionCall.arguments);
-        if (functionCall.name === 'patchCard') {
-          await sendMessage(
-            client,
-            room,
-            args.description,
-            initialMessage.event_id,
-          );
-          return await sendOption(client, room, args);
-        }
-      } else {
-        return await sendMessage(
-          client,
-          room,
-          responseFull.choices[0].message.content,
-          initialMessage.event_id,
-        );
+      let unsent = 0;
+      let tokenCount = 0;
+      let fcSent = false;
+      const runner = await getResponse(history, userId)
+        .on('content', async (_delta, snapshot) => {
+          unsent += 1;
+          if (unsent > 5) {
+            unsent = 0;
+            await sendMessage(
+              client,
+              room,
+              cleanContent(snapshot),
+              initialMessage.event_id,
+            );
+          }
+        }) /*
+        .on('chunk', async (chunk: ChatCompletionChunk) => {
+          let delta = chunk.choices[0].delta;
+          if (delta.function_call) {
+            let args = delta.function_call.arguments;
+            log.info('Function call', delta.function_call);
+            if (args) {
+              tokenCount += args.length;
+            }
+            if (!fcSent) {
+              await sendMessage(
+                client,
+                room,
+                `Generating (${tokenCount})`,
+                initialMessage.event_id,
+              );
+            }
+          }
+        })*/
+        .on('functionCall', async (functionCall) => {
+          let args = JSON.parse(functionCall.arguments);
+          if (functionCall.name === 'patchCard') {
+            fcSent = true;
+            await sendMessage(
+              client,
+              room,
+              args.description,
+              initialMessage.event_id,
+            );
+            return await sendOption(client, room, args);
+          }
+          return;
+        });
+
+      let finalContent = await runner.finalContent();
+      if (finalContent) {
+        finalContent = cleanContent(finalContent);
       }
-      //return await sendStream(stream, client, room, initialMessage.event_id);
+      if (finalContent) {
+        await sendMessage(client, room, finalContent, initialMessage.event_id);
+      }
+      return;
     },
   );
 

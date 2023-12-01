@@ -1,8 +1,4 @@
 import { IRoomEvent } from 'matrix-js-sdk';
-import { chain } from 'stream-chain';
-import { parser } from 'stream-json';
-import { streamValues } from 'stream-json/streamers/StreamValues';
-import { Readable } from 'node:stream';
 
 const MODIFY_SYSTEM_MESSAGE =
   '\
@@ -12,16 +8,10 @@ The user may be asking questions about the contents of the cards rather than hel
 If the user wants the data they see edited, you MUST use the "patchCard" function to make the change. \
 NEVER tell the user to use patchCard, you should always do it for them. \
 If the user request is unclear, you may ask clarifying questions. \
+You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
+If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
 \
 If you need access to the cards the user can see, you can ask them to "send their open cards" to you.';
-
-type ChatCompletion = {
-  choices: Array<{
-    delta?: {
-      content?: string | null | undefined;
-    };
-  }>;
-};
 
 type CommandMessage = {
   type: 'command';
@@ -70,186 +60,6 @@ export function constructHistory(history: IRoomEvent[]) {
   return latestEvents;
 }
 
-export async function* extractContentFromStream(
-  iterable: AsyncIterable<ChatCompletion>,
-) {
-  /**
-   * The OpenAI API returns a stream of updates, which
-   * have extra details that we don't need, this function
-   * extracts out just the content from the stream.
-   *
-   * It also splits the content around { and } so that
-   * we can parse JSON more cleanly
-   */
-  for await (const part of iterable) {
-    let content = part.choices[0]?.delta?.content;
-    if (content) {
-      // Regex splits keep the delimiters
-      for (let token of content.split(/([{}])/)) {
-        if (token) {
-          yield token;
-        }
-      }
-    }
-  }
-}
-
-export class CheckpointedAsyncGenerator<T> {
-  private generator: AsyncGenerator<T>;
-  private buffer: T[] = [];
-  private bufferIndex = 0;
-
-  constructor(generator: AsyncGenerator<T>) {
-    this.generator = generator;
-  }
-
-  async *[Symbol.asyncIterator]() {
-    while (true) {
-      const next = await this.next();
-      if (next.done) {
-        return;
-      }
-      yield next.value;
-    }
-  }
-
-  async next(): Promise<IteratorResult<T>> {
-    // If we're in the past and haven't exhausted the buffer, return the next buffered item.
-    if (this.bufferIndex < this.buffer.length) {
-      return { value: this.buffer[this.bufferIndex++], done: false };
-    }
-
-    // Otherwise, get the next item from the generator.
-    const result = await this.generator.next();
-
-    // If we're checkpointed, add the item to the buffer.
-    if (!result.done) {
-      this.buffer.push(result.value);
-      this.bufferIndex++;
-    }
-
-    return result;
-  }
-
-  async return(value?: any): Promise<IteratorResult<T>> {
-    if (this.generator.return) {
-      return await this.generator.return(value);
-    }
-    return { value, done: true };
-  }
-
-  async throw(error?: any): Promise<IteratorResult<T>> {
-    if (this.generator.throw) {
-      return await this.generator.throw(error);
-    }
-    throw error;
-  }
-
-  checkpoint(): void {
-    // Cut the buffer to hold from buffer index to the end
-    if (this.bufferIndex < this.buffer.length) {
-      this.buffer = this.buffer.slice(this.bufferIndex);
-    } else {
-      this.buffer = [];
-    }
-
-    this.bufferIndex = 0;
-  }
-
-  restore(): void {
-    this.bufferIndex = 0;
-  }
-}
-
-async function* prependedStream<T>(prepend: T, stream: AsyncIterable<T>) {
-  yield prepend;
-  for await (const part of stream) {
-    yield part;
-  }
-}
-
-export async function* processStream(stream: AsyncGenerator<string>) {
-  let tokenStream = new CheckpointedAsyncGenerator(stream);
-  let currentMessage = '';
-  for await (const part of tokenStream) {
-    // If we see an opening brace, we *might* be looking at JSON
-    // Optimistically start parsing it, and if we hit an error
-    // then roll back to the last checkpoint
-    if (part == '{') {
-      // If we were processing text and now are probably looking at
-      // JSON, yield the text we've seen so far, marked as "complete"
-      // If there's no text, we don't need to yield anything
-      // Typically this happens when a { is the very first token
-      if (currentMessage) {
-        yield {
-          type: 'text',
-          content: currentMessage,
-          complete: true,
-        };
-      }
-      let commands: string[] = [];
-      const pipeline = chain([
-        Readable.from(prependedStream(part, tokenStream)), // We need to prepend the { back on
-        parser({ jsonStreaming: true }),
-        streamValues(),
-      ]);
-
-      // Setup this promise so we can await the json parsing to complete
-      const endOfStream = new Promise((resolve, reject) => {
-        pipeline.on('end', resolve);
-        pipeline.on('error', reject);
-      });
-
-      pipeline.on('data', (x) => {
-        commands.push(x.value);
-        // We've found some JSON so we don't want to
-        // keep building up the text
-        currentMessage = '';
-        // If we've seen a command, bump the checkpoint
-        // of the stream to the current position
-        tokenStream.checkpoint();
-      });
-
-      try {
-        await endOfStream;
-      } catch (error) {
-        // We've hit an error parsing something, so let's roll
-        // back to the last checkpoint so we don't lose the
-        // processed tokens
-        tokenStream.restore();
-      } finally {
-        // We've either finished parsing the stream and have
-        // one or more JSON objects, or we've hit an error.
-        // The error may occur after successfully parsing a
-        // JSON object, so we need to yield any commands
-        // we've found.
-        for (let command of commands) {
-          yield {
-            type: 'command',
-            content: command,
-          };
-        }
-      }
-    } else {
-      currentMessage += part;
-      yield {
-        type: 'text',
-        content: currentMessage,
-        complete: false,
-      };
-    }
-    // Checkpoint before we start processing the next token
-    tokenStream.checkpoint();
-  }
-  if (currentMessage) {
-    yield {
-      type: 'text',
-      content: currentMessage,
-      complete: true,
-    };
-  }
-}
-
 interface OpenAIPromptMessage {
   /**
    * The contents of the message. `content` is required for all messages, and may be
@@ -289,7 +99,7 @@ export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
 }
 
 export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
-  let functions = [];
+  let functions: { name: string; description: string; parameters: any }[] = [];
   for (let event of history) {
     if (event.sender !== aiBotUserId) {
       let content = event.content;
@@ -300,7 +110,7 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
           functions = [
             {
               name: 'patchCard',
-              description: `Patch an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
               parameters: {
                 type: 'object',
                 properties: {
