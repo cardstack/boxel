@@ -183,7 +183,7 @@ function getExportedCardsOrFields(moduleProxy: object) {
 
 function collectLocalCardsOrFields(
   moduleSyntax: ModuleSyntax,
-  exportedCardsOrFields: any,
+  exportedCardsOrFields: Map<string, typeof BaseDef>,
 ): Map<PossibleCardOrFieldDeclaration, typeof BaseDef> {
   const localCardsOrFields: Map<
     PossibleCardOrFieldDeclaration,
@@ -192,21 +192,23 @@ function collectLocalCardsOrFields(
   let possibleCardsOrFields = moduleSyntax.possibleCardsOrFields;
 
   for (const value of moduleSyntax.declarations) {
-    const cardOrField = exportedCardsOrFields.get(value.localName);
+    if (value.localName !== undefined) {
+      const cardOrField = exportedCardsOrFields.get(value.localName);
 
-    if (cardOrField !== undefined) {
-      findLocalAncestor(
-        value,
-        cardOrField,
-        possibleCardsOrFields,
-        localCardsOrFields,
-      );
-      findLocalField(
-        value,
-        cardOrField,
-        possibleCardsOrFields,
-        localCardsOrFields,
-      );
+      if (cardOrField !== undefined) {
+        findLocalAncestor(
+          value,
+          cardOrField,
+          possibleCardsOrFields,
+          localCardsOrFields,
+        );
+        findLocalField(
+          value,
+          cardOrField,
+          possibleCardsOrFields,
+          localCardsOrFields,
+        );
+      }
     }
   }
 
