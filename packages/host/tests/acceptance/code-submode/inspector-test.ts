@@ -1297,9 +1297,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .includesText('Re-exported Base Definition');
     assert.dom('[data-test-card-module-definition]').includesText('Base');
     assert.true(monacoService.getLineCursorOn()?.includes('BDef'));
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.',
+      );
   });
 
-  test('in-this-file displays local grandfather card or local grandfather field', async function (assert) {
+  test('in-this-file displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',
@@ -1322,6 +1327,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
     assert.true(monacoService.getLineCursorOn()?.includes('GrandParent'));
+    assert.true(monacoService.getLineCursorOn()?.includes('CardDef'));
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
       'GrandParent card',
@@ -1340,7 +1346,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         .hasText(elementName);
     });
 
-    //select parent card defined locally
+    //select card defined locally
     elementName = 'Parent';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert
@@ -1361,8 +1367,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom(`[data-test-card-schema="local grandparent"]`).exists();
     assert.dom(`[data-test-total-fields]`).containsText('3 Fields');
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+    assert.true(monacoService.getLineCursorOn()?.includes('GrandParent'));
 
-    //select child field defined locally
+    //select field defined locally
     elementName = 'Sport';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert
@@ -1377,9 +1384,23 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-module-definition]').includesText('my sport');
     await waitFor('[data-test-card-schema="my sport"]');
     assert.dom('[data-test-card-schema="my sport"]').exists({ count: 1 });
-    assert.dom(`[data-test-card-schema="my hobby"]`).exists();
-    assert.dom(`[data-test-card-schema="my sport"]`).exists();
+    assert.dom(`[data-test-card-schema="my hobby"]`).exists({ count: 1 });
+    assert.dom(`[data-test-card-schema="my activity"]`).exists({ count: 1 });
     assert.dom(`[data-test-total-fields]`).containsText('0 Fields');
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+
+    //clicking on inherited field defined locally
+    await waitFor(`[data-test-clickable-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`); //clicking on Hobby
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText('Hobby field');
+    await waitFor('[data-test-card-schema="my hobby"]');
+    assert.dom(`[data-test-card-schema="my hobby"]`).exists({ count: 1 });
+    assert.dom(`[data-test-card-schema="my activity"]`).exists({ count: 1 });
+    assert.dom(`[data-test-total-fields]`).containsText('0 Fields');
+    assert.true(monacoService.getLineCursorOn()?.includes('Hobby'));
+    assert.true(monacoService.getLineCursorOn()?.includes('Activity'));
   });
 });
