@@ -396,7 +396,6 @@ export default class CreateFileModal extends Component<Signature> {
       if (!this.definitionClass) {
         let fieldOrCard =
           this.fileType.id === 'field-definition' ? 'field' : 'card';
-
         let resource = getCard(
           this,
           () => `${baseRealm.url}types/${fieldOrCard}`,
@@ -405,7 +404,6 @@ export default class CreateFileModal extends Component<Signature> {
           },
         );
         await resource.loaded;
-
         this.selectedCatalogEntry = resource.card as CatalogEntry;
       }
     } finally {

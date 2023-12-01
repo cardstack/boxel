@@ -489,11 +489,10 @@ export default class CodeSubmode extends Component<Signature> {
     }
   });
 
-  // dropTask will ignore any subsequent delete requests until the one in progress is done
+  // dropTask will ignore any subsequent create file requests until the one in progress is done
   private createFile = dropTask(
     async (
       fileType: FileType,
-
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
