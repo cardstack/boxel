@@ -140,8 +140,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor('[data-test-new-file-button]');
     await click('[data-test-new-file-button]');
     await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
-    await waitFor('[data-test-create-file-modal][data-test-ready]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace A"]`,
+    );
   }
 
   hooks.afterEach(async function () {

@@ -1,14 +1,14 @@
-import { visit, click, waitFor, currentURL } from '@ember/test-helpers';
+import { visit, click, waitFor, fillIn, currentURL } from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -24,8 +24,10 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   setupServerSentEvents,
+  setupOnSave,
   waitForCodeEditor,
   type TestContextWithSSE,
+  type TestContextWithSave,
 } from '../../helpers';
 
 const indexCardSource = `
@@ -307,6 +309,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
+  setupOnSave(hooks);
   setupWindowMock(hooks);
 
   hooks.afterEach(async function () {
@@ -1185,9 +1188,143 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} card`);
   });
 
-  skip('Can inherit from an exported card def declaration', async function (_assert) {});
+  test<TestContextWithSave>('Can inherit from an exported card def declaration', async function (assert) {
+    assert.expect(8);
+    let expectedSrc = `
+import { ExportedCard } from '${testRealmURL}in-this-file';
+export class TestCard extends ExportedCard {
+  static displayName = "Test Card";
+}`;
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
 
-  skip('Can inherit from an exported field def declaration', async function (_assert) {});
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
-  skip('Inherit action item is not displayed when definition is not exported', async function (_assert) {});
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    assert
+      .dom('[data-test-inherits-from-field] .pill.inert')
+      .includesText('exported card', 'the inherits from is correct');
+    assert.dom('[data-test-create-definition]').isDisabled();
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    assert.dom('[data-test-create-definition]').isDisabled();
+    await fillIn('[data-test-file-name-field]', '/test-card');
+    assert.dom('[data-test-create-definition]').isEnabled();
+
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+      deferred.fulfill();
+    });
+    await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    await waitForCodeEditor();
+    assert.strictEqual(
+      getMonacoContent(),
+      expectedSrc,
+      'monaco displays the new definition',
+    );
+
+    await waitFor('[data-test-card-schema="Test Card"]');
+    assert
+      .dom('[data-test-card-schema]')
+      .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
+    assert.dom('[data-test-total-fields]').containsText('4 Fields');
+  });
+
+  test<TestContextWithSave>('Can inherit from an exported field def declaration', async function (assert) {
+    assert.expect(2);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
+
+    await click('[data-boxel-selector-item-text="ExportedField"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    assert
+      .dom('[data-test-inherits-from-field] .pill.inert')
+      .includesText('exported field', 'the inherits from is correct');
+
+    await fillIn('[data-test-display-name-field]', 'Test Field');
+    await fillIn('[data-test-file-name-field]', '/test-field');
+
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import { ExportedField } from '${testRealmURL}in-this-file';
+export class TestField extends ExportedField {
+  static displayName = "Test Field";
+}`,
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test('Inherit action item is not displayed when definition is not exported', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
+
+    await click('[data-boxel-selector-item-text="LocalCard"]');
+    await waitFor('[data-test-card-module-definition]');
+    assert
+      .dom('[data-test-action-button="Inherit"]')
+      .doesNotExist('non-exported cards do not display an inherit button');
+  });
 });
