@@ -7,7 +7,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -19,10 +19,13 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 import {
   createNewCard,
   baseRealm,
+  type CardDocument,
   type CodeRef,
   type CreateNewCard,
   Deferred,
+  isSingleCardDocument,
   type RealmInfo,
+  RealmPaths,
 } from '@cardstack/runtime-common';
 
 import type { Query, Filter } from '@cardstack/runtime-common/query';
@@ -76,6 +79,7 @@ type State = {
   cardURL: string;
   chooseCardTitle: string;
   dismissModal: boolean;
+  errorMessage?: string;
 };
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
@@ -96,7 +100,9 @@ export default class CardCatalogModal extends Component<Signature> {
             @value={{this.state.searchKey}}
             @onInput={{this.setSearchKey}}
             @onKeyPress={{this.onSearchFieldKeypress}}
-            @placeholder='Search for a card or enter its URL'
+            @placeholder='Search for a card or enter card URL'
+            @state={{if this.isInvalid 'invalid'}}
+            @errorMessage={{this.state.errorMessage}}
             data-test-search-field
           />
           <CardCatalogFilters
@@ -112,7 +118,7 @@ export default class CardCatalogModal extends Component<Signature> {
             Loading...
           {{else}}
             {{! The getter for availableRealms is necessary because
-                it's a resource that needs to load the search results }}
+              it's a resource that needs to load the search results }}
             <CardCatalog
               @results={{if
                 this.availableRealms.length
@@ -262,6 +268,7 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.searchResults = this.availableRealms;
     this.state.cardURL = '';
     this.state.selectedCard = undefined;
+    this.state.errorMessage = '';
     this.state.dismissModal = false;
   }
 
@@ -368,31 +375,79 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
+  get isInvalid() {
+    if (!this.state.searchKey) {
+      return false;
+    }
+    return this.state.errorMessage || this.state.searchResults?.length === 0;
+  }
+
+  setErrorState(message: string) {
+    this.state.errorMessage = message;
+    this.state.searchResults = [];
+  }
+
+  private getCardByURL = restartableTask(async (cardURL: string) => {
+    let maybeCardDoc: CardDocument | undefined;
+    try {
+      maybeCardDoc = await this.cardService.fetchJSON(cardURL);
+    } catch (e) {
+      this.setErrorState(`Could not find card at ${this.state.searchKey}`);
+      return;
+    }
+    if (isSingleCardDocument(maybeCardDoc)) {
+      let card = await this.cardService.createFromSerialized(
+        maybeCardDoc.data,
+        maybeCardDoc,
+        new URL(maybeCardDoc.data.id),
+      );
+      if (!card) {
+        this.setErrorState(
+          `Encountered error deserializing card for ${cardURL}`,
+        );
+        return;
+      }
+      let realmInfo = await this.cardService.getRealmInfo(card);
+      if (!realmInfo) {
+        this.setErrorState(
+          `Encountered error getting realm info for ${cardURL}`,
+        );
+        return;
+      }
+      this.state.searchResults = [
+        {
+          url: card.id,
+          realmInfo,
+          cards: [card],
+        },
+      ];
+    }
+  });
+
   @action
   onSearchFieldUpdated() {
+    this.state.errorMessage = '';
+
     if (!this.state.searchKey && !this.state.selectedRealms.length) {
       return this.resetState();
     }
 
-    let results: RealmCards[] = [];
-    let cardFilter;
-
     if (this.searchKeyIsURL) {
-      cardFilter = (c: CardDef) => {
-        return c.id === this.state.searchKey;
-      };
-    } else {
-      cardFilter = (c: CardDef) => {
-        return c.title
-          ?.trim()
-          .toLowerCase()
-          .includes(this.state.searchKey.trim().toLowerCase());
-      };
+      let realmPath = new RealmPaths(this.state.searchKey);
+      this.getCardByURL.perform(realmPath.url);
+      return;
     }
+
+    let results: RealmCards[] = [];
+    let cardFilter = (c: CardDef) => {
+      return c.title
+        ?.trim()
+        .toLowerCase()
+        .includes(this.state.searchKey.trim().toLowerCase());
+    };
 
     for (let { url, realmInfo, cards } of this.displayedRealms) {
       let filteredCards = cards.filter(cardFilter);
-
       if (filteredCards.length) {
         results.push({
           url,

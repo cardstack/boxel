@@ -157,23 +157,16 @@ export default class SearchSheet extends Component<Signature> {
   getCard = restartableTask(async (cardURL: string) => {
     this.clearSearchCardResults();
 
-    let response = await this.loaderService.loader.fetch(cardURL, {
-      headers: {
-        Accept: 'application/vnd.card+json',
-      },
-    });
-    if (response.ok) {
-      let maybeCardDoc = await response.json();
-      if (isSingleCardDocument(maybeCardDoc)) {
-        let card = await this.cardService.createFromSerialized(
-          maybeCardDoc.data,
-          maybeCardDoc,
-          new URL(maybeCardDoc.data.id),
-        );
+    let maybeCardDoc = await this.cardService.fetchJSON(cardURL);
+    if (isSingleCardDocument(maybeCardDoc)) {
+      let card = await this.cardService.createFromSerialized(
+        maybeCardDoc.data,
+        maybeCardDoc,
+        new URL(maybeCardDoc.data.id),
+      );
 
-        this.clearSearchCardResults();
-        this.searchCardResults.push(card);
-      }
+      this.clearSearchCardResults();
+      this.searchCardResults.push(card);
     }
   });
 

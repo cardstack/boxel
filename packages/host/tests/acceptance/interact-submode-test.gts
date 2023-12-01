@@ -375,6 +375,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('Can add an index card by URL (without "index" in path) using the add button', async function (assert) {
+      const wrongURL = 'https://cardstack.com/bas';
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
           stringify({ stacks: [] })!,
@@ -387,13 +388,35 @@ module('Acceptance | interact submode tests', function (hooks) {
       await waitFor('[data-test-card-catalog]');
       await fillIn(
         '[data-test-card-catalog-modal] [data-test-search-field]',
+        wrongURL,
+      );
+      await waitFor('[data-test-boxel-input-error-message]');
+      assert
+        .dom('[data-test-boxel-input-error-message]')
+        .hasText(`Could not find card at ${wrongURL}`);
+      assert.dom('[data-test-boxel-input-validation-state="invalid"]').exists();
+
+      await fillIn(
+        '[data-test-card-catalog-modal] [data-test-search-field]',
+        baseRealm.url.slice(0, -1),
+      );
+      await waitFor(`[data-test-card-catalog-item="${baseRealm.url}index"]`, {
+        timeout: 2000,
+      });
+      assert.dom('[data-test-card-catalog-item]').hasText('Base Workspace');
+
+      await fillIn(
+        '[data-test-card-catalog-modal] [data-test-search-field]',
         testRealmURL,
       );
-
       await waitFor(`[data-test-card-catalog-item="${testRealmURL}index"]`, {
         timeout: 2000,
       });
       assert.dom('[data-test-card-catalog-item]').hasText('Test Workspace B');
+      assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
+      assert
+        .dom('[data-test-boxel-input-validation-state="invalid"]')
+        .doesNotExist();
 
       await click(`[data-test-select="${testRealmURL}index"]`);
       await click('[data-test-card-catalog-go-button]');
