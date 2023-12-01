@@ -2,12 +2,13 @@ import { isDestroying } from '@ember/destroyable';
 import { debounce, next } from '@ember/runloop';
 import { inject as service } from '@ember/service';
 
-import Modifier, { PositionalArgs } from 'ember-modifier';
+import Modifier, { NamedArgs } from 'ember-modifier';
 
 import ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 
 interface RestoreScrollPositionModifierArgs {
-  Positional: [String, String];
+  Positional: [];
+  Named: { container?: string; key?: string };
 }
 
 interface RestoreScrollPositionModifierSignature {
@@ -26,8 +27,12 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
 
   modify(
     element: Element,
-    [container, key]: PositionalArgs<RestoreScrollPositionModifierSignature>,
+    // No named args but without this the named ones are undefined
+    // eslint-disable-next-line no-empty-pattern
+    []: [],
+    { container, key }: NamedArgs<RestoreScrollPositionModifierSignature>,
   ): void {
+    console.log(`wha`, container, key);
     if (!this.#mutationObserver) {
       this.element = element;
 

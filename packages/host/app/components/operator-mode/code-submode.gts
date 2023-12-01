@@ -630,8 +630,8 @@ export default class CodeSubmode extends Component<Signature> {
                       class='inner-container__content'
                       data-test-togglable-left-panel
                       {{RestoreScrollPosition
-                        this.scrollPositionContainer
-                        this.scrollPositionKey.href
+                        container=this.scrollPositionContainer
+                        key=this.scrollPositionKey.href
                       }}
                     >
                       {{#if this.isFileTreeShowing}}
