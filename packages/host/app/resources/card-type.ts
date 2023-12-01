@@ -43,6 +43,7 @@ interface Args {
 
 export type CodeRefType = CodeRef & {
   displayName: string;
+  localName: string;
 };
 
 export interface FieldOfType {
@@ -108,6 +109,7 @@ export class CardType extends Resource<Args> {
       return {
         ...ref,
         displayName: card.prototype.constructor.displayName,
+        localName: card.name,
       };
     }
     let id = internalKeyFor(ref, undefined);
@@ -214,7 +216,9 @@ export function getCardType(
 }
 
 function isCodeRefType(type: any): type is CodeRefType {
-  return type && isCodeRef(type) && 'displayName' in type;
+  return (
+    type && isCodeRef(type) && 'displayName' in type && 'localName' in type
+  );
 }
 
 export function isFieldOfType(obj: any): obj is FieldOfType {

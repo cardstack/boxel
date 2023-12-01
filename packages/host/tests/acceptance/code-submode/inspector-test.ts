@@ -926,8 +926,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       submode: Submodes.Code,
     });
     let selected = 'AncestorCard2 card';
-    await waitFor(`[data-test-definition-container]`);
-    await click(`[data-test-definition-container]`);
+    await waitFor(`[data-test-clickable-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
@@ -952,8 +952,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       submode: Submodes.Code,
     });
     selected = 'default (DefaultAncestorCard) card';
-    await waitFor(`[data-test-definition-container]`);
-    await click(`[data-test-definition-container]`);
+    await waitFor(`[data-test-clickable-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
@@ -977,8 +977,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       submode: Submodes.Code,
     });
     selected = 'RenamedAncestorCard (AncestorCard) card';
-    await waitFor(`[data-test-definition-container]`);
-    await click(`[data-test-definition-container]`);
+    await waitFor(`[data-test-clickable-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
@@ -1002,7 +1002,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       submode: Submodes.Code,
     });
     selected = 'AncestorCard3 card';
-    await click(`[data-test-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
@@ -1028,8 +1028,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       submode: Submodes.Code,
     });
     selected = 'ChildCard2 card';
-    await waitFor(`[data-test-definition-container]`);
-    await click(`[data-test-definition-container]`);
+    await waitFor(`[data-test-clickable-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
 
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
@@ -1055,7 +1055,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       submode: Submodes.Code,
     });
     selected = 'AncestorField1 field';
-    await click(`[data-test-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
   });

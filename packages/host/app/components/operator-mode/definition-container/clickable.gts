@@ -5,11 +5,9 @@ import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 export interface ClickableArgs {
   openDefinition: (
-    moduleHref: string,
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) => void;
-  moduleHref: string;
   codeRef?: ResolvedCodeRef;
   localName?: string;
 }
@@ -25,11 +23,7 @@ interface ClickableSignature {
 export class Clickable extends Component<ClickableSignature> {
   @action
   handleClick() {
-    this.args.openDefinition(
-      this.args.moduleHref,
-      this.args.codeRef,
-      this.args.localName,
-    );
+    this.args.openDefinition(this.args.codeRef, this.args.localName);
   }
   <template>
     <button

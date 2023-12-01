@@ -1189,7 +1189,7 @@ module('Acceptance | code submode tests', function (hooks) {
       'cursor is at Employee declaration',
     );
 
-    await click(`[data-test-definition-container="${testRealmURL}person"]`);
+    await click(`[data-test-clickable-definition-container`);
     await waitFor(`[data-boxel-selector-item-text="Person"]`);
     await waitUntil(() => monacoService.hasFocus);
     lineCursorOn = monacoService.getLineCursorOn();

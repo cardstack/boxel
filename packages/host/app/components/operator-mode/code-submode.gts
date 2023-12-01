@@ -381,13 +381,12 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   openDefinition(
-    moduleHref: string,
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) {
     if (codeRef) {
       this.operatorModeStateService.updateCodeRefSelection(codeRef);
-      this.operatorModeStateService.updateCodePath(new URL(moduleHref));
+      this.operatorModeStateService.updateCodePath(new URL(codeRef.module));
     } else if (localName) {
       this.operatorModeStateService.updateLocalNameSelection(localName);
       this.updateCursorByDeclaration?.(this.selectedDeclaration!);
