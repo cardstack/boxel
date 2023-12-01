@@ -376,11 +376,19 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  openDefinition(moduleHref: string, codeRef: ResolvedCodeRef | undefined) {
+  openDefinition(
+    codeRef: ResolvedCodeRef | undefined,
+    localName: string | undefined,
+  ) {
     if (codeRef) {
       this.operatorModeStateService.updateCodeRefSelection(codeRef);
+      this.operatorModeStateService.updateCodePath(new URL(codeRef.module));
+    } else if (localName) {
+      this.operatorModeStateService.updateLocalNameSelection(localName);
+      this.updateCursorByDeclaration?.(this.selectedDeclaration!);
+    } else {
+      console.log('No reference to codeRef or name found within module');
     }
-    this.operatorModeStateService.updateCodePath(new URL(moduleHref));
   }
 
   private onCardChange = () => {

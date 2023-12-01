@@ -21,7 +21,9 @@ import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
+  isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
+import { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface SelectorItemOptions {
   action: Function;
@@ -78,6 +80,19 @@ interface Signature {
   Blocks: EmptyObject;
 }
 
+function typeOfCardOrField(cardOrField: typeof BaseDef) {
+  if (isCardDef(cardOrField)) {
+    return 'card';
+  } else if (isFieldDef(cardOrField)) {
+    return 'field';
+  } else if (isBaseDef(cardOrField)) {
+    return 'base';
+  }
+  throw new Error(
+    `in-this-file panel: declaration should either be card, field, or base.`,
+  );
+}
+
 export default class Selector extends Component<Signature> {
   @action invokeSelectorItemAction(
     action: unknown,
@@ -93,21 +108,16 @@ export default class Selector extends Component<Signature> {
   }
 
   getType(declaration: ModuleDeclaration) {
-    let type = declaration.type as string;
     if (isCardOrFieldDeclaration(declaration)) {
-      if (isCardDef(declaration.cardOrField)) {
-        type = 'card';
-      } else if (isFieldDef(declaration.cardOrField)) {
-        type = 'field';
-      } else if (isBaseDef(declaration.cardOrField)) {
-        type = 'base';
-      } else {
-        throw new Error(
-          'card or field declaration does not have an appropriate type',
-        );
-      }
+      return typeOfCardOrField(declaration.cardOrField);
+    } else if (isReexportCardOrField(declaration)) {
+      return typeOfCardOrField(declaration.cardOrField);
+    } else if (declaration.type === 'class') {
+      return 'class';
+    } else if (declaration.type === 'function') {
+      return 'function';
     }
-    return type;
+    return '';
   }
 
   <template>
