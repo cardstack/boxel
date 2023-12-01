@@ -29,6 +29,7 @@ import {
   isSingleCardDocument,
   baseRealm,
   catalogEntryRef,
+  type CardDocument,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -157,7 +158,14 @@ export default class SearchSheet extends Component<Signature> {
   getCard = restartableTask(async (cardURL: string) => {
     this.clearSearchCardResults();
 
-    let maybeCardDoc = await this.cardService.fetchJSON(cardURL);
+    let maybeCardDoc: CardDocument | undefined;
+    try {
+      maybeCardDoc = await this.cardService.fetchJSON(cardURL);
+    } catch (e) {
+      // Not found message is displayed in getter for searchLabel
+      console.error(`Unable to fetch card at ${cardURL}`);
+    }
+
     if (isSingleCardDocument(maybeCardDoc)) {
       let card = await this.cardService.createFromSerialized(
         maybeCardDoc.data,
