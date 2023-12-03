@@ -21,8 +21,8 @@ interface Signature {
     cardInheritanceChain: CardInheritance[];
     moduleSyntax: ModuleSyntax;
     openDefinition: (
-      moduleHref: string,
       codeRef: ResolvedCodeRef | undefined,
+      localName: string | undefined,
     ) => void;
   };
 }

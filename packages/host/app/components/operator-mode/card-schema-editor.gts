@@ -51,8 +51,8 @@ interface Signature {
     childFields: string[];
     parentFields: string[];
     openDefinition: (
-      moduleHref: string,
       codeRef: ResolvedCodeRef | undefined,
+      localName: string | undefined,
     ) => void;
   };
 }
@@ -251,7 +251,7 @@ export default class CardSchemaEditor extends Component<Signature> {
           <Tooltip @placement='bottom'>
             <:trigger>
               <Pill
-                {{on 'click' (fn @openDefinition @cardType.module codeRef)}}
+                {{on 'click' (fn @openDefinition codeRef @cardType.localName)}}
                 data-test-card-schema-navigational-button
               >
                 <:icon>
@@ -337,7 +337,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                           <Pill
                             {{on
                               'click'
-                              (fn @openDefinition moduleUrl codeRef)
+                              (fn @openDefinition codeRef field.card.localName)
                             }}
                             data-test-card-schema-field-navigational-button
                           >
