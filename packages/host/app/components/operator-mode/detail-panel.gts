@@ -105,10 +105,6 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
-  get showDetailsPanel() {
-    return this.isBinary || this.isNonCardJson;
-  }
-
   get cardType() {
     if (
       this.args.selectedDeclaration &&
@@ -149,17 +145,6 @@ export default class DetailPanel extends Component<Signature> {
 
   get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
-  }
-
-  get isBinary() {
-    return this.args.readyFile.isBinary;
-  }
-
-  private get isNonCardJson() {
-    return (
-      this.args.readyFile.url.endsWith('.json') &&
-      !isCardDocumentString(this.args.readyFile.content)
-    );
   }
 
   private get fileExtension() {
@@ -330,7 +315,7 @@ export default class DetailPanel extends Component<Signature> {
             {{/if}}
 
           </div>
-        {{else if this.showDetailsPanel}}
+        {{else}}
           <div class='details-panel'>
             <header class='panel-header' aria-label='Details Panel Header'>
               Details
