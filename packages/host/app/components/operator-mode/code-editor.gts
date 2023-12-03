@@ -161,7 +161,7 @@ export default class CodeEditor extends Component<Signature> {
         //capturing position of named export declarations
         //this will always divert to the end of the specifier
         let specifier = declaration.path?.node.specifiers.find(
-          (specifier) => getName(specifier.exported) === declaration.exportedAs,
+          (specifier) => getName(specifier.exported) === declaration.exportName,
         );
         if (
           specifier &&

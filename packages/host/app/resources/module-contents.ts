@@ -118,8 +118,8 @@ export class ModuleContentsResource extends Resource<Args> {
     this._declarations = [];
     moduleSyntax.declarations.forEach((value: Declaration) => {
       if (value.type === 'possibleCardOrField') {
-        let cardOrField = value.exportedAs
-          ? exportedCardsOrFields.get(value.exportedAs)
+        let cardOrField = value.exportName
+          ? exportedCardsOrFields.get(value.exportName)
           : localCardsOrFields.get(value);
         if (cardOrField !== undefined) {
           this._declarations.push({
@@ -130,18 +130,18 @@ export class ModuleContentsResource extends Resource<Args> {
           return;
         }
         // case where things statically look like cards or fields but are not
-        if (value.exportedAs !== undefined) {
+        if (value.exportName !== undefined) {
           this._declarations.push({
             localName: value.localName,
-            exportedAs: value.exportedAs,
+            exportName: value.exportName,
             path: value.path,
             type: 'class',
           } as ClassDeclaration);
         }
       } else if (value.type === 'reexport') {
         let cardOrField: typeof BaseDef | undefined;
-        if (value.exportedAs) {
-          let foundCardOrField = exportedCardsOrFields.get(value.exportedAs);
+        if (value.exportName) {
+          let foundCardOrField = exportedCardsOrFields.get(value.exportName);
           if (foundCardOrField) {
             cardOrField = foundCardOrField;
           }
@@ -154,7 +154,7 @@ export class ModuleContentsResource extends Resource<Args> {
           }
         }
       } else if (value.type === 'class' || value.type === 'function') {
-        if (value.exportedAs !== undefined) {
+        if (value.exportName !== undefined) {
           this.declarations.push(value as ModuleDeclaration);
         }
       }

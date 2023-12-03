@@ -343,7 +343,7 @@ export default class CodeSubmode extends Component<Signature> {
       let codeRef = this.operatorModeStateService.state.codeSelection?.codeRef;
       if (isCardOrFieldDeclaration(dec) && codeRef) {
         return (
-          dec.exportedAs === codeRef.name || dec.localName === codeRef.name
+          dec.exportName === codeRef.name || dec.localName === codeRef.name
         );
       }
       return false;

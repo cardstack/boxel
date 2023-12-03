@@ -155,16 +155,16 @@ export default class Selector extends Component<Signature> {
                   disabled={{selectorItem.disabled}}
                 >
                   <div class='selector-item'>
-                    {{#if selectorItem.declaration.exportedAs}}
+                    {{#if selectorItem.declaration.exportName}}
                       <span class='exported-arrow'>
                         <DiagonalArrowLeftUp width='20' height='20' />
                       </span>
                       <span
                         class='exported'
-                      >{{selectorItem.declaration.exportedAs}}</span>
+                      >{{selectorItem.declaration.exportName}}</span>
                       {{#unless
                         (eq
-                          selectorItem.declaration.exportedAs
+                          selectorItem.declaration.exportName
                           selectorItem.declaration.localName
                         )
                       }}<span

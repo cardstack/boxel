@@ -273,7 +273,7 @@ export class ModuleSyntax {
     let cardOrFieldClass: PossibleCardOrFieldDeclaration | undefined;
     if (!('type' in codeRef)) {
       cardOrFieldClass = this.possibleCardsOrFields.find(
-        (c) => c.exportedAs === codeRef.name,
+        (c) => c.exportName === codeRef.name,
       );
     } else if (codeRef.type === 'ancestorOf') {
       let classRef = this.getCard(codeRef.card).super;
@@ -315,7 +315,7 @@ export class ModuleSyntax {
         trimExecutableExtension(new URL(classRef.module, this.url)) === this.url
       ) {
         return this.possibleCardsOrFields.find(
-          (c) => c.exportedAs === classRef.name,
+          (c) => c.exportName === classRef.name,
         );
       }
       throw new Error(

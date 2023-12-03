@@ -17,7 +17,7 @@ export type ClassReference = ExternalReference | InternalReference;
 
 export interface BaseDeclaration {
   localName: string | undefined;
-  exportedAs: string | undefined; //generally, all our cases should have an exportedAs
+  exportName: string | undefined; //generally, all our cases should have an exportName
   path: NodePath;
 }
 
@@ -80,7 +80,7 @@ const coreVisitor = {
         insertOrReplace(
           {
             localName,
-            exportedAs: getExportName(path, localName),
+            exportName: getExportName(path, localName),
             path,
             type: 'function',
           },
@@ -100,7 +100,7 @@ const coreVisitor = {
             localName,
             path,
             possibleFields: new Map(),
-            exportedAs: getExportName(path, localName),
+            exportName: getExportName(path, localName),
             type: 'possibleCardOrField',
           };
           state.opts.possibleCardsOrFields.push(possibleCardOrField);
@@ -113,7 +113,7 @@ const coreVisitor = {
           insertOrReplace(
             {
               localName,
-              exportedAs: getExportName(path, localName),
+              exportName: getExportName(path, localName),
               path,
               type: 'class',
             },
@@ -131,7 +131,7 @@ const coreVisitor = {
           insertOrReplace(
             {
               localName,
-              exportedAs: getExportName(path, localName),
+              exportName: getExportName(path, localName),
               path,
               type: 'class',
             },
@@ -154,7 +154,7 @@ const coreVisitor = {
             localName,
             path,
             possibleFields: new Map(),
-            exportedAs: getExportName(path, localName),
+            exportName: getExportName(path, localName),
             type: 'possibleCardOrField',
           };
           state.opts.possibleCardsOrFields.push(possibleCardOrField);
@@ -165,7 +165,7 @@ const coreVisitor = {
             insertOrReplace(
               {
                 localName,
-                exportedAs: getExportName(path, localName),
+                exportName: getExportName(path, localName),
                 path,
                 type: 'class',
               },
@@ -282,7 +282,7 @@ const reExportVisitor = {
           insertOrReplace(
             {
               path,
-              exportedAs: getExportName(path, localName),
+              exportName: getExportName(path, localName),
               localName: localName,
               type: 'reexport',
             },
@@ -304,7 +304,7 @@ const reExportVisitor = {
       insertOrReplace(
         {
           path,
-          exportedAs: 'default',
+          exportName: 'default',
           localName,
           type: 'reexport',
         },
