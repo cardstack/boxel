@@ -934,7 +934,6 @@ module('Acceptance | code submode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    debugger;
 
     await waitFor('[data-test-file-incompatibility-message]');
     assert
