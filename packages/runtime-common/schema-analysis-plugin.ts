@@ -386,7 +386,10 @@ function getExportName(
       localName,
     );
     if (maybeExportSpecifierLocal !== undefined) {
-      return getName(maybeExportSpecifierLocal.parentPath.node.exported);
+      return getName(
+        (maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>)
+          .node.exported,
+      );
     }
     // case that doesn't enter module scope
     // eg export { MyCard as SomeCard } from './some-module
