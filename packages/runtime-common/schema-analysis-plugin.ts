@@ -530,9 +530,6 @@ function insertOrReplace(item: Declaration, arr: Declaration[]) {
     return i.localName === localName;
   });
   if (existingDeclaration) {
-    console.log(
-      `declaration of name ${localName} already exists. It is of type ${existingDeclaration.type}. Attempting to replace with type ${item.type}`,
-    );
     if (
       item.type === 'possibleCardOrField' &&
       existingDeclaration.type === 'reexport'
