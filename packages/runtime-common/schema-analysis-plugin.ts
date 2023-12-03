@@ -17,7 +17,7 @@ export type ClassReference = ExternalReference | InternalReference;
 
 export interface BaseDeclaration {
   localName: string | undefined;
-  exportedAs: string | undefined;
+  exportedAs: string | undefined; //generally, all our cases should have an exportedAsName
   path: NodePath;
 }
 
@@ -80,7 +80,7 @@ const coreVisitor = {
         insertOrReplace(
           {
             localName,
-            exportedAs: getExportedAsName(path, localName),
+            exportedAs: getExportedName(path, localName),
             path,
             type: 'function',
           },
@@ -100,7 +100,7 @@ const coreVisitor = {
             localName,
             path,
             possibleFields: new Map(),
-            exportedAs: getExportedAsName(path, localName),
+            exportedAs: getExportedName(path, localName),
             type: 'possibleCardOrField',
           };
           state.opts.possibleCardsOrFields.push(possibleCardOrField);
@@ -113,7 +113,7 @@ const coreVisitor = {
           insertOrReplace(
             {
               localName,
-              exportedAs: getExportedAsName(path, localName),
+              exportedAs: getExportedName(path, localName),
               path,
               type: 'class',
             },
@@ -131,7 +131,7 @@ const coreVisitor = {
           insertOrReplace(
             {
               localName,
-              exportedAs: getExportedAsName(path, localName),
+              exportedAs: getExportedName(path, localName),
               path,
               type: 'class',
             },
@@ -154,7 +154,7 @@ const coreVisitor = {
             localName,
             path,
             possibleFields: new Map(),
-            exportedAs: getExportedAsName(path, localName),
+            exportedAs: getExportedName(path, localName),
             type: 'possibleCardOrField',
           };
           state.opts.possibleCardsOrFields.push(possibleCardOrField);
@@ -165,7 +165,7 @@ const coreVisitor = {
             insertOrReplace(
               {
                 localName,
-                exportedAs: getExportedAsName(path, localName),
+                exportedAs: getExportedName(path, localName),
                 path,
                 type: 'class',
               },
@@ -265,6 +265,9 @@ const coreVisitor = {
 };
 
 //This visitor captures re-exports
+// - ones which enter the module scope (eg import { foo } from './some-module'; export { foo })
+// - ones which do not enter the module scope (eg export { foo } from './some-module')
+// Typically re-export refers to variables that are never entering the module scope
 const reExportVisitor = {
   ExportNamedDeclaration(
     path: NodePath<t.ExportNamedDeclaration>,
@@ -279,7 +282,7 @@ const reExportVisitor = {
           insertOrReplace(
             {
               path,
-              exportedAs: getExportedAsName(path, localName),
+              exportedAs: getExportedName(path, localName),
               localName: localName,
               type: 'reexport',
             },
@@ -326,7 +329,7 @@ class CompilerError extends Error {
   }
 }
 
-// find the local identifier of a class or function declaration that is used in an export specifier
+// find the local identifier of a declaration that is referred in an export specifier as long as it enters the module scope
 function findExportSpecifierPathForDeclaration(
   path:
     | NodePath<t.ClassDeclaration>
@@ -334,17 +337,34 @@ function findExportSpecifierPathForDeclaration(
     | NodePath<t.ExportNamedDeclaration>,
   localName: string | undefined,
 ): NodePath<t.Identifier> | undefined {
-  // the class's identifier is referenced in a node whose parent is an ExportSpecifier
   let binding = localName ? path.scope.getBinding(localName) : undefined;
   if (binding) {
     return binding.referencePaths.find(
       (b) => b.parentPath?.isExportSpecifier(),
     ) as NodePath<t.Identifier> | undefined;
   }
-  return undefined;
 }
 
-function getExportedAsName(
+// find the specifier of a declaration that is referred in an export specifier as long as it enters the module scope
+function findExportSpecifierPathForNonBinding(
+  path: NodePath<t.ExportNamedDeclaration>,
+  localName: string | undefined,
+): t.ExportSpecifier | undefined {
+  if (path.node.source && path.node.specifiers) {
+    let specifier = path.node.specifiers.find((specifier) => {
+      if (t.isExportSpecifier(specifier)) {
+        return specifier.local.name === localName;
+      }
+      return false;
+    });
+    if (t.isExportSpecifier(specifier)) {
+      return specifier;
+    }
+  }
+  return;
+}
+
+function getExportedName(
   path:
     | NodePath<t.ClassDeclaration>
     | NodePath<t.FunctionDeclaration>
@@ -353,22 +373,30 @@ function getExportedAsName(
 ): string | undefined {
   let { parentPath } = path;
   if (parentPath.isExportNamedDeclaration()) {
-    // the class declaration is part of a named export
+    // eg handles scenario like export MyClass {} or export function foo(){}
     return localName;
   } else if (parentPath.isExportDefaultDeclaration()) {
-    // the class declaration is part of a default export
+    // eg export default class MyClass {}
     return 'default';
-  } else {
-    // export named declaration seems to only occur here
+  } else if (path.isExportNamedDeclaration()) {
+    // case that enters the module scope
     let maybeExportSpecifierLocal = findExportSpecifierPathForDeclaration(
       path,
       localName,
     );
     if (maybeExportSpecifierLocal !== undefined) {
-      return getName(
-        (maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>)
-          .node.exported,
+      return getName(maybeExportSpecifierLocal.parentPath.node.exported);
+    }
+    // case that doesn't enter module scope
+    // eg export { MyCard as SomeCard } from './some-module
+    if (path.isExportNamedDeclaration()) {
+      let maybeExportSpecifierNonBinding = findExportSpecifierPathForNonBinding(
+        path,
+        localName,
       );
+      if (maybeExportSpecifierNonBinding) {
+        return getName(maybeExportSpecifierNonBinding.exported);
+      }
     }
   }
   return;
@@ -455,12 +483,19 @@ function getNamedImportInfo(
   };
 }
 
+// the local name always refers to a code declaration and not the variable its assigned to
+// it doesn't refer to the variable a function or class is assigned to
 function getLocalName(
   path: NodePath<t.FunctionDeclaration> | NodePath<t.ClassDeclaration>,
 ) {
   return path.node.id ? path.node.id.name : undefined;
 }
 
+// this is just a simple utility to get name
+// most instances of usage are on t.Identifier
+// t.StringLiteral do not occur often in our usage of schema, they either occur
+// - as a value of a variable (eg let foo = 'apple'. 'apple' is the string literal)
+// - as a value of node.source (eg import foo from 'some-module'. 'some-module' is the string literal)
 export function getName(node: t.Identifier | t.StringLiteral) {
   if (node.type === 'Identifier') {
     return node.name;
