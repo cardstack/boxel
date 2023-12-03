@@ -343,6 +343,7 @@ function findExportSpecifierPathForDeclaration(
       (b) => b.parentPath?.isExportSpecifier(),
     ) as NodePath<t.Identifier> | undefined;
   }
+  return undefined;
 }
 
 // find the specifier of a declaration that is referred in an export specifier as long as it enters the module scope
@@ -378,7 +379,7 @@ function getExportedName(
   } else if (parentPath.isExportDefaultDeclaration()) {
     // eg export default class MyClass {}
     return 'default';
-  } else if (path.isExportNamedDeclaration()) {
+  } else {
     // case that enters the module scope
     let maybeExportSpecifierLocal = findExportSpecifierPathForDeclaration(
       path,
