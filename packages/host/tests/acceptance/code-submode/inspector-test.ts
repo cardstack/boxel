@@ -319,6 +319,8 @@ const reExportSource = `
 
   export default NumberCard;
   export { Person as Human } from './person';
+
+  export { default as Date } from 'https://cardstack.com/base/date';
 `;
 
 const localInheritSource = `
@@ -1275,6 +1277,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       'BDef base',
       'default (NumberCard) field',
       'Human (Person) card',
+      'Date (default) field',
     ];
     expectedElementNames.forEach(async (elementName, index) => {
       await waitFor(
@@ -1284,7 +1287,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
         .hasText(elementName);
     });
-    assert.dom('[data-test-boxel-selector-item]').exists({ count: 6 });
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 7 });
 
     //clicking on a base card
     elementName = 'BDef';

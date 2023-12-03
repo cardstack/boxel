@@ -18,3 +18,5 @@ export * from './in-this-file'; //Will not display inside "in-this-file"
 export default NumberCard;
 
 export { Person as Human } from './person';
+
+export { default as Date } from 'https://cardstack.com/base/date';
