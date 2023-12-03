@@ -13,6 +13,8 @@ export { StringCard as StrCard };
 
 export { FieldDef as FDef, CardDef, contains, BDef };
 
-export * from './in-this-file';
+export * from './in-this-file'; //Will not display inside "in-this-file"
 
 export default NumberCard;
+
+export { Person as Human } from './person';

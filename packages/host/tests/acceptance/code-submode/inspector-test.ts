@@ -318,6 +318,7 @@ const reExportSource = `
   export * from './in-this-file'; //Will not display inside "in-this-file"
 
   export default NumberCard;
+  export { Person as Human } from './person';
 `;
 
 const localInheritSource = `
@@ -1273,6 +1274,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       'CardDef card',
       'BDef base',
       'default (NumberCard) field',
+      'Human (Person) card',
     ];
     expectedElementNames.forEach(async (elementName, index) => {
       await waitFor(
@@ -1282,11 +1284,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
         .hasText(elementName);
     });
-    assert.dom('[data-test-boxel-selector-item]').exists({ count: 5 });
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 6 });
 
     //clicking on a base card
     elementName = 'BDef';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
       .hasText(`${elementName} base`);
@@ -1297,6 +1300,26 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .includesText('Re-exported Base Definition');
     assert.dom('[data-test-card-module-definition]').includesText('Base');
     assert.true(monacoService.getLineCursorOn()?.includes('BDef'));
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.',
+      );
+
+    //clicking on re-export (which doesn't enter module scope)
+    elementName = 'Person';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`Human (${elementName}) card`);
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert
+      .dom('[data-test-definition-header]')
+      .includesText('Re-exported Card Definition');
+    assert.dom('[data-test-card-module-definition]').includesText('Card');
+    assert.true(monacoService.getLineCursorOn()?.includes('Human'));
     assert
       .dom('[data-test-file-incompatibility-message]')
       .hasText(
