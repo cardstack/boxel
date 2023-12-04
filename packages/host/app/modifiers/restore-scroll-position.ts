@@ -1,5 +1,5 @@
 import { isDestroying } from '@ember/destroyable';
-import { debounce, next } from '@ember/runloop';
+import { debounce } from '@ember/runloop';
 import { inject as service } from '@ember/service';
 
 import Modifier, { NamedArgs } from 'ember-modifier';
