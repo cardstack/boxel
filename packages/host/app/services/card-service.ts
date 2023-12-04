@@ -7,6 +7,7 @@ import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  baseRealm,
   SupportedMimeType,
   type LooseCardResource,
   isSingleCardDocument,
@@ -58,6 +59,10 @@ export default class CardService extends Service {
     return api;
   });
 
+  // This is temporary until we have a better way of discovering the realms that
+  // are available for a user // unresolved URLs
+  realmURLs = [...new Set([ownRealmURL, baseRealm.url, ...otherRealmURLs])];
+
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
   get defaultURL(): URL {
@@ -91,7 +96,7 @@ export default class CardService extends Service {
     if (!response.ok) {
       let err = new Error(
         `status: ${response.status} -
-        ${response.statusText}. ${await response.text()}`,
+          ${response.statusText}. ${await response.text()}`,
       );
       (err as any).status = response.status;
       throw err;
@@ -355,8 +360,7 @@ export default class CardService extends Service {
   }
 
   getRealmURLFor(url: URL) {
-    let realmURLS = new Set([ownRealmURL, ...otherRealmURLs]);
-    for (let realmURL of realmURLS) {
+    for (let realmURL of this.realmURLs) {
       let path = new RealmPaths(realmURL);
       if (path.inRealm(url)) {
         return new URL(realmURL);
