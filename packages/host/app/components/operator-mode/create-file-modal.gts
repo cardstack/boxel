@@ -466,15 +466,24 @@ export default class CreateFileModal extends Component<Signature> {
     // sanitize the name since it will be used in javascript code
     let safeName = this.displayName.replace(/[^A-Za-z \d-_]/g, '').trim();
     let src: string;
-    if (exportName === 'default') {
-      // TODO there is actually only one possible declaration collision: `className` and `parent`,
-      // reconcile that particular collision as necessary.
+
+    // There is actually only one possible declaration collision: `className` and `parent`,
+    // reconcile that particular collision as necessary.
+    if (className === exportName) {
+      src = `
+import { ${exportName} as ${exportName}Parent } from '${absoluteModule}';
+export class ${className} extends ${exportName}Parent {
+  static displayName = "${safeName}";
+}`;
+    } else if (exportName === 'default') {
       let parent = camelize(
         module
           .split('/')
           .pop()!
           .replace(/\.[^\.]+$/, ''),
       );
+      // check for parent/className declaration collision
+      parent = parent === className ? `${parent}Parent` : parent;
       src = `
 import ${parent} from '${absoluteModule}';
 export class ${className} extends ${parent} {

@@ -1617,7 +1617,64 @@ export class TestField extends ExportedField {
       .hasNoValue('filename field is empty');
   });
 
-  skip<TestContextWithSave>(`can handle the situation where there is a class name collision with the inherited cards class name`, async function (_assert) {});
+  test<TestContextWithSave>(`can handle the situation where there is a class name collision with the inherited cards class name`, async function (assert) {
+    assert.expect(4);
+    let expectedSrc = `
+import { ExportedCard as ExportedCardParent } from '${testRealmURL}in-this-file';
+export class ExportedCard extends ExportedCardParent {
+  static displayName = "Exported Card";
+}`;
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    await fillIn('[data-test-display-name-field]', 'Exported Card'); // this name collides with the parent card
+    await fillIn('[data-test-file-name-field]', '/test-card');
+
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+      deferred.fulfill();
+    });
+    await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    await waitForCodeEditor();
+    assert.strictEqual(
+      getMonacoContent(),
+      expectedSrc,
+      'monaco displays the new definition',
+    );
+
+    await waitFor('[data-test-card-schema="Exported Card"]');
+    assert
+      .dom('[data-test-card-schema]')
+      .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
+    assert.dom('[data-test-total-fields]').containsText('4 Fields');
+  });
 
   skip('field error message displays if you try to inherit using a filename that already exists', async function (_assert) {});
 
