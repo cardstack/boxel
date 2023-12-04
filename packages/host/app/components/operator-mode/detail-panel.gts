@@ -105,6 +105,10 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
+  get showDetailsPanel() {
+    return !this.isModule;
+  }
+
   get cardType() {
     if (
       this.args.selectedDeclaration &&
@@ -315,7 +319,7 @@ export default class DetailPanel extends Component<Signature> {
             {{/if}}
 
           </div>
-        {{else}}
+        {{else if this.showDetailsPanel}}
           <div class='details-panel'>
             <header class='panel-header' aria-label='Details Panel Header'>
               Details
