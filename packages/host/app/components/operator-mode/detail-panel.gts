@@ -238,7 +238,7 @@ export default class DetailPanel extends Component<Signature> {
             this.args.selectDeclaration(dec);
           },
         ],
-        { selected: isSelected, url: this.args.readyFile.url },
+        { selected: isSelected },
       );
     });
   }

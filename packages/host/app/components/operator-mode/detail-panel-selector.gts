@@ -1,6 +1,6 @@
 import { type EmptyObject } from '@ember/component/helper';
 
-import { fn, concat } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -36,7 +36,6 @@ export class SelectorItem {
   selected: boolean;
   disabled: boolean;
   action: Function | undefined;
-  url: string | undefined;
 
   constructor(
     declaration: ModuleDeclaration,
@@ -44,7 +43,6 @@ export class SelectorItem {
   ) {
     this.declaration = declaration;
     this.action = options.action;
-    this.url = options.url;
     this.selected = options.selected || false;
     this.disabled = options.disabled || false;
   }
@@ -137,14 +135,7 @@ export default class Selector extends Component<Signature> {
                 }}
                 data-test-boxel-selector-item
                 data-test-boxel-selector-item-selected={{selectorItem.selected}}
-                {{! FIXME key should not just be URL }}
-                {{scrollIntoViewModifier
-                  selectorItem.selected
-                  container='inspector'
-                  key=(concat
-                    selectorItem.url '#' selectorItem.declaration.localName
-                  )
-                }}
+                {{scrollIntoViewModifier selectorItem.selected}}
               >
                 {{! template-lint-disable require-context-role }}
                 <div
