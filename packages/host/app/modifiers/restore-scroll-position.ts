@@ -34,7 +34,6 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
     []: [],
     { container, key }: NamedArgs<RestoreScrollPositionModifierSignature>,
   ): () => void {
-    console.log(`wha`, container, key);
     if (!this.#mutationObserver) {
       this.element = element;
 
@@ -89,13 +88,7 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
         container,
         key,
       )!;
-      console.log(
-        `ummm next render restoring pst ${previousScrollTop} container ${container} key ${key}`,
-      );
-      console.log(`st before: ${this.element.scrollTop}`);
-      console.log(`scroll height: ${this.element.scrollHeight}`);
       this.element.scrollTop = previousScrollTop;
-      console.log(`st after: ${this.element.scrollTop}`);
     } else if (
       container &&
       key &&
@@ -114,14 +107,6 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
       return;
     }
 
-    console.log(
-      'scrollend, container is ' +
-        this.#previousContainer +
-        ' key is ' +
-        this.#previousKey,
-      e,
-    );
-
     if (
       e.target &&
       e.target instanceof HTMLElement &&
@@ -129,7 +114,6 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
       this.#previousContainer &&
       this.#previousKey
     ) {
-      console.log('scrolltop ' + e.target.scrollTop);
       this.scrollPositionService.setKeyScrollPosition(
         this.#previousContainer,
         this.#previousKey,
