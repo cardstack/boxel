@@ -1,6 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -15,12 +13,11 @@ import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import {
-  Button,
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { cn, and, not } from '@cardstack/boxel-ui/helpers';
+import { and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -55,6 +52,8 @@ import FileTree from '../editor/file-tree';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
+import InnerContainer from './code-submode/inner-container';
+import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
@@ -193,20 +192,8 @@ export default class CodeSubmode extends Component<Signature> {
     this.operatorModeStateService.updateFileView(view);
   }
 
-  get fileView() {
-    return this.operatorModeStateService.state.fileView;
-  }
-
-  get fileViewTitle() {
-    return this.isFileTreeShowing ? 'File Browser' : 'Inspector';
-  }
-
   private get realmURL() {
     return this.operatorModeStateService.realmURL;
-  }
-
-  private get isReady() {
-    return isReady(this.currentOpenFile);
   }
 
   private get isIncompatibleFile() {
@@ -222,12 +209,12 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get hasCardDefOrFieldDef() {
-    return this.declarations.some((d) => isCardOrFieldDeclaration(d));
+    return this.declarations.some(isCardOrFieldDeclaration);
   }
 
   private get isSelectedItemIncompatibleWithSchemaEditor() {
     if (!this.selectedDeclaration) {
-      return;
+      return undefined;
     }
     return !isCardOrFieldDeclaration(this.selectedDeclaration);
   }
@@ -239,8 +226,12 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
+  get fileView() {
+    return this.operatorModeStateService.state.fileView;
+  }
+
   private get isFileOpen() {
-    return this.codePath && this.currentOpenFile?.state !== 'not-found';
+    return !!(this.codePath && this.currentOpenFile?.state !== 'not-found');
   }
 
   private get fileIncompatibilityMessage() {
@@ -278,6 +269,14 @@ export default class CodeSubmode extends Component<Signature> {
     return null;
   }
 
+  private get currentOpenFile() {
+    return this.operatorModeStateService.openFile.current;
+  }
+
+  private get isReady() {
+    return isReady(this.currentOpenFile);
+  }
+
   private get readyFile() {
     if (isReady(this.currentOpenFile)) {
       return this.currentOpenFile;
@@ -297,10 +296,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private dismissURLError() {
     this.userHasDismissedURLError = true;
-  }
-
-  private get currentOpenFile() {
-    return this.operatorModeStateService.openFile.current;
   }
 
   private onCardLoaded = (
@@ -366,7 +361,7 @@ export default class CodeSubmode extends Component<Signature> {
     ) {
       return this.selectedDeclaration;
     }
-    return;
+    return undefined;
   }
 
   @action
@@ -437,10 +432,6 @@ export default class CodeSubmode extends Component<Signature> {
       CodeModePanelHeights,
       JSON.stringify(this.panelHeights),
     );
-  }
-
-  private get isFileTreeShowing() {
-    return this.fileView === 'browser' || !this.isFileOpen;
   }
 
   onStateChange(state: FileResource['state']) {
@@ -582,85 +573,46 @@ export default class CodeSubmode extends Component<Signature> {
                   @defaultLengthFraction={{defaultPanelHeights.filePanel}}
                   @lengthPx={{this.panelHeights.filePanel}}
                 >
-
-                  {{! Move each container and styles to separate component }}
-                  <div
-                    class='inner-container file-view
-                      {{if this.isFileTreeShowing "file-browser"}}'
+                  <CodeSubmodeLeftPanelToggle
+                    @fileView={{this.fileView}}
+                    @setFileView={{this.setFileView}}
+                    @isFileOpen={{this.isFileOpen}}
                   >
-                    <header
-                      class='file-view__header'
-                      aria-label={{this.fileViewTitle}}
-                      data-test-file-view-header
-                    >
-                      <Button
-                        @disabled={{not this.isFileOpen}}
-                        @kind={{if
-                          (not this.isFileTreeShowing)
-                          'primary-dark'
-                          'secondary'
-                        }}
-                        @size='extra-small'
-                        class={{cn
-                          'file-view__header-btn'
-                          active=(not this.isFileTreeShowing)
-                        }}
-                        {{on 'click' (fn this.setFileView 'inspector')}}
-                        data-test-inspector-toggle
-                      >
-                        Inspector</Button>
-                      <Button
-                        @kind={{if
-                          this.isFileTreeShowing
-                          'primary-dark'
-                          'secondary'
-                        }}
-                        @size='extra-small'
-                        class={{cn
-                          'file-view__header-btn'
-                          active=this.isFileTreeShowing
-                        }}
-                        {{on 'click' (fn this.setFileView 'browser')}}
-                        data-test-file-browser-toggle
-                      >
-                        File Tree</Button>
-                    </header>
-                    <section class='inner-container__content'>
-                      {{#if this.isFileTreeShowing}}
-                        <FileTree @realmURL={{this.realmURL}} />
-                      {{else}}
-                        {{#if this.isReady}}
-                          <DetailPanel
-                            @cardInstance={{this.card}}
-                            @readyFile={{this.readyFile}}
-                            @selectedDeclaration={{this.selectedDeclaration}}
-                            @declarations={{this.declarations}}
-                            @selectDeclaration={{this.selectDeclaration}}
-                            @delete={{perform this.delete}}
-                            @openDefinition={{this.openDefinition}}
-                            data-test-card-inspector-panel
-                          />
-                        {{/if}}
+                    <:inspector>
+                      {{#if this.isReady}}
+                        <DetailPanel
+                          @cardInstance={{this.card}}
+                          @readyFile={{this.readyFile}}
+                          @selectedDeclaration={{this.selectedDeclaration}}
+                          @declarations={{this.declarations}}
+                          @selectDeclaration={{this.selectDeclaration}}
+                          @delete={{perform this.delete}}
+                          @openDefinition={{this.openDefinition}}
+                          data-test-card-inspector-panel
+                        />
                       {{/if}}
-                    </section>
-                  </div>
+                    </:inspector>
+                    <:browser>
+                      <FileTree @realmURL={{this.realmURL}} />
+                    </:browser>
+                  </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
                 <VerticallyResizablePanel
                   @defaultLengthFraction={{defaultPanelHeights.recentPanel}}
                   @lengthPx={{this.panelHeights.recentPanel}}
                   @minLengthPx={{100}}
                 >
-                  <aside class='inner-container recent-files'>
-                    <header
-                      class='inner-container__header'
-                      aria-label='Recent Files Header'
-                    >
+                  <InnerContainer
+                    class='recent-files'
+                    as |InnerContainerContent InnerContainerHeader|
+                  >
+                    <InnerContainerHeader aria-label='Recent Files Header'>
                       Recent Files
-                    </header>
-                    <section class='inner-container__content'>
+                    </InnerContainerHeader>
+                    <InnerContainerContent>
                       <RecentFiles />
-                    </section>
-                  </aside>
+                    </InnerContainerContent>
+                  </InnerContainer>
                 </VerticallyResizablePanel>
               </ResizablePanelGroup>
             </div>
@@ -671,7 +623,7 @@ export default class CodeSubmode extends Component<Signature> {
               @lengthPx={{this.panelWidths.codeEditorPanel}}
               @minLengthPx={{300}}
             >
-              <div class='inner-container'>
+              <InnerContainer>
                 {{#if this.isReady}}
                   <CodeEditor
                     @file={{this.currentOpenFile}}
@@ -700,13 +652,13 @@ export default class CodeSubmode extends Component<Signature> {
                     <CheckMark width='27' height='27' />
                   {{/if}}
                 </div>
-              </div>
+              </InnerContainer>
             </ResizablePanel>
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.rightPanel}}
               @lengthPx={{this.panelWidths.rightPanel}}
             >
-              <div class='inner-container'>
+              <InnerContainer>
                 {{#if this.isReady}}
                   {{#if this.fileIncompatibilityMessage}}
                     <div
@@ -732,22 +684,19 @@ export default class CodeSubmode extends Component<Signature> {
                     />
                   {{/if}}
                 {{/if}}
-              </div>
+              </InnerContainer>
             </ResizablePanel>
           {{else}}
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.emptyCodeModePanel}}
               @lengthPx={{this.panelWidths.emptyCodeModePanel}}
             >
-              <div
-                class='inner-container inner-container--empty'
-                data-test-empty-code-mode
-              >
+              <InnerContainer class='empty-container' data-test-empty-code-mode>
                 <File width='40' height='40' role='presentation' />
                 <h3 class='choose-file-prompt'>
                   Choose a file on the left to open it
                 </h3>
-              </div>
+              </InnerContainer>
             </ResizablePanel>
           {{/if}}
         </ResizablePanelGroup>
@@ -801,42 +750,7 @@ export default class CodeSubmode extends Component<Signature> {
         height: 100%;
       }
 
-      .inner-container {
-        height: 100%;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius-xl);
-        box-shadow: var(--boxel-deep-box-shadow);
-        overflow: hidden;
-      }
-
-      .inner-container.recent-files {
-        background-color: var(--boxel-200);
-      }
-
-      .inner-container__header {
-        padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
-        font: 700 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .inner-container__content {
-        position: relative;
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
-        overflow-y: auto;
-        height: 100%;
-      }
-      .inner-container--empty {
-        background-color: var(--boxel-light-100);
-        align-items: center;
-        justify-content: center;
-      }
-      .inner-container--empty > :deep(svg) {
-        --icon-color: var(--boxel-highlight);
-      }
-
-      .file-view {
+      .recent-files {
         background-color: var(--boxel-200);
       }
 
@@ -845,33 +759,6 @@ export default class CodeSubmode extends Component<Signature> {
         padding: var(--boxel-sp);
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
-      }
-
-      .file-view__header {
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs);
-        background-color: var(--boxel-200);
-      }
-      .file-view__header-btn {
-        --boxel-button-border: 1px solid var(--boxel-400);
-        --boxel-button-font: 700 var(--boxel-font-xs);
-        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
-        --boxel-button-min-width: 6rem;
-        --boxel-button-padding: 0;
-        border-radius: var(--boxel-border-radius);
-        flex: 1;
-      }
-      .file-view__header-btn:hover:not(:disabled) {
-        border-color: var(--boxel-dark);
-      }
-      .file-view__header-btn.active {
-        border-color: var(--boxel-dark);
-        --boxel-button-text-color: var(--boxel-highlight);
-      }
-
-      .file-view.file-browser .inner-container__content {
-        background: var(--boxel-light);
       }
 
       .code-mode-top-bar {
@@ -941,6 +828,14 @@ export default class CodeSubmode extends Component<Signature> {
         color: var(--boxel-450);
         font-weight: 500;
         padding: var(--boxel-sp-xl);
+      }
+      .empty-container {
+        background-color: var(--boxel-light-100);
+        align-items: center;
+        justify-content: center;
+      }
+      .empty-container > :deep(svg) {
+        --icon-color: var(--boxel-highlight);
       }
     </style>
   </template>

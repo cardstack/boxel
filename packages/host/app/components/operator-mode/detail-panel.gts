@@ -117,7 +117,7 @@ export default class DetailPanel extends Component<Signature> {
     ) {
       return this.args.selectedDeclaration.cardType;
     }
-    return;
+    return undefined;
   }
 
   get isLoading() {
