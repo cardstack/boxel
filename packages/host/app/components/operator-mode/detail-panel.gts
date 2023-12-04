@@ -185,7 +185,6 @@ export default class DetailPanel extends Component<Signature> {
     if (!id) {
       throw new Error(`Can only call inherit() on card def or field def`);
     }
-    debugger;
     if (!this.args.selectedDeclaration?.exportName) {
       throw new Error(`bug: only exported cards/fields can be inherited`);
     }
