@@ -79,26 +79,30 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
 
     let container = this.#previousContainer;
     let key = this.#previousKey;
-    if (
-      container &&
-      key &&
-      this.scrollPositionService.keyHasScrollPosition(container, key)
-    ) {
-      let previousScrollTop = this.scrollPositionService.getScrollPosition(
-        container,
-        key,
-      )!;
-      this.#element.scrollTop = previousScrollTop;
-    } else if (
-      container &&
-      key &&
-      this.scrollPositionService.containerHasScrollPosition(container)
-    ) {
-      this.scrollPositionService.setKeyScrollPosition(
-        container,
-        key,
-        this.#element.scrollTop,
-      );
+    if (container && key) {
+      let shouldRestorePosition =
+        this.scrollPositionService.keyHasScrollPosition(container, key);
+
+      if (shouldRestorePosition) {
+        let previousScrollTop = this.scrollPositionService.getScrollPosition(
+          container,
+          key,
+        )!;
+        this.#element.scrollTop = previousScrollTop;
+        return;
+      }
+
+      // Key differs, old position can be forgotten
+      let shouldReplaceStoredPosition =
+        this.scrollPositionService.containerHasScrollPosition(container);
+
+      if (shouldReplaceStoredPosition) {
+        this.scrollPositionService.setKeyScrollPosition(
+          container,
+          key,
+          this.#element.scrollTop,
+        );
+      }
     }
   }
 
