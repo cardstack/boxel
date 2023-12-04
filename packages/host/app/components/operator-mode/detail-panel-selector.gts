@@ -132,7 +132,7 @@ export default class Selector extends Component<Signature> {
                   selectorItem.selected
                   container='inspector'
                   key=(concat
-                    selectorItem.url '#' selectorItem.declaration.path
+                    selectorItem.url '#' selectorItem.declaration.localName
                   )
                 }}
               >

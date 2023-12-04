@@ -1,4 +1,11 @@
-import { find, visit, click, waitFor, currentURL } from '@ember/test-helpers';
+import {
+  find,
+  visit,
+  click,
+  settled,
+  waitFor,
+  currentURL,
+} from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
@@ -689,7 +696,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     let deleteButtonSelector = '[data-test-action-button="Delete"]';
     let deleteButtonElement = find(deleteButtonSelector);
 
-    await this.pauseTest();
     if (!deleteButtonElement) {
       assert.ok(deleteButtonElement, 'delete button should exist');
     } else {
@@ -699,7 +705,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       );
 
       deleteButtonElement.scrollIntoView({ block: 'center' });
-      await this.pauseTest();
 
       assert.ok(
         await elementIsVisible(deleteButtonElement),
@@ -713,19 +718,21 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click('[data-test-inspector-toggle]');
     await waitFor(deleteButtonSelector);
 
-    let position = new MonacoSDK.Position(14, 0);
+    let position = new MonacoSDK.Position(15, 0);
     monacoService.updateCursorPosition(position);
 
-    let localClassSelector =
-      '[data-test-boxel-selector-item-text="LocalClass"]';
-    let localClassElement = find(localClassSelector);
+    await settled();
 
-    if (!localClassElement) {
-      assert.ok(localClassElement, 'local class element should exist');
+    let exportedClassSelector =
+      '[data-test-boxel-selector-item-text="ExportedClass"]';
+    let exportedClassElement = find(exportedClassSelector);
+
+    if (!exportedClassElement) {
+      assert.ok(exportedClassElement, 'local class element should exist');
     } else {
       assert.ok(
-        await elementIsVisible(localClassElement),
-        'expected local class to have scrolled into view',
+        await elementIsVisible(exportedClassElement),
+        'expected exported class to have scrolled into view',
       );
     }
   });

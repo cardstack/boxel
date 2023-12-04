@@ -405,7 +405,7 @@ export default class CodeSubmode extends Component<Signature> {
     if (this.isFileTreeShowing) {
       return this.codePath?.toString();
     } else {
-      return `${this.codePath}#${this.selectedDeclaration?.path}`;
+      return `${this.codePath}#${this.selectedDeclaration?.localName}`;
     }
   }
 
