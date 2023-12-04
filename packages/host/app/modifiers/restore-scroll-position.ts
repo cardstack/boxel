@@ -68,10 +68,6 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
     debounce(this, this.setScrollTop, 100);
   }
 
-  nextSetScrollTop() {
-    next(this, this.setScrollTop);
-  }
-
   setScrollTop() {
     if (isDestroying(this)) {
       return;
