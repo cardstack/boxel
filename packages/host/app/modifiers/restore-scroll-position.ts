@@ -29,7 +29,7 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
 
   modify(
     element: Element,
-    // No named args but without this the named ones are undefined
+    // No position args but without this the named ones are undefined
     // eslint-disable-next-line no-empty-pattern
     []: [],
     { container, key }: NamedArgs<RestoreScrollPositionModifierSignature>,
