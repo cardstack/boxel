@@ -870,7 +870,7 @@ export default class CodeSubmode extends Component<Signature> {
       .empty-container > :deep(svg) {
         --icon-color: var(--boxel-highlight);
       }
-      :global(.accordion-item-content) {
+      .accordion-item :deep(.accordion-item-content) {
         overflow-y: auto;
       }
       .accordion-item:last-child {
