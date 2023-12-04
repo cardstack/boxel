@@ -90,7 +90,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
     if (this.isFileTreeShowing) {
       return this.codePath?.toString();
     } else {
-      return `${this.codePath}#${this.selectedDeclaration?.localName}`;
+      return `${this.codePath}#${this.args.selectedDeclaration?.localName}`;
     }
   }
 
