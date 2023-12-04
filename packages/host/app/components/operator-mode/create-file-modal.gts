@@ -26,6 +26,7 @@ import {
   baseRealm,
   RealmPaths,
   Deferred,
+  SupportedMimeType,
   type LocalPath,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
@@ -42,7 +43,7 @@ import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 import RealmInfoProvider from './realm-info-provider';
 import RealmIcon from './realm-icon';
-
+import type LoaderService from '../../services/loader-service';
 import type CardService from '../../services/card-service';
 
 export type NewFileType =
@@ -149,6 +150,8 @@ export default class CreateFileModal extends Component<Signature> {
                     'my-field.gts'
                   }}
                   @value={{this.fileName}}
+                  @state={{this.fileNameInputState}}
+                  @errorMessage={{this.fileNameError}}
                   @onInput={{this.setFileName}}
                 />
               </FieldContainer>
@@ -252,10 +255,12 @@ export default class CreateFileModal extends Component<Signature> {
   </template>
 
   @service private declare cardService: CardService;
+  @service declare loaderService: LoaderService;
 
   @tracked private selectedCatalogEntry: CatalogEntry | undefined = undefined;
   @tracked private displayName = '';
   @tracked private fileName = '';
+  @tracked private fileNameError: string | undefined;
   @tracked private currentRequest:
     | {
         fileType: FileType;
@@ -318,8 +323,13 @@ export default class CreateFileModal extends Component<Signature> {
   private clearState() {
     this.selectedCatalogEntry = undefined;
     this.currentRequest = undefined;
+    this.fileNameError = undefined;
     this.displayName = '';
     this.fileName = '';
+  }
+
+  private get fileNameInputState() {
+    return this.fileNameError ? 'invalid' : 'initial';
   }
 
   @action private onCancel() {
@@ -341,6 +351,7 @@ export default class CreateFileModal extends Component<Signature> {
   }
 
   @action private setFileName(name: string) {
+    this.fileNameError = undefined;
     this.fileName = name;
   }
 
@@ -456,7 +467,21 @@ export default class CreateFileModal extends Component<Signature> {
       );
     }
 
-    // TODO test to see if this.filename already exists and set field to invalid state if so
+    let realmPath = new RealmPaths(this.selectedRealmURL);
+    // assert that filename is a GTS file and is a LocalPath
+    let fileName: LocalPath = `${this.fileName.replace(
+      /\.[^\.].+$/,
+      '',
+    )}.gts`.replace(/^\//, '');
+    let url = realmPath.fileURL(fileName);
+
+    let response = await this.loaderService.loader.fetch(url, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
+    if (response.ok) {
+      this.fileNameError = `This file already exists`;
+      return;
+    }
 
     let {
       ref: { name: exportName, module },
@@ -496,13 +521,6 @@ export class ${className} extends ${exportName} {
   static displayName = "${safeName}";
 }`;
     }
-    let realmPath = new RealmPaths(this.selectedRealmURL);
-    // assert that filename is a GTS file and is a LocalPath
-    let fileName: LocalPath = `${this.fileName.replace(
-      /\.[^\.].+$/,
-      '',
-    )}.gts`.replace(/^\//, '');
-    let url = realmPath.fileURL(fileName);
     await this.cardService.saveSource(url, src);
     this.currentRequest.newFileDeferred.fulfill(url);
   });

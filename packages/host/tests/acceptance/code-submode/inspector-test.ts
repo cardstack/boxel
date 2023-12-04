@@ -4,7 +4,7 @@ import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
@@ -1676,7 +1676,51 @@ export class ExportedCard extends ExportedCardParent {
     assert.dom('[data-test-total-fields]').containsText('4 Fields');
   });
 
-  skip('field error message displays if you try to inherit using a filename that already exists', async function (_assert) {});
+  test('field error message displays if you try to inherit using a filename that already exists', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'in-this-file');
+    await click('[data-test-create-definition]');
+
+    assert
+      .dom(
+        '[data-test-file-name-field][data-test-boxel-input-validation-state="invalid"]',
+      )
+      .exists('error state for filename field is displayed');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .includesText('This file already exists');
+
+    await fillIn('[data-test-file-name-field]', 'test-file');
+    assert
+      .dom(
+        '[data-test-file-name-field][data-test-boxel-input-validation-state="invalid"]',
+      )
+      .doesNotExist('error state for filename field is not displayed');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .doesNotExist('no error message displayed');
+  });
 
   test('Inherit action item is not displayed when definition is not exported', async function (assert) {
     let operatorModeStateParam = stringify({
