@@ -686,7 +686,7 @@ export default class CodeSubmode extends Component<Signature> {
                       data-test-card-resource-loaded
                     />
                   {{else if this.selectedCardOrField}}
-                    <Accordion class='accordion' as |A|>
+                    <Accordion as |A|>
                       <SchemaEditor
                         @file={{this.readyFile}}
                         @card={{this.selectedCardOrField.cardOrField}}
