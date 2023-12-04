@@ -30,6 +30,8 @@ import {
   isBaseDef,
 } from '@cardstack/runtime-common/code-ref';
 
+import { capitalize } from '@ember/string';
+import startCase from 'lodash/startCase';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
@@ -55,6 +57,8 @@ import {
   ClickableModuleDefinitionContainer,
 } from './definition-container';
 
+import { type FileType, type NewFileType } from './create-file-modal';
+
 import Selector from './detail-panel-selector';
 
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
@@ -73,6 +77,13 @@ interface Signature {
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
     ) => void;
+    createFile: (
+      fileType: FileType,
+      definitionClass?: {
+        displayName: string;
+        ref: ResolvedCodeRef;
+      },
+    ) => Promise<void>;
     delete: (
       card: CardDef | typeof CardDef | undefined,
     ) => void | Promise<void>;
@@ -120,7 +131,7 @@ export default class DetailPanel extends Component<Signature> {
     return undefined;
   }
 
-  get isLoading() {
+  private get isLoading() {
     return (
       this.args.declarations.some((dec) => {
         if (isCardOrFieldDeclaration(dec)) {
@@ -134,12 +145,67 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
-  @action
-  isSelected(dec: ModuleDeclaration) {
-    return this.args.selectedDeclaration === dec;
+  private get definitionActions() {
+    if (
+      this.args.selectedDeclaration &&
+      !isCardOrFieldDeclaration(this.args.selectedDeclaration)
+    ) {
+      return [];
+    }
+    return [
+      // the inherit feature performs in the inheritance in a new module,
+      // this means that the Card/Field that we are inheriting must be exported
+      ...(this.args.selectedDeclaration?.exportName
+        ? [
+            {
+              label: 'Inherit',
+              icon: IconInherit,
+              handler: this.inherit,
+            },
+          ]
+        : []),
+      { label: 'Delete', icon: IconTrash, handler: this.args.delete },
+    ];
   }
 
-  get isCardInstance() {
+  @action inherit() {
+    if (
+      this.args.selectedDeclaration &&
+      !isCardOrFieldDeclaration(this.args.selectedDeclaration)
+    ) {
+      throw new Error(`bug: the selected declaration is not a card nor field`);
+    }
+    let id: NewFileType | undefined = isCardDef(
+      this.args.selectedDeclaration?.cardOrField,
+    )
+      ? 'card-definition'
+      : isFieldDef(this.args.selectedDeclaration?.cardOrField)
+      ? 'field-definition'
+      : undefined;
+    if (!id) {
+      throw new Error(`Can only call inherit() on card def or field def`);
+    }
+    if (!this.args.selectedDeclaration?.exportName) {
+      throw new Error(`bug: only exported cards/fields can be inherited`);
+    }
+    let ref = {
+      name: this.args.selectedDeclaration.exportName,
+      module: `${this.operatorModeStateService.state.codePath!.href.replace(
+        /\.[^\.]+$/,
+        '',
+      )}`,
+    };
+    let displayName = this.args.selectedDeclaration.cardOrField.displayName;
+    this.args.createFile(
+      { id, displayName: capitalize(startCase(id)) },
+      {
+        ref,
+        displayName,
+      },
+    );
+  }
+
+  private get isCardInstance() {
     return (
       this.args.readyFile.url.endsWith('.json') &&
       isCardDocumentString(this.args.readyFile.content) &&
@@ -147,7 +213,7 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
-  get isModule() {
+  private get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
   }
 
@@ -159,7 +225,7 @@ export default class DetailPanel extends Component<Signature> {
     }
   }
 
-  get buildSelectorItems(): SelectorItem[] {
+  private get buildSelectorItems(): SelectorItem[] {
     if (!this.args.declarations) {
       return [];
     }
@@ -274,9 +340,7 @@ export default class DetailPanel extends Component<Signature> {
                     @fileExtension={{this.cardType.type.moduleInfo.extension}}
                     @infoText={{this.lastModified.value}}
                     @isActive={{true}}
-                    @actions={{array
-                      (hash label='Delete' handler=@delete icon=IconTrash)
-                    }}
+                    @actions={{this.definitionActions}}
                   />
                   {{#if this.cardType.type.super}}
                     {{#let (getCodeRef this.cardType.type.super) as |codeRef|}}

@@ -21,17 +21,15 @@ import {
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { and, not } from '@cardstack/boxel-ui/helpers';
+import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
-
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import config from '@cardstack/host/config/environment';
@@ -63,6 +61,7 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+import CreateFileModal, { type FileType } from './create-file-modal';
 
 interface Signature {
   Args: {
@@ -119,6 +118,7 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
   @tracked private previewFormat: Format = 'isolated';
+  @tracked private isCreateModalOpen = false;
 
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -129,6 +129,7 @@ export default class CodeSubmode extends Component<Signature> {
   #currentCard: CardDef | undefined;
 
   private deleteModal: DeleteModal | undefined;
+  private createFileModal: CreateFileModal | undefined;
   private cardResource = getCard(
     this,
     () => {
@@ -441,6 +442,11 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
+  @action
+  private onSelectNewFileType(fileType: FileType) {
+    this.createFile.perform(fileType);
+  }
+
   onStateChange(state: FileResource['state']) {
     this.userHasDismissedURLError = false;
     if (state === 'ready') {
@@ -489,6 +495,32 @@ export default class CodeSubmode extends Component<Signature> {
     }
   });
 
+  // dropTask will ignore any subsequent create file requests until the one in progress is done
+  private createFile = dropTask(
+    async (
+      fileType: FileType,
+      definitionClass?: {
+        displayName: string;
+        ref: ResolvedCodeRef;
+      },
+    ) => {
+      if (!this.createFileModal) {
+        throw new Error(`bug: CreateFileModal not instantiated`);
+      }
+      this.isCreateModalOpen = true;
+      let url = await this.createFileModal.createNewFile(
+        fileType,
+        this.realmURL,
+        definitionClass,
+      );
+      this.isCreateModalOpen = false;
+      if (url) {
+        this.operatorModeStateService.updateCodePath(url);
+        this.setPreviewFormat('edit');
+      }
+    },
+  );
+
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
     try {
@@ -508,6 +540,10 @@ export default class CodeSubmode extends Component<Signature> {
     this.deleteModal = deleteModal;
   };
 
+  private setupCreateFileModal = (createFileModal: CreateFileModal) => {
+    this.createFileModal = createFileModal;
+  };
+
   private setupCodeEditor = (
     updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
   ) => {
@@ -523,14 +559,10 @@ export default class CodeSubmode extends Component<Signature> {
     this.previewFormat = format;
   }
 
-  @action private onNewFileSave(fileURL: URL) {
-    this.operatorModeStateService.updateCodePath(fileURL);
-    this.setPreviewFormat('edit');
-  }
+  @tracked private selectedAccordionItem: SelectedAccordionItem =
+    'schema-editor';
 
-  @tracked selectedAccordionItem: SelectedAccordionItem = 'schema-editor';
-
-  @action selectAccordionItem(item: SelectedAccordionItem) {
+  @action private selectAccordionItem(item: SelectedAccordionItem) {
     if (this.selectedAccordionItem === item) {
       this.selectedAccordionItem = null;
       return;
@@ -557,8 +589,8 @@ export default class CodeSubmode extends Component<Signature> {
         @realmURL={{this.realmURL}}
       />
       <NewFileButton
-        @realmURL={{this.realmURL}}
-        @onSave={{this.onNewFileSave}}
+        @onSelectNewFileType={{this.onSelectNewFileType}}
+        @isCreateModalShown={{bool this.isCreateModalOpen}}
       />
     </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
@@ -606,6 +638,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @selectDeclaration={{this.selectDeclaration}}
                           @delete={{perform this.delete}}
                           @openDefinition={{this.openDefinition}}
+                          @createFile={{perform this.createFile}}
                           data-test-card-inspector-panel
                         />
                       {{/if}}
@@ -743,6 +776,7 @@ export default class CodeSubmode extends Component<Signature> {
         </ResizablePanelGroup>
       </div>
       <DeleteModal @onCreate={{this.setupDeleteModal}} />
+      <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
     </SubmodeLayout>
 
     <style>
