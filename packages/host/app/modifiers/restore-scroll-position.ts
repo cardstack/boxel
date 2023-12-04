@@ -19,7 +19,7 @@ interface RestoreScrollPositionModifierSignature {
 export default class RestoreScrollPosition extends Modifier<RestoreScrollPositionModifierSignature> {
   @service declare scrollPositionService: ScrollPositionService;
 
-  element!: Element;
+  #element!: Element;
 
   #mutationObserver: MutationObserver | undefined;
   #scrollEndListener: ((e: Event) => void) | undefined;
@@ -35,7 +35,7 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
     { container, key }: NamedArgs<RestoreScrollPositionModifierSignature>,
   ): () => void {
     if (!this.#mutationObserver) {
-      this.element = element;
+      this.#element = element;
 
       this.#scrollEndListener = this.handleScrollEnd.bind(this);
       element.addEventListener('scrollend', this.#scrollEndListener);
@@ -88,7 +88,7 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
         container,
         key,
       )!;
-      this.element.scrollTop = previousScrollTop;
+      this.#element.scrollTop = previousScrollTop;
     } else if (
       container &&
       key &&
@@ -97,7 +97,7 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
       this.scrollPositionService.setKeyScrollPosition(
         container,
         key,
-        this.element.scrollTop,
+        this.#element.scrollTop,
       );
     }
   }
