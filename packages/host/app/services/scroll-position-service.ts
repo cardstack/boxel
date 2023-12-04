@@ -41,7 +41,7 @@ export default class ScrollPositionService extends Service {
     return entry[1];
   }
 
-  setKeyScrollPosition(container: string, key: string, position: number) {
+  setScrollPosition(container: string, key: string, position: number) {
     this.keyToScrollPosition.set(container, [key, position]);
     this.persist();
   }
