@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn } from '@ember/helper';
+import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -8,6 +8,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
+import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -89,6 +90,13 @@ export default class CardCatalogModal extends Component<Signature> {
         @title={{this.state.chooseCardTitle}}
         @onClose={{fn this.pick undefined}}
         @zIndex={{this.zIndex}}
+        {{focusTrap
+          isActive=(not this.state.dismissModal)
+          focusTrapOptions=(hash
+            initialFocus='[data-test-search-field]' allowOutsideClick=true
+          )
+        }}
+        {{on 'keydown' this.handleKeydown}}
         data-test-card-catalog-modal
       >
         <:header>
@@ -123,7 +131,7 @@ export default class CardCatalogModal extends Component<Signature> {
                 this.state.searchResults
                 this.availableRealms
               }}
-              @toggleSelect={{this.toggleSelect}}
+              @select={{this.selectCard}}
               @selectedCard={{this.state.selectedCard}}
               @context={{@context}}
             />
@@ -362,10 +370,6 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.cardURL = cardURL;
   }
 
-  @action setSelectedCard(card: CardDef | undefined) {
-    this.state.selectedCard = card;
-  }
-
   @action
   onSearchFieldKeypress(e: KeyboardEvent) {
     if (e.key === 'Enter') {
@@ -446,13 +450,22 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.searchResults = results;
   }
 
-  @action toggleSelect(card?: CardDef): void {
+  @action selectCard(card?: CardDef, event?: MouseEvent | KeyboardEvent): void {
     this.state.cardURL = '';
-    if (this.state.selectedCard?.id === card?.id) {
-      this.state.selectedCard = undefined;
-      return;
-    }
     this.state.selectedCard = card;
+
+    if (
+      (event instanceof KeyboardEvent && event?.key === 'Enter') ||
+      (event instanceof MouseEvent && event?.type === 'dblclick')
+    ) {
+      this.pick(card);
+    }
+  }
+
+  @action handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      this.pick(undefined);
+    }
   }
 
   @action pick(card?: CardDef, state?: State) {
