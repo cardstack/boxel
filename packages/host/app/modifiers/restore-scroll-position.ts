@@ -37,11 +37,11 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
     if (!this.#mutationObserver) {
       this.#element = element;
 
-      this.#scrollEndListener = this.handleScrollEnd.bind(this);
+      this.#scrollEndListener = this.persistScrollTop.bind(this);
       element.addEventListener('scrollend', this.#scrollEndListener);
 
       let mutationObserver = new MutationObserver(
-        this.debouncedSetScrollTop.bind(this),
+        this.debouncedRestoreOrPersistScrollTop.bind(this),
       );
       mutationObserver.observe(element, {
         childList: true,
@@ -64,11 +64,11 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
     };
   }
 
-  debouncedSetScrollTop() {
-    debounce(this, this.setScrollTop, 100);
+  private debouncedRestoreOrPersistScrollTop() {
+    debounce(this, this.restoreOrPersistScrollTop, 100);
   }
 
-  setScrollTop() {
+  private restoreOrPersistScrollTop() {
     if (isDestroying(this)) {
       return;
     }
@@ -102,7 +102,7 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
     }
   }
 
-  handleScrollEnd(e: Event) {
+  private persistScrollTop(e: Event) {
     if (isDestroying(this)) {
       return;
     }
