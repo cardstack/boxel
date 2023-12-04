@@ -300,7 +300,7 @@ export default class CardCatalogModal extends Component<Signature> {
     )) as T | undefined;
   }
 
-  private _chooseCard = restartableTask(
+  private _chooseCard = task(
     async <T extends CardDef>(
       query: Query,
       opts: {
@@ -385,7 +385,7 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.searchResults = [];
   }
 
-  private getCard = task(async (cardURL: string) => {
+  private getCard = restartableTask(async (cardURL: string) => {
     let maybeIndexCardURL = this.cardService.realmURLs.find(
       (u) => u === cardURL + '/',
     );
