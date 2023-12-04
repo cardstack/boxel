@@ -741,7 +741,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('persisted scroll position is restored on refresh', async function (assert) {
-    // FIXME is it weird to know this key structure here?
     window.localStorage.setItem(
       'scroll-positions',
       JSON.stringify({
