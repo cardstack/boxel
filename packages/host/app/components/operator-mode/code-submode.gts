@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -10,14 +11,17 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
+
 import perform from 'ember-concurrency/helpers/perform';
+
+import { Accordion } from '@cardstack/boxel-ui/components';
 
 import {
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { and, not, bool } from '@cardstack/boxel-ui/helpers';
+import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -28,7 +32,6 @@ import {
 } from '@cardstack/runtime-common';
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
@@ -53,6 +56,7 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
+import SchemaEditor from './code-submode/schema-editor';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
@@ -78,6 +82,8 @@ type PanelHeights = {
   filePanel: number;
   recentPanel: number;
 };
+
+type SelectedAccordionItem = 'schema-editor' | null;
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
 const defaultPanelWidths: PanelWidths = {
@@ -553,6 +559,18 @@ export default class CodeSubmode extends Component<Signature> {
     this.previewFormat = format;
   }
 
+  @tracked private selectedAccordionItem: SelectedAccordionItem =
+    'schema-editor';
+
+  @action private selectAccordionItem(item: SelectedAccordionItem) {
+    if (this.selectedAccordionItem === item) {
+      this.selectedAccordionItem = null;
+      return;
+    }
+
+    this.selectedAccordionItem = item;
+  }
+
   <template>
     <RealmInfoProvider @realmURL={{this.realmURL}}>
       <:ready as |realmInfo|>
@@ -709,12 +727,35 @@ export default class CodeSubmode extends Component<Signature> {
                       data-test-card-resource-loaded
                     />
                   {{else if this.selectedCardOrField}}
-                    <SchemaEditorColumn
-                      @file={{this.readyFile}}
-                      @card={{this.selectedCardOrField.cardOrField}}
-                      @cardTypeResource={{this.selectedCardOrField.cardType}}
-                      @openDefinition={{this.openDefinition}}
-                    />
+                    <Accordion as |A|>
+                      <SchemaEditor
+                        @file={{this.readyFile}}
+                        @card={{this.selectedCardOrField.cardOrField}}
+                        @cardTypeResource={{this.selectedCardOrField.cardType}}
+                        @openDefinition={{this.openDefinition}}
+                        as |SchemaEditorTitle SchemaEditorPanel|
+                      >
+                        <A.Item
+                          class='accordion-item'
+                          @contentClass='accordion-item-content'
+                          @onClick={{fn
+                            this.selectAccordionItem
+                            'schema-editor'
+                          }}
+                          @isOpen={{eq
+                            this.selectedAccordionItem
+                            'schema-editor'
+                          }}
+                        >
+                          <:title>
+                            <SchemaEditorTitle />
+                          </:title>
+                          <:content>
+                            <SchemaEditorPanel class='accordion-content' />
+                          </:content>
+                        </A.Item>
+                      </SchemaEditor>
+                    </Accordion>
                   {{/if}}
                 {{/if}}
               </InnerContainer>
@@ -870,6 +911,15 @@ export default class CodeSubmode extends Component<Signature> {
       }
       .empty-container > :deep(svg) {
         --icon-color: var(--boxel-highlight);
+      }
+      .accordion-item :deep(.accordion-item-content) {
+        overflow-y: auto;
+      }
+      .accordion-item:last-child {
+        border-bottom: var(--boxel-border);
+      }
+      .accordion-content {
+        padding: var(--boxel-sp-sm);
       }
     </style>
   </template>

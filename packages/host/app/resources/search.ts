@@ -7,11 +7,9 @@ import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import flatMap from 'lodash/flatMap';
 
-import { baseRealm, subscribeToRealm } from '@cardstack/runtime-common';
+import { subscribeToRealm } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
-
-import ENV from '@cardstack/host/config/environment';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -28,10 +26,6 @@ interface Args {
   };
 }
 
-// This is temporary until we have a better way of discovering the realms that
-// are available for a user to search from
-const { otherRealmURLs } = ENV;
-
 export class Search extends Resource<Args> {
   @service private declare cardService: CardService;
   @tracked private _instances: CardDef[] = [];
@@ -44,15 +38,7 @@ export class Search extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { query, realms, isLive, doWhileRefreshing } = named;
-    this.realmsToSearch = realms ?? [
-      ...new Set(
-        realms ?? [
-          this.cardService.defaultURL.href,
-          baseRealm.url,
-          ...otherRealmURLs,
-        ],
-      ),
-    ];
+    this.realmsToSearch = realms ?? this.cardService.realmURLs;
     this.loaded = this.search.perform(query);
 
     if (isLive) {
