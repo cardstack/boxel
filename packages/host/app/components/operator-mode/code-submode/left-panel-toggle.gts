@@ -1,11 +1,14 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 
+import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import InnerContainer from './inner-container';
 
@@ -56,6 +59,7 @@ interface Signature {
     fileView: FileView | undefined;
     setFileView: (view: FileView) => void;
     isFileOpen: boolean;
+    selectedDeclaration: any | undefined;
   };
   Blocks: {
     inspector: [];
@@ -64,12 +68,30 @@ interface Signature {
 }
 
 export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
+  @service declare operatorModeStateService: OperatorModeStateService;
+
   private get isFileTreeShowing() {
     return this.args.fileView === 'browser' || !this.args.isFileOpen;
   }
 
   get fileViewTitle() {
     return this.isFileTreeShowing ? 'File Browser' : 'Inspector';
+  }
+
+  private get codePath() {
+    return this.operatorModeStateService.state.codePath;
+  }
+
+  private get scrollPositionContainer() {
+    return this.isFileTreeShowing ? 'file-tree' : 'inspector';
+  }
+
+  private get scrollPositionKey() {
+    if (this.isFileTreeShowing) {
+      return this.codePath?.toString();
+    } else {
+      return `${this.codePath}#${this.selectedDeclaration?.localName}`;
+    }
   }
 
   <template>
@@ -99,7 +121,14 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
           File Tree
         </ToggleButton>
       </header>
-      <InnerContainerContent class='content'>
+      <InnerContainerContent
+        class='content'
+        data-test-togglable-left-panel
+        {{RestoreScrollPosition
+          container=this.scrollPositionContainer
+          key=this.scrollPositionKey
+        }}
+      >
         {{#if this.isFileTreeShowing}}
           {{yield to='browser'}}
         {{else}}

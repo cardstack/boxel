@@ -3,12 +3,15 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
+import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 
 import { use, resource } from 'ember-resources';
+
+import startCase from 'lodash/startCase';
 
 import {
   CardContainer,
@@ -30,8 +33,6 @@ import {
   isBaseDef,
 } from '@cardstack/runtime-common/code-ref';
 
-import { capitalize } from '@ember/string';
-import startCase from 'lodash/startCase';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
@@ -50,14 +51,13 @@ import {
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
+import { type FileType, type NewFileType } from './create-file-modal';
 import {
   FileDefinitionContainer,
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
   ClickableModuleDefinitionContainer,
 } from './definition-container';
-
-import { type FileType, type NewFileType } from './create-file-modal';
 
 import Selector from './detail-panel-selector';
 
@@ -238,7 +238,7 @@ export default class DetailPanel extends Component<Signature> {
             this.args.selectDeclaration(dec);
           },
         ],
-        { selected: isSelected },
+        { selected: isSelected, url: this.args.readyFile.url },
       );
     });
   }

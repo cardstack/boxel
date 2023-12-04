@@ -1,6 +1,6 @@
 import { type EmptyObject } from '@ember/component/helper';
 
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -23,6 +23,7 @@ import {
   isCardOrFieldDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
+
 import { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface SelectorItemOptions {
@@ -36,6 +37,7 @@ export class SelectorItem {
   selected: boolean;
   disabled: boolean;
   action: Function | undefined;
+  url: string | undefined;
 
   constructor(
     declaration: ModuleDeclaration,
@@ -43,6 +45,7 @@ export class SelectorItem {
   ) {
     this.declaration = declaration;
     this.action = options.action;
+    this.url = options.url;
     this.selected = options.selected || false;
     this.disabled = options.disabled || false;
   }
@@ -135,7 +138,13 @@ export default class Selector extends Component<Signature> {
                 }}
                 data-test-boxel-selector-item
                 data-test-boxel-selector-item-selected={{selectorItem.selected}}
-                {{scrollIntoViewModifier selectorItem.selected}}
+                {{scrollIntoViewModifier
+                  selectorItem.selected
+                  container='inspector'
+                  key=(concat
+                    selectorItem.url '#' selectorItem.declaration.localName
+                  )
+                }}
               >
                 {{! template-lint-disable require-context-role }}
                 <div

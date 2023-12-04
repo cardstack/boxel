@@ -30,6 +30,7 @@ import {
   hasExecutableExtension,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import config from '@cardstack/host/config/environment';
@@ -57,11 +58,11 @@ import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
 import SchemaEditor from './code-submode/schema-editor';
+import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
-import CreateFileModal, { type FileType } from './create-file-modal';
 
 interface Signature {
   Args: {
@@ -627,6 +628,7 @@ export default class CodeSubmode extends Component<Signature> {
                     @fileView={{this.fileView}}
                     @setFileView={{this.setFileView}}
                     @isFileOpen={{this.isFileOpen}}
+                    @selectedDeclaration={{this.selectedDeclaration}}
                   >
                     <:inspector>
                       {{#if this.isReady}}

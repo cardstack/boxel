@@ -755,30 +755,31 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
 
-    let deleteButtonSelector = '[data-test-action-button="Delete"]';
-    let deleteButtonElement = find(deleteButtonSelector);
+    let defaultClassSelector =
+      '[data-test-boxel-selector-item-text="DefaultClass"]';
+    let defaultClassElement = find(defaultClassSelector);
 
-    if (!deleteButtonElement) {
-      assert.ok(deleteButtonElement, 'delete button should exist');
+    if (!defaultClassElement) {
+      assert.ok(defaultClassElement, 'default class should exist');
     } else {
       assert.notOk(
-        await elementIsVisible(deleteButtonElement),
-        'expected delete button not to be within view',
+        await elementIsVisible(defaultClassElement),
+        'expected default class not to be within view',
       );
 
-      deleteButtonElement.scrollIntoView({ block: 'center' });
+      defaultClassElement.scrollIntoView({ block: 'center' });
 
       assert.ok(
-        await elementIsVisible(deleteButtonElement),
-        'expected delete button to now be within view',
+        await elementIsVisible(defaultClassElement),
+        'expected default class to now be within view',
       );
     }
 
     await click('[data-test-file-browser-toggle]');
-    assert.dom(deleteButtonSelector).doesNotExist();
+    assert.dom(defaultClassSelector).doesNotExist();
 
     await click('[data-test-inspector-toggle]');
-    await waitFor(deleteButtonSelector);
+    await waitFor(defaultClassSelector);
 
     let position = new MonacoSDK.Position(15, 0);
     monacoService.updateCursorPosition(position);
