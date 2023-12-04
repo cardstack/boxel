@@ -146,13 +146,16 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get definitionActions() {
-    if (!this.isCard && !this.isField) {
+    if (
+      this.args.selectedDeclaration &&
+      !isCardOrFieldDeclaration(this.args.selectedDeclaration)
+    ) {
       return [];
     }
     return [
       // the inherit feature performs in the inheritance in a new module,
       // this means that the Card/Field that we are inheriting must be exported
-      ...(this.args.selectedDeclaration?.exportedAs
+      ...(this.args.selectedDeclaration?.exportName
         ? [
             {
               label: 'Inherit',
@@ -166,25 +169,28 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action inherit() {
-    let id: NewFileType | undefined = this.isCard
-      ? 'card-definition'
-      : this.isField
-      ? 'field-definition'
-      : undefined;
-    if (!id) {
-      throw new Error(`Can only call inherit() on card def or field def`);
-    }
     if (
       this.args.selectedDeclaration &&
       !isCardOrFieldDeclaration(this.args.selectedDeclaration)
     ) {
       throw new Error(`bug: the selected declaration is not a card nor field`);
     }
-    if (!this.args.selectedDeclaration?.exportedAs) {
+    let id: NewFileType | undefined = isCardDef(
+      this.args.selectedDeclaration?.cardOrField,
+    )
+      ? 'card-definition'
+      : isFieldDef(this.args.selectedDeclaration?.cardOrField)
+      ? 'field-definition'
+      : undefined;
+    if (!id) {
+      throw new Error(`Can only call inherit() on card def or field def`);
+    }
+    debugger;
+    if (!this.args.selectedDeclaration?.exportName) {
       throw new Error(`bug: only exported cards/fields can be inherited`);
     }
     let ref = {
-      name: this.args.selectedDeclaration.exportedAs,
+      name: this.args.selectedDeclaration.exportName,
       module: `${this.operatorModeStateService.state.codePath!.href.replace(
         /\.[^\.]+$/,
         '',
