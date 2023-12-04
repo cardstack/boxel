@@ -6,7 +6,10 @@ import window from 'ember-window-mock';
 import { TrackedMap } from 'tracked-built-ins';
 
 export default class ScrollPositionService extends Service {
-  @tracked keyToScrollPosition = new TrackedMap<string, [string, number]>();
+  @tracked private keyToScrollPosition = new TrackedMap<
+    string,
+    [string, number]
+  >();
 
   constructor(properties: object) {
     super(properties);
