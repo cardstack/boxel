@@ -18,6 +18,7 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
   @service declare scrollPositionService: ScrollPositionService;
 
   element!: Element;
+  #lastRunScrolled = false;
 
   modify(
     element: Element,
@@ -30,9 +31,13 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
       shouldScrollIntoView &&
       container &&
       key &&
-      !this.scrollPositionService.keyHasScrollPosition(container, key)
+      !this.scrollPositionService.keyHasScrollPosition(container, key) &&
+      !this.#lastRunScrolled
     ) {
       this.element.scrollIntoView({ block: 'center' });
+      this.#lastRunScrolled = true;
+    } else {
+      this.#lastRunScrolled = false;
     }
   }
 }
