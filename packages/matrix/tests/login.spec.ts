@@ -20,7 +20,6 @@ test.describe('Login', () => {
   test('it can login', async ({ page }) => {
     await openRoot(page);
     await toggleOperatorMode(page);
-    await openChat(page);
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
@@ -29,6 +28,7 @@ test.describe('Login', () => {
     await page.locator('[data-test-password-field]').fill('pass');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
+    await openChat(page);
 
     await assertLoggedIn(page);
 
@@ -53,7 +53,7 @@ test.describe('Login', () => {
     await assertLoggedOut(page);
 
     // reload to page to show that the logout state persists
-    await reloadAndOpenChat(page);
+    await page.reload();
     await assertLoggedOut(page);
   });
 
@@ -62,7 +62,6 @@ test.describe('Login', () => {
   }) => {
     await openRoot(page);
     await toggleOperatorMode(page);
-    await openChat(page);
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('bad pass');
     await expect(
@@ -71,7 +70,7 @@ test.describe('Login', () => {
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
     await expect(page.locator('[data-test-login-error]')).toContainText(
-      'Invalid username or password',
+      'Sign in failed. Please check your credentials and try again',
     );
 
     await page.locator('[data-test-password-field]').fill('pass');
@@ -80,7 +79,8 @@ test.describe('Login', () => {
       'login error message is not displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
-
+    await openChat(page);
+    
     await assertLoggedIn(page);
   });
 });

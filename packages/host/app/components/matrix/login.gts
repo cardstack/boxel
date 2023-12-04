@@ -40,14 +40,11 @@ export default class Login extends Component<Signature> {
           </BoxelHeader>
           <div class='content'>
             <span class='title'>Sign in to your Boxel Account</span>
-            {{#if this.error}}
-              <div class='error' data-test-login-error>{{this.error}}</div>
-            {{/if}}
             <FieldContainer
               @label='Email Address or Username'
               @tag='label'
               @vertical={{true}}
-              class='login__field'
+              class='field'
             >
               <BoxelInput
                 data-test-username-field
@@ -70,27 +67,29 @@ export default class Login extends Component<Signature> {
               />
             </FieldContainer>
             <Button @kind='text-only' class='forgot-password'>Forgot password?</Button>
-            <div class='buttons'>
-              <Button
-                class='login-button'
-                data-test-login-btn
-                @kind='primary'
-                @disabled={{this.isLoginButtonDisabled}}
-                {{on 'click' this.login}}
-              >Sign in</Button>
-              <span>or</span>
-              <Button
-                class='signup-button'
-                data-test-signup-btn
-                {{on 'click' this.login}}
-              >Create a new Boxel account</Button>
-            </div>
+            <Button
+              class='button'
+              data-test-login-btn
+              @kind='primary'
+              @disabled={{this.isLoginButtonDisabled}}
+              {{on 'click' this.login}}
+            >Sign in</Button>
+            {{#if this.error}}
+              <div class='error' data-test-login-error>{{this.error}}</div>
+            {{/if}}
+            <span class='or'>or</span>
+            <Button
+              class='button'
+              data-test-signup-btn
+              {{on 'click' this.login}}
+            >Create a new Boxel account</Button>
             {{! TODO: Remove after registration page is implemented. }}
             {{#if @skipSignIn}}<Button
                 @kind='text-only'
-                class='forgot-password'
+                class='skip-signin'
                 {{on 'click' @skipSignIn}}
-              >Skip sign in?</Button>{{/if}}
+                data-test-skip-signin
+              >Skip sign-in?</Button>{{/if}}
           </div>
         </div>
       </div>
@@ -109,6 +108,7 @@ export default class Login extends Component<Signature> {
         border-radius: var(--boxel-form-control-border-radius);
         letter-spacing: var(--boxel-lsp);
         width: 550px;
+        position: relative;
       }
       .header {
         --boxel-header-icon-width: var(--boxel-icon-med);
@@ -126,7 +126,6 @@ export default class Login extends Component<Signature> {
       .content {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp);
         padding: var(--boxel-sp-xl);
       }
       .title {
@@ -134,37 +133,43 @@ export default class Login extends Component<Signature> {
         margin-bottom: var(--boxel-sp-lg);
       }
       .field {
-        margin-top: var(--boxel-sp-sm);
+        margin-top: var(--boxel-sp-lg);
       }
       .forgot-password {
         border: none;
         padding: 0;
-        margin-top: calc(-1 * var(--boxel-sp));
+        margin-bottom: var(--boxel-sp-lg);
         margin-left: auto;
+        color: var(--boxel-dark);
         font: 500 var(--boxel-font-xs);
       }
       .forgot-password:hover {
         color: var(--boxel-highlight);
       }
-      .buttons {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .login-button {
-        --boxel-button-text-color: var(--boxel-light);
+      .button {
         --boxel-button-padding: var(--boxel-sp-sm);
         width: 100%;
       }
-      .signup-button {
-        --boxel-button-text-color: var(--boxel-dark);
-        --boxel-button-padding: var(--boxel-sp-sm);
-        width: 100%;
+      .or {
+        margin: var(--boxel-sp-sm) auto;
+        font: 500 var(--boxel-font-sm);
       }
       .error {
         color: var(--boxel-error-100);
-        margin-bottom: calc(-1 * var(--boxel-sp-xs));
+        padding: 0;
+        font: 500 var(--boxel-font-xs);
+        margin-top: var(--boxel-sp-xxs);
+      }
+      .skip-signin {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        padding: 0;
+        color: var(--boxel-black);
+        font: 500 var(--boxel-font-xs);
+      }
+      .skip-signin:hover {
+        color: var(--boxel-highlight);
       }
     </style>
   </template>
@@ -175,7 +180,7 @@ export default class Login extends Component<Signature> {
   @service private declare matrixService: MatrixService;
 
   private get isLoginButtonDisabled() {
-    return !this.username || !this.password;
+    return !this.username || !this.password || this.error;
   }
 
   @action

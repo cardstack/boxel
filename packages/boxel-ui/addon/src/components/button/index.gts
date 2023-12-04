@@ -188,7 +188,7 @@ export default class ButtonComponent extends Component<Signature> {
         .kind-primary:not(:disabled) {
           --boxel-button-color: var(--boxel-highlight);
           --boxel-button-border: 1px solid var(--boxel-button-color);
-          --boxel-button-text-color: var(--boxel-dark);
+          --boxel-button-text-color: var(--boxel-light);
         }
 
         .kind-primary:not(:disabled):hover,
