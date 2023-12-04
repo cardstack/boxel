@@ -16,19 +16,19 @@ import {
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { shimExternals } from '@cardstack/host/lib/externals';
-
 import type LoaderService from '@cardstack/host/services/loader-service';
 
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as StringFieldMod from 'https://cardstack.com/base/string';
+
 import {
-  TestRealm,
-  TestRealmAdapter,
   testRealmURL,
   testRealmInfo,
   setupCardLogs,
   setupLocalIndexing,
   setupServerSentEvents,
   type TestContextWithSSE,
+  setupIntegrationTestRealm,
 } from '../helpers';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -49,25 +49,22 @@ module('Integration | realm', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  hooks.beforeEach(function () {
-    shimExternals(loader);
-  });
-
   test('realm can serve GET card requests', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/empty.json': {
-        data: {
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
-              name: 'CardDef',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/empty.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/empty`, {
@@ -108,48 +105,49 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve GET card requests with linksTo relationships', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/owner.json': {
-        data: {
-          id: `${testRealmURL}dir/owner`,
-          attributes: {
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/owner.json': {
+          data: {
+            id: `${testRealmURL}dir/owner`,
+            attributes: {
+              firstName: 'Hassan',
+              lastName: 'Abdel-Rahman',
             },
-          },
-        },
-      },
-      'dir/mango.json': {
-        data: {
-          id: `${testRealmURL}dir/mango`,
-          attributes: {
-            description: null,
-            thumbnailURL: null,
-            firstName: 'Mango',
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: `${testRealmURL}dir/owner`,
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
+        },
+        'dir/mango.json': {
+          data: {
+            id: `${testRealmURL}dir/mango`,
+            attributes: {
+              description: null,
+              thumbnailURL: null,
+              firstName: 'Mango',
+            },
+            relationships: {
+              owner: {
+                links: {
+                  self: `${testRealmURL}dir/owner`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/mango`, {
@@ -228,33 +226,34 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve GET card requests with linksTo relationships to other realms', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/mango.json': {
-        data: {
-          id: `${testRealmURL}dir/mango`,
-          attributes: {
-            description: null,
-            thumbnailURL: null,
-            firstName: 'Mango',
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: `http://localhost:4202/test/hassan`,
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/mango.json': {
+          data: {
+            id: `${testRealmURL}dir/mango`,
+            attributes: {
+              description: null,
+              thumbnailURL: null,
+              firstName: 'Mango',
+            },
+            relationships: {
+              owner: {
+                links: {
+                  self: `http://localhost:4202/test/hassan`,
+                },
               },
             },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/mango`, {
@@ -337,9 +336,9 @@ module('Integration | realm', function (hooks) {
   });
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'dir/empty.json': {
           data: {
             meta: {
@@ -351,12 +350,8 @@ module('Integration | realm', function (hooks) {
           },
         },
       },
-      this.owner,
-      {
-        realmURL: `${testRealmURL}root/`,
-      },
-    );
-    await realm.ready;
+      realmURL: `${testRealmURL}root/`,
+    });
     {
       let response = await realm.handle(
         new Request(`${testRealmURL}root/dir/empty`, {
@@ -396,9 +391,10 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve create card requests', async function (assert) {
-    let adapter = new TestRealmAdapter({});
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {},
+    });
     let response = await realm.handle(
       new Request(testRealmURL, {
         method: 'POST',
@@ -458,25 +454,26 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve POST requests that include linksTo fields', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/owner.json': {
-        data: {
-          id: `${testRealmURL}dir/owner`,
-          attributes: {
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/owner.json': {
+          data: {
+            id: `${testRealmURL}dir/owner`,
+            attributes: {
+              firstName: 'Hassan',
+              lastName: 'Abdel-Rahman',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let response = await realm.handle(
       new Request(testRealmURL, {
         method: 'POST',
@@ -612,24 +609,25 @@ module('Integration | realm', function (hooks) {
   });
 
   test<TestContextWithSSE>('realm can serve patch card requests', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/card.json': {
-        data: {
-          attributes: {
-            firstName: 'Mango',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/card.json': {
+          data: {
+            attributes: {
+              firstName: 'Mango',
+              lastName: 'Abdel-Rahman',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let expectedEvents = [
       {
         type: 'index',
@@ -642,7 +640,6 @@ module('Integration | realm', function (hooks) {
     let response = await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         let response = realm.handle(
@@ -762,29 +759,30 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can remove item from containsMany field via PATCH request', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'ski-trip.json': {
-        data: {
-          attributes: {
-            title: 'Gore Mountain Ski Trip',
-            venue: 'Gore Mountain',
-            startTime: '2023-02-18T10:00:00.000Z',
-            endTime: '2023-02-19T02:00:00.000Z',
-            hosts: [{ firstName: 'Hassan' }, { firstName: 'Mango' }],
-            sponsors: ['Burton', 'Spy Optics'],
-            posts: [],
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/booking',
-              name: 'Booking',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'ski-trip.json': {
+          data: {
+            attributes: {
+              title: 'Gore Mountain Ski Trip',
+              venue: 'Gore Mountain',
+              startTime: '2023-02-18T10:00:00.000Z',
+              endTime: '2023-02-19T02:00:00.000Z',
+              hosts: [{ firstName: 'Hassan' }, { firstName: 'Mango' }],
+              sponsors: ['Burton', 'Spy Optics'],
+              posts: [],
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/booking',
+                name: 'Booking',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}ski-trip`, {
         method: 'PATCH',
@@ -896,64 +894,65 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can remove item from linksToMany field via PATCH request', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/van-gogh.json': {
-        data: {
-          id: `${testRealmURL}dir/van-gogh`,
-          attributes: { firstName: 'Van Gogh' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/van-gogh.json': {
+          data: {
+            id: `${testRealmURL}dir/van-gogh`,
+            attributes: { firstName: 'Van Gogh' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'dir/mango.json': {
-        data: {
-          id: `${testRealmURL}dir/mango`,
-          attributes: { firstName: 'Mango' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+        'dir/mango.json': {
+          data: {
+            id: `${testRealmURL}dir/mango`,
+            attributes: { firstName: 'Mango' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'dir/friend.json': {
-        data: {
-          id: `${testRealmURL}dir/friend`,
-          attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+        'dir/friend.json': {
+          data: {
+            id: `${testRealmURL}dir/friend`,
+            attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
             },
           },
         },
-      },
-      'jackie.json': {
-        data: {
-          id: `${testRealmURL}jackie`,
-          attributes: { firstName: 'Jackie' },
-          relationships: {
-            'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
-            friend: { links: { self: `${testRealmURL}dir/friend` } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet-person`,
-              name: 'PetPerson',
+        'jackie.json': {
+          data: {
+            id: `${testRealmURL}jackie`,
+            attributes: { firstName: 'Jackie' },
+            relationships: {
+              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
+              friend: { links: { self: `${testRealmURL}dir/friend` } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet-person`,
+                name: 'PetPerson',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}jackie`, {
         method: 'PATCH',
@@ -1096,64 +1095,65 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can add an item to linksToMany relationships via PATCH request', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/van-gogh.json': {
-        data: {
-          id: `${testRealmURL}dir/van-gogh`,
-          attributes: { firstName: 'Van Gogh' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/van-gogh.json': {
+          data: {
+            id: `${testRealmURL}dir/van-gogh`,
+            attributes: { firstName: 'Van Gogh' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'dir/mango.json': {
-        data: {
-          id: `${testRealmURL}dir/mango`,
-          attributes: { firstName: 'Mango' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+        'dir/mango.json': {
+          data: {
+            id: `${testRealmURL}dir/mango`,
+            attributes: { firstName: 'Mango' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'dir/friend.json': {
-        data: {
-          id: `${testRealmURL}dir/friend`,
-          attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+        'dir/friend.json': {
+          data: {
+            id: `${testRealmURL}dir/friend`,
+            attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
             },
           },
         },
-      },
-      'jackie.json': {
-        data: {
-          id: `${testRealmURL}jackie`,
-          attributes: { firstName: 'Jackie' },
-          relationships: {
-            'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
-            friend: { links: { self: `${testRealmURL}dir/friend` } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet-person`,
-              name: 'PetPerson',
+        'jackie.json': {
+          data: {
+            id: `${testRealmURL}jackie`,
+            attributes: { firstName: 'Jackie' },
+            relationships: {
+              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
+              friend: { links: { self: `${testRealmURL}dir/friend` } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet-person`,
+                name: 'PetPerson',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     let response = await realm.handle(
       new Request(`${testRealmURL}jackie`, {
@@ -1229,51 +1229,52 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can add items to null linksToMany relationship via PATCH request', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/van-gogh.json': {
-        data: {
-          id: `${testRealmURL}dir/van-gogh`,
-          attributes: { firstName: 'Van Gogh' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/van-gogh.json': {
+          data: {
+            id: `${testRealmURL}dir/van-gogh`,
+            attributes: { firstName: 'Van Gogh' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'dir/mango.json': {
-        data: {
-          id: `${testRealmURL}dir/mango`,
-          attributes: { firstName: 'Mango' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+        'dir/mango.json': {
+          data: {
+            id: `${testRealmURL}dir/mango`,
+            attributes: { firstName: 'Mango' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'jackie.json': {
-        data: {
-          id: `${testRealmURL}jackie`,
-          attributes: { firstName: 'Jackie' },
-          relationships: {
-            pets: { links: { self: null } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet-person`,
-              name: 'PetPerson',
+        'jackie.json': {
+          data: {
+            id: `${testRealmURL}jackie`,
+            attributes: { firstName: 'Jackie' },
+            relationships: {
+              pets: { links: { self: null } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet-person`,
+                name: 'PetPerson',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     let response = await realm.handle(
       new Request(`${testRealmURL}jackie`, {
@@ -1337,52 +1338,53 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can remove all items to in a linksToMany relationship via PATCH request', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/van-gogh.json': {
-        data: {
-          id: `${testRealmURL}dir/van-gogh`,
-          attributes: { firstName: 'Van Gogh' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/van-gogh.json': {
+          data: {
+            id: `${testRealmURL}dir/van-gogh`,
+            attributes: { firstName: 'Van Gogh' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'dir/mango.json': {
-        data: {
-          id: `${testRealmURL}dir/mango`,
-          attributes: { firstName: 'Mango' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+        'dir/mango.json': {
+          data: {
+            id: `${testRealmURL}dir/mango`,
+            attributes: { firstName: 'Mango' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'jackie.json': {
-        data: {
-          id: `${testRealmURL}jackie`,
-          attributes: { firstName: 'Jackie' },
-          relationships: {
-            'pets.0': { links: { self: `${testRealmURL}dir/mango` } },
-            'pets.1': { links: { self: `${testRealmURL}dir/van-gogh` } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet-person`,
-              name: 'PetPerson',
+        'jackie.json': {
+          data: {
+            id: `${testRealmURL}jackie`,
+            attributes: { firstName: 'Jackie' },
+            relationships: {
+              'pets.0': { links: { self: `${testRealmURL}dir/mango` } },
+              'pets.1': { links: { self: `${testRealmURL}dir/van-gogh` } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet-person`,
+                name: 'PetPerson',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     let response = await realm.handle(
       new Request(`${testRealmURL}jackie`, {
@@ -1436,63 +1438,64 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve PATCH requests to linksTo field in a card that also has a linksToMany field', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/van-gogh.json': {
-        data: {
-          id: `${testRealmURL}dir/van-gogh`,
-          attributes: { firstName: 'Van Gogh' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/van-gogh.json': {
+          data: {
+            id: `${testRealmURL}dir/van-gogh`,
+            attributes: { firstName: 'Van Gogh' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'dir/friend.json': {
-        data: {
-          id: `${testRealmURL}dir/friend`,
-          attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+        'dir/friend.json': {
+          data: {
+            id: `${testRealmURL}dir/friend`,
+            attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
             },
           },
         },
-      },
-      'dir/different-friend.json': {
-        data: {
-          id: `${testRealmURL}dir/friend`,
-          attributes: { firstName: 'Burcu' },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+        'dir/different-friend.json': {
+          data: {
+            id: `${testRealmURL}dir/friend`,
+            attributes: { firstName: 'Burcu' },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
             },
           },
         },
-      },
-      'jackie.json': {
-        data: {
-          id: `${testRealmURL}jackie`,
-          attributes: { firstName: 'Jackie' },
-          relationships: {
-            'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
-            friend: { links: { self: `${testRealmURL}dir/friend` } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet-person`,
-              name: 'PetPerson',
+        'jackie.json': {
+          data: {
+            id: `${testRealmURL}jackie`,
+            attributes: { firstName: 'Jackie' },
+            relationships: {
+              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
+              friend: { links: { self: `${testRealmURL}dir/friend` } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet-person`,
+                name: 'PetPerson',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     // changing linksTo field only
     let response = await realm.handle(
@@ -1557,76 +1560,77 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve PATCH requests to both linksTo and linksToMany fields', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/van-gogh.json': {
-        data: {
-          id: `${testRealmURL}dir/van-gogh`,
-          attributes: { firstName: 'Van Gogh' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/van-gogh.json': {
+          data: {
+            id: `${testRealmURL}dir/van-gogh`,
+            attributes: { firstName: 'Van Gogh' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'dir/mango.json': {
-        data: {
-          id: `${testRealmURL}dir/mango`,
-          attributes: { firstName: 'Mango' },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
-              name: 'Pet',
+        'dir/mango.json': {
+          data: {
+            id: `${testRealmURL}dir/mango`,
+            attributes: { firstName: 'Mango' },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet`,
+                name: 'Pet',
+              },
             },
           },
         },
-      },
-      'dir/friend.json': {
-        data: {
-          id: `${testRealmURL}dir/friend`,
-          attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+        'dir/friend.json': {
+          data: {
+            id: `${testRealmURL}dir/friend`,
+            attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
             },
           },
         },
-      },
-      'dir/different-friend.json': {
-        data: {
-          id: `${testRealmURL}dir/friend`,
-          attributes: { firstName: 'Burcu' },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+        'dir/different-friend.json': {
+          data: {
+            id: `${testRealmURL}dir/friend`,
+            attributes: { firstName: 'Burcu' },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
             },
           },
         },
-      },
-      'jackie.json': {
-        data: {
-          id: `${testRealmURL}jackie`,
-          attributes: { firstName: 'Jackie' },
-          relationships: {
-            'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
-            friend: { links: { self: `${testRealmURL}dir/friend` } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `http://localhost:4202/test/pet-person`,
-              name: 'PetPerson',
+        'jackie.json': {
+          data: {
+            id: `${testRealmURL}jackie`,
+            attributes: { firstName: 'Jackie' },
+            relationships: {
+              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
+              friend: { links: { self: `${testRealmURL}dir/friend` } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/pet-person`,
+                name: 'PetPerson',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     let response = await realm.handle(
       new Request(`${testRealmURL}jackie`, {
@@ -1692,63 +1696,64 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve PATCH requests that include linksTo fields', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/hassan.json': {
-        data: {
-          id: `${testRealmURL}dir/hassan`,
-          attributes: {
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/hassan.json': {
+          data: {
+            id: `${testRealmURL}dir/hassan`,
+            attributes: {
+              firstName: 'Hassan',
+              lastName: 'Abdel-Rahman',
             },
-          },
-        },
-      },
-      'dir/mariko.json': {
-        data: {
-          id: `${testRealmURL}dir/mariko`,
-          attributes: {
-            firstName: 'Mariko',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'dir/mango.json': {
-        data: {
-          id: `${testRealmURL}dir/mango`,
-          attributes: {
-            description: null,
-            thumbnailURL: null,
-            firstName: 'Mango',
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: `${testRealmURL}dir/hassan`,
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
+        },
+        'dir/mariko.json': {
+          data: {
+            id: `${testRealmURL}dir/mariko`,
+            attributes: {
+              firstName: 'Mariko',
+              lastName: 'Abdel-Rahman',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'dir/mango.json': {
+          data: {
+            id: `${testRealmURL}dir/mango`,
+            attributes: {
+              description: null,
+              thumbnailURL: null,
+              firstName: 'Mango',
+            },
+            relationships: {
+              owner: {
+                links: {
+                  self: `${testRealmURL}dir/hassan`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/mango`, {
         method: 'PATCH',
@@ -1881,30 +1886,31 @@ module('Integration | realm', function (hooks) {
   });
 
   test<TestContextWithSSE>('realm can serve delete card requests', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'cards/1.json': {
-        data: {
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
-              name: 'CardDef',
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'cards/1.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
             },
           },
         },
-      },
-      'cards/2.json': {
-        data: {
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
-              name: 'CardDef',
+        'cards/2.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     let searchIndex = realm.searchIndex;
 
@@ -1935,7 +1941,6 @@ module('Integration | realm', function (hooks) {
     let response = await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         let response = realm.handle(
@@ -1972,14 +1977,12 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve card source file', async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'dir/person.gts': cardSrc,
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/person.gts`, {
         headers: {
@@ -1997,14 +2000,12 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm provide redirect for card source', async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'dir/person.gts': cardSrc,
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/person`, {
         headers: {
@@ -2021,8 +2022,10 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm returns 404 when no card source can be found', async function (assert) {
-    let realm = await TestRealm.create(loader, {}, this.owner);
-    await realm.ready;
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {},
+    });
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/person`, {
         headers: {
@@ -2034,9 +2037,10 @@ module('Integration | realm', function (hooks) {
   });
 
   test<TestContextWithSSE>('realm can serve card source post request', async function (assert) {
-    let adapter = new TestRealmAdapter({});
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {},
+    });
 
     {
       let expectedEvents = [
@@ -2051,7 +2055,6 @@ module('Integration | realm', function (hooks) {
       let response = await this.expectEvents({
         assert,
         realm,
-        adapter,
         expectedEvents,
         callback: async () => {
           let response = realm.handle(
@@ -2092,19 +2095,24 @@ module('Integration | realm', function (hooks) {
   });
 
   test<TestContextWithSSE>('realm can serve card source delete request', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'person.gts': `
-      import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-      import StringCard from 'https://cardstack.com/base/string';
+    let { field, contains, CardDef } = await loader.import<typeof CardAPI>(
+      'https://cardstack.com/base/card-api',
+    );
+    let { default: StringField } = await loader.import<typeof StringFieldMod>(
+      'https://cardstack.com/base/string',
+    );
 
-      export class Person extends CardDef {
-        @field firstName = contains(StringCard);
-        @field lastName = contains(StringCard);
-      }
-    `,
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'person.gts': { Person },
+      },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     let expectedEvents = [
       {
@@ -2118,7 +2126,6 @@ module('Integration | realm', function (hooks) {
     let response = await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         let response = realm.handle(
@@ -2156,14 +2163,12 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'dir/person.gts': cardSrc,
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
     let response = await realm.handle(new Request(`${testRealmURL}dir/person`));
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
@@ -2175,14 +2180,12 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve compiled js file when requested with file extension ', async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'dir/person.gts': cardSrc,
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/person.gts`),
     );
@@ -2203,14 +2206,12 @@ module('Integration | realm', function (hooks) {
         </body>
       </html>
     `.trim();
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'dir/index.html': html,
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/index.html`),
     );
@@ -2220,9 +2221,9 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve search requests', async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'dir/empty.json': {
           data: {
             attributes: {},
@@ -2235,9 +2236,7 @@ module('Integration | realm', function (hooks) {
           },
         },
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
     let response = await realm.handle(
       new Request(`${testRealmURL}_search`, {
         headers: {
@@ -2259,69 +2258,70 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve search requests whose results have linksTo fields', async function (assert) {
-    let adapter = new TestRealmAdapter({
-      'dir/mariko.json': {
-        data: {
-          id: `${testRealmURL}dir/mariko`,
-          attributes: {
-            firstName: 'Mariko',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'dir/mariko.json': {
+          data: {
+            id: `${testRealmURL}dir/mariko`,
+            attributes: {
+              firstName: 'Mariko',
+              lastName: 'Abdel-Rahman',
             },
-          },
-        },
-      },
-      'dir/mango.json': {
-        data: {
-          id: `${testRealmURL}dir/mango`,
-          attributes: {
-            description: null,
-            thumbnailURL: null,
-            firstName: 'Mango',
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: `${testRealmURL}dir/mariko`,
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/person',
+                name: 'Person',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
-            },
-          },
         },
-      },
-      'dir/vanGogh.json': {
-        data: {
-          id: `${testRealmURL}dir/vanGogh`,
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: `http://localhost:4202/test/hassan`,
+        'dir/mango.json': {
+          data: {
+            id: `${testRealmURL}dir/mango`,
+            attributes: {
+              description: null,
+              thumbnailURL: null,
+              firstName: 'Mango',
+            },
+            relationships: {
+              owner: {
+                links: {
+                  self: `${testRealmURL}dir/mariko`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
+        },
+        'dir/vanGogh.json': {
+          data: {
+            id: `${testRealmURL}dir/vanGogh`,
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            relationships: {
+              owner: {
+                links: {
+                  self: `http://localhost:4202/test/hassan`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
             },
           },
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
 
     let response = await realm.handle(
       new Request(
@@ -2475,9 +2475,9 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve directory requests', async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'dir/empty.json': {
           data: {
             attributes: {},
@@ -2491,9 +2491,7 @@ module('Integration | realm', function (hooks) {
         },
         'dir/subdir/file.txt': '',
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/`, {
         headers: {
@@ -2539,9 +2537,9 @@ module('Integration | realm', function (hooks) {
       export class Post extends CardDef {}
     `;
 
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'sample-post.json': '',
         'posts/1.json': '',
         'posts/nested.gts': cardSource,
@@ -2555,9 +2553,7 @@ module('Integration | realm', function (hooks) {
 posts/ignore-me.gts
 `,
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
 
     {
       let response = await realm.handle(
@@ -2622,18 +2618,16 @@ posts/ignore-me.gts
   });
 
   test('realm can serve info requests by reading .realm.json', async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         '.realm.json': `{
           "name": "Example Workspace",
           "backgroundURL": "https://example-background-url.com",
           "iconURL": "https://example-icon-url.com"
         }`,
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
     let response = await realm.handle(
       new Request(`${testRealmURL}_info`, {
         headers: {
@@ -2660,8 +2654,10 @@ posts/ignore-me.gts
   });
 
   test('realm can serve info requests if .realm.json is missing', async function (assert) {
-    let realm = await TestRealm.create(loader, {}, this.owner);
-    await realm.ready;
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {},
+    });
     let response = await realm.handle(
       new Request(`${testRealmURL}_info`, {
         headers: {
@@ -2684,14 +2680,12 @@ posts/ignore-me.gts
   });
 
   test('realm can serve info requests if .realm.json is malformed', async function (assert) {
-    let realm = await TestRealm.create(
+    let { realm } = await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         '.realm.json': `Some example content that is not valid json`,
       },
-      this.owner,
-    );
-    await realm.ready;
+    });
     let response = await realm.handle(
       new Request(`${testRealmURL}_info`, {
         headers: {
@@ -2714,9 +2708,9 @@ posts/ignore-me.gts
   });
 
   test('realm does not crash when indexing a broken instance', async function (assert) {
-    let realm = await TestRealm.create(
+    await setupIntegrationTestRealm({
       loader,
-      {
+      contents: {
         'FieldDef/1.json': {
           data: {
             type: 'card',
@@ -2729,10 +2723,8 @@ posts/ignore-me.gts
           },
         },
       },
-      this.owner,
-    ); // this is an example of a card that where loadCard will throw an error
+    }); // this is an example of a card that where loadCard will throw an error
 
-    await realm.ready;
     assert.ok(
       true,
       'realm did not crash when trying to index a broken instance',

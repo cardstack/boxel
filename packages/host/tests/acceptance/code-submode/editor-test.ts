@@ -15,7 +15,6 @@ import config from '@cardstack/host/config/environment';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
-  TestRealm,
   TestRealmAdapter,
   setupLocalIndexing,
   setupServerSentEvents,
@@ -23,12 +22,11 @@ import {
   testRealmURL,
   getMonacoContent,
   setMonacoContent,
+  setupAcceptanceTestRealm,
   waitForSyntaxHighlighting,
   waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
-  sourceFetchRedirectHandle,
-  sourceFetchReturnUrlHandle,
 } from '../../helpers';
 
 module('Acceptance | code submode | editor tests', function (hooks) {
@@ -50,8 +48,13 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     window.localStorage.removeItem('recent-cards');
     window.localStorage.removeItem('recent-files');
 
-    adapter = new TestRealmAdapter({
-      'pet.gts': `
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+
+    ({ realm, adapter } = await setupAcceptanceTestRealm({
+      loader,
+      contents: {
+        'pet.gts': `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
@@ -72,7 +75,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           }
         }
       `,
-      'shipping-info.gts': `
+        'shipping-info.gts': `
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         export class ShippingInfo extends FieldDef {
@@ -92,7 +95,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           }
         }
       `,
-      'address.gts': `
+        'address.gts': `
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { ShippingInfo } from "./shipping-info";
@@ -128,7 +131,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           };
         }
       `,
-      'person.gts': `
+        'person.gts': `
         import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
@@ -165,133 +168,118 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           }
         }
       `,
-      'README.txt': `Hello World`,
-      'Pet/mango.json': {
-        data: {
-          attributes: {
-            name: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
+        'README.txt': `Hello World`,
+        'Pet/mango.json': {
+          data: {
+            attributes: {
+              name: 'Mango',
             },
-          },
-        },
-      },
-      'Pet/vangogh.json': {
-        data: {
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-
-      'Person/fadhlan.json': {
-        data: {
-          attributes: {
-            firstName: 'Fadhlan',
-            address: {
-              city: 'Bandung',
-              country: 'Indonesia',
-              shippingInfo: {
-                preferredCarrier: 'DHL',
-                remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
-          relationships: {
-            pet: {
-              links: {
-                self: `${testRealmURL}Pet/mango`,
+        },
+        'Pet/vangogh.json': {
+          data: {
+            attributes: {
+              name: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
         },
-      },
-      'grid.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
+
+        'Person/fadhlan.json': {
+          data: {
+            attributes: {
+              firstName: 'Fadhlan',
+              address: {
+                city: 'Bandung',
+                country: 'Indonesia',
+                shippingInfo: {
+                  preferredCarrier: 'DHL',
+                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                },
+              },
             },
-          },
-        },
-      },
-      'index.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
+            relationships: {
+              pet: {
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+              },
             },
-          },
-        },
-      },
-      '.realm.json': {
-        name: 'Test Workspace B',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
-      'Person/john-with-bad-pet-link.json': {
-        data: {
-          attributes: {
-            firstName: 'John',
-            address: {
-              city: 'Ljubljana',
-              country: 'Slovenia',
-            },
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: `http://badlink.com/nonexisting-pet`,
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
+        },
+        'grid.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        '.realm.json': {
+          name: 'Test Workspace B',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        },
+        'Person/john-with-bad-pet-link.json': {
+          data: {
+            attributes: {
+              firstName: 'John',
+              address: {
+                city: 'Ljubljana',
+                country: 'Slovenia',
+              },
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: `http://badlink.com/nonexisting-pet`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
             },
           },
         },
       },
-    });
-
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      isAcceptanceTest: true,
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
-        },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
-        },
-      ],
-    });
-    await realm.ready;
+    }));
   });
 
   test('card instance JSON displayed in monaco editor', async function (assert) {
@@ -390,7 +378,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         setMonacoContent(JSON.stringify(editedCard));
@@ -469,7 +456,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         setMonacoContent(JSON.stringify(expected));
@@ -553,7 +539,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await fillIn('[data-test-field="name"] input', 'MangoXXX');
@@ -586,8 +571,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     setMonacoContent('Hello Mars');
 
     await waitFor('[data-test-save-idle]');
-
-    await percySnapshot(assert);
   });
 
   test<TestContextWithSave>('unsaved changes made in monaco editor are saved when switching out of code submode', async function (assert) {
@@ -759,15 +742,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         setMonacoContent(expected);
         await waitFor('[data-test-save-idle]');
       },
     });
-
-    await percySnapshot(assert);
 
     let fileRef = await adapter.openFile('pet.gts');
     if (!fileRef) {

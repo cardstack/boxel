@@ -4,7 +4,6 @@ import Button from './components/button/index.gts';
 import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import BoxelDropdown from './components/dropdown/index.gts';
-import DropdownButton from './components/dropdown-button/index.gts';
 import FieldContainer from './components/field-container/index.gts';
 import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
@@ -41,7 +40,6 @@ export {
   BoxelMessage,
   Button,
   CardContainer,
-  DropdownButton,
   FieldContainer,
   GridContainer,
   Header,

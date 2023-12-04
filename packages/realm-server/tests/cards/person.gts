@@ -7,6 +7,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 
 export class Person extends CardDef {
+  static displayName = 'Person';
   @field firstName = contains(StringCard);
   @field title = contains(StringCard, {
     computeVia: function (this: Person) {

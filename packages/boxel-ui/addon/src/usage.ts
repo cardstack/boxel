@@ -5,7 +5,6 @@ import AccordionUsage from './components/accordion/usage.gts';
 import AddButtonUsage from './components/add-button/usage.gts';
 import ButtonUsage from './components/button/usage.gts';
 import CardContainerUsage from './components/card-container/usage.gts';
-import DropdownButtonUsage from './components/dropdown-button/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
 import DropdownUsage from './components/dropdown/usage.gts';
 import FieldContainerUsage from './components/field-container/usage.gts';
@@ -26,7 +25,6 @@ export const ALL_USAGE_COMPONENTS = [
   ['AddButton', AddButtonUsage],
   ['Button', ButtonUsage],
   ['CardContainer', CardContainerUsage],
-  ['DropdownButton', DropdownButtonUsage],
   ['DropdownTrigger', DropdownTriggerUsage],
   ['Dropdown', DropdownUsage],
   ['FieldContainer', FieldContainerUsage],

@@ -70,6 +70,7 @@ export default class DatetimeField extends FieldDef {
         type='datetime-local'
         @value={{this.formatted}}
         @onInput={{fn this.parseInput @set}}
+        @max='9999-12-31T23:59:59'
       />
     </template>
 

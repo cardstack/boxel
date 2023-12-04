@@ -4,6 +4,7 @@ import {
   waitFor,
   fillIn,
   triggerEvent,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -20,12 +21,9 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
-  TestRealm,
-  TestRealmAdapter,
   setupLocalIndexing,
   testRealmURL,
-  sourceFetchRedirectHandle,
-  sourceFetchReturnUrlHandle,
+  setupAcceptanceTestRealm,
   setupServerSentEvents,
   setupOnSave,
   getMonacoContent,
@@ -214,7 +212,6 @@ const ambiguousDisplayNamesCardSource = `
 
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let realm: Realm;
-  let adapter: TestRealmAdapter;
 
   async function saveField(
     context: TestContextWithSSE,
@@ -224,7 +221,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await context.expectEvents({
       assert,
       realm,
-      adapter,
       expectedEvents,
       callback: async () => {
         await click('[data-test-save-field-button]');
@@ -244,107 +240,97 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
 
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
-    adapter = new TestRealmAdapter({
-      'index.gts': indexCardSource,
-      'pet-person.gts': personCardSource,
-      'person.gts': personCardSource,
-      'friend.gts': friendCardSource,
-      'employee.gts': employeeCardSource,
-      'in-this-file.gts': inThisFileSource,
-      'ambiguous-display-names.gts': ambiguousDisplayNamesCardSource,
-      'person-entry.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Person',
-            description: 'Catalog entry',
-            ref: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'index.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './index',
-              name: 'Index',
-            },
-          },
-        },
-      },
-      'not-json.json': 'I am not JSON.',
-      'Person/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'z00.json': '{}',
-      'z01.json': '{}',
-      'z02.json': '{}',
-      'z03.json': '{}',
-      'z04.json': '{}',
-      'z05.json': '{}',
-      'z06.json': '{}',
-      'z07.json': '{}',
-      'z08.json': '{}',
-      'z09.json': '{}',
-      'z10.json': '{}',
-      'z11.json': '{}',
-      'z12.json': '{}',
-      'z13.json': '{}',
-      'z14.json': '{}',
-      'z15.json': '{}',
-      'z16.json': '{}',
-      'z17.json': '{}',
-      'z18.json': '{}',
-      'z19.json': '{}',
-      'zzz/zzz/file.json': '{}',
-      '.realm.json': {
-        name: 'Test Workspace B',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
-    });
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      isAcceptanceTest: true,
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+    // this seeds the loader used during index which obtains url mappings
+    // from the global loader
+    ({ realm } = await setupAcceptanceTestRealm({
+      loader,
+      contents: {
+        'index.gts': indexCardSource,
+        'pet-person.gts': personCardSource,
+        'person.gts': personCardSource,
+        'friend.gts': friendCardSource,
+        'employee.gts': employeeCardSource,
+        'in-this-file.gts': inThisFileSource,
+        'ambiguous-display-names.gts': ambiguousDisplayNamesCardSource,
+        'person-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Person',
+              description: 'Catalog entry',
+              ref: {
+                module: `./person`,
+                name: 'Person',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}catalog-entry`,
+                name: 'CatalogEntry',
+              },
+            },
+          },
         },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './index',
+                name: 'Index',
+              },
+            },
+          },
         },
-      ],
-    });
-    await realm.ready;
+        'not-json.json': 'I am not JSON.',
+        'Person/1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Hassan',
+              lastName: 'Abdel-Rahman',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'z00.json': '{}',
+        'z01.json': '{}',
+        'z02.json': '{}',
+        'z03.json': '{}',
+        'z04.json': '{}',
+        'z05.json': '{}',
+        'z06.json': '{}',
+        'z07.json': '{}',
+        'z08.json': '{}',
+        'z09.json': '{}',
+        'z10.json': '{}',
+        'z11.json': '{}',
+        'z12.json': '{}',
+        'z13.json': '{}',
+        'z14.json': '{}',
+        'z15.json': '{}',
+        'z16.json': '{}',
+        'z17.json': '{}',
+        'z18.json': '{}',
+        'z19.json': '{}',
+        'zzz/zzz/file.json': '{}',
+        '.realm.json': {
+          name: 'Test Workspace B',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        },
+      },
+    }));
   });
 
   test('schema editor lists the inheritance chain', async function (assert) {
@@ -869,13 +855,19 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-remove-field-button]');
     await waitFor('[data-test-card-schema]');
 
+    await waitUntil(() => {
+      return document
+        .querySelector(
+          '[data-test-card-schema="Person"] [data-test-total-fields]',
+        )
+        ?.textContent?.includes('4');
+    });
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
       .containsText('+ 4 Fields'); // One field less
-
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="firstName"]`,
+        '[data-test-card-schema="Person"] [data-test-field-name="firstName"]',
       )
       .doesNotExist();
   });

@@ -95,6 +95,7 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
 
 function getResponse(history: IRoomEvent[], aiBotUsername: string) {
   let messages = getModifyPrompt(history, aiBotUsername);
+<<<<<<< HEAD
   let functions = getFunctions(history, aiBotUsername);
   return openai.beta.chat.completions.stream({
     model: 'gpt-4-1106-preview',
@@ -102,16 +103,50 @@ function getResponse(history: IRoomEvent[], aiBotUsername: string) {
     functions: functions,
     function_call: 'auto',
   });
+=======
+  return await openai.chat.completions.create(
+    {
+      model: 'gpt-4-1106-preview',
+      messages: messages,
+      stream: true,
+    },
+    {
+      // Retry with exponential backoff,
+      // Let OpenAI library handle approved logic
+      maxRetries: 5,
+    },
+  );
+>>>>>>> main
 }
 
 (async () => {
+  const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
   let client = createClient({
-    baseUrl: process.env.MATRIX_URL || 'http://localhost:8008',
+    baseUrl: matrixUrl,
   });
-  let auth = await client.loginWithPassword(
-    aiBotUsername,
-    process.env.BOXEL_AIBOT_PASSWORD || 'pass',
-  );
+  let auth = await client
+    .loginWithPassword(
+      aiBotUsername,
+      process.env.BOXEL_AIBOT_PASSWORD || 'pass',
+    )
+    .catch((e) => {
+      log.error(e);
+      log.info(`The matrix bot could not login to the server.
+Common issues are:
+- The server is not running (configured to use ${matrixUrl})
+   - Check it is reachable at ${matrixUrl}/_matrix/client/versions
+   - If running in development, check the docker container is running (see the boxel README)
+- The bot is not registered on the matrix server
+  - The bot uses the username ${aiBotUsername}
+- The bot is registered but the password is incorrect
+   - The bot password ${
+     process.env.BOXEL_AIBOT_PASSWORD
+       ? 'is set in the env var, check it is correct'
+       : 'is not set in the env var so defaults to "pass"'
+   }
+      `);
+      process.exit(1);
+    });
   let { user_id: userId } = auth;
   client.on(RoomMemberEvent.Membership, function (_event, member) {
     if (member.membership === 'invite' && member.userId === userId) {

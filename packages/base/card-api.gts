@@ -1,4 +1,5 @@
 import Modifier from 'ember-modifier';
+import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
@@ -27,10 +28,12 @@ import {
   isField,
   primitive,
   identifyCard,
+  isCardDef,
   loadCard,
   humanReadable,
   maybeURL,
   maybeRelativeURL,
+  moduleFrom,
   getCard,
   trackCard,
   type Meta,
@@ -154,7 +157,11 @@ interface StaleValue {
   staleValue: any;
 }
 
-type CardChangeSubscriber = (fieldName: string, fieldValue: any) => void;
+type CardChangeSubscriber = (
+  instance: BaseDef,
+  fieldName: string,
+  fieldValue: any,
+) => void;
 
 function isStaleValue(value: any): value is StaleValue {
   if (value && typeof value === 'object') {
@@ -1702,6 +1709,80 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
   </template>
 }
 
+class MissingEmbeddedTemplate extends GlimmerComponent<{
+  Args: {
+    cardOrField: typeof BaseDef;
+    model: CardDef;
+    fields: Record<string, new () => GlimmerComponent>;
+    context?: CardContext;
+  };
+}> {
+  <template>
+    <div
+      class='missing-embedded-template
+        {{if (isCardDef @cardOrField) "card" "field"}}'
+    >
+      <span data-test-missing-embedded-template-text>Missing embedded component
+        for
+        {{if (isCardDef @cardOrField) 'CardDef' 'FieldDef'}}:
+        {{@cardOrField.displayName}}</span>
+      {{#if @context.actions.openCodeSubmode}}
+        <span
+          class='open-code-submode'
+          {{on 'click' this.openCodeSubmode}}
+          data-test-open-code-submode
+        >
+          Open In Code Mode
+        </span>
+      {{/if}}
+    </div>
+    <style>
+      .missing-embedded-template {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        box-sizing: border-box;
+        min-height: 3.75rem;
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-100);
+        border: none;
+        border-radius: var(--boxel-form-control-border-radius);
+        color: var(--boxel-dark);
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        transition: background-color var(--boxel-transition);
+      }
+      .card {
+        width: calc(100% + calc(2 * var(--boxel-sp)));
+        margin: calc(-1 * var(--boxel-sp));
+      }
+      .field {
+        width: 100%;
+        margin: 0;
+      }
+      .open-code-submode {
+        cursor: pointer;
+        color: var(--boxel-highlight);
+      }
+      .open-code-submode:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </template>
+
+  @action
+  openCodeSubmode() {
+    let ref = identifyCard(this.args.cardOrField);
+    if (!ref) {
+      return;
+    }
+    let moduleId = moduleFrom(ref);
+    this.args.context?.actions?.openCodeSubmode(new URL(moduleId));
+  }
+}
+
 class DefaultAtomViewTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;
@@ -1765,6 +1846,7 @@ export type BaseDefComponent = ComponentLike<{
   Blocks: {};
   Element: any;
   Args: {
+    cardOrField: typeof BaseDef;
     fields: any;
     model: any;
     set: Setter;
@@ -1779,16 +1861,7 @@ export class FieldDef extends BaseDef {
   static isFieldDef = true;
   static displayName = 'Field';
 
-  static embedded: BaseDefComponent = class Embedded extends Component<
-    typeof this
-  > {
-    <template>
-      <div>
-        Missing embedded component for FieldDef:
-        {{@model.constructor.displayName}}.
-      </div>
-    </template>
-  };
+  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
 }
@@ -1865,16 +1938,7 @@ export class CardDef extends BaseDef {
     }
   }
 
-  static embedded: BaseDefComponent = class Embedded extends Component<
-    typeof this
-  > {
-    <template>
-      <div>
-        Missing embedded component for CardDef:
-        {{@model.constructor.displayName}}.
-      </div>
-    </template>
-  };
+  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
@@ -1889,11 +1953,27 @@ export function subscribeToChanges(
   subscriber: CardChangeSubscriber,
 ) {
   let changeSubscribers = subscribers.get(fieldOrCard);
+  if (changeSubscribers && changeSubscribers.has(subscriber)) {
+    return;
+  }
+
   if (!changeSubscribers) {
     changeSubscribers = new Set();
     subscribers.set(fieldOrCard, changeSubscribers);
   }
+
   changeSubscribers.add(subscriber);
+
+  let fields = getFields(fieldOrCard, {
+    usedFieldsOnly: true,
+    includeComputeds: false,
+  });
+  Object.keys(fields).forEach((fieldName) => {
+    let value = peekAtField(fieldOrCard, fieldName);
+    if (isCardOrField(value)) {
+      subscribeToChanges(value, subscriber);
+    }
+  });
 }
 
 export function unsubscribeFromChanges(
@@ -1905,6 +1985,29 @@ export function unsubscribeFromChanges(
     return;
   }
   changeSubscribers.delete(subscriber);
+
+  let fields = getFields(fieldOrCard, {
+    usedFieldsOnly: true,
+    includeComputeds: false,
+  });
+  Object.keys(fields).forEach((fieldName) => {
+    let value = peekAtField(fieldOrCard, fieldName);
+    if (isCardOrField(value)) {
+      unsubscribeFromChanges(value, subscriber);
+    }
+  });
+}
+
+function migrateSubscribers(oldFieldOrCard: BaseDef, newFieldOrCard: BaseDef) {
+  let changeSubscribers = subscribers.get(oldFieldOrCard);
+  if (changeSubscribers) {
+    changeSubscribers.forEach((changeSubscriber) =>
+      subscribeToChanges(newFieldOrCard, changeSubscriber),
+    );
+    changeSubscribers.forEach((changeSubscriber) =>
+      unsubscribeFromChanges(oldFieldOrCard, changeSubscriber),
+    );
+  }
 }
 
 function getDataBucket<T extends BaseDef>(instance: T): Map<string, any> {
@@ -2383,6 +2486,17 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         );
       }
       let deserialized = getDataBucket(instance);
+
+      // Before updating field's value, we also have to make sure
+      // the subscribers also subscribes to a new value.
+      let existingValue = deserialized.get(fieldName as string);
+      if (
+        isCardOrField(existingValue) &&
+        isCardOrField(value) &&
+        existingValue !== value
+      ) {
+        migrateSubscribers(existingValue, value);
+      }
       deserialized.set(fieldName as string, value);
       logger.log(recompute(instance));
     }
@@ -2396,6 +2510,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
 
   deferred.fulfill(instance);
   return instance;
+}
+
+export function setCardAsSavedForTest(instance: CardDef): void {
+  instance[isSavedInstance] = true;
 }
 
 export async function searchDoc<CardT extends BaseDefConstructor>(
@@ -2509,11 +2627,11 @@ function makeDescriptor<
   return descriptor;
 }
 
-function notifySubscribers(card: BaseDef, fieldName: string, value: any) {
-  let changeSubscribers = subscribers.get(card);
+function notifySubscribers(instance: BaseDef, fieldName: string, value: any) {
+  let changeSubscribers = subscribers.get(instance);
   if (changeSubscribers) {
     for (let subscriber of changeSubscribers) {
-      subscriber(fieldName, value);
+      subscriber(instance, fieldName, value);
     }
   }
 }

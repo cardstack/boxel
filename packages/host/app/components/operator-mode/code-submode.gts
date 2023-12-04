@@ -10,9 +10,10 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 //@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
+
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { use, resource } from 'ember-resources';
+
 import {
   Button,
   LoadingIndicator,
@@ -21,22 +22,20 @@ import {
 import type { PanelContext } from '@cardstack/boxel-ui/components';
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
+
 import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import {
-  isReady,
-  type Ready,
-  type FileResource,
-} from '@cardstack/host/resources/file';
+import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
@@ -48,8 +47,11 @@ import type MessageService from '@cardstack/host/services/message-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
 import FileTree from '../editor/file-tree';
+
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
@@ -110,6 +112,7 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
+  @tracked private previewFormat: Format = 'isolated';
 
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -135,6 +138,9 @@ export default class CodeSubmode extends Component<Signature> {
       onCardInstanceChange: () => this.onCardLoaded,
     },
   );
+  private moduleContentsResource = moduleContentsResource(this, () => {
+    return this.isModule ? this.readyFile : undefined;
+  });
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -199,13 +205,6 @@ export default class CodeSubmode extends Component<Signature> {
     return this.operatorModeStateService.realmURL;
   }
 
-  private get isLoading() {
-    return (
-      this.currentOpenFile?.state === 'loading' ||
-      this.moduleContentsResource?.isLoading
-    );
-  }
-
   private get isReady() {
     return isReady(this.currentOpenFile);
   }
@@ -216,7 +215,9 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isModule() {
     return (
-      hasExecutableExtension(this.readyFile.name) && !this.isIncompatibleFile
+      this.isReady &&
+      hasExecutableExtension(this.readyFile.url) &&
+      !this.isIncompatibleFile
     );
   }
 
@@ -243,6 +244,10 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
+    //this will prevent displaying message during a page refresh
+    if (this.moduleContentsResource.isLoading) {
+      return null;
+    }
     // If file is incompatible
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
@@ -259,7 +264,7 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
-      return 'No tools are available to inspect this file or its contents.';
+      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
     }
 
     // TODO: handle card preview errors (when json is valid but card returns error)
@@ -297,18 +302,6 @@ export default class CodeSubmode extends Component<Signature> {
   private get currentOpenFile() {
     return this.operatorModeStateService.openFile.current;
   }
-
-  @use private moduleContentsResource = resource(() => {
-    if (isReady(this.currentOpenFile)) {
-      let f: Ready = this.currentOpenFile;
-      if (hasExecutableExtension(f.url)) {
-        return moduleContentsResource(this, () => ({
-          executableFile: f,
-        }));
-      }
-    }
-    return;
-  });
 
   private onCardLoaded = (
     oldCard: CardDef | undefined,
@@ -520,6 +513,15 @@ export default class CodeSubmode extends Component<Signature> {
     this.operatorModeStateService.updateCodePath(codePath);
   }
 
+  @action private setPreviewFormat(format: Format) {
+    this.previewFormat = format;
+  }
+
+  @action private onNewFileSave(fileURL: URL) {
+    this.operatorModeStateService.updateCodePath(fileURL);
+    this.setPreviewFormat('edit');
+  }
+
   <template>
     <RealmInfoProvider @realmURL={{this.realmURL}}>
       <:ready as |realmInfo|>
@@ -537,7 +539,10 @@ export default class CodeSubmode extends Component<Signature> {
         @dismissURLError={{this.dismissURLError}}
         @realmURL={{this.realmURL}}
       />
-      <NewFileButton />
+      <NewFileButton
+        @realmURL={{this.realmURL}}
+        @onSave={{this.onNewFileSave}}
+      />
     </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
       <div
@@ -694,11 +699,7 @@ export default class CodeSubmode extends Component<Signature> {
               @lengthPx={{this.panelWidths.rightPanel}}
             >
               <div class='inner-container'>
-                {{#if this.isLoading}}
-                  <div class='loading'>
-                    <LoadingIndicator />
-                  </div>
-                {{else if this.isReady}}
+                {{#if this.isReady}}
                   {{#if this.fileIncompatibilityMessage}}
                     <div
                       class='file-incompatible-message'
@@ -710,6 +711,8 @@ export default class CodeSubmode extends Component<Signature> {
                     <CardPreviewPanel
                       @card={{this.loadedCard}}
                       @realmURL={{this.realmURL}}
+                      @format={{this.previewFormat}}
+                      @setFormat={{this.setPreviewFormat}}
                       data-test-card-resource-loaded
                     />
                   {{else if this.selectedCardOrField}}

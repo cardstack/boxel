@@ -1,27 +1,25 @@
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import { inject as service } from '@ember/service';
-import { restartableTask } from 'ember-concurrency';
 
 import { IconButton } from '@cardstack/boxel-ui/components';
 import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
 
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import ENV from '@cardstack/host/config/environment';
+import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { assertNever } from '@cardstack/host/utils/assert-never';
-
-import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 import ChatSidebar from '../matrix/chat-sidebar';
 import SearchSheet, {
   SearchSheetMode,
   SearchSheetModes,
 } from '../search-sheet';
+import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
-import ENV from '@cardstack/host/config/environment';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const { APP } = ENV;
 
@@ -42,10 +40,6 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
 
   @service private declare operatorModeStateService: OperatorModeStateService;
-
-  private constructRecentCards = restartableTask(async () => {
-    return await this.operatorModeStateService.constructRecentCards();
-  });
 
   private get chatVisibilityClass() {
     return this.isChatVisible ? 'chat-open' : 'chat-closed';
@@ -98,10 +92,6 @@ export default class SubmodeLayout extends Component<Signature> {
   @action private openSearchSheetToPrompt() {
     if (this.searchSheetMode == SearchSheetModes.Closed) {
       this.searchSheetMode = SearchSheetModes.SearchPrompt;
-    }
-
-    if (this.operatorModeStateService.recentCards.length === 0) {
-      this.constructRecentCards.perform();
     }
 
     this.args.onSearchSheetOpened?.();

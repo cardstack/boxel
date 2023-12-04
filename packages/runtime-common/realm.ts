@@ -161,10 +161,12 @@ interface IndexEvent {
   type: 'index';
   data: IncrementalIndexEventData | FullIndexEventData;
   id?: string;
+  clientRequestId?: string | null;
 }
 interface IncrementalIndexEventData {
   type: 'incremental';
   invalidations: string[];
+  clientRequestId?: string | null;
 }
 interface FullIndexEventData {
   type: 'full';
@@ -186,6 +188,7 @@ interface WriteOperation {
   type: 'write';
   path: LocalPath;
   contents: string;
+  clientRequestId?: string | null; // Used for client to be able to see if the SSE event is a result of the client's own write
   deferred: Deferred<WriteResult>;
 }
 
@@ -330,7 +333,11 @@ export class Realm {
     this.#operationQueue = [];
     for (let operation of operations) {
       if (operation.type === 'write') {
-        let result = await this.#write(operation.path, operation.contents);
+        let result = await this.#write(
+          operation.path,
+          operation.contents,
+          operation.clientRequestId,
+        );
         operation.deferred.fulfill(result);
       } else {
         await this.#delete(operation.path);
@@ -341,19 +348,28 @@ export class Realm {
     operationsDrained!();
   }
 
-  async write(path: LocalPath, contents: string): Promise<WriteResult> {
+  async write(
+    path: LocalPath,
+    contents: string,
+    clientRequestId?: string | null,
+  ): Promise<WriteResult> {
     let deferred = new Deferred<WriteResult>();
     this.#operationQueue.push({
       type: 'write',
       path,
       contents,
+      clientRequestId,
       deferred,
     });
     this.drainOperations();
     return deferred.promise;
   }
 
-  async #write(path: LocalPath, contents: string): Promise<WriteResult> {
+  async #write(
+    path: LocalPath,
+    contents: string,
+    clientRequestId?: string | null,
+  ): Promise<WriteResult> {
     await this.trackOwnWrite(path);
     let results = await this.#adapter.write(path, contents);
     await this.#searchIndex.update(this.paths.fileURL(path), {
@@ -363,6 +379,7 @@ export class Realm {
           data: {
             type: 'incremental',
             invalidations: invalidatedURLs.map((u) => u.href),
+            clientRequestId: clientRequestId ?? null, // use null instead of undefined for valid JSON serialization
           },
         });
       },
@@ -570,14 +587,50 @@ export class Realm {
       // set the static public asset paths in index.html
       indexHTML = indexHTML.replace(/(src|href)="\//g, `$1="/${assetsDir}`);
 
-      // This setting relaxes the document.domain (by eliminating the port) so
-      // that we can do cross origin scripting in order to perform test assertions
+      // this installs an event listener to allow a test driver to introspect
+      // the DOM from a different localhost:4205 origin (the test driver's
+      // origin)
       if (this.#useTestingDomain) {
         indexHTML = `
           ${indexHTML}
           <script>
-            document.domain = 'localhost';
+            window.addEventListener('message', (event) => {
+              console.log('received event in realm index HTML', event);
+              if ([
+                  'http://localhost:4205',
+                  'http://localhost:7357',
+                  'http://127.0.0.1:4205',
+                  'http://127.0.0.1:7357'
+                ].includes(event.origin)) {
+                if (event.data === 'location') {
+                  event.source.postMessage(document.location.href, event.origin);
+                  return;
+                }
+
+                let { data: { querySelector, querySelectorAll, click } } = event;
+                let response;
+                if (querySelector) {
+                  let element = document.querySelector(querySelector);
+                  response = element ? element.outerHTML : null;
+                } else if (querySelectorAll) {
+                  response = [...document.querySelectorAll(querySelectorAll)].map(el => el.outerHTML);
+                } else if (click) {
+                  let el = document.querySelector(click);
+                  if (el) {
+                    el.click();
+                    response = null;
+                  } else {
+                    response = "cannot click on element: could not find '" + click + "'";
+                  }
+                } else {
+                  response = 'Do not know how to handle event data: ' + JSON.stringify(event.data);
+                }
+                console.log('event response:', response);
+                event.source.postMessage(response, event.origin);
+              }
+            });
           </script>
+          </
         `;
       }
     }
@@ -861,6 +914,7 @@ export class Realm {
         null,
         2,
       ),
+      request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.card(new URL(instanceURL), {
@@ -1086,14 +1140,14 @@ export class Realm {
     doc: LooseSingleCardDocument,
     relativeTo: URL,
   ): Promise<LooseSingleCardDocument> {
-    let api = await this.searchIndex.loader.import<typeof CardAPI>(
+    let api = await this.loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api',
     );
     let card = (await api.createFromSerialized(
       doc.data,
       doc,
       relativeTo,
-      this.searchIndex.loader as unknown as LoaderType,
+      this.loader as unknown as LoaderType,
     )) as CardDef;
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
@@ -1166,6 +1220,10 @@ export class Realm {
     return response;
   }
 
+  unsubscribe() {
+    this.#adapter.unsubscribe();
+  }
+
   private async drainUpdates() {
     await this.#flushUpdateEvents;
     let itemsDrained: () => void;
@@ -1205,9 +1263,14 @@ export class Realm {
   }
 
   private async respondWithHTML() {
-    return createResponse(this.url, await this.getIndexHTML(), {
-      headers: { 'content-type': 'text/html' },
-    });
+    return createResponse(
+      this.url,
+      await this.getIndexHTML(),
+      {
+        headers: { 'content-type': 'text/html' },
+      },
+      this.#useTestingDomain,
+    );
   }
 }
 

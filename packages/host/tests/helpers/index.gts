@@ -1,6 +1,5 @@
-import Owner from '@ember/owner';
 import Service from '@ember/service';
-import { type TestContext, visit } from '@ember/test-helpers';
+import { type TestContext, getContext, visit } from '@ember/test-helpers';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
@@ -19,7 +18,6 @@ import {
   executableExtensions,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { type RequestHandler } from '@cardstack/runtime-common/loader';
 
 import { Loader } from '@cardstack/runtime-common/loader';
 import { LocalPath, RealmPaths } from '@cardstack/runtime-common/paths';
@@ -42,7 +40,10 @@ import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 import type MessageService from '@cardstack/host/services/message-service';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import {
+  type CardDef,
+  type FieldDef,
+} from 'https://cardstack.com/base/card-api';
 
 import { renderComponent } from './render-component';
 import { WebMessageStream, messageCloseHandler } from './stream';
@@ -146,67 +147,14 @@ export interface TestContextWithSSE extends TestContext {
   expectEvents: (args: {
     assert: Assert;
     realm: Realm;
-    adapter: TestRealmAdapter;
     expectedEvents?: { type: string; data: Record<string, any> }[];
     expectedNumberOfEvents?: number;
     onEvents?: (events: { type: string; data: Record<string, any> }[]) => void;
     callback: () => Promise<any>;
+    opts?: { timeout?: number };
   }) => Promise<any>;
   subscribers: ((e: { type: string; data: string }) => void)[];
 }
-
-interface Options {
-  realmURL?: string;
-  isAcceptanceTest?: true;
-  onFetch?: (req: Request) => Promise<Request>;
-  overridingHandlers?: RequestHandler[];
-}
-
-// We use a rendered component to facilitate our indexing (this emulates
-// the work that the Fastboot renderer is doing), which means that the
-// `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
-export const TestRealm = {
-  async create(
-    loader: Loader,
-    flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
-    owner: Owner,
-    opts?: Options,
-  ): Promise<Realm> {
-    if (opts?.isAcceptanceTest) {
-      await visit('/');
-    } else {
-      await makeRenderer();
-    }
-    return makeRealm(
-      new TestRealmAdapter(flatFiles),
-      loader,
-      owner,
-      opts?.realmURL,
-      opts?.onFetch,
-    );
-  },
-
-  async createWithAdapter(
-    adapter: RealmAdapter,
-    loader: Loader,
-    owner: Owner,
-    opts?: Options,
-  ): Promise<Realm> {
-    if (opts?.isAcceptanceTest) {
-      await visit('/acceptance-test-setup');
-    } else {
-      await makeRenderer();
-    }
-    return makeRealm(
-      adapter,
-      loader,
-      owner,
-      opts?.realmURL,
-      opts?.onFetch,
-      opts?.overridingHandlers,
-    );
-  },
-};
 
 async function makeRenderer() {
   // This emulates the application.hbs
@@ -324,21 +272,21 @@ export function setupServerSentEvents(hooks: NestedHooks) {
     this.expectEvents = async <T,>({
       assert,
       realm,
-      adapter,
       expectedEvents,
       expectedNumberOfEvents,
       onEvents,
       callback,
+      opts,
     }: {
       assert: Assert;
       realm: Realm;
-      adapter: TestRealmAdapter;
       expectedEvents?: { type: string; data: Record<string, any> }[];
       expectedNumberOfEvents?: number;
       onEvents?: (
         events: { type: string; data: Record<string, any> }[],
       ) => void;
       callback: () => Promise<T>;
+      opts?: { timeout?: number };
     }): Promise<T> => {
       let defer = new Deferred();
       let events: { type: string; data: Record<string, any> }[] = [];
@@ -367,7 +315,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
               `expectEvent timed out, saw events ${JSON.stringify(events)}`,
             ),
           ),
-        3000,
+        opts?.timeout ?? 3000,
       );
       let result = await callback();
       let decoder = new TextDecoder();
@@ -396,13 +344,21 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         }
       }
       if (expectedEvents) {
-        assert.deepEqual(events, expectedEvents, 'sse response is correct');
+        let eventsWithoutClientRequestId = events.map((e) => {
+          delete e.data.clientRequestId;
+          return e;
+        });
+        assert.deepEqual(
+          eventsWithoutClientRequestId,
+          expectedEvents,
+          'sse response is correct',
+        );
       }
       if (onEvents) {
         onEvents(events);
       }
       clearTimeout(timeout);
-      adapter.unsubscribe();
+      realm.unsubscribe();
       return result;
     };
   });
@@ -421,14 +377,114 @@ function getEventData(message: string) {
 }
 
 let runnerOptsMgr = new RunnerOptionsManager();
-function makeRealm(
-  adapter: RealmAdapter,
-  loader: Loader,
-  owner: Owner,
-  realmURL = testRealmURL,
-  onFetch?: (req: Request) => Promise<Request>,
-  overridingHandlers?: RequestHandler[],
-) {
+
+interface RealmContents {
+  [key: string]:
+    | CardDef
+    | FieldDef
+    | LooseSingleCardDocument
+    | RealmInfo
+    | Record<string, unknown>
+    | string;
+}
+export async function setupAcceptanceTestRealm({
+  loader,
+  contents,
+  realmURL,
+  onFetch,
+}: {
+  loader: Loader;
+  contents: RealmContents;
+  realmURL?: string;
+  onFetch?: (req: Request) => Promise<Request>;
+}) {
+  return await setupTestRealm({
+    loader,
+    contents,
+    realmURL,
+    onFetch,
+    isAcceptanceTest: true,
+  });
+}
+
+export async function setupIntegrationTestRealm({
+  loader,
+  contents,
+  realmURL,
+  onFetch,
+}: {
+  loader: Loader;
+  contents: RealmContents;
+  realmURL?: string;
+  onFetch?: (req: Request) => Promise<Request>;
+}) {
+  return await setupTestRealm({
+    loader,
+    contents,
+    realmURL,
+    onFetch,
+    isAcceptanceTest: false,
+  });
+}
+
+async function setupTestRealm({
+  loader,
+  contents,
+  realmURL,
+  onFetch,
+  isAcceptanceTest,
+}: {
+  loader: Loader;
+  contents: RealmContents;
+  realmURL?: string;
+  onFetch?: (req: Request) => Promise<Request>;
+  isAcceptanceTest?: boolean;
+}) {
+  realmURL = realmURL ?? testRealmURL;
+  for (const [path, mod] of Object.entries(contents)) {
+    if (path.endsWith('.gts') && typeof mod !== 'string') {
+      await shimModule(
+        `${realmURL}${path.replace(/\.gts$/, '')}`,
+        mod as object,
+        loader,
+      );
+    }
+  }
+  let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
+  for (const [path, value] of Object.entries(contents)) {
+    if (path.endsWith('.json') && api.isCard(value)) {
+      value.id = `${realmURL}${path.replace(/\.json$/, '')}`;
+      api.setCardAsSavedForTest(value);
+    }
+  }
+  for (const [path, value] of Object.entries(contents)) {
+    if (path.endsWith('.json') && api.isCard(value)) {
+      let doc = api.serializeCard(value);
+      contents[path] = doc;
+    }
+  }
+
+  let flatFiles: Record<string, string> = {};
+  for (const [path, value] of Object.entries(contents)) {
+    if (path.endsWith('.gts') && typeof value !== 'string') {
+      flatFiles[path] = '// this file is shimmed';
+    } else if (typeof value === 'string') {
+      flatFiles[path] = value;
+    } else {
+      flatFiles[path] = JSON.stringify(value);
+    }
+  }
+  let adapter = new TestRealmAdapter(flatFiles, new URL(realmURL));
+  let owner = (getContext() as TestContext).owner;
+  if (isAcceptanceTest) {
+    await visit('/acceptance-test-setup');
+  } else {
+    // We use a rendered component to facilitate our indexing (this emulates
+    // the work that the Fastboot renderer is doing), which means that the
+    // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
+    await makeRenderer();
+  }
+
   let localIndexer = owner.lookup(
     'service:local-indexer',
   ) as unknown as MockLocalIndexer;
@@ -446,9 +502,7 @@ function makeRealm(
       return realm.maybeHandle(req);
     });
   }
-  if (overridingHandlers && overridingHandlers.length > 0) {
-    loader.prependURLHandlers(overridingHandlers);
-  }
+
   realm = new Realm(
     realmURL,
     adapter,
@@ -461,7 +515,13 @@ function makeRealm(
     async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
   );
-  return realm;
+  loader.prependURLHandlers([
+    (req) => sourceFetchRedirectHandle(req, adapter, realmURL!),
+    (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
+  ]);
+
+  await realm.ready;
+  return { realm, adapter };
 }
 
 export async function saveCard(instance: CardDef, id: string, loader: Loader) {
@@ -497,6 +557,10 @@ export function setupCardLogs(
     await api.flushLogs();
   });
 }
+type FilesForTestAdapter = Record<
+  string,
+  string | LooseSingleCardDocument | CardDocFiles | RealmInfo
+>;
 
 export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
@@ -505,10 +569,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #subscriber: ((message: UpdateEventData) => void) | undefined;
 
   constructor(
-    flatFiles: Record<
-      string,
-      string | LooseSingleCardDocument | CardDocFiles | RealmInfo
-    >,
+    flatFiles: FilesForTestAdapter,
     realmURL = new URL(testRealmURL),
   ) {
     this.#paths = new RealmPaths(realmURL);

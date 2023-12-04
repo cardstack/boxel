@@ -4,6 +4,8 @@ import { task } from 'ember-concurrency';
 
 import { stringify } from 'qs';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import {
   SupportedMimeType,
   type LooseCardResource,
@@ -29,7 +31,6 @@ import type {
   Field,
   SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
-
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { trackCard } from '../resources/card-resource';
@@ -43,7 +44,11 @@ const { ownRealmURL, otherRealmURLs } = ENV;
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare messageService: MessageService;
+
   private subscriber: CardSaveSubscriber | undefined;
+  // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
+  // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and SSE event.
+  clientRequestIds = new Set<string>();
 
   private getAPI = task(async (loader?: Loader) => {
     loader = loader ?? this.loaderService.loader;
@@ -72,9 +77,15 @@ export default class CardService extends Service {
     args?: RequestInit,
     loader?: Loader,
   ): Promise<CardDocument | undefined> {
+    let clientRequestId = uuidv4();
+    this.clientRequestIds.add(clientRequestId);
+
     loader = loader ?? this.loaderService.loader;
     let response = await loader.fetch(url, {
-      headers: { Accept: SupportedMimeType.CardJson },
+      headers: {
+        Accept: SupportedMimeType.CardJson,
+        'X-Boxel-Client-Request-Id': clientRequestId,
+      },
       ...args,
     });
     if (!response.ok) {
@@ -94,7 +105,7 @@ export default class CardService extends Service {
   async createFromSerialized(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
-    relativeTo: URL | undefined,
+    relativeTo?: URL | undefined,
     loader?: Loader,
   ): Promise<CardDef> {
     loader = loader ?? this.loaderService.loader;

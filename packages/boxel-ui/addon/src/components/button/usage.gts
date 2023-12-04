@@ -8,7 +8,10 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import cn from '../../helpers/cn.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
-import BoxelButton from './index.gts';
+import BoxelButton, {
+  type BoxelButtonKind,
+  type BoxelButtonSize,
+} from './index.gts';
 
 export default class ButtonUsage extends Component {
   sizeVariants = ['extra-small', 'small', 'base', 'tall', 'touch'];
@@ -19,6 +22,7 @@ export default class ButtonUsage extends Component {
       'secondary-light',
       'secondary-dark',
       'danger',
+      'text-only',
     ],
     light: ['primary', 'secondary-light'],
     dark: ['primary', 'secondary-dark'],
@@ -26,8 +30,8 @@ export default class ButtonUsage extends Component {
 
   // base button arguments
   @tracked as = 'button';
-  @tracked size = 'tall';
-  @tracked kind = 'primary';
+  @tracked size: BoxelButtonSize = 'tall';
+  @tracked kind: BoxelButtonKind = 'primary';
   @tracked disabled = false;
   @tracked loading = false;
 

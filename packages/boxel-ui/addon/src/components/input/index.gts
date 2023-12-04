@@ -60,6 +60,7 @@ export interface Signature {
     errorMessage?: string;
     helperText?: string;
     id?: string;
+    max?: string | number;
     onBlur?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
@@ -95,6 +96,8 @@ export default class BoxelInput extends Component<Signature> {
 
     if (type === InputTypes.Textarea) {
       return undefined;
+    } else if (type === InputTypes.Search) {
+      return 'text';
     }
 
     return type;
@@ -153,6 +156,7 @@ export default class BoxelInput extends Component<Signature> {
           type={{this.type}}
           value={{@value}}
           placeholder={{@placeholder}}
+          max={{@max}}
           required={{@required}}
           disabled={{@disabled}}
           aria-describedby={{if

@@ -1,25 +1,20 @@
 import { click, waitFor } from '@ember/test-helpers';
+
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 import percySnapshot from '@percy/ember';
-import {
-  baseRealm,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { type Loader } from '@cardstack/runtime-common/loader';
+
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import {
-  saveCard,
   setupCardLogs,
   setupLocalIndexing,
-  shimModule,
-  TestRealm,
   testRealmURL,
-  type CardDocFiles,
+  setupIntegrationTestRealm,
 } from '../../helpers';
 import { renderComponent, renderCard } from '../../helpers/render-component';
 
@@ -28,10 +23,6 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   let cardApi: typeof import('https://cardstack.com/base/card-api');
   let string: typeof import('https://cardstack.com/base/string');
   let number: typeof import('https://cardstack.com/base/number');
-
-  let createTestRealm: (
-    files: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
-  ) => Promise<void>;
 
   let setCardInOperatorModeState: (
     card: string,
@@ -54,15 +45,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   hooks.beforeEach(async function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     number = await loader.import(`${baseRealm.url}number`);
-
-    createTestRealm = async (files) => {
-      let realm = await TestRealm.create(loader, files, this.owner);
-      await realm.ready;
-    };
 
     setCardInOperatorModeState = async (cardURL, format = 'isolated') => {
       let operatorModeStateService = this.owner.lookup(
@@ -456,16 +441,15 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       }),
     });
 
-    await shimModule(`${testRealmURL}currency`, { CurrencyCard }, loader);
-    await shimModule(`${testRealmURL}tx`, { TxCard }, loader);
-
-    let usdCardDoc = await saveCard(usdCard, `${testRealmURL}usd`, loader);
-    let txCardDoc = await saveCard(txCard, `${testRealmURL}Tx/1`, loader);
-
-    await createTestRealm({
-      '.realm.json': `{ "name": "Local Workspace" }`,
-      'usd.json': usdCardDoc,
-      'Tx/1.json': txCardDoc,
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'currency.gts': { CurrencyCard },
+        'tx.gts': { TxCard },
+        '.realm.json': `{ "name": "Local Workspace" }`,
+        'usd.json': usdCard,
+        'Tx/1.json': txCard,
+      },
     });
 
     await renderComponent(OperatorModeComponent);
@@ -548,27 +532,21 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       @field trips = contains(Trips);
     }
 
-    await shimModule(`${testRealmURL}country`, { Country }, loader);
-    await shimModule(`${testRealmURL}person`, { Person }, loader);
-
     let usa = new Country({ name: 'United States' });
     let japan = new Country({ name: 'Japan' });
     let fadhlan = new Person({
       firstName: 'Fadhlan',
     });
 
-    let usaCardDoc = await saveCard(usa, `${testRealmURL}usa`, loader);
-    let japanCardDoc = await saveCard(japan, `${testRealmURL}japan`, loader);
-    let personCardDoc = await saveCard(
-      fadhlan,
-      `${testRealmURL}Person/fadhlan`,
+    await setupIntegrationTestRealm({
       loader,
-    );
-
-    await createTestRealm({
-      'usa.json': usaCardDoc,
-      'japan.json': japanCardDoc,
-      'Person/fadhlan.json': personCardDoc,
+      contents: {
+        'country.gts': { Country },
+        'person.gts': { Person },
+        'usa.json': usa,
+        'japan.json': japan,
+        'Person/fadhlan.json': fadhlan,
+      },
     });
 
     await renderComponent(OperatorModeComponent);

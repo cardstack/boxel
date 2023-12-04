@@ -10,7 +10,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import Preview from '@cardstack/host/components/preview';
 
-import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { testRealmURL, shimModule } from '../../helpers';
@@ -30,7 +29,6 @@ module('Integration | preview', function (hooks) {
   hooks.beforeEach(async function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-indexer', MockLocalIndexer);

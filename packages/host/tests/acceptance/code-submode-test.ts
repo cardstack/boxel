@@ -17,7 +17,10 @@ import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -25,14 +28,11 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
-  TestRealm,
-  TestRealmAdapter,
   getMonacoContent,
+  setupAcceptanceTestRealm,
   setMonacoContent,
   setupLocalIndexing,
   testRealmURL,
-  sourceFetchRedirectHandle,
-  sourceFetchReturnUrlHandle,
   setupServerSentEvents,
   waitForCodeEditor,
   type TestContextWithSSE,
@@ -52,11 +52,121 @@ const indexCardSource = `
   }
 `;
 
+const postalCodeFieldSource = `
+  import {
+    contains,
+    field,
+    Component,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  export class PostalCode extends FieldDef {
+    static displayName = 'Postal Code';
+    @field fiveDigitPostalCode = contains(StringCard); // required
+    @field fourDigitOptional = contains(StringCard);
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <div><@fields.fiveDigitPostalCode /> - <@fields.fourDigitOptional /></div>
+        </address>
+      </template>
+    };
+  }
+`;
+
+const addressFieldSource = `
+  import {
+    contains,
+    field,
+    Component,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+  import { PostalCode } from './postal-code';
+
+  export class Address extends FieldDef {
+    static displayName = 'Address';
+    @field streetAddress = contains(StringCard); // required
+    @field city = contains(StringCard); // required
+    @field region = contains(StringCard);
+    @field postalCode = contains(PostalCode);
+    @field poBoxNumber = contains(StringCard);
+    @field country = contains(StringCard); // required // dropdown
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <div><@fields.streetAddress /></div>
+          <@fields.city />
+          <@fields.region />
+          <@fields.postalCode /><@fields.poBoxNumber />
+          <@fields.country />
+        </address>
+      </template>
+    };
+  }
+`;
+
+const countryCardSource = `
+  import {
+    contains,
+    field,
+    Component,
+    CardDef,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class Country extends CardDef {
+    static displayName = 'Country';
+    @field name = contains(StringField);
+    @field title = contains(StringField, {
+      computeVia(this: Country) {
+        return this.name;
+      },
+    });
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <@fields.name />
+        </address>
+      </template>
+    };
+  }
+`;
+
+const tripsFieldSource = `
+  import {
+    linksToMany,
+    field,
+    Component,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import { Country } from './country';
+
+  export class Trips extends FieldDef {
+    static displayName = 'Trips';
+    @field countriesVisited = linksToMany(Country);
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <address>
+          <@fields.countriesVisited />
+        </address>
+      </template>
+    };
+  }
+`;
+
 const personCardSource = `
   import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
   import { Friend } from './friend';
   import { Pet } from "./pet";
+  import { Address } from './address';
+  import { Trips } from './trips';
 
   export class Person extends CardDef {
     static displayName = 'Person';
@@ -70,6 +180,8 @@ const personCardSource = `
     @field pet = linksTo(Pet);
     @field friends = linksToMany(Friend);
     @field address = containsMany(StringCard);
+    @field addressDetail = contains(Address);
+    @field trips = contains(Trips);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <div data-test-person>
@@ -246,9 +358,12 @@ const friendCardSource = `
   }
 `;
 
+const txtSource = `
+  Hello, world!
+`;
+
 module('Acceptance | code submode tests', function (hooks) {
   let realm: Realm;
-  let adapter: TestRealmAdapter;
   let monacoService: MonacoService;
 
   setupApplicationTest(hooks);
@@ -266,151 +381,162 @@ module('Acceptance | code submode tests', function (hooks) {
       'service:monaco-service',
     ) as MonacoService;
 
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
-    adapter = new TestRealmAdapter({
-      'index.gts': indexCardSource,
-      'pet-person.gts': personCardSource,
-      'person.gts': personCardSource,
-      'pet.gts': petCardSource,
-      'friend.gts': friendCardSource,
-      'employee.gts': employeeCardSource,
-      'in-this-file.gts': inThisFileSource,
-      'person-entry.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Person',
-            description: 'Catalog entry',
-            ref: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'index.json': {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './index',
-              name: 'Index',
-            },
-          },
-        },
-      },
-      'not-json.json': 'I am not JSON.',
-      'Person/fadhlan.json': {
-        data: {
-          attributes: {
-            firstName: 'Fadhlan',
-            address: [
-              {
-                city: 'Bandung',
-                country: 'Indonesia',
-                shippingInfo: {
-                  preferredCarrier: 'DHL',
-                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-                },
-              },
-            ],
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: `${testRealmURL}Pet/mango`,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'Person/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'Pet/mango.json': {
-        data: {
-          attributes: {
-            name: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'z00.json': '{}',
-      'z01.json': '{}',
-      'z02.json': '{}',
-      'z03.json': '{}',
-      'z04.json': '{}',
-      'z05.json': '{}',
-      'z06.json': '{}',
-      'z07.json': '{}',
-      'z08.json': '{}',
-      'z09.json': '{}',
-      'z10.json': '{}',
-      'z11.json': '{}',
-      'z12.json': '{}',
-      'z13.json': '{}',
-      'z14.json': '{}',
-      'z15.json': '{}',
-      'z16.json': '{}',
-      'z17.json': '{}',
-      'z18.json': '{}',
-      'z19.json': '{}',
-      'zzz/zzz/file.json': '{}',
-      '.realm.json': {
-        name: 'Test Workspace B',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
-      'noop.gts': `export function noop() {};\nclass NoopClass {}`,
-    });
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      isAcceptanceTest: true,
-      overridingHandlers: [
-        async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+    // this seeds the loader used during index which obtains url mappings
+    // from the global loader
+    ({ realm } = await setupAcceptanceTestRealm({
+      loader,
+      contents: {
+        'index.gts': indexCardSource,
+        'pet-person.gts': personCardSource,
+        'person.gts': personCardSource,
+        'pet.gts': petCardSource,
+        'friend.gts': friendCardSource,
+        'employee.gts': employeeCardSource,
+        'in-this-file.gts': inThisFileSource,
+        'postal-code.gts': postalCodeFieldSource,
+        'address.gts': addressFieldSource,
+        'country.gts': countryCardSource,
+        'trips.gts': tripsFieldSource,
+        'person-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Person',
+              description: 'Catalog entry',
+              ref: {
+                module: `./person`,
+                name: 'Person',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}catalog-entry`,
+                name: 'CatalogEntry',
+              },
+            },
+          },
         },
-        async (req: Request) => {
-          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './index',
+                name: 'Index',
+              },
+            },
+          },
         },
-      ],
-    });
-    await realm.ready;
+        'not-json.json': 'I am not JSON.',
+        'Person/fadhlan.json': {
+          data: {
+            attributes: {
+              firstName: 'Fadhlan',
+              address: [
+                {
+                  city: 'Bandung',
+                  country: 'Indonesia',
+                  shippingInfo: {
+                    preferredCarrier: 'DHL',
+                    remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                  },
+                },
+              ],
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Hassan',
+              lastName: 'Abdel-Rahman',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Pet/mango.json': {
+          data: {
+            attributes: {
+              name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Country/united-states.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'United States',
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../country',
+                name: 'Country',
+              },
+            },
+          },
+        },
+        'hello.txt': txtSource,
+        'z00.json': '{}',
+        'z01.json': '{}',
+        'z02.json': '{}',
+        'z03.json': '{}',
+        'z04.json': '{}',
+        'z05.json': '{}',
+        'z06.json': '{}',
+        'z07.json': '{}',
+        'z08.json': '{}',
+        'z09.json': '{}',
+        'z10.json': '{}',
+        'z11.json': '{}',
+        'z12.json': '{}',
+        'z13.json': '{}',
+        'z14.json': '{}',
+        'z15.json': '{}',
+        'z16.json': '{}',
+        'z17.json': '{}',
+        'z18.json': '{}',
+        'z19.json': '{}',
+        'zzz/zzz/file.json': '{}',
+        '.realm.json': {
+          name: 'Test Workspace B',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        },
+        'noop.gts': `export function noop() {};\nclass NoopClass {}`,
+      },
+    }));
   });
 
   test('defaults to inheritance view and can toggle to file view', async function (assert) {
@@ -796,6 +922,30 @@ module('Acceptance | code submode tests', function (hooks) {
     assert.dom('[data-test-file-incompatibility-message]').exists();
   });
 
+  test('displays clear message on schema-editor when file is completely unsupported', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-incompatibility-message]');
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.',
+      );
+
+    await waitFor('[data-test-definition-file-extension]');
+    assert.dom('[data-test-definition-file-extension]').hasText('.txt');
+  });
+
   test('Clicking card in search panel opens card JSON in editor', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
@@ -987,7 +1137,6 @@ module('Acceptance | code submode tests', function (hooks) {
       await this.expectEvents({
         assert,
         realm,
-        adapter,
         expectedEvents,
         callback: async () => {
           setMonacoContent(`// This is a change \n${inThisFileSource}`);
@@ -1107,5 +1256,138 @@ module('Acceptance | code submode tests', function (hooks) {
       100,
       'the scroll position is correct',
     );
+  });
+
+  test<TestContextWithSSE>('updates values in preview panel must be represented in editor panel', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/fadhlan`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/fadhlan.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-test-code-mode-card-preview-body]');
+
+    await click('[data-test-preview-card-footer-button-edit]');
+
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => {
+        // primitive field
+        await fillIn('[data-test-field="lastName"] input', 'Ridhwanallah');
+
+        // compound field with 1 level
+        await fillIn(
+          '[data-test-field="streetAddress"] input',
+          'Unknown Address',
+        );
+        await fillIn('[data-test-field="city"] input', 'Bandung');
+
+        // compound field with 2 level
+        await fillIn('[data-test-field="fiveDigitPostalCode"] input', '12345');
+        await fillIn('[data-test-field="fourDigitOptional"] input', '1234');
+
+        // compound field with linksToMany field
+        await click(
+          '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
+        );
+        await waitFor(
+          `[data-test-select="${testRealmURL}Country/united-states"]`,
+        );
+        await click(
+          `[data-test-select="${testRealmURL}Country/united-states"]`,
+        );
+        await click(`[data-test-card-catalog-go-button]`);
+      },
+      opts: { timeout: 4500 },
+    });
+    await waitFor('[data-test-saved]');
+    await waitFor('[data-test-save-idle]');
+
+    let content = getMonacoContent();
+    assert.ok(content.includes('Ridhwanallah'));
+    assert.ok(content.includes('Unknown Address'));
+    assert.ok(content.includes('Bandung'));
+    assert.ok(content.includes('12345'));
+    assert.ok(content.includes('1234'));
+    assert.ok(content.includes(`${testRealmURL}Country/united-states`));
+  });
+
+  test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/fadhlan`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/fadhlan.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-card-resource-loaded]');
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => {
+        await realm.write(
+          'Person/fadhlan.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'FadhlanXXX',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
+    });
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-code-mode-card-preview-body]')
+          ?.textContent?.includes('FadhlanXXX'),
+    );
+    assert
+      .dom('[data-test-code-mode-card-preview-body]')
+      .includesText('FadhlanXXX');
   });
 });

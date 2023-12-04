@@ -101,6 +101,7 @@ export function getBoxComponent(
             ...attributes
           >
             <f.Implementation
+              @cardOrField={{card}}
               @model={{model.value}}
               @fields={{f.fields}}
               @set={{model.set}}
@@ -116,6 +117,7 @@ export function getBoxComponent(
             ...attributes
           >
             <f.Implementation
+              @cardOrField={{card}}
               @model={{model.value}}
               @fields={{f.fields}}
               @set={{model.set}}
@@ -125,6 +127,7 @@ export function getBoxComponent(
           </div>
         {{else}}
           <f.Implementation
+            @cardOrField={{card}}
             @model={{model.value}}
             @fields={{f.fields}}
             @set={{model.set}}
@@ -194,6 +197,10 @@ function fieldsComponentsFor<T extends BaseDef>(
   defaultFormat: Format,
   context?: CardContext,
 ): FieldsTypeFor<T> {
+  // This is a cache of the fields we've already created components for
+  // so that they do not get recreated
+  let stableComponents = new Map<string, BoxComponent>();
+
   return new Proxy(target, {
     get(target, property, received) {
       if (
@@ -204,6 +211,12 @@ function fieldsComponentsFor<T extends BaseDef>(
         // don't handle symbols or nulls
         return Reflect.get(target, property, received);
       }
+
+      let stable = stableComponents.get(property);
+      if (stable) {
+        return stable;
+      }
+
       let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above
       let maybeField: Field<BaseDefConstructor> | undefined = getField(
         modelValue.constructor,
@@ -215,11 +228,13 @@ function fieldsComponentsFor<T extends BaseDef>(
       }
       let field = maybeField;
 
-      return field.component(
+      let result = field.component(
         model as unknown as Box<BaseDef>,
         defaultFormat,
         context,
       );
+      stableComponents.set(property, result);
+      return result;
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
@@ -272,9 +287,10 @@ export function getPluralViewComponent(
   ) => typeof BaseDef,
   context?: CardContext,
 ): BoxComponent {
-  let components = model.children.map((child) =>
-    getBoxComponent(cardTypeFor(field, child), format, child, field, context),
-  );
+  let getComponents = () =>
+    model.children.map((child) =>
+      getBoxComponent(cardTypeFor(field, child), format, child, field, context),
+    ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
   let pluralViewComponent: TemplateOnlyComponent<BoxComponentSignature> =
     <template>
       {{#let (if @format @format format) as |format|}}
@@ -286,7 +302,7 @@ export function getPluralViewComponent(
           data-test-plural-view={{field.fieldType}}
           data-test-plural-view-format={{format}}
         >
-          {{#each components as |Item i|}}
+          {{#each (getComponents) as |Item i|}}
             <div data-test-plural-view-item={{i}}>
               <Item @format={{format}} />
             </div>
@@ -306,7 +322,8 @@ export function getPluralViewComponent(
         }
         .containsMany-field.atom-format {
           padding: var(--boxel-sp-sm);
-          border: var(--boxel-border);
+          background-color: var(--boxel-100);
+          border: none !important;
           border-radius: var(--boxel-border-radius);
         }
       </style>
@@ -315,6 +332,8 @@ export function getPluralViewComponent(
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
+      let components = getComponents();
+
       if (property === Symbol.iterator) {
         return components[Symbol.iterator];
       }
