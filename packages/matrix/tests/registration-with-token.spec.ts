@@ -15,6 +15,7 @@ import {
   test,
   mailHost,
   setupMatrixOverride,
+  openChat,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -88,7 +89,8 @@ test.describe('User Registration w/ Token', () => {
     await page.locator('[data-test-token-field]').fill('abc123');
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
-
+    
+    await openChat(page);
     await assertLoggedIn(page, { email: 'user1@example.com' });
 
     // assert that the registration mode state is cleared properly
@@ -150,7 +152,8 @@ test.describe('User Registration w/ Token', () => {
 
     await page.locator('[data-test-token-field]').fill('abc123');
     await page.locator('[data-test-next-btn]').click();
-
+    
+    await openChat(page);
     await assertLoggedIn(page, {
       userId: '@user2:localhost',
       displayName: 'user2',
@@ -216,7 +219,8 @@ test.describe('User Registration w/ Token', () => {
       'no error message is displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-next-btn]').click();
-
+    
+    await openChat(page);
     await assertLoggedIn(page);
   });
 
@@ -343,6 +347,8 @@ test.describe('User Registration w/ Token', () => {
         ).toContainText(`To:user1@example.com`);
       },
     });
+    
+    await openChat(page);
     await assertLoggedIn(page, { email: 'user1@example.com' });
   });
 

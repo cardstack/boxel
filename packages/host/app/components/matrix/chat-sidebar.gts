@@ -1,23 +1,20 @@
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
-import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
 import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import Login from './login';
-import RegisterUser from './register-user';
+import { IconX } from '@cardstack/boxel-ui/icons';
+
+import Auth from './auth';
 import RoomsManager from './rooms-manager';
 
 import UserProfile from './user-profile';
 
 import type MatrixService from '../../services/matrix-service';
-import { IconX } from '@cardstack/boxel-ui/icons';
 
 interface Args {
   Args: {
@@ -50,16 +47,7 @@ export default class ChatSidebar extends Component<Args> {
             <UserProfile />
             <RoomsManager />
           {{else}}
-            {{#if this.isRegistrationMode}}
-              <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
-            {{else}}
-              <Login />
-              <button
-                class='link registration-link'
-                data-test-register-user
-                {{on 'click' this.toggleRegistrationMode}}
-              >Register new user</button>
-            {{/if}}
+            <Auth />
           {{/if}}
         {{/if}}
       </div>
@@ -102,7 +90,6 @@ export default class ChatSidebar extends Component<Args> {
   </template>
 
   @service declare matrixService: MatrixService;
-  @tracked isRegistrationMode = false;
 
   constructor(owner: Owner, args: Args['Args']) {
     super(owner, args);
@@ -110,15 +97,13 @@ export default class ChatSidebar extends Component<Args> {
   }
 
   get showLoggedInMode() {
-    return this.matrixService.isLoggedIn && !this.isRegistrationMode;
-  }
-
-  @action
-  toggleRegistrationMode() {
-    this.isRegistrationMode = !this.isRegistrationMode;
+    return this.matrixService.isLoggedIn;
   }
 
   private loadMatrix = task(async () => {
+    if (this.matrixService.isLoggedIn) {
+      return;
+    }
     await this.matrixService.ready;
     await this.matrixService.start();
   });

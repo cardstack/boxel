@@ -16,7 +16,7 @@ import { and, not } from '@cardstack/boxel-ui/helpers';
 import { type Loader } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
-import Login from '@cardstack/host/components/matrix/login';
+import Auth from '@cardstack/host/components/matrix/auth';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import config from '@cardstack/host/config/environment';
@@ -157,12 +157,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.matrixService.isLoggedIn || this.isSignInSkipped;
   }
 
-  //TODO: Remove after registration page is implemented.
-  @action
-  skipSignIn() {
-    this.isSignInSkipped = true;
-  }
-
   <template>
     <Modal
       class='operator-mode'
@@ -187,7 +181,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         {{else if (and this.showLoggedInMode (not this.isCodeMode))}}
           <InteractSubmode @write={{perform this.write}} />
         {{else}}
-          <Login @skipSignIn={{this.skipSignIn}} />
+          <Auth />
         {{/if}}
       {{/if}}
     </Modal>

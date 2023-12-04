@@ -22,7 +22,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface Signature {
   Args: {
-    skipSignIn?: () => void; //TODO: Remove after registration page is implemented.
+    onRegistration: () => void;
   };
 }
 
@@ -31,77 +31,62 @@ export default class Login extends Component<Signature> {
     {{#if this.doLogin.isRunning}}
       <LoadingIndicator />
     {{else}}
-      <div class='container'>
-        <div class='login-form'>
-          <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
-            <:icon>
-              <BoxelIcon />
-            </:icon>
-          </BoxelHeader>
-          <div class='content'>
-            <span class='title'>Sign in to your Boxel Account</span>
-            <FieldContainer
-              @label='Email Address or Username'
-              @tag='label'
-              @vertical={{true}}
-              class='field'
-            >
-              <BoxelInput
-                data-test-username-field
-                type='text'
-                @value={{this.username}}
-                @onInput={{this.setUsername}}
-              />
-            </FieldContainer>
-            <FieldContainer
-              @label='Password'
-              @tag='label'
-              @vertical={{true}}
-              class='field'
-            >
-              <BoxelInput
-                data-test-password-field
-                type='password'
-                @value={{this.password}}
-                @onInput={{this.setPassword}}
-              />
-            </FieldContainer>
-            <Button @kind='text-only' class='forgot-password'>Forgot password?</Button>
-            <Button
-              class='button'
-              data-test-login-btn
-              @kind='primary'
-              @disabled={{this.isLoginButtonDisabled}}
-              {{on 'click' this.login}}
-            >Sign in</Button>
-            {{#if this.error}}
-              <div class='error' data-test-login-error>{{this.error}}</div>
-            {{/if}}
-            <span class='or'>or</span>
-            <Button
-              class='button'
-              data-test-signup-btn
-              {{on 'click' this.login}}
-            >Create a new Boxel account</Button>
-            {{! TODO: Remove after registration page is implemented. }}
-            {{#if @skipSignIn}}<Button
-                @kind='text-only'
-                class='skip-signin'
-                {{on 'click' @skipSignIn}}
-                data-test-skip-signin
-              >Skip sign-in?</Button>{{/if}}
-          </div>
+      <div class='login-form'>
+        <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
+          <:icon>
+            <BoxelIcon />
+          </:icon>
+        </BoxelHeader>
+        <div class='content'>
+          <span class='title'>Sign in to your Boxel Account</span>
+          <FieldContainer
+            @label='Email Address or Username'
+            @tag='label'
+            @vertical={{true}}
+            class='field'
+          >
+            <BoxelInput
+              data-test-username-field
+              type='text'
+              @value={{this.username}}
+              @onInput={{this.setUsername}}
+            />
+          </FieldContainer>
+          <FieldContainer
+            @label='Password'
+            @tag='label'
+            @vertical={{true}}
+            class='field'
+          >
+            <BoxelInput
+              data-test-password-field
+              type='password'
+              @value={{this.password}}
+              @onInput={{this.setPassword}}
+            />
+          </FieldContainer>
+          <Button @kind='text-only' class='forgot-password'>Forgot password?</Button>
+          <Button
+            class='button'
+            data-test-login-btn
+            @kind='primary'
+            @disabled={{this.isLoginButtonDisabled}}
+            {{on 'click' this.login}}
+          >Sign in</Button>
+          {{#if this.error}}
+            <div class='error' data-test-login-error>{{this.error}}</div>
+          {{/if}}
+          <span class='or'>or</span>
+          <Button
+            class='button'
+            data-test-register-user
+            {{on 'click' @onRegistration}}
+          >Create a new Boxel account</Button>
         </div>
       </div>
     {{/if}}
 
     <style>
-      .container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-      }
       .login-form {
         background-color: var(--boxel-light);
         border: 1px solid var(--boxel-form-control-border-color);
@@ -159,17 +144,6 @@ export default class Login extends Component<Signature> {
         padding: 0;
         font: 500 var(--boxel-font-xs);
         margin-top: var(--boxel-sp-xxs);
-      }
-      .skip-signin {
-        position: absolute;
-        right: 0;
-        bottom: 0;
-        padding: 0;
-        color: var(--boxel-black);
-        font: 500 var(--boxel-font-xs);
-      }
-      .skip-signin:hover {
-        color: var(--boxel-highlight);
       }
     </style>
   </template>
