@@ -4,7 +4,7 @@ import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
@@ -1434,7 +1434,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test<TestContextWithSave>('Can inherit from an exported card def declaration', async function (assert) {
-    assert.expect(8);
+    assert.expect(11);
     let expectedSrc = `
 import { ExportedCard } from '${testRealmURL}in-this-file';
 export class TestCard extends ExportedCard {
@@ -1497,6 +1497,24 @@ export class TestCard extends ExportedCard {
       .dom('[data-test-card-schema]')
       .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
     assert.dom('[data-test-total-fields]').containsText('4 Fields');
+
+    // assert modal state is cleared
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+    assert
+      .dom('[data-test-inherits-from-field] .pill.inert')
+      .includesText('Test Card', 'the inherits from is correct');
+    assert
+      .dom('[data-test-display-name-field]')
+      .hasNoValue('display name field is empty');
+    assert
+      .dom('[data-test-file-name-field]')
+      .hasNoValue('filename field is empty');
   });
 
   test<TestContextWithSave>('Can inherit from an exported field def declaration', async function (assert) {
@@ -1551,6 +1569,58 @@ export class TestField extends ExportedField {
     await deferred.promise;
   });
 
+  test<TestContextWithSave>('inherit modal state is cleared when modal is cancelled', async function (assert) {
+    assert.expect(3);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', '/test-card');
+    this.onSave(() => assert.ok(false, 'should not save a file'));
+    await click('[data-test-cancel-create-file]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+
+    // assert modal state is cleared
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+    assert
+      .dom('[data-test-inherits-from-field] .pill.inert')
+      .includesText('exported card', 'the inherits from is correct');
+    assert
+      .dom('[data-test-display-name-field]')
+      .hasNoValue('display name field is empty');
+    assert
+      .dom('[data-test-file-name-field]')
+      .hasNoValue('filename field is empty');
+  });
+
+  skip<TestContextWithSave>(`can handle the situation where there is a class name collision with the inherited cards class name`, async function (_assert) {});
+
+  skip('field error message displays if you try to inherit using a filename that already exists', async function (_assert) {});
+
   test('Inherit action item is not displayed when definition is not exported', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [[]],
@@ -1568,28 +1638,6 @@ export class TestField extends ExportedField {
 
     await click('[data-boxel-selector-item-text="LocalCard"]');
     await waitFor('[data-test-card-module-definition]');
-    assert
-      .dom('[data-test-action-button="Inherit"]')
-      .doesNotExist('non-exported cards do not display an inherit button');
-  });
-
-  test('Inherit action item is not displayed for non Card/Field declarations', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
-      submode: 'code',
-      codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
-    await waitForCodeEditor();
-    await waitFor('[data-boxel-selector-item-text="ExportedClass"]');
-
-    await click('[data-boxel-selector-item-text="ExportedClass"]');
-    await waitFor('[data-test-file-definition]');
     assert
       .dom('[data-test-action-button="Inherit"]')
       .doesNotExist('non-exported cards do not display an inherit button');

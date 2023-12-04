@@ -310,13 +310,21 @@ export default class CreateFileModal extends Component<Signature> {
       };
       await this.onSetup.perform();
       let url = await this.currentRequest.newFileDeferred.promise;
-      this.currentRequest = undefined;
+      this.clearState();
       return url;
     },
   );
 
+  private clearState() {
+    this.selectedCatalogEntry = undefined;
+    this.currentRequest = undefined;
+    this.displayName = '';
+    this.fileName = '';
+  }
+
   @action private onCancel() {
     this.currentRequest?.newFileDeferred.fulfill(undefined);
+    this.clearState();
   }
 
   @action private onSelectRealm({ path }: RealmDropdownItem) {
@@ -447,6 +455,9 @@ export default class CreateFileModal extends Component<Signature> {
         `bug: cannot call createCardDefinition without a display name`,
       );
     }
+
+    // TODO test to see if this.filename already exists and set field to invalid state if so
+
     let {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? this.selectedCatalogEntry)!; // we just checked above to make sure one of these exists
@@ -456,7 +467,8 @@ export default class CreateFileModal extends Component<Signature> {
     let safeName = this.displayName.replace(/[^A-Za-z \d-_]/g, '').trim();
     let src: string;
     if (exportName === 'default') {
-      // we don't have to worry about declaration collisions with 'parent' since we own the entire module
+      // TODO there is actually only one possible declaration collision: `className` and `parent`,
+      // reconcile that particular collision as necessary.
       let parent = camelize(
         module
           .split('/')
