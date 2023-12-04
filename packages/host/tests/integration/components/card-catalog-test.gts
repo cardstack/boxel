@@ -41,13 +41,19 @@ module('Integration | card-catalog', function (hooks) {
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');
+    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
+    let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     textArea = await loader.import(`${baseRealm.url}text-area`);
+    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
 
     let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
     let { default: TextAreaField } = textArea;
+    let { CardsGrid } = cardsGrid;
+    let { CatalogEntry } = catalogEntry;
 
     class Author extends CardDef {
       static displayName = 'Author';
@@ -83,94 +89,39 @@ module('Integration | card-catalog', function (hooks) {
         'author.gts': { Author },
         'publishing-packet.gts': { PublishingPacket },
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
+        'index.json': new CardsGrid(),
+        'CatalogEntry/publishing-packet.json': new CatalogEntry({
+          title: 'Publishing Packet',
+          description: 'Catalog entry for PublishingPacket',
+          ref: {
+            module: `../publishing-packet`,
+            name: 'PublishingPacket',
           },
-        },
-        'CatalogEntry/publishing-packet.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Publishing Packet',
-              description: 'Catalog entry for PublishingPacket',
-              ref: {
-                module: `../publishing-packet`,
-                name: 'PublishingPacket',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
-              },
-            },
+        }),
+        'CatalogEntry/author.json': new CatalogEntry({
+          title: 'Author',
+          description: 'Catalog entry for Author',
+          ref: {
+            module: `${testRealmURL}author`,
+            name: 'Author',
           },
-        },
-        'CatalogEntry/author.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Author',
-              description: 'Catalog entry for Author',
-              ref: {
-                module: `${testRealmURL}author`,
-                name: 'Author',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
-              },
-            },
+        }),
+        'CatalogEntry/blog-post.json': new CatalogEntry({
+          title: 'BlogPost',
+          description: 'Catalog entry for BlogPost',
+          ref: {
+            module: `${testRealmURL}blog-post`,
+            name: 'BlogPost',
           },
-        },
-        'CatalogEntry/blog-post.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'BlogPost',
-              description: 'Catalog entry for BlogPost',
-              ref: {
-                module: `${testRealmURL}blog-post`,
-                name: 'BlogPost',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
-              },
-            },
+        }),
+        'CatalogEntry/address.json': new CatalogEntry({
+          title: 'Address',
+          description: 'Catalog entry for Address field',
+          ref: {
+            module: `${testRealmURL}address`,
+            name: 'Address',
           },
-        },
-        'CatalogEntry/address.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Address',
-              description: 'Catalog entry for Address field',
-              ref: {
-                module: `${testRealmURL}address`,
-                name: 'Address',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
-              },
-            },
-          },
-        },
+        }),
       },
     });
 
@@ -428,7 +379,7 @@ module('Integration | card-catalog', function (hooks) {
         .hasText('Blog Post');
     });
 
-    test(`pressing Escape key closes the modal`, async function (assert) {
+    test(`pressing escape key closes the modal`, async function (assert) {
       assert
         .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
         .hasText('Local Workspace');
