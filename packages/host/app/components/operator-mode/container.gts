@@ -5,7 +5,6 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -46,9 +45,6 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
-  //TODO: Remove after registration page is implemented.
-  @tracked isSignInSkipped = false;
-
   @service private declare cardService: CardService;
   @service declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -153,10 +149,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     await this.matrixService.start();
   });
 
-  private get showLoggedInMode() {
-    return this.matrixService.isLoggedIn || this.isSignInSkipped;
-  }
-
   <template>
     <Modal
       class='operator-mode'
@@ -173,12 +165,12 @@ export default class OperatorModeContainer extends Component<Signature> {
           <span class='loading__message'>Initializing Operator Mode...</span>
         </div>
       {{else}}
-        {{#if (and this.showLoggedInMode this.isCodeMode)}}
+        {{#if (and this.matrixService.isLoggedIn this.isCodeMode)}}
           <CodeSubmode
             @saveSourceOnClose={{perform this.saveSource}}
             @saveCardOnClose={{perform this.write}}
           />
-        {{else if (and this.showLoggedInMode (not this.isCodeMode))}}
+        {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
           <InteractSubmode @write={{perform this.write}} />
         {{else}}
           <Auth />
