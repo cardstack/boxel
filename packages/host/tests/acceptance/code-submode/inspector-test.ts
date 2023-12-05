@@ -1,9 +1,18 @@
-import { visit, click, waitFor, fillIn, currentURL } from '@ember/test-helpers';
+import {
+  fillIn,
+  find,
+  visit,
+  click,
+  settled,
+  waitFor,
+  currentURL,
+} from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
@@ -19,6 +28,7 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   TestRealmAdapter,
+  elementIsVisible,
   getMonacoContent,
   setupLocalIndexing,
   testRealmURL,
@@ -725,6 +735,69 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
       );
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+  });
+
+  test('inspector persists scroll position but choosing another element overrides it', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+
+    let defaultClassSelector =
+      '[data-test-boxel-selector-item-text="DefaultClass"]';
+    let defaultClassElement = find(defaultClassSelector);
+
+    if (!defaultClassElement) {
+      assert.ok(defaultClassElement, 'default class should exist');
+    } else {
+      assert.notOk(
+        await elementIsVisible(defaultClassElement),
+        'expected default class not to be within view',
+      );
+
+      defaultClassElement.scrollIntoView({ block: 'center' });
+
+      assert.ok(
+        await elementIsVisible(defaultClassElement),
+        'expected default class to now be within view',
+      );
+    }
+
+    await click('[data-test-file-browser-toggle]');
+    assert.dom(defaultClassSelector).doesNotExist();
+
+    await click('[data-test-inspector-toggle]');
+    await waitFor(defaultClassSelector);
+
+    let position = new MonacoSDK.Position(15, 0);
+    monacoService.updateCursorPosition(position);
+
+    await settled();
+
+    let exportedClassSelector =
+      '[data-test-boxel-selector-item-text="ExportedClass"]';
+    let exportedClassElement = find(exportedClassSelector);
+
+    if (!exportedClassElement) {
+      assert.ok(exportedClassElement, 'local class element should exist');
+    } else {
+      assert.ok(
+        await elementIsVisible(exportedClassElement),
+        'expected exported class to have scrolled into view',
+      );
+    }
   });
 
   test<TestContextWithSSE>('Can delete a card instance from code submode with no recent files to fall back on', async function (assert) {

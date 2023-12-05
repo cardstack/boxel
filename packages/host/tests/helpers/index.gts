@@ -879,3 +879,15 @@ export class MockRedirectedResponse extends Response {
     return this._mockUrl;
   }
 }
+
+export async function elementIsVisible(element: Element) {
+  return new Promise((resolve) => {
+    let intersectionObserver = new IntersectionObserver(function (entries) {
+      intersectionObserver.unobserve(element);
+
+      resolve(entries[0].isIntersecting);
+    });
+
+    intersectionObserver.observe(element);
+  });
+}
