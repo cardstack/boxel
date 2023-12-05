@@ -28,63 +28,61 @@ interface Signature {
 
 export default class Login extends Component<Signature> {
   <template>
-    {{#if this.doLogin.isRunning}}
-      <LoadingIndicator />
-    {{else}}
-      <div class='login-form'>
-        <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
-          <:icon>
-            <BoxelIcon />
-          </:icon>
-        </BoxelHeader>
-        <div class='content'>
-          <span class='title'>Sign in to your Boxel Account</span>
-          <FieldContainer
-            @label='Email Address or Username'
-            @tag='label'
-            @vertical={{true}}
-            class='field'
-          >
-            <BoxelInput
-              data-test-username-field
-              type='text'
-              @value={{this.username}}
-              @onInput={{this.setUsername}}
-            />
-          </FieldContainer>
-          <FieldContainer
-            @label='Password'
-            @tag='label'
-            @vertical={{true}}
-            class='field'
-          >
-            <BoxelInput
-              data-test-password-field
-              type='password'
-              @value={{this.password}}
-              @onInput={{this.setPassword}}
-            />
-          </FieldContainer>
-          <Button @kind='text-only' class='forgot-password'>Forgot password?</Button>
-          <Button
-            class='button'
-            data-test-login-btn
-            @kind='primary'
-            @disabled={{this.isLoginButtonDisabled}}
-            {{on 'click' this.login}}
-          >Sign in</Button>
-          {{#if this.error}}
-            <div class='error' data-test-login-error>{{this.error}}</div>
-          {{/if}}
-          <span class='or'>or</span>
-          <Button
-            class='button'
-            data-test-register-user
-            {{on 'click' @onRegistration}}
-          >Create a new Boxel account</Button>
-        </div>
+    <div class='login-form'>
+      <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
+        <:icon>
+          <BoxelIcon />
+        </:icon>
+      </BoxelHeader>
+      <div class='content'>
+        <span class='title'>Sign in to your Boxel Account</span>
+        <FieldContainer
+          @label='Email Address or Username'
+          @tag='label'
+          @vertical={{true}}
+          class='field'
+        >
+          <BoxelInput
+            data-test-username-field
+            type='text'
+            @value={{this.username}}
+            @onInput={{this.setUsername}}
+          />
+        </FieldContainer>
+        <FieldContainer
+          @label='Password'
+          @tag='label'
+          @vertical={{true}}
+          class='field'
+        >
+          <BoxelInput
+            data-test-password-field
+            type='password'
+            @value={{this.password}}
+            @onInput={{this.setPassword}}
+          />
+        </FieldContainer>
+        <Button @kind='text-only' class='forgot-password'>Forgot password?</Button>
+        <Button
+          class='button'
+          data-test-login-btn
+          @kind='primary'
+          @disabled={{this.isLoginButtonDisabled}}
+          {{on 'click' this.login}}
+        >{{#if this.doLogin.isRunning}}
+            <LoadingIndicator />
+          {{else}}Sign in{{/if}}</Button>
+        {{#if this.error}}
+          <div class='error' data-test-login-error>{{this.error}}</div>
+        {{/if}}
+        <span class='or'>or</span>
+        <Button
+          class='button'
+          data-test-register-user
+          {{on 'click' @onRegistration}}
+        >Create a new Boxel account</Button>
       </div>
-    {{/if}}
+    </div>
 
     <style>
       .login-form {
@@ -135,6 +133,11 @@ export default class Login extends Component<Signature> {
         --boxel-button-padding: var(--boxel-sp-sm);
         width: 100%;
       }
+      .button :deep(.boxel-loading-indicator) {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
       .or {
         margin: var(--boxel-sp-sm) auto;
         font: 500 var(--boxel-font-sm);
@@ -154,7 +157,9 @@ export default class Login extends Component<Signature> {
   @service private declare matrixService: MatrixService;
 
   private get isLoginButtonDisabled() {
-    return !this.username || !this.password || this.error;
+    return (
+      !this.username || !this.password || this.error || this.doLogin.isRunning
+    );
   }
 
   @action
