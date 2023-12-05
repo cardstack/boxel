@@ -73,19 +73,26 @@ interface Args {
 
 export class ModuleContentsResource extends Resource<Args> {
   @tracked private _declarations: ModuleDeclaration[] = [];
+  @tracked private _url: string | undefined;
+  private executableFile: Ready | undefined;
 
   get isLoading() {
     return this.load.isRunning;
   }
 
+  get isLoadingNewModule() {
+    return this.load.isRunning && this._url !== this.executableFile.url;
+  }
+
   get declarations() {
-    return this._declarations;
+    return this.isLoadingNewModule ? [] : this._declarations;
   }
 
   modify(_positional: never[], named: Args['named']) {
     let { executableFile } = named;
-    if (executableFile) {
-      this.load.perform(executableFile);
+    this.executableFile = executableFile;
+    if (this.executableFile) {
+      this.load.perform(this.executableFile);
     }
   }
 
@@ -157,6 +164,7 @@ export class ModuleContentsResource extends Resource<Args> {
         }
       }
     });
+    this._url = executableFile.url;
   });
 }
 
