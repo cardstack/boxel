@@ -1439,7 +1439,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 import { ExportedCard } from '${testRealmURL}in-this-file';
 export class TestCard extends ExportedCard {
   static displayName = "Test Card";
-}`;
+}`.trim();
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',
@@ -1559,7 +1559,7 @@ export class TestCard extends ExportedCard {
 import { ExportedField } from '${testRealmURL}in-this-file';
 export class TestField extends ExportedField {
   static displayName = "Test Field";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -1623,7 +1623,7 @@ export class TestField extends ExportedField {
 import { ExportedCard as ExportedCardParent } from '${testRealmURL}in-this-file';
 export class ExportedCard extends ExportedCardParent {
   static displayName = "Exported Card";
-}`;
+}`.trim();
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',

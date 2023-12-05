@@ -521,7 +521,7 @@ export class ${className} extends ${exportName} {
   static displayName = "${safeName}";
 }`;
     }
-    await this.cardService.saveSource(url, src);
+    await this.cardService.saveSource(url, src.trim());
     this.currentRequest.newFileDeferred.fulfill(url);
   });
 
