@@ -16,7 +16,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
-import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
+import { IconInherit, IconTrash, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   hasExecutableExtension,
@@ -102,11 +102,11 @@ export default class DetailPanel extends Component<Signature> {
     return undefined;
   });
 
-  get showInThisFilePanel() {
+  private get showInThisFilePanel() {
     return this.isModule && this.args.declarations.length > 0;
   }
 
-  get showInheritancePanel() {
+  private get showInheritancePanel() {
     return (
       (this.isModule &&
         this.args.selectedDeclaration &&
@@ -116,11 +116,11 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
-  get showDetailsPanel() {
+  private get showDetailsPanel() {
     return !this.isModule;
   }
 
-  get cardType() {
+  private get cardType() {
     if (
       this.args.selectedDeclaration &&
       (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
@@ -153,6 +153,19 @@ export default class DetailPanel extends Component<Signature> {
       return [];
     }
     return [
+      // internal cards are not really meant to be addressable instances, but
+      // rather interior owned instances, as well as only card definitions can
+      // be instantiated (not field definitions)
+      ...(this.args.selectedDeclaration?.exportName &&
+      (this.args.selectedDeclaration?.cardOrField as typeof CardDef).isCardDef
+        ? [
+            {
+              label: 'Create Instance',
+              icon: IconPlus,
+              handler: this.createInstance,
+            },
+          ]
+        : []),
       // the inherit feature performs in the inheritance in a new module,
       // this means that the Card/Field that we are inheriting must be exported
       ...(this.args.selectedDeclaration?.exportName
@@ -168,7 +181,33 @@ export default class DetailPanel extends Component<Signature> {
     ];
   }
 
-  @action inherit() {
+  @action private createInstance() {
+    if (!this.args.selectedDeclaration) {
+      throw new Error('must have a selected delcaration');
+    }
+    if (
+      this.args.selectedDeclaration &&
+      (!isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
+        !isCardDef(this.args.selectedDeclaration.cardOrField))
+    ) {
+      throw new Error(`bug: the selected declaration is not a card definition`);
+    }
+    let ref = this.getSelectedDeclarationAsCodeRef();
+    let displayName = this.args.selectedDeclaration.cardOrField.displayName;
+    let id: NewFileType = 'card-instance';
+    this.args.createFile(
+      { id, displayName: capitalize(startCase(id)) },
+      {
+        ref,
+        displayName,
+      },
+    );
+  }
+
+  @action private inherit() {
+    if (!this.args.selectedDeclaration) {
+      throw new Error('must have a selected delcaration');
+    }
     if (
       this.args.selectedDeclaration &&
       !isCardOrFieldDeclaration(this.args.selectedDeclaration)
@@ -176,25 +215,16 @@ export default class DetailPanel extends Component<Signature> {
       throw new Error(`bug: the selected declaration is not a card nor field`);
     }
     let id: NewFileType | undefined = isCardDef(
-      this.args.selectedDeclaration?.cardOrField,
+      this.args.selectedDeclaration.cardOrField,
     )
       ? 'card-definition'
-      : isFieldDef(this.args.selectedDeclaration?.cardOrField)
+      : isFieldDef(this.args.selectedDeclaration.cardOrField)
       ? 'field-definition'
       : undefined;
     if (!id) {
       throw new Error(`Can only call inherit() on card def or field def`);
     }
-    if (!this.args.selectedDeclaration?.exportName) {
-      throw new Error(`bug: only exported cards/fields can be inherited`);
-    }
-    let ref = {
-      name: this.args.selectedDeclaration.exportName,
-      module: `${this.operatorModeStateService.state.codePath!.href.replace(
-        /\.[^\.]+$/,
-        '',
-      )}`,
-    };
+    let ref = this.getSelectedDeclarationAsCodeRef();
     let displayName = this.args.selectedDeclaration.cardOrField.displayName;
     this.args.createFile(
       { id, displayName: capitalize(startCase(id)) },
@@ -203,6 +233,19 @@ export default class DetailPanel extends Component<Signature> {
         displayName,
       },
     );
+  }
+
+  private getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
+    if (!this.args.selectedDeclaration?.exportName) {
+      throw new Error(`bug: only exported cards/fields can be inherited`);
+    }
+    return {
+      name: this.args.selectedDeclaration.exportName,
+      module: `${this.operatorModeStateService.state.codePath!.href.replace(
+        /\.[^\.]+$/,
+        '',
+      )}`,
+    };
   }
 
   private get isCardInstance() {
@@ -243,7 +286,7 @@ export default class DetailPanel extends Component<Signature> {
     });
   }
 
-  get numberOfItems() {
+  private get numberOfItems() {
     let numberOfElements = this.args.declarations.length || 0;
     return `${numberOfElements} ${getPlural('item', numberOfElements)}`;
   }
