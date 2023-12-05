@@ -752,8 +752,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `${testRealmURL}Person/1.json`,
-      openDirs: { [testRealmURL]: ['Person/'] },
+      codePath: `${testRealmURL}person-entry.json`,
     })!;
 
     await visit(
@@ -765,7 +764,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     let scrollablePanel = find('[data-test-togglable-left-panel]');
     let currentScrollTop = scrollablePanel?.scrollTop;
 
-    await click('[data-test-file="pet-person.gts"]');
+    await click('[data-test-file="person.gts"]');
 
     let newScrollTop = scrollablePanel?.scrollTop;
 
