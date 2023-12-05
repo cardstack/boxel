@@ -71,7 +71,7 @@ export async function toggleOperatorMode(page: Page) {
 export async function openChat(page: Page) {
   await page.locator('[data-test-open-chat]').click();
   await page.waitForFunction(() =>
-    document.querySelector('[data-test-matrix-ready]'),
+    document.querySelector('[data-test-close-chat-button]'),
   );
 }
 
