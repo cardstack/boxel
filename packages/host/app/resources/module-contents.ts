@@ -81,7 +81,7 @@ export class ModuleContentsResource extends Resource<Args> {
   }
 
   get isLoadingNewModule() {
-    return this.load.isRunning && this._url !== this.executableFile.url;
+    return this.load.isRunning && this._url !== this.executableFile?.url;
   }
 
   get declarations() {
