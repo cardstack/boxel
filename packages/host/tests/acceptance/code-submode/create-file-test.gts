@@ -432,7 +432,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
     await openNewFileModal('Card Definition');
     assert
       .dom('[data-test-create-definition]')
@@ -500,7 +500,7 @@ export class TestCard extends CardDef {
 import BigInteger from 'https://cardstack.com/base/big-integer';
 export class FieldThatExtendsFromBigInt extends BigInteger {
   static displayName = "Field that extends from big int";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -536,7 +536,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
 import Pet from '${testRealmURL}pet';
 export class TestCard extends Pet {
   static displayName = "Test Card";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -573,7 +573,7 @@ export class TestCard extends Pet {
 import PetParent from '${testRealmURL}pet';
 export class Pet extends PetParent {
   static displayName = "Pet";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -602,7 +602,7 @@ export class Pet extends PetParent {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -619,7 +619,7 @@ export class TestCard extends CardDef {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
 
     await openNewFileModal('Card Definition');
 
@@ -652,7 +652,7 @@ export class TestCard extends CardDef {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
 
     await openNewFileModal('Card Definition');
 
@@ -685,7 +685,7 @@ export class TestCard extends CardDef {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
 
     await openNewFileModal('Card Definition');
 
