@@ -87,6 +87,8 @@ export class ModuleContentsResource extends Resource<Args> {
   }
 
   get declarations() {
+    //we need this check because we don't want to show data stale data from the old module.
+    //can be seen with a temporary flicker of the stale data
     return this.isLoadingNewModule ? [] : this._declarations;
   }
 
