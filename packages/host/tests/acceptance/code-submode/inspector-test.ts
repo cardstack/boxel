@@ -1512,7 +1512,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 import { ExportedCard } from '${testRealmURL}in-this-file';
 export class TestCard extends ExportedCard {
   static displayName = "Test Card";
-}`;
+}`.trim();
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',
@@ -1632,7 +1632,7 @@ export class TestCard extends ExportedCard {
 import { ExportedField } from '${testRealmURL}in-this-file';
 export class TestField extends ExportedField {
   static displayName = "Test Field";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -1696,7 +1696,7 @@ export class TestField extends ExportedField {
 import { ExportedCard as ExportedCardParent } from '${testRealmURL}in-this-file';
 export class ExportedCard extends ExportedCardParent {
   static displayName = "Exported Card";
-}`;
+}`.trim();
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',
@@ -1815,5 +1815,127 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-action-button="Inherit"]')
       .doesNotExist('non-exported cards do not display an inherit button');
+  });
+
+  test<TestContextWithSave>('Can create an instance from an exported card definition', async function (assert) {
+    assert.expect(8);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Create Instance"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    assert
+      .dom('[data-test-inherits-from-field] .pill.inert')
+      .includesText('exported card', 'the inherits from is correct');
+    assert.dom('[data-test-create-card-instance]').isEnabled();
+
+    let deferred = new Deferred<void>();
+    let id: string | undefined;
+    this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error(`expected JSON save data`);
+      }
+      id = json.data.id;
+      assert.strictEqual(
+        json.data.attributes?.someString,
+        null,
+        'someString field is empty',
+      );
+      assert.strictEqual(
+        json.data.meta.realmURL,
+        testRealmURL,
+        'realm url is correct',
+      );
+      assert.deepEqual(
+        json.data.meta.adoptsFrom,
+        {
+          module: '../in-this-file',
+          name: 'ExportedCard',
+        },
+        'adoptsFrom is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await percySnapshot(assert);
+    await click('[data-test-create-card-instance]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    if (!id) {
+      assert.ok(false, 'card instance ID does not exist');
+    }
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
+    assert
+      .dom('[data-test-card-resource-loaded]')
+      .containsText('exported card');
+    assert.dom('[data-test-field="someString"] input').hasValue('');
+    assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
+  });
+
+  test('Create instance action is not displayed for non-exported Card definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
+
+    await click('[data-boxel-selector-item-text="LocalCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Instance"]')
+      .doesNotExist(
+        'non-exported card defs do not display a create instance button',
+      );
+  });
+
+  test('Create instance action is not displayed for field definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
+
+    await click('[data-boxel-selector-item-text="ExportedField"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Instance"]')
+      .doesNotExist('field defs do not display a create instance button');
   });
 });

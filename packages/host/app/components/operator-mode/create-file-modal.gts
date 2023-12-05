@@ -388,7 +388,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateCardInstanceButtonDisabled() {
     return (
-      !this.selectedCatalogEntry ||
+      (!this.selectedCatalogEntry && !this.definitionClass) ||
       !this.selectedRealmURL ||
       this.createCardInstance.isRunning
     );
@@ -521,7 +521,7 @@ export class ${className} extends ${exportName} {
   static displayName = "${safeName}";
 }`;
     }
-    await this.cardService.saveSource(url, src);
+    await this.cardService.saveSource(url, src.trim());
     this.currentRequest.newFileDeferred.fulfill(url);
   });
 
@@ -531,15 +531,22 @@ export class ${className} extends ${exportName} {
         `Cannot createCardInstance when there is no this.currentRequest`,
       );
     }
-    if (!this.selectedCatalogEntry?.ref || !this.selectedRealmURL) {
-      return;
+    if (
+      (!this.selectedCatalogEntry?.ref && !this.definitionClass) ||
+      !this.selectedRealmURL
+    ) {
+      throw new Error(
+        `bug: cannot create card instance with out adoptsFrom ref and selected realm URL`,
+      );
     }
 
-    let { ref } = this.definitionClass
-      ? this.definitionClass
-      : this.selectedCatalogEntry;
+    let { ref } = (
+      this.definitionClass ? this.definitionClass : this.selectedCatalogEntry
+    )!; // we just checked above to make sure one of these exist
 
-    let relativeTo = new URL(this.selectedCatalogEntry.id);
+    let relativeTo = this.selectedCatalogEntry
+      ? new URL(this.selectedCatalogEntry.id)
+      : undefined;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
     // definition comes from
