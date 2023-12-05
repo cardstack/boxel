@@ -760,6 +760,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await waitFor('[data-test-file="person.gts"]');
 
     let scrollablePanel = find('[data-test-togglable-left-panel]');
     let currentScrollTop = scrollablePanel?.scrollTop;
