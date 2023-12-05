@@ -740,6 +740,42 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     }
   });
 
+  test('scroll position does not change when switching to another file within view', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+      openDirs: { [testRealmURL]: ['Person/'] },
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    let scrollablePanel = find('[data-test-togglable-left-panel]');
+    let currentScrollTop = scrollablePanel?.scrollTop;
+
+    await click('[data-test-file="pet-person.gts"]');
+
+    let newScrollTop = scrollablePanel?.scrollTop;
+
+    assert.strictEqual(
+      currentScrollTop,
+      newScrollTop,
+      'expected scroll position not to have changed when choosing a neighbouring file',
+    );
+  });
+
   test('persisted scroll position is restored on refresh', async function (assert) {
     window.localStorage.setItem(
       'scroll-positions',
