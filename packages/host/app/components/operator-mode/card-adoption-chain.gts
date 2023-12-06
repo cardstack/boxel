@@ -1,5 +1,6 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { IconInherit as InheritIcon } from '@cardstack/boxel-ui/icons';
 
@@ -11,6 +12,7 @@ import { CardInheritance } from '@cardstack/host/components/operator-mode/code-s
 
 import { Type } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
+import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
 
@@ -18,6 +20,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     file: Ready;
+    moduleContentsResource: ModuleContentsResource;
     cardInheritanceChain: CardInheritance[];
     moduleSyntax: ModuleSyntax;
     openDefinition: (
@@ -73,36 +76,47 @@ export default class CardAdoptionChain extends Component<Signature> {
         width: 100%;
         border: 1px solid var(--boxel-purple-200);
       }
+      .loading {
+        display: flex;
+        justify-content: center;
+        padding: var(--boxel-sp-sm);
+      }
     </style>
 
     <div class='card-adoption-chain' ...attributes>
-      {{#each @cardInheritanceChain as |data index|}}
-        <div class='chain'>
-          <CardSchemaEditor
-            @card={{data.card}}
-            @cardType={{data.cardType}}
-            @file={{@file}}
-            @moduleSyntax={{@moduleSyntax}}
-            @childFields={{this.getFields index 'successors'}}
-            @parentFields={{this.getFields index 'ancestors'}}
-            @allowFieldManipulation={{this.allowFieldManipulation
-              @file
-              data.cardType
-            }}
-            @openDefinition={{@openDefinition}}
-          />
-          <div class='content-with-line'>
-            <hr class='line' />
-            <div class='inherits-from'>
-              <span class='inherits-icon'><InheritIcon
-                  width='24px'
-                  height='24px'
-                /></span>
-              <span>Inherits From</span>
+      {{#if this.args.moduleContentsResource.isLoadingNewModule}}
+        <div class='loading'>
+          <LoadingIndicator />
+        </div>
+      {{else}}
+        {{#each @cardInheritanceChain as |data index|}}
+          <div class='chain'>
+            <CardSchemaEditor
+              @card={{data.card}}
+              @cardType={{data.cardType}}
+              @file={{@file}}
+              @moduleSyntax={{@moduleSyntax}}
+              @childFields={{this.getFields index 'successors'}}
+              @parentFields={{this.getFields index 'ancestors'}}
+              @allowFieldManipulation={{this.allowFieldManipulation
+                @file
+                data.cardType
+              }}
+              @openDefinition={{@openDefinition}}
+            />
+            <div class='content-with-line'>
+              <hr class='line' />
+              <div class='inherits-from'>
+                <span class='inherits-icon'><InheritIcon
+                    width='24px'
+                    height='24px'
+                  /></span>
+                <span>Inherits From</span>
+              </div>
             </div>
           </div>
-        </div>
-      {{/each}}
+        {{/each}}
+      {{/if}}
     </div>
   </template>
 

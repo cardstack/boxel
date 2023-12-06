@@ -12,6 +12,7 @@ import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 import { CardType, Type } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
+import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import { inheritanceChain } from '@cardstack/host/resources/inheritance-chain';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
@@ -24,6 +25,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     file: Ready;
+    moduleContentsResource: ModuleContentsResource;
     cardTypeResource?: CardType;
     card: typeof BaseDef;
     openDefinition: (
@@ -116,6 +118,7 @@ export default class SchemaEditor extends Component<Signature> {
       (component
         CardAdoptionChain
         file=@file
+        moduleContentsResource=@moduleContentsResource
         moduleSyntax=this.moduleSyntax
         cardInheritanceChain=this.cardInheritanceChain.value
         openDefinition=@openDefinition

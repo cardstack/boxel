@@ -732,6 +732,7 @@ export default class CodeSubmode extends Component<Signature> {
                     <Accordion as |A|>
                       <SchemaEditor
                         @file={{this.readyFile}}
+                        @moduleContentsResource={{this.moduleContentsResource}}
                         @card={{this.selectedCardOrField.cardOrField}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
                         @openDefinition={{this.openDefinition}}
