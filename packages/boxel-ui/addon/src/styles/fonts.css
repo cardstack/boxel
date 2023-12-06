@@ -1,48 +1,48 @@
 @font-face {
   font-family: 'Poppins';
-  src: url('./Poppins-Regular.ttf');
+  src: url('./Poppins-Regular.woff2') format('woff2');
   font-weight: 400;
 }
 @font-face {
   font-family: 'Poppins';
-  src: url('./Poppins-Italic.ttf');
+  src: url('./Poppins-Italic.woff2') format('woff2');
   font-weight: 400;
   font-style: italic;
 }
 @font-face {
   font-family: 'Poppins';
-  src: url('./Poppins-Medium.ttf');
+  src: url('./Poppins-Medium.woff2') format('woff2');
   font-weight: 500;
 }
 @font-face {
   font-family: 'Poppins';
-  src: url('./Poppins-MediumItalic.ttf');
+  src: url('./Poppins-MediumItalic.woff2') format('woff2');
   font-weight: 500;
   font-style: italic;
 }
 @font-face {
   font-family: 'Poppins';
-  src: url('./Poppins-Bold.ttf');
+  src: url('./Poppins-Bold.woff2') format('woff2');
   font-weight: 700;
 }
 @font-face {
   font-family: 'Poppins';
-  src: url('./Poppins-BoldItalic.ttf');
+  src: url('./Poppins-BoldItalic.woff2') format('woff2');
   font-weight: 700;
   font-style: italic;
 }
 @font-face {
   font-family: 'Open Sans';
-  src: url('./OpenSans-Regular.ttf');
+  src: url('./OpenSans-Regular.woff2') format('woff2');
   font-weight: 400;
 }
 @font-face {
   font-family: 'Open Sans';
-  src: url('./OpenSans-SemiBold.ttf');
+  src: url('./OpenSans-SemiBold.woff2') format('woff2');
   font-weight: 600;
 }
 @font-face {
   font-family: 'Open Sans';
-  src: url('./OpenSans-Bold.ttf');
+  src: url('./OpenSans-Bold.woff2') format('woff2');
   font-weight: 700;
 }

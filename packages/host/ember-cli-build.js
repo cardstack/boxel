@@ -40,6 +40,10 @@ module.exports = function (defaults) {
                 test: /\.ttf$/,
                 type: 'asset',
               },
+              {
+                test: /\.woff2$/,
+                type: 'asset',
+              },
             ],
           },
           plugins: [
