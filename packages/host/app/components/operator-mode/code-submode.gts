@@ -264,6 +264,7 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
+      // this will prevent displaying message during a page refresh
       if (isCardDocumentString(this.readyFile.content)) {
         return null;
       }
@@ -276,6 +277,10 @@ export default class CodeSubmode extends Component<Signature> {
     // - a json error will be caught by incompatibleFile
     if (this.cardError) {
       return `card preview error ${this.cardError.message}`;
+    }
+
+    if (!this.isModule || !this.readyFile.name.endsWith('.json')) {
+      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
     }
 
     return null;
