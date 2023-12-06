@@ -279,7 +279,8 @@ export default class CodeSubmode extends Component<Signature> {
       return `card preview error ${this.cardError.message}`;
     }
 
-    if (!this.isModule || !this.readyFile.name.endsWith('.json')) {
+    if (!this.isModule && !this.readyFile.name.endsWith('.json')) {
+      debugger;
       return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
     }
 
