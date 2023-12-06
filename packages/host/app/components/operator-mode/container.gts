@@ -146,8 +146,11 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   private loadMatrix = task(async () => {
     await all([
-      this.matrixService.ready,
-      this.matrixService.start(),
+      new Promise(async (resolve) => {
+        await this.matrixService.ready;
+        await this.matrixService.start();
+        resolve();
+      }),
       timeout(1000),
     ]);
   });
