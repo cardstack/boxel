@@ -80,11 +80,9 @@ export class ModuleContentsResource extends Resource<Args> {
     return this.load.isRunning;
   }
 
-  // this resource is aware of loading new modules
-  // it has to know this to distinguish this with the act of editing of a file
-  // swtiching of files is typical, but when editing a file we don't want to introduce loading state
-  // that is why we have this loading getter consumers would typically want to use this instead of isLoading
-  // isLoading 'may' be useful when refreshing the page
+  // this resource is aware of loading new modules (ie it stores previous urls)
+  // it has to know this to distinguish the act of editing of a file and switching between definitions
+  // when editing a file we don't want to introduce loading state, whereas when switching between definitions we do
   get isLoadingNewModule() {
     return (
       this.load.isRunning && this._url && this._url !== this.executableFile?.url
