@@ -3,4 +3,9 @@ module.exports = {
   snapshot: {
     widths: [1280],
   },
+  percyCSS: `
+    .monaco-container[data-test-editor] {
+      display: none;
+    }
+  `,
 };
