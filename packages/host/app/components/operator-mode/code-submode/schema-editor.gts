@@ -38,7 +38,11 @@ interface Signature {
       WithBoundArgs<typeof SchemaEditorTitle, 'totalFields'>,
       WithBoundArgs<
         typeof CardAdoptionChain,
-        'file' | 'moduleSyntax' | 'cardInheritanceChain' | 'openDefinition'
+        | 'file'
+        | 'moduleContentsResource'
+        | 'moduleSyntax'
+        | 'cardInheritanceChain'
+        | 'openDefinition'
       >,
     ];
   };
