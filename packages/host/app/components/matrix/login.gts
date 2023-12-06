@@ -146,7 +146,7 @@ export default class Login extends Component<Signature> {
         color: var(--boxel-error-100);
         padding: 0;
         font: 500 var(--boxel-font-xs);
-        margin-top: var(--boxel-sp-xxs);
+        margin: var(--boxel-sp-xxs) auto 0 auto;
       }
     </style>
   </template>
