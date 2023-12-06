@@ -607,7 +607,7 @@ export class Realm {
                   return;
                 }
 
-                let { data: { querySelector, querySelectorAll, click } } = event;
+                let { data: { querySelector, querySelectorAll, click, fillInput } } = event;
                 let response;
                 if (querySelector) {
                   let element = document.querySelector(querySelector);
@@ -621,6 +621,19 @@ export class Realm {
                     response = null;
                   } else {
                     response = "cannot click on element: could not find '" + click + "'";
+                  }
+                } else if (fillInput) {
+                  let [ target, text ] = fillInput;
+                  let el = document.querySelector(target);
+                  if (el && text != undefined) {
+                    el.value = text;
+                    el.dispatchEvent(new Event('input'));
+                    response = null;
+                  } else if (text == undefined) {
+                    response = "Must provide '" + text + "' when calling 'fillIn'.)";
+                  } else {
+                    response =
+                      "Element not found when calling 'fillInput(" + target + ")'.";
                   }
                 } else {
                   response = 'Do not know how to handle event data: ' + JSON.stringify(event.data);

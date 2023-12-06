@@ -11,6 +11,7 @@ import {
   gotoRegistration,
   assertLoggedIn,
   setupMatrixOverride,
+  openChat,
 } from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
@@ -46,7 +47,8 @@ test.describe('User Registration w/o Token', () => {
     await page.locator('[data-test-password-field]').fill('mypassword');
     await page.locator('[data-test-confirm-password-field]').fill('mypassword');
     await page.locator('[data-test-register-btn]').click();
-
+    
+    await openChat(page);
     await assertLoggedIn(page);
   });
 });

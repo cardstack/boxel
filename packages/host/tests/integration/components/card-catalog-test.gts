@@ -24,6 +24,7 @@ import {
   setupIntegrationTestRealm,
   setupServerSentEvents,
 } from '../../helpers';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
 const realmName = 'Local Workspace';
@@ -32,6 +33,7 @@ module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
+  setupMatrixServiceMock(hooks);
 
   const noop = () => {};
 

@@ -28,6 +28,7 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 module('Acceptance | code submode | editor tests', function (hooks) {
   let realm: Realm;
@@ -38,6 +39,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
+  setupMatrixServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');
