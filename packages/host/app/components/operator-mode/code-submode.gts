@@ -244,10 +244,6 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
-    //this will prevent displaying message during a page refresh
-    if (this.moduleContentsResource.isLoading) {
-      return null;
-    }
     // If file is incompatible
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
@@ -255,6 +251,10 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If the module is incompatible
     if (this.isModule) {
+      //this will prevent displaying message during a page refresh
+      if (this.moduleContentsResource.isLoading) {
+        return null;
+      }
       if (!this.hasCardDefOrFieldDef) {
         return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
       } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
@@ -264,6 +264,10 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
+      // this will prevent displaying message during a page refresh
+      if (isCardDocumentString(this.readyFile.content)) {
+        return null;
+      }
       return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
     }
 
@@ -273,6 +277,14 @@ export default class CodeSubmode extends Component<Signature> {
     // - a json error will be caught by incompatibleFile
     if (this.cardError) {
       return `card preview error ${this.cardError.message}`;
+    }
+
+    if (
+      !this.isModule &&
+      !this.readyFile.name.endsWith('.json') &&
+      !this.card //for case of creating new card instance
+    ) {
+      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
     }
 
     return null;
@@ -328,7 +340,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get declarations() {
-    return this.moduleContentsResource?.declarations || [];
+    return this.moduleContentsResource?.declarations;
   }
 
   private get _selectedDeclaration() {
@@ -633,10 +645,10 @@ export default class CodeSubmode extends Component<Signature> {
                     <:inspector>
                       {{#if this.isReady}}
                         <DetailPanel
+                          @moduleContentsResource={{this.moduleContentsResource}}
                           @cardInstance={{this.card}}
                           @readyFile={{this.readyFile}}
                           @selectedDeclaration={{this.selectedDeclaration}}
-                          @declarations={{this.declarations}}
                           @selectDeclaration={{this.selectDeclaration}}
                           @delete={{perform this.delete}}
                           @openDefinition={{this.openDefinition}}
@@ -732,6 +744,7 @@ export default class CodeSubmode extends Component<Signature> {
                     <Accordion as |A|>
                       <SchemaEditor
                         @file={{this.readyFile}}
+                        @moduleContentsResource={{this.moduleContentsResource}}
                         @card={{this.selectedCardOrField.cardOrField}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
                         @openDefinition={{this.openDefinition}}
