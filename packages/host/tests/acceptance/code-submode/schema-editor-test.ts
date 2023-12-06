@@ -492,12 +492,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert
       .dom('[data-test-code-mode-card-preview-body]')
       .containsText('Hassan');
-    await waitFor(
-      `button[data-test-definition-container="${testRealmURL}person"]`,
-    );
-    await click(
-      `button[data-test-definition-container="${testRealmURL}person"]`,
-    );
+    await waitFor(`button[data-test-clickable-definition-container`);
+    await click(`button[data-test-clickable-definition-container`);
     await waitFor('[data-test-card-schema]');
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
     assert.dom('[data-test-total-fields]').containsText('8 Fields');

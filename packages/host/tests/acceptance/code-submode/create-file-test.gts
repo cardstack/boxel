@@ -146,8 +146,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor('[data-test-new-file-button]');
     await click('[data-test-new-file-button]');
     await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
-    await waitFor('[data-test-create-file-modal][data-test-ready]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace A"]`,
+    );
   }
 
   hooks.afterEach(async function () {
@@ -437,7 +438,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
     await openNewFileModal('Card Definition');
     assert
       .dom('[data-test-create-definition]')
@@ -505,7 +506,7 @@ export class TestCard extends CardDef {
 import BigInteger from 'https://cardstack.com/base/big-integer';
 export class FieldThatExtendsFromBigInt extends BigInteger {
   static displayName = "Field that extends from big int";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -541,7 +542,44 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
 import Pet from '${testRealmURL}pet';
 export class TestCard extends Pet {
   static displayName = "Test Card";
-}`,
+}`.trim(),
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can reconcile a classname collision with the selected name of extending a card definition which uses a default export', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
+
+    // select card type
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Pet"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Pet');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import PetParent from '${testRealmURL}pet';
+export class Pet extends PetParent {
+  static displayName = "Pet";
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -570,7 +608,7 @@ export class TestCard extends Pet {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -587,7 +625,7 @@ export class TestCard extends CardDef {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
 
     await openNewFileModal('Card Definition');
 
@@ -620,7 +658,7 @@ export class TestCard extends CardDef {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
 
     await openNewFileModal('Card Definition');
 
@@ -653,7 +691,7 @@ export class TestCard extends CardDef {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
 
     await openNewFileModal('Card Definition');
 

@@ -14,7 +14,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import LoaderService from '../services/loader-service';
+import type LoaderService from '../services/loader-service';
 
 import type MessageService from '../services/message-service';
 

@@ -4,6 +4,7 @@ import {
   waitFor,
   find,
   fillIn,
+  settled,
   triggerKeyEvent,
 } from '@ember/test-helpers';
 
@@ -19,6 +20,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
+  elementIsVisible,
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -614,6 +616,205 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     );
   });
 
+  test('scroll position is restored when returning to file view but only for one file per realm', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+      openDirs: { [testRealmURL]: ['Person/'] },
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    let endDirectorySelector = `[data-test-directory="zzz/"]`;
+
+    await waitFor(endDirectorySelector);
+    let endDirectoryElement = find(endDirectorySelector);
+
+    if (!endDirectoryElement) {
+      assert.ok(endDirectoryElement, 'end directory should exist');
+    } else {
+      assert.notOk(
+        await elementIsVisible(endDirectoryElement),
+        'expected end directory not to be within view',
+      );
+
+      endDirectoryElement.scrollIntoView({ block: 'center' });
+
+      assert.ok(
+        await elementIsVisible(endDirectoryElement),
+        'expected end directory to now be within view',
+      );
+    }
+
+    await click('[data-test-inspector-toggle]');
+    assert.dom(endDirectorySelector).doesNotExist();
+
+    await click('[data-test-file-browser-toggle]');
+    await waitFor(endDirectorySelector);
+
+    endDirectoryElement = find(endDirectorySelector);
+
+    if (!endDirectoryElement) {
+      assert.ok(endDirectoryElement, 'end directory should exist');
+    } else {
+      assert.ok(
+        await elementIsVisible(endDirectoryElement),
+        'expected end directory to be within view after returning to the file tree',
+      );
+    }
+
+    // Change to another file and back, persisted scroll position should be forgotten
+
+    await click('[data-test-file="pet-person.gts"]');
+    await click('[data-test-file="Person/1.json"]');
+
+    await click('[data-test-inspector-toggle]');
+    assert.dom(endDirectorySelector).doesNotExist();
+
+    await click('[data-test-file-browser-toggle]');
+    await waitFor(endDirectorySelector);
+
+    endDirectoryElement = find(endDirectorySelector);
+
+    if (!endDirectoryElement) {
+      assert.ok(endDirectoryElement, 'end directory should exist');
+    } else {
+      assert.notOk(
+        await elementIsVisible(endDirectoryElement),
+        'expected previously-stored scroll position to have been forgotten',
+      );
+
+      endDirectoryElement.scrollIntoView({ block: 'center' });
+
+      assert.ok(
+        await elementIsVisible(endDirectoryElement),
+        'expected end directory to again be within view',
+      );
+    }
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://localhost:4202/test/mango.png`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    await waitFor('[data-test-realm-name="Test Workspace A"]', {
+      timeout: 2000,
+    });
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://test-realm/test/Person/1.json`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor('[data-test-realm-name="Test Workspace B"]');
+
+    endDirectoryElement = find(endDirectorySelector);
+
+    if (!endDirectoryElement) {
+      assert.ok(endDirectoryElement, 'end directory should exist');
+    } else {
+      assert.notOk(
+        await elementIsVisible(endDirectoryElement),
+        'expected previously-stored scroll position to have been forgotten',
+      );
+    }
+  });
+
+  test('scroll position does not change when switching to another file within view', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}person-entry.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file="person.gts"]');
+
+    let scrollablePanel = find('[data-test-togglable-left-panel]');
+    let currentScrollTop = scrollablePanel?.scrollTop;
+
+    await click('[data-test-file="person.gts"]');
+
+    let newScrollTop = scrollablePanel?.scrollTop;
+
+    assert.strictEqual(
+      currentScrollTop,
+      newScrollTop,
+      'expected scroll position not to have changed when choosing a neighbouring file',
+    );
+  });
+
+  test('persisted scroll position is restored on refresh', async function (assert) {
+    window.localStorage.setItem(
+      'scroll-positions',
+      JSON.stringify({
+        'file-tree': ['http://test-realm/test/Person/1.json', 300],
+      }),
+    );
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+      openDirs: { [testRealmURL]: ['Person/'] },
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-togglable-left-panel]');
+    await settled();
+
+    let scrollablePanel = find('[data-test-togglable-left-panel]');
+
+    assert.strictEqual(scrollablePanel?.scrollTop, 300);
+  });
+
   test('can open files in base realm', async function (assert) {
     let codeModeStateParam = stringify({
       stacks: [
@@ -642,15 +843,3 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert.dom('[data-test-file="cards-grid.gts"]').hasClass('selected');
   });
 });
-
-async function elementIsVisible(element: Element) {
-  return new Promise((resolve) => {
-    let intersectionObserver = new IntersectionObserver(function (entries) {
-      intersectionObserver.unobserve(element);
-
-      resolve(entries[0].isIntersecting);
-    });
-
-    intersectionObserver.observe(element);
-  });
-}

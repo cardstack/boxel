@@ -13,6 +13,7 @@ import { Person } from './person';
 let imageURL = new URL('./logo.png', import.meta.url).href;
 
 class BasicCard extends FieldDef {
+  static displayName = 'Basic Card';
   @field title = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>

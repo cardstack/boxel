@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn } from '@ember/helper';
+import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -7,7 +7,8 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
+import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -30,6 +31,7 @@ import type { Query, Filter } from '@cardstack/runtime-common/query';
 import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 
 import { getSearchResults, Search } from '../../resources/search';
+import { getCard } from '../../resources/card-resource';
 
 import {
   suggestCardChooserTitle,
@@ -76,6 +78,7 @@ type State = {
   cardURL: string;
   chooseCardTitle: string;
   dismissModal: boolean;
+  errorMessage?: string;
 };
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
@@ -87,6 +90,13 @@ export default class CardCatalogModal extends Component<Signature> {
         @title={{this.state.chooseCardTitle}}
         @onClose={{fn this.pick undefined}}
         @zIndex={{this.zIndex}}
+        {{focusTrap
+          isActive=(not this.state.dismissModal)
+          focusTrapOptions=(hash
+            initialFocus='[data-test-search-field]' allowOutsideClick=true
+          )
+        }}
+        {{on 'keydown' this.handleKeydown}}
         data-test-card-catalog-modal
       >
         <:header>
@@ -96,7 +106,9 @@ export default class CardCatalogModal extends Component<Signature> {
             @value={{this.state.searchKey}}
             @onInput={{this.setSearchKey}}
             @onKeyPress={{this.onSearchFieldKeypress}}
-            @placeholder='Search for a card or enter its URL'
+            @placeholder='Search for a card or enter card URL'
+            @state={{if this.isInvalid 'invalid'}}
+            @errorMessage={{this.state.errorMessage}}
             data-test-search-field
           />
           <CardCatalogFilters
@@ -112,14 +124,14 @@ export default class CardCatalogModal extends Component<Signature> {
             Loading...
           {{else}}
             {{! The getter for availableRealms is necessary because
-                it's a resource that needs to load the search results }}
+              it's a resource that needs to load the search results }}
             <CardCatalog
               @results={{if
                 this.availableRealms.length
                 this.state.searchResults
                 this.availableRealms
               }}
-              @toggleSelect={{this.toggleSelect}}
+              @select={{this.selectCard}}
               @selectedCard={{this.state.selectedCard}}
               @context={{@context}}
             />
@@ -262,6 +274,7 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.searchResults = this.availableRealms;
     this.state.cardURL = '';
     this.state.selectedCard = undefined;
+    this.state.errorMessage = '';
     this.state.dismissModal = false;
   }
 
@@ -357,10 +370,6 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.cardURL = cardURL;
   }
 
-  @action setSelectedCard(card: CardDef | undefined) {
-    this.state.selectedCard = card;
-  }
-
   @action
   onSearchFieldKeypress(e: KeyboardEvent) {
     if (e.key === 'Enter') {
@@ -368,31 +377,68 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
+  get isInvalid() {
+    if (!this.state.searchKey) {
+      return false;
+    }
+    return this.state.errorMessage || this.state.searchResults?.length === 0;
+  }
+
+  setErrorState(message: string) {
+    this.state.errorMessage = message;
+    this.state.searchResults = [];
+  }
+
+  private getCard = restartableTask(async (cardURL: string) => {
+    let maybeIndexCardURL = this.cardService.realmURLs.find(
+      (u) => u === cardURL + '/',
+    );
+    const cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {
+      isLive: () => false,
+    });
+    await cardResource.loaded;
+    let { card } = cardResource;
+    if (!card) {
+      this.setErrorState(`Could not find card at ${this.state.searchKey}`);
+      return;
+    }
+    let realmInfo = await this.cardService.getRealmInfo(card);
+    if (!realmInfo) {
+      this.setErrorState(`Encountered error getting realm info for ${cardURL}`);
+      return;
+    }
+    this.state.searchResults = [
+      {
+        url: card.id,
+        realmInfo,
+        cards: [card],
+      },
+    ];
+  });
+
   @action
   onSearchFieldUpdated() {
+    this.state.errorMessage = '';
+
     if (!this.state.searchKey && !this.state.selectedRealms.length) {
       return this.resetState();
     }
 
-    let results: RealmCards[] = [];
-    let cardFilter;
-
     if (this.searchKeyIsURL) {
-      cardFilter = (c: CardDef) => {
-        return c.id === this.state.searchKey;
-      };
-    } else {
-      cardFilter = (c: CardDef) => {
-        return c.title
-          ?.trim()
-          .toLowerCase()
-          .includes(this.state.searchKey.trim().toLowerCase());
-      };
+      this.getCard.perform(this.state.searchKey);
+      return;
     }
+
+    let results: RealmCards[] = [];
+    let cardFilter = (c: CardDef) => {
+      return c.title
+        ?.trim()
+        .toLowerCase()
+        .includes(this.state.searchKey.trim().toLowerCase());
+    };
 
     for (let { url, realmInfo, cards } of this.displayedRealms) {
       let filteredCards = cards.filter(cardFilter);
-
       if (filteredCards.length) {
         results.push({
           url,
@@ -404,13 +450,22 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.searchResults = results;
   }
 
-  @action toggleSelect(card?: CardDef): void {
+  @action selectCard(card?: CardDef, event?: MouseEvent | KeyboardEvent): void {
     this.state.cardURL = '';
-    if (this.state.selectedCard?.id === card?.id) {
-      this.state.selectedCard = undefined;
-      return;
-    }
     this.state.selectedCard = card;
+
+    if (
+      (event instanceof KeyboardEvent && event?.key === 'Enter') ||
+      (event instanceof MouseEvent && event?.type === 'dblclick')
+    ) {
+      this.pick(card);
+    }
+  }
+
+  @action handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      this.pick(undefined);
+    }
   }
 
   @action pick(card?: CardDef, state?: State) {

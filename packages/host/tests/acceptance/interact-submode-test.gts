@@ -64,8 +64,12 @@ module('Acceptance | interact submode tests', function (hooks) {
       .loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
+    let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
+    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
+    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
+    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
 
     let {
       field,
@@ -77,6 +81,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       FieldDef,
     } = cardApi;
     let { default: StringField } = string;
+    let { CatalogEntry } = catalogEntry;
+    let { CardsGrid } = cardsGrid;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -183,6 +189,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       };
     }
 
+    let mangoPet = new Pet({ name: 'Mango' });
+
     ({ realm } = await setupAcceptanceTestRealm({
       loader,
       contents: {
@@ -191,104 +199,30 @@ module('Acceptance | interact submode tests', function (hooks) {
         'pet.gts': { Pet },
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Person Card',
-              description: 'Catalog entry for Person Card',
-              ref: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
-              },
-            },
+        'person-entry.json': new CatalogEntry({
+          title: 'Person Card',
+          description: 'Catalog entry for Person Card',
+          ref: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
           },
-        },
-        'Pet/mango.json': {
-          data: {
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            attributes: {
-              name: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-
-        'Person/fadhlan.json': {
-          data: {
-            attributes: {
-              firstName: 'Fadhlan',
-              address: {
-                city: 'Bandung',
-                country: 'Indonesia',
-                shippingInfo: {
-                  preferredCarrier: 'DHL',
-                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-                },
-              },
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: `${testRealmURL}Pet/mango`,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'grid.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
+        }),
+        'Pet/mango.json': mangoPet,
+        'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
+        'Person/fadhlan.json': new Person({
+          firstName: 'Fadhlan',
+          address: new Address({
+            city: 'Bandung',
+            country: 'Indonesia',
+            shippingInfo: new ShippingInfo({
+              preferredCarrier: 'DHL',
+              remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+            }),
+          }),
+          pet: mangoPet,
+        }),
+        'grid.json': new CardsGrid(),
+        'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace B',
           backgroundURL:
@@ -345,6 +279,87 @@ module('Acceptance | interact submode tests', function (hooks) {
         )
         .doesNotExist();
       assert.dom('[data-test-search-field]').hasValue('');
+    });
+
+    test('Can add a card by URL using the add button', async function (assert) {
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({ stacks: [] })!,
+        )}`,
+      );
+
+      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
+
+      await click('[data-test-add-card-button]');
+      await waitFor('[data-test-card-catalog]');
+      await fillIn(
+        '[data-test-card-catalog-modal] [data-test-search-field]',
+        `${testRealmURL}index`,
+      );
+
+      await waitFor(`[data-test-card-catalog-item="${testRealmURL}index"]`, {
+        timeout: 2000,
+      });
+      assert.dom('[data-test-card-catalog-item]').hasText('Test Workspace B');
+
+      await click(`[data-test-select="${testRealmURL}index"]`);
+      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-catalog]', { count: 0 });
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      assert.dom('[data-test-stack-card-header]').hasText('Test Workspace B');
+    });
+
+    test('Can add an index card by URL (without "index" in path) using the add button', async function (assert) {
+      const wrongURL = 'https://cardstack.com/bas';
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({ stacks: [] })!,
+        )}`,
+      );
+
+      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
+
+      await click('[data-test-add-card-button]');
+      await waitFor('[data-test-card-catalog]');
+      await fillIn(
+        '[data-test-card-catalog-modal] [data-test-search-field]',
+        wrongURL,
+      );
+      await waitFor('[data-test-boxel-input-error-message]');
+      assert
+        .dom('[data-test-boxel-input-error-message]')
+        .hasText(`Could not find card at ${wrongURL}`);
+      assert.dom('[data-test-boxel-input-validation-state="invalid"]').exists();
+
+      await fillIn(
+        '[data-test-card-catalog-modal] [data-test-search-field]',
+        baseRealm.url.slice(0, -1),
+      );
+      await waitFor(`[data-test-card-catalog-item="${baseRealm.url}index"]`, {
+        timeout: 2000,
+      });
+      assert.dom('[data-test-card-catalog-item]').hasText('Base Workspace');
+
+      await fillIn(
+        '[data-test-card-catalog-modal] [data-test-search-field]',
+        testRealmURL,
+      );
+      await waitFor(`[data-test-card-catalog-item="${testRealmURL}index"]`, {
+        timeout: 2000,
+      });
+      assert.dom('[data-test-card-catalog-item]').hasText('Test Workspace B');
+      assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
+      assert
+        .dom('[data-test-boxel-input-validation-state="invalid"]')
+        .doesNotExist();
+
+      await click(`[data-test-select="${testRealmURL}index"]`);
+      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-catalog]', { count: 0 });
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      assert.dom('[data-test-stack-card-header]').hasText('Test Workspace B');
     });
 
     test('Can open a recent card in empty stack', async function (assert) {

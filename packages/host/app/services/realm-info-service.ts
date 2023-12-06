@@ -9,18 +9,16 @@ import {
   RealmInfo,
   SupportedMimeType,
   RealmPaths,
-  baseRealm,
 } from '@cardstack/runtime-common';
 
-import ENV from '@cardstack/host/config/environment';
+import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
-import LoaderService from '@cardstack/host/services/loader-service';
-
-const { ownRealmURL, otherRealmURLs } = ENV;
 const waiter = buildWaiter('realm-info-service:waiter');
 
 export default class RealmInfoService extends Service {
   @service declare loaderService: LoaderService;
+  @service declare cardService: CardService;
   cachedRealmURLsForFileURL: TrackedMap<string, string> = new TrackedMap(); // Has the file url already been resolved to a realm url?
   cachedRealmInfos: TrackedMap<string, RealmInfo> = new TrackedMap(); // Has the realm url already been resolved to a realm info?
 
@@ -78,10 +76,9 @@ export default class RealmInfoService extends Service {
   }
 
   fetchAllKnownRealmInfos = restartableTask(async () => {
-    let paths = [
-      ...new Set([ownRealmURL, baseRealm.url, ...otherRealmURLs]),
-    ].map((path) => new RealmPaths(path).url);
-
+    let paths = this.cardService.realmURLs.map(
+      (path) => new RealmPaths(path).url,
+    );
     let token = waiter.beginAsync();
     try {
       await Promise.all(

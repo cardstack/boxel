@@ -12,7 +12,8 @@ export const exportedVar = 'exported var';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const localVar = 'local var';
 
-class LocalClass {}
+class LocalClass
+ {}
 
 export class ExportedClass {}
 
