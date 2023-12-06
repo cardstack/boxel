@@ -280,7 +280,6 @@ export default class CodeSubmode extends Component<Signature> {
     }
 
     if (!this.isModule && !this.readyFile.name.endsWith('.json')) {
-      debugger;
       return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
     }
 
