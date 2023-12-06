@@ -73,7 +73,7 @@ interface Args {
 
 export class ModuleContentsResource extends Resource<Args> {
   @tracked private _declarations: ModuleDeclaration[] = [];
-  @tracked private _url: string | undefined;
+  private _url: string | undefined;
   private executableFile: Ready | undefined;
 
   get isLoading() {
