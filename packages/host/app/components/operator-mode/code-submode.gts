@@ -328,7 +328,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get declarations() {
-    return this.moduleContentsResource?.declarations || [];
+    return this.moduleContentsResource?.declarations;
   }
 
   private get _selectedDeclaration() {
@@ -633,10 +633,10 @@ export default class CodeSubmode extends Component<Signature> {
                     <:inspector>
                       {{#if this.isReady}}
                         <DetailPanel
+                          @moduleContentsResource={{this.moduleContentsResource}}
                           @cardInstance={{this.card}}
                           @readyFile={{this.readyFile}}
                           @selectedDeclaration={{this.selectedDeclaration}}
-                          @declarations={{this.declarations}}
                           @selectDeclaration={{this.selectDeclaration}}
                           @delete={{perform this.delete}}
                           @openDefinition={{this.openDefinition}}

@@ -80,6 +80,11 @@ export class ModuleContentsResource extends Resource<Args> {
     return this.load.isRunning;
   }
 
+  // this resource is aware of loading new modules
+  // it has to know this to distinguish this with the act of editing of a file
+  // swtiching of files is typical, but when editing a file we don't want to introduce loading state
+  // that is why we have this loading getter consumers would typically want to use this instead of isLoading
+  // isLoading 'may' be useful when refreshing the page
   get isLoadingNewModule() {
     return (
       this.load.isRunning && this._url && this._url !== this.executableFile?.url
@@ -87,9 +92,7 @@ export class ModuleContentsResource extends Resource<Args> {
   }
 
   get declarations() {
-    //we need this check because we don't want to show data stale data from the old module.
-    //can be seen with a temporary flicker of the stale data
-    return this.isLoadingNewModule ? [] : this._declarations;
+    return this._declarations;
   }
 
   modify(_positional: never[], named: Args['named']) {

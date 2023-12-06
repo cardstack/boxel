@@ -50,6 +50,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
+import { ModuleContentsResource } from '../../resources/module-contents';
 
 import { type FileType, type NewFileType } from './create-file-modal';
 import {
@@ -68,10 +69,10 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 interface Signature {
   Element: HTMLElement;
   Args: {
+    moduleContentsResource: ModuleContentsResource;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
     selectedDeclaration?: ModuleDeclaration;
-    declarations: ModuleDeclaration[];
     selectDeclaration: (dec: ModuleDeclaration) => void;
     openDefinition: (
       codeRef: ResolvedCodeRef | undefined,
@@ -102,8 +103,12 @@ export default class DetailPanel extends Component<Signature> {
     return undefined;
   });
 
+  private get declarations() {
+    return this.args.moduleContentsResource.declarations;
+  }
+
   private get showInThisFilePanel() {
-    return this.isModule && this.args.declarations.length > 0;
+    return this.isModule && this.declarations.length > 0;
   }
 
   private get showInheritancePanel() {
@@ -133,7 +138,8 @@ export default class DetailPanel extends Component<Signature> {
 
   private get isLoading() {
     return (
-      this.args.declarations.some((dec) => {
+      this.args.moduleContentsResource.isLoadingNewModule ||
+      this.declarations.some((dec) => {
         if (isCardOrFieldDeclaration(dec)) {
           return dec.cardType?.isLoading;
         } else {
@@ -269,10 +275,10 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get buildSelectorItems(): SelectorItem[] {
-    if (!this.args.declarations) {
+    if (!this.declarations) {
       return [];
     }
-    return this.args.declarations.map((dec) => {
+    return this.declarations.map((dec) => {
       const isSelected = this.args.selectedDeclaration === dec;
       return selectorItemFunc(
         [
@@ -287,7 +293,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get numberOfItems() {
-    let numberOfElements = this.args.declarations.length || 0;
+    let numberOfElements = this.declarations.length || 0;
     return `${numberOfElements} ${getPlural('item', numberOfElements)}`;
   }
 
