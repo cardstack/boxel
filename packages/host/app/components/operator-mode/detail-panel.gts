@@ -122,7 +122,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get showDetailsPanel() {
-    return !this.isModule;
+    return !this.isModule && !isCardDocumentString(this.args.readyFile.content);
   }
 
   private get cardType() {

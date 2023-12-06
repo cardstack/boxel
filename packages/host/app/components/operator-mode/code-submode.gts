@@ -244,10 +244,6 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
-    //this will prevent displaying message during a page refresh
-    if (this.moduleContentsResource.isLoading) {
-      return null;
-    }
     // If file is incompatible
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
@@ -255,6 +251,10 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If the module is incompatible
     if (this.isModule) {
+      //this will prevent displaying message during a page refresh
+      if (this.moduleContentsResource.isLoading) {
+        return null;
+      }
       if (!this.hasCardDefOrFieldDef) {
         return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
       } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
@@ -264,6 +264,9 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
+      if (isCardDocumentString(this.readyFile.content)) {
+        return null;
+      }
       return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
     }
 
