@@ -27,6 +27,7 @@ import {
   RealmPaths,
   Deferred,
   SupportedMimeType,
+  maybeRelativeURL,
   type LocalPath,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
@@ -487,7 +488,12 @@ export default class CreateFileModal extends Component<Signature> {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? this.selectedCatalogEntry)!; // we just checked above to make sure one of these exists
     let className = camelize(this.displayName);
-    let absoluteModule = new URL(module, this.selectedCatalogEntry?.id).href;
+    let absoluteModule = new URL(module, this.selectedCatalogEntry?.id);
+    let moduleURL = maybeRelativeURL(
+      absoluteModule,
+      url,
+      this.selectedRealmURL,
+    );
     // sanitize the name since it will be used in javascript code
     let safeName = this.displayName.replace(/[^A-Za-z \d-_]/g, '').trim();
     let src: string;
@@ -496,7 +502,7 @@ export default class CreateFileModal extends Component<Signature> {
     // reconcile that particular collision as necessary.
     if (className === exportName) {
       src = `
-import { ${exportName} as ${exportName}Parent } from '${absoluteModule}';
+import { ${exportName} as ${exportName}Parent } from '${moduleURL}';
 export class ${className} extends ${exportName}Parent {
   static displayName = "${safeName}";
 }`;
@@ -510,13 +516,13 @@ export class ${className} extends ${exportName}Parent {
       // check for parent/className declaration collision
       parent = parent === className ? `${parent}Parent` : parent;
       src = `
-import ${parent} from '${absoluteModule}';
+import ${parent} from '${moduleURL}';
 export class ${className} extends ${parent} {
   static displayName = "${safeName}";
 }`;
     } else {
       src = `
-import { ${exportName} } from '${absoluteModule}';
+import { ${exportName} } from '${moduleURL}';
 export class ${className} extends ${exportName} {
   static displayName = "${safeName}";
 }`;
@@ -549,7 +555,7 @@ export class ${className} extends ${exportName} {
       : undefined;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
-    // definition comes from
+    // definition comes from. The server will make relative URL if appropriate after creation
     let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
     if ('name' in maybeRef && 'module' in maybeRef) {
       ref = maybeRef;
