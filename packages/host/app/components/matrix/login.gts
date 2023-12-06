@@ -37,7 +37,7 @@ export default class Login extends Component<Signature> {
       <div class='content'>
         <span class='title'>Sign in to your Boxel Account</span>
         <FieldContainer
-          @label='Email Address or Username'
+          @label='Username'
           @tag='label'
           @vertical={{true}}
           class='field'

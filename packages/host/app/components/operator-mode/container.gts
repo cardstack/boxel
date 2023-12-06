@@ -6,7 +6,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
+import { all, task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -145,8 +145,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   private loadMatrix = task(async () => {
-    await this.matrixService.ready;
-    await this.matrixService.start();
+    await all([
+      this.matrixService.ready,
+      this.matrixService.start(),
+      timeout(1000),
+    ]);
   });
 
   <template>
@@ -161,7 +164,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       <CardCatalogModal />
       {{#if this.loadMatrix.isRunning}}
         <div class='loading'>
-          <LoadingIndicator />
+          <LoadingIndicator @color='var(--boxel-light)' />
           <span class='loading__message'>Initializing Operator Mode...</span>
         </div>
       {{else}}
@@ -197,10 +200,22 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
       .loading {
         display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
         padding: var(--boxel-sp);
+        color: var(--boxel-light);
+        font: 500 var(--boxel-font);
+
+        --icon-color: var(--boxel-light);
       }
       .loading__message {
-        margin-left: var(--boxel-sp-xs);
+        margin-left: var(--boxel-sp-5xs);
+      }
+      .loading :deep(.boxel-loading-indicator) {
+        display: flex;
+        justify: center;
+        align-items: center;
       }
     </style>
   </template>
