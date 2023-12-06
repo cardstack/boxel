@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
@@ -38,11 +39,7 @@ interface Signature {
       WithBoundArgs<typeof SchemaEditorTitle, 'totalFields'>,
       WithBoundArgs<
         typeof CardAdoptionChain,
-        | 'file'
-        | 'moduleContentsResource'
-        | 'moduleSyntax'
-        | 'cardInheritanceChain'
-        | 'openDefinition'
+        'file' | 'moduleSyntax' | 'cardInheritanceChain' | 'openDefinition'
       >,
     ];
   };
@@ -117,16 +114,28 @@ export default class SchemaEditor extends Component<Signature> {
   }
 
   <template>
-    {{yield
-      (component SchemaEditorTitle totalFields=this.totalFields)
-      (component
-        CardAdoptionChain
-        file=@file
-        moduleContentsResource=@moduleContentsResource
-        moduleSyntax=this.moduleSyntax
-        cardInheritanceChain=this.cardInheritanceChain.value
-        openDefinition=@openDefinition
-      )
-    }}
+    <style>
+      .loading {
+        display: flex;
+        justify-content: center;
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+    {{#if @moduleContentsResource.isLoadingNewModule}}
+      <div class='loading'>
+        <LoadingIndicator />
+      </div>
+    {{else}}
+      {{yield
+        (component SchemaEditorTitle totalFields=this.totalFields)
+        (component
+          CardAdoptionChain
+          file=@file
+          moduleSyntax=this.moduleSyntax
+          cardInheritanceChain=this.cardInheritanceChain.value
+          openDefinition=@openDefinition
+        )
+      }}
+    {{/if}}
   </template>
 }
