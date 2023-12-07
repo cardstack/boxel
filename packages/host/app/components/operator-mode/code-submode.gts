@@ -345,6 +345,7 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get _selectedDeclaration() {
     let codeSelection = this.operatorModeStateService.state.codeSelection;
+    debugger;
     return this.moduleContentsResource?.declarations.find((dec) => {
       return codeSelection
         ? dec.exportName === codeSelection || dec.localName === codeSelection
