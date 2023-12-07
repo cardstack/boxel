@@ -8,13 +8,14 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
+
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
   baseRealm,
@@ -29,6 +30,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import {
+  percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
@@ -37,8 +39,6 @@ import {
   type TestContextWithSave,
   setupAcceptanceTestRealm,
 } from '../helpers';
-
-import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
