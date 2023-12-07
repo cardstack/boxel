@@ -486,7 +486,6 @@ module('Integration | card-copy', function (hooks) {
     await click(
       `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
-    await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="right"]')
       .exists('copy button with right arrow exists');
@@ -517,7 +516,6 @@ module('Integration | card-copy', function (hooks) {
     await click(
       ` [data-test-overlay-card="${testRealm2URL}Pet/paper"] button.select`,
     );
-    await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="left"]')
       .exists('copy button with left arrow exists');
