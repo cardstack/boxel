@@ -409,6 +409,7 @@ export default class OperatorModeStateService extends Service {
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
+      codeSelection: rawState.codeSelection,
     });
 
     let stackIndex = 0;
