@@ -365,6 +365,7 @@ export default class OperatorModeStateService extends Service {
       codePath: this.state.codePath?.toString(),
       fileView: this.state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
+      codeSelection: this.state.codeSelection,
     };
 
     for (let stack of this.state.stacks) {
