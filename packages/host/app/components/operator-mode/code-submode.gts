@@ -344,25 +344,11 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get _selectedDeclaration() {
+    let codeSelection = this.operatorModeStateService.state.codeSelection;
     return this.moduleContentsResource?.declarations.find((dec) => {
-      // when refreshing module,
-      // checks localName from serialized url
-      if (
-        this.operatorModeStateService.state.codeSelection.localName ===
-        dec.localName
-      ) {
-        return true;
-      }
-
-      // when opening new definition,
-      // checks codeRef from serialized url
-      let codeRef = this.operatorModeStateService.state.codeSelection.codeRef;
-      if (isCardOrFieldDeclaration(dec) && codeRef) {
-        return (
-          dec.exportName === codeRef.name || dec.localName === codeRef.name
-        );
-      }
-      return false;
+      return codeSelection
+        ? dec.exportName === codeSelection || dec.localName === codeSelection
+        : false;
     });
   }
 
@@ -387,8 +373,7 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this.operatorModeStateService.updateLocalNameSelection(dec.localName);
-    this.updateCursorByDeclaration?.(dec);
+    this.openDefinition(undefined, dec.localName);
   }
 
   @action
@@ -396,15 +381,11 @@ export default class CodeSubmode extends Component<Signature> {
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) {
-    if (codeRef) {
-      this.operatorModeStateService.updateCodeRefSelection(codeRef);
-      this.operatorModeStateService.updateCodePath(new URL(codeRef.module));
-    } else if (localName) {
-      this.operatorModeStateService.updateLocalNameSelection(localName);
-      this.updateCursorByDeclaration?.(this.selectedDeclaration!);
-    } else {
-      console.log('No reference to codeRef or name found within module');
-    }
+    this.operatorModeStateService.updateCodePathWithCodeSelection(
+      codeRef,
+      localName,
+      () => this.updateCursorByDeclaration?.(this.selectedDeclaration!),
+    );
   }
 
   private onCardChange = () => {

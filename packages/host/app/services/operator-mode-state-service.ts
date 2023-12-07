@@ -40,12 +40,7 @@ export interface OperatorModeState {
   codePath: URL | null;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
-  codeSelection: CodeSelection;
-}
-
-interface CodeSelection {
-  codeRef?: ResolvedCodeRef;
-  localName?: string;
+  codeSelection?: string;
 }
 
 interface CardItem {
@@ -64,7 +59,7 @@ export type SerializedState = {
   codePath?: string;
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
-  codeSelection?: CodeSelection;
+  codeSelection?: string;
 };
 
 interface OpenFileSubscriber {
@@ -77,7 +72,6 @@ export default class OperatorModeStateService extends Service {
     submode: Submodes.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
-    codeSelection: new TrackedObject({}),
   });
 
   private cachedRealmURL: URL | null = null;
@@ -247,16 +241,21 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  updateCodeRefSelection(codeRef: ResolvedCodeRef) {
-    this.state.codeSelection = {
-      codeRef,
-    };
-    this.schedulePersist();
-  }
-
-  updateLocalNameSelection(localName: string | undefined) {
-    this.state.codeSelection = { localName }; //we need to update localName independently because card and field don't have code ref
-    this.schedulePersist();
+  updateCodePathWithCodeSelection(
+    codeRef: ResolvedCodeRef | undefined,
+    localName: string | undefined,
+    onLocalSelection: () => void,
+  ) {
+    //moving from one definition to another
+    if (codeRef) {
+      //in a different module
+      this.state.codeSelection = codeRef.name;
+      this.updateCodePath(new URL(codeRef.module));
+    } else if (localName) {
+      //in the same module
+      this.state.codeSelection = localName;
+      onLocalSelection();
+    }
   }
 
   get codePathRelativeToRealm() {
@@ -409,7 +408,6 @@ export default class OperatorModeStateService extends Service {
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
-      codeSelection: rawState.codeSelection ?? {},
     });
 
     let stackIndex = 0;
