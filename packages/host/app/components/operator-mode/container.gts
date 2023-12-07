@@ -3,7 +3,6 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { all, task, timeout } from 'ember-concurrency';
@@ -20,6 +19,7 @@ import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import config from '@cardstack/host/config/environment';
 import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
+import { isTesting } from '@embroider/macros';
 
 import {
   getLiveSearchResults,
@@ -38,6 +38,8 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
+const { loginMessageTimeoutMs } = config;
+
 interface Signature {
   Args: {
     onClose: () => void;
@@ -53,7 +55,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     super(owner, args);
 
     this.loadMatrix.perform();
-    if (config.environment === 'test') {
+    if (isTesting()) {
       (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
       registerDestructor(this, () => {
         delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
@@ -151,7 +153,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         await this.matrixService.start();
         resolve();
       }),
-      timeout(1000),
+      timeout(loginMessageTimeoutMs),
     ]);
   });
 

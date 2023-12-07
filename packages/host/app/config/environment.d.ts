@@ -24,4 +24,5 @@ declare const config: {
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;
   serverEchoDebounceMs: number;
+  loginMessageTimeoutMs: number;
 };

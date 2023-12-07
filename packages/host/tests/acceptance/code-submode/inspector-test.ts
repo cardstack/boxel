@@ -802,7 +802,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     }
   });
 
-  test<TestContextWithSSE>('Can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
+  test<TestContextWithSSE>('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
     let expectedEvents = [
       {
         type: 'index',
@@ -864,7 +864,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     });
     await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
-      'Acceptance | operator mode tests | Can delete a card instance from code submode with no recent files - empty code submode',
+      'Acceptance | operator mode tests | can delete a card instance from code submode with no recent files - empty code submode',
     );
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
@@ -1508,10 +1508,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.true(monacoService.getLineCursorOn()?.includes('Activity'));
   });
 
-  test<TestContextWithSave>('Can inherit from an exported card def declaration', async function (assert) {
+  test<TestContextWithSave>('can inherit from an exported card def declaration', async function (assert) {
     assert.expect(11);
     let expectedSrc = `
-import { ExportedCard } from '${testRealmURL}in-this-file';
+import { ExportedCard } from './in-this-file';
 export class TestCard extends ExportedCard {
   static displayName = "Test Card";
 }`.trim();
@@ -1592,7 +1592,7 @@ export class TestCard extends ExportedCard {
       .hasNoValue('filename field is empty');
   });
 
-  test<TestContextWithSave>('Can inherit from an exported field def declaration', async function (assert) {
+  test<TestContextWithSave>('can inherit from an exported field def declaration', async function (assert) {
     assert.expect(2);
     let operatorModeStateParam = stringify({
       stacks: [[]],
@@ -1631,7 +1631,7 @@ export class TestCard extends ExportedCard {
       assert.strictEqual(
         content,
         `
-import { ExportedField } from '${testRealmURL}in-this-file';
+import { ExportedField } from './in-this-file';
 export class TestField extends ExportedField {
   static displayName = "Test Field";
 }`.trim(),
@@ -1695,7 +1695,7 @@ export class TestField extends ExportedField {
   test<TestContextWithSave>(`can handle the situation where there is a class name collision with the inherited cards class name`, async function (assert) {
     assert.expect(4);
     let expectedSrc = `
-import { ExportedCard as ExportedCardParent } from '${testRealmURL}in-this-file';
+import { ExportedCard as ExportedCardParent } from './in-this-file';
 export class ExportedCard extends ExportedCardParent {
   static displayName = "Exported Card";
 }`.trim();
@@ -1819,7 +1819,7 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('non-exported cards do not display an inherit button');
   });
 
-  test<TestContextWithSave>('Can create an instance from an exported card definition', async function (assert) {
+  test<TestContextWithSave>('can create an instance from an exported card definition', async function (assert) {
     assert.expect(8);
     let operatorModeStateParam = stringify({
       stacks: [[]],

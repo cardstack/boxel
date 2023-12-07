@@ -432,7 +432,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('can create a new card definition', async function (assert) {
+  test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
     assert.expect(7);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -476,7 +476,45 @@ export class TestCard extends CardDef {
     assert.dom('[data-test-total-fields]').containsText('3 Fields');
   });
 
+  test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
+
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Person"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import { Person } from './person';
+export class TestCard extends Person {
+  static displayName = "Test Card";
+}`.trim(),
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
   test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
+    assert.expect(2);
     await openNewFileModal('Field Definition');
     await click('[data-test-select-card-type]');
     await waitFor('[data-test-card-catalog-modal]');
@@ -539,7 +577,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       assert.strictEqual(
         content,
         `
-import Pet from '${testRealmURL}pet';
+import Pet from './pet';
 export class TestCard extends Pet {
   static displayName = "Test Card";
 }`.trim(),
@@ -576,7 +614,7 @@ export class TestCard extends Pet {
       assert.strictEqual(
         content,
         `
-import PetParent from '${testRealmURL}pet';
+import PetParent from './pet';
 export class Pet extends PetParent {
   static displayName = "Pet";
 }`.trim(),
