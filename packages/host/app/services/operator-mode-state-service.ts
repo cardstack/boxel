@@ -248,7 +248,7 @@ export default class OperatorModeStateService extends Service {
   ) {
     //moving from one definition to another
     if (codeRef) {
-      //in a different module
+      //(possibly) in a different module
       this.state.codeSelection = codeRef.name;
       this.updateCodePath(new URL(codeRef.module));
     } else if (localName) {
