@@ -996,6 +996,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     let elementName = 'ChildCard1';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    debugger;
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
       codeSelection: elementName,
@@ -1008,6 +1009,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-clickable-definition-container]`);
     await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
+    let url = currentURL();
+    console.log(url);
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
     //clicking on default card
