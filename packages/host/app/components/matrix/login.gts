@@ -28,7 +28,7 @@ interface Signature {
 
 export default class Login extends Component<Signature> {
   <template>
-    <form class='login-form' {{on 'keydown' this.handleKeydown}}>
+    <form class='login-form' {{on 'submit' this.handleSubmit}}>
       <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
         <:icon>
           <BoxelIcon />
@@ -162,11 +162,9 @@ export default class Login extends Component<Signature> {
     );
   }
 
-  @action handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      !this.isLoginButtonDisabled && this.login();
-    }
+  @action handleSubmit(event: KeyboardEvent) {
+    event.preventDefault(); // Don't actually submit the form
+    !this.isLoginButtonDisabled && this.login();
   }
 
   @action
