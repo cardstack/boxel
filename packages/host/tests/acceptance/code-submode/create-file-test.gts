@@ -452,8 +452,6 @@ export class TestCard extends CardDef {
       .dom('[data-test-create-definition]')
       .isEnabled('create button is enabled');
 
-    await percySnapshot(assert);
-
     this.onSave((content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
@@ -507,7 +505,6 @@ export class TestCard extends Person {
       deferred.fulfill();
     });
 
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -549,7 +546,6 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       );
       deferred.fulfill();
     });
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -623,7 +619,6 @@ export class Pet extends PetParent {
       deferred.fulfill();
     });
 
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;

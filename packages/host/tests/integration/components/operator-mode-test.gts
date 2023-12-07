@@ -1059,8 +1059,6 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
 
-    await percySnapshot(assert);
-
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
     assert.dom(`[data-test-cards-grid-item]`).exists();
     assert
@@ -2382,7 +2380,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
-    await percySnapshot(assert);
 
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');

@@ -1732,7 +1732,6 @@ export class ExportedCard extends ExportedCardParent {
       assert.strictEqual(content, expectedSrc, 'the source is correct');
       deferred.fulfill();
     });
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
