@@ -34,7 +34,7 @@ export default class Login extends Component<Signature> {
           <BoxelIcon />
         </:icon>
       </BoxelHeader>
-      <div class='content'>
+      <div class='content' {{on 'keydown' this.handleEnterKey}}>
         <span class='title'>Sign in to your Boxel Account</span>
         <FieldContainer
           @label='Username'
@@ -160,6 +160,12 @@ export default class Login extends Component<Signature> {
     return (
       !this.username || !this.password || this.error || this.doLogin.isRunning
     );
+  }
+
+  @action handleEnterKey(event: KeyboardEvent) {
+    if (event.key === 'Enter' && !this.isLoginButtonDisabled) {
+      this.login();
+    }
   }
 
   @action
