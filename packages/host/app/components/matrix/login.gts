@@ -162,7 +162,7 @@ export default class Login extends Component<Signature> {
     );
   }
 
-  @action handleSubmit(event: KeyboardEvent) {
+  @action handleSubmit(event: SubmitEvent) {
     event.preventDefault(); // Don't actually submit the form
     !this.isLoginButtonDisabled && this.login();
   }
