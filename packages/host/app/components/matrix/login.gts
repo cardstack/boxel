@@ -28,13 +28,13 @@ interface Signature {
 
 export default class Login extends Component<Signature> {
   <template>
-    <div class='login-form'>
+    <form class='login-form' {{on 'keydown' this.handleKeydown}}>
       <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
         <:icon>
           <BoxelIcon />
         </:icon>
       </BoxelHeader>
-      <div class='content' {{on 'keydown' this.handleEnterKey}}>
+      <div class='content'>
         <span class='title'>Sign in to your Boxel Account</span>
         <FieldContainer
           @label='Username'
@@ -82,7 +82,7 @@ export default class Login extends Component<Signature> {
           {{on 'click' @onRegistration}}
         >Create a new Boxel account</Button>
       </div>
-    </div>
+    </form>
 
     <style>
       .login-form {
@@ -162,9 +162,10 @@ export default class Login extends Component<Signature> {
     );
   }
 
-  @action handleEnterKey(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !this.isLoginButtonDisabled) {
-      this.login();
+  @action handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      !this.isLoginButtonDisabled && this.login();
     }
   }
 
