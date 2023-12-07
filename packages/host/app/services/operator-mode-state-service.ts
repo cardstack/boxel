@@ -255,6 +255,7 @@ export default class OperatorModeStateService extends Service {
       //in the same module
       this.state.codeSelection = localName;
       onLocalSelection();
+      this.schedulePersist();
     }
   }
 
