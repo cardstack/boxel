@@ -680,7 +680,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )
       .exists();
 
-    assert.ok(getMonacoContent().includes('birthdate = contains(DateCard)'));
+    assert.ok(getMonacoContent().includes('birthdate = contains(DateField)'));
   });
 
   test<TestContextWithSSE>('adding a field from schema editor - cardinality test', async function (assert) {
@@ -740,9 +740,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     assert.ok(
       getMonacoContent().includes(
-        'luckyNumbers = containsMany(BigIntegerCard)',
+        'luckyNumbers = containsMany(BigIntegerField)',
       ),
-      "code editor contains line 'luckyNumbers = containsMany(BigIntegerCard)'",
+      "code editor contains line 'luckyNumbers = containsMany(BigIntegerField)'",
     );
 
     // Field is a card descending from CardDef (cardinality: one)
@@ -915,7 +915,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       if (typeof content !== 'string') {
         throw new Error('expected string save data');
       }
-      assert.ok(content.includes('friendCount = contains(BigIntegerCard)'));
+      assert.ok(content.includes('friendCount = contains(BigIntegerField)'));
     });
     await click('[data-test-save-field-button]');
 

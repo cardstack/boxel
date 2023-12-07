@@ -451,14 +451,25 @@ function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
 }
 
 function suggestedCardName(ref: { name: string; module: string }): string {
-  if (ref.name.toLowerCase().endsWith('card')) {
-    return ref.name;
-  }
   let name = ref.name;
   if (name === 'default') {
     name = ref.module.split('/').pop()!;
   }
-  return upperFirst(camelCase(`${name} card`));
+  if (
+    ref.module.startsWith('https://') &&
+    baseRealm.inRealm(new URL(ref.module))
+  ) {
+    // we suffix these specifically because we know they are fields and don't collide
+    // JS keywords like `String`, `Number`, and `Date`
+    name = `${name} field`;
+  }
+
+  // otherwise we do a more general check for javascript built-ins
+  let suggestedName = upperFirst(camelCase(`${name}`));
+  if (typeof (globalThis as any)[suggestedName] !== 'undefined') {
+    suggestedName = `${suggestedName}0`;
+  }
+  return suggestedName;
 }
 
 function insertFieldBeforePath(
