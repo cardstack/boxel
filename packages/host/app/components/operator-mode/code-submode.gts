@@ -356,7 +356,7 @@ export default class CodeSubmode extends Component<Signature> {
 
       // when opening new definition,
       // checks codeRef from serialized url
-      let codeRef = this.operatorModeStateService.state.codeSelection?.codeRef;
+      let codeRef = this.operatorModeStateService.state.codeSelection.codeRef;
       if (isCardOrFieldDeclaration(dec) && codeRef) {
         return (
           dec.exportName === codeRef.name || dec.localName === codeRef.name
