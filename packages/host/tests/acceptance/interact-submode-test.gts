@@ -39,6 +39,7 @@ import {
   type TestContextWithSave,
   setupAcceptanceTestRealm,
 } from '../helpers';
+import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
@@ -48,6 +49,7 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
+  setupMatrixServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');

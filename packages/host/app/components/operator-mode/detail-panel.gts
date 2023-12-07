@@ -3,6 +3,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
+import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 
 // @ts-expect-error cached doesn't have type yet
@@ -10,13 +11,15 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { use, resource } from 'ember-resources';
 
+import startCase from 'lodash/startCase';
+
 import {
   CardContainer,
   Header,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
-import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
+import { IconInherit, IconTrash, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   hasExecutableExtension,
@@ -30,8 +33,6 @@ import {
   isBaseDef,
 } from '@cardstack/runtime-common/code-ref';
 
-import { capitalize } from '@ember/string';
-import startCase from 'lodash/startCase';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
@@ -49,15 +50,15 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
+import { ModuleContentsResource } from '../../resources/module-contents';
 
+import { type FileType, type NewFileType } from './create-file-modal';
 import {
   FileDefinitionContainer,
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
   ClickableModuleDefinitionContainer,
 } from './definition-container';
-
-import { type FileType, type NewFileType } from './create-file-modal';
 
 import Selector from './detail-panel-selector';
 
@@ -68,10 +69,10 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 interface Signature {
   Element: HTMLElement;
   Args: {
+    moduleContentsResource: ModuleContentsResource;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
     selectedDeclaration?: ModuleDeclaration;
-    declarations: ModuleDeclaration[];
     selectDeclaration: (dec: ModuleDeclaration) => void;
     openDefinition: (
       codeRef: ResolvedCodeRef | undefined,
@@ -102,11 +103,15 @@ export default class DetailPanel extends Component<Signature> {
     return undefined;
   });
 
-  get showInThisFilePanel() {
-    return this.isModule && this.args.declarations.length > 0;
+  private get declarations() {
+    return this.args.moduleContentsResource.declarations;
   }
 
-  get showInheritancePanel() {
+  private get showInThisFilePanel() {
+    return this.isModule && this.declarations.length > 0;
+  }
+
+  private get showInheritancePanel() {
     return (
       (this.isModule &&
         this.args.selectedDeclaration &&
@@ -116,11 +121,11 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
-  get showDetailsPanel() {
-    return !this.isModule;
+  private get showDetailsPanel() {
+    return !this.isModule && !isCardDocumentString(this.args.readyFile.content);
   }
 
-  get cardType() {
+  private get cardType() {
     if (
       this.args.selectedDeclaration &&
       (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
@@ -133,7 +138,8 @@ export default class DetailPanel extends Component<Signature> {
 
   private get isLoading() {
     return (
-      this.args.declarations.some((dec) => {
+      this.args.moduleContentsResource.isLoadingNewModule ||
+      this.declarations.some((dec) => {
         if (isCardOrFieldDeclaration(dec)) {
           return dec.cardType?.isLoading;
         } else {
@@ -153,6 +159,19 @@ export default class DetailPanel extends Component<Signature> {
       return [];
     }
     return [
+      // internal cards are not really meant to be addressable instances, but
+      // rather interior owned instances, as well as only card definitions can
+      // be instantiated (not field definitions)
+      ...(this.args.selectedDeclaration?.exportName &&
+      (this.args.selectedDeclaration?.cardOrField as typeof CardDef).isCardDef
+        ? [
+            {
+              label: 'Create Instance',
+              icon: IconPlus,
+              handler: this.createInstance,
+            },
+          ]
+        : []),
       // the inherit feature performs in the inheritance in a new module,
       // this means that the Card/Field that we are inheriting must be exported
       ...(this.args.selectedDeclaration?.exportName
@@ -168,7 +187,33 @@ export default class DetailPanel extends Component<Signature> {
     ];
   }
 
-  @action inherit() {
+  @action private createInstance() {
+    if (!this.args.selectedDeclaration) {
+      throw new Error('must have a selected delcaration');
+    }
+    if (
+      this.args.selectedDeclaration &&
+      (!isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
+        !isCardDef(this.args.selectedDeclaration.cardOrField))
+    ) {
+      throw new Error(`bug: the selected declaration is not a card definition`);
+    }
+    let ref = this.getSelectedDeclarationAsCodeRef();
+    let displayName = this.args.selectedDeclaration.cardOrField.displayName;
+    let id: NewFileType = 'card-instance';
+    this.args.createFile(
+      { id, displayName: capitalize(startCase(id)) },
+      {
+        ref,
+        displayName,
+      },
+    );
+  }
+
+  @action private inherit() {
+    if (!this.args.selectedDeclaration) {
+      throw new Error('must have a selected delcaration');
+    }
     if (
       this.args.selectedDeclaration &&
       !isCardOrFieldDeclaration(this.args.selectedDeclaration)
@@ -176,25 +221,16 @@ export default class DetailPanel extends Component<Signature> {
       throw new Error(`bug: the selected declaration is not a card nor field`);
     }
     let id: NewFileType | undefined = isCardDef(
-      this.args.selectedDeclaration?.cardOrField,
+      this.args.selectedDeclaration.cardOrField,
     )
       ? 'card-definition'
-      : isFieldDef(this.args.selectedDeclaration?.cardOrField)
+      : isFieldDef(this.args.selectedDeclaration.cardOrField)
       ? 'field-definition'
       : undefined;
     if (!id) {
       throw new Error(`Can only call inherit() on card def or field def`);
     }
-    if (!this.args.selectedDeclaration?.exportName) {
-      throw new Error(`bug: only exported cards/fields can be inherited`);
-    }
-    let ref = {
-      name: this.args.selectedDeclaration.exportName,
-      module: `${this.operatorModeStateService.state.codePath!.href.replace(
-        /\.[^\.]+$/,
-        '',
-      )}`,
-    };
+    let ref = this.getSelectedDeclarationAsCodeRef();
     let displayName = this.args.selectedDeclaration.cardOrField.displayName;
     this.args.createFile(
       { id, displayName: capitalize(startCase(id)) },
@@ -203,6 +239,19 @@ export default class DetailPanel extends Component<Signature> {
         displayName,
       },
     );
+  }
+
+  private getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
+    if (!this.args.selectedDeclaration?.exportName) {
+      throw new Error(`bug: only exported cards/fields can be inherited`);
+    }
+    return {
+      name: this.args.selectedDeclaration.exportName,
+      module: `${this.operatorModeStateService.state.codePath!.href.replace(
+        /\.[^\.]+$/,
+        '',
+      )}`,
+    };
   }
 
   private get isCardInstance() {
@@ -226,10 +275,10 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get buildSelectorItems(): SelectorItem[] {
-    if (!this.args.declarations) {
+    if (!this.declarations) {
       return [];
     }
-    return this.args.declarations.map((dec) => {
+    return this.declarations.map((dec) => {
       const isSelected = this.args.selectedDeclaration === dec;
       return selectorItemFunc(
         [
@@ -238,13 +287,13 @@ export default class DetailPanel extends Component<Signature> {
             this.args.selectDeclaration(dec);
           },
         ],
-        { selected: isSelected },
+        { selected: isSelected, url: this.args.readyFile.url },
       );
     });
   }
 
-  get numberOfItems() {
-    let numberOfElements = this.args.declarations.length || 0;
+  private get numberOfItems() {
+    let numberOfElements = this.declarations.length || 0;
     return `${numberOfElements} ${getPlural('item', numberOfElements)}`;
   }
 

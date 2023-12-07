@@ -1,7 +1,12 @@
-import Modifier, { PositionalArgs } from 'ember-modifier';
+import { inject as service } from '@ember/service';
+
+import Modifier, { NamedArgs, PositionalArgs } from 'ember-modifier';
+
+import ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 
 interface ScrollIntoViewModifierArgs {
   Positional: [boolean];
+  Named: { container?: string; key?: string };
 }
 
 interface ScrollIntoViewModifierSignature {
@@ -10,21 +15,47 @@ interface ScrollIntoViewModifierSignature {
 }
 
 export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModifierSignature> {
-  element!: Element;
-  #didSetup = false;
+  @service declare scrollPositionService: ScrollPositionService;
 
-  modify(
+  element!: Element;
+  #lastRunScrolled = false;
+
+  async modify(
     element: Element,
     [shouldScrollIntoView]: PositionalArgs<ScrollIntoViewModifierSignature>,
-  ): void {
+    { container, key }: NamedArgs<ScrollIntoViewModifierSignature>,
+  ): Promise<void> {
     this.element = element;
 
-    if (!this.#didSetup) {
-      this.#didSetup = true;
-
-      if (shouldScrollIntoView) {
-        this.element.scrollIntoView({ block: 'center' });
-      }
+    if (
+      shouldScrollIntoView &&
+      container &&
+      key &&
+      !this.scrollPositionService.keyHasScrollPosition(container, key) &&
+      !this.#lastRunScrolled
+    ) {
+      await this.scrollIfNotVisible();
+      this.#lastRunScrolled = true;
+    } else {
+      this.#lastRunScrolled = false;
     }
+  }
+
+  private async scrollIfNotVisible() {
+    let element = this.element;
+
+    return new Promise((resolve) => {
+      let intersectionObserver = new IntersectionObserver(function (entries) {
+        intersectionObserver.unobserve(element);
+
+        if (!entries[0].isIntersecting) {
+          element.scrollIntoView({ block: 'center' });
+        }
+
+        resolve(void 0);
+      });
+
+      intersectionObserver.observe(element);
+    });
   }
 }

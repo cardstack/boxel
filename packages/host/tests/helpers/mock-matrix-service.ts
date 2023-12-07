@@ -113,3 +113,13 @@ export class MockMatrixService extends Service {
     });
   }
 }
+
+export function setupMatrixServiceMock(hooks: NestedHooks) {
+  hooks.beforeEach(function () {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+  });
+}

@@ -15,9 +15,10 @@ import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
 
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -38,7 +39,10 @@ import {
   showSearchResult,
   type TestContextWithSave,
 } from '../../helpers';
-import { MockMatrixService } from '../../helpers/mock-matrix-service';
+import {
+  setupMatrixServiceMock,
+  MockMatrixService,
+} from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -48,6 +52,7 @@ let setCardInOperatorModeState: (card: string) => Promise<void>;
 let loader: Loader;
 
 module('Integration | operator-mode', function (hooks) {
+  let matrixService: MockMatrixService;
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
@@ -62,6 +67,7 @@ module('Integration | operator-mode', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
+  setupMatrixServiceMock(hooks);
   let noop = () => {};
 
   hooks.afterEach(async function () {
@@ -71,6 +77,10 @@ module('Integration | operator-mode', function (hooks) {
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
 
     //Generate 11 person card to test recent card menu in card sheet
     let personCards: Map<String, any> = new Map<String, any>();
@@ -655,11 +665,6 @@ module('Integration | operator-mode', function (hooks) {
 
   test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
     assert.expect(4);
-    this.owner.register('service:matrixService', MockMatrixService);
-    let matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
-    matrixService.cardAPI = cardApi;
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -714,11 +719,6 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
-    this.owner.register('service:matrixService', MockMatrixService);
-    let matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
-    matrixService.cardAPI = cardApi;
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -767,11 +767,6 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('it sends regular messages without any context while the share checkbox is unticked', async function (assert) {
-    this.owner.register('service:matrixService', MockMatrixService);
-    let matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
-    matrixService.cardAPI = cardApi;
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -808,11 +803,6 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('sends the top stack cards when context sharing is on', async function (assert) {
-    this.owner.register('service:matrixService', MockMatrixService);
-    let matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
-    matrixService.cardAPI = cardApi;
     await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -850,11 +840,6 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
-    this.owner.register('service:matrixService', MockMatrixService);
-    let matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
-    matrixService.cardAPI = cardApi;
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     let operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
@@ -912,10 +897,6 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('it can handle an error in a room objective card', async function (assert) {
-    this.owner.register('service:matrixService', MockMatrixService);
-    let matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
     matrixService.roomObjectives.set('testroom', {
       error: new Error('error rendering room objective'),
     });

@@ -903,3 +903,15 @@ export async function percySnapshot(...args: any[]) {
   // @ts-ignore FIXME how to permit this?
   await originalPercySnapshot(...args);
 }
+
+export async function elementIsVisible(element: Element) {
+  return new Promise((resolve) => {
+    let intersectionObserver = new IntersectionObserver(function (entries) {
+      intersectionObserver.unobserve(element);
+
+      resolve(entries[0].isIntersecting);
+    });
+
+    intersectionObserver.observe(element);
+  });
+}

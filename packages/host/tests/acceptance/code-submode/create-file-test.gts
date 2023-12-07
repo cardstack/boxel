@@ -1,15 +1,19 @@
 import { visit, click, fillIn, waitFor } from '@ember/test-helpers';
-import { setupApplicationTest } from 'ember-qunit';
-import { module, test } from 'qunit';
-import stringify from 'safe-stable-stringify';
+
 import percySnapshot from '@percy/ember';
+import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, test } from 'qunit';
+import stringify from 'safe-stable-stringify';
+
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
-import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
+
 import type { Submode } from '@cardstack/host/components/submode-switcher';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+
 import {
   setupLocalIndexing,
   testRealmURL,
@@ -21,6 +25,7 @@ import {
   TestRealmAdapter,
   type TestContextWithSave,
 } from '../../helpers';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
@@ -134,6 +139,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
+  setupMatrixServiceMock(hooks);
 
   async function openNewFileModal(menuSelection: string) {
     await waitFor('[data-test-code-mode][data-test-save-idle]');
@@ -426,13 +432,13 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('can create a new card definition', async function (assert) {
+  test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
     assert.expect(7);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
     await openNewFileModal('Card Definition');
     assert
       .dom('[data-test-create-definition]')
@@ -470,7 +476,45 @@ export class TestCard extends CardDef {
     assert.dom('[data-test-total-fields]').containsText('3 Fields');
   });
 
+  test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
+
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Person"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import { Person } from './person';
+export class TestCard extends Person {
+  static displayName = "Test Card";
+}`.trim(),
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
   test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
+    assert.expect(2);
     await openNewFileModal('Field Definition');
     await click('[data-test-select-card-type]');
     await waitFor('[data-test-card-catalog-modal]');
@@ -500,7 +544,7 @@ export class TestCard extends CardDef {
 import BigInteger from 'https://cardstack.com/base/big-integer';
 export class FieldThatExtendsFromBigInt extends BigInteger {
   static displayName = "Field that extends from big int";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -533,10 +577,10 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       assert.strictEqual(
         content,
         `
-import Pet from '${testRealmURL}pet';
+import Pet from './pet';
 export class TestCard extends Pet {
   static displayName = "Test Card";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -570,10 +614,10 @@ export class TestCard extends Pet {
       assert.strictEqual(
         content,
         `
-import PetParent from '${testRealmURL}pet';
+import PetParent from './pet';
 export class Pet extends PetParent {
   static displayName = "Pet";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -602,7 +646,7 @@ export class Pet extends PetParent {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`,
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -619,7 +663,7 @@ export class TestCard extends CardDef {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
 
     await openNewFileModal('Card Definition');
 
@@ -652,7 +696,7 @@ export class TestCard extends CardDef {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
 
     await openNewFileModal('Card Definition');
 
@@ -685,7 +729,7 @@ export class TestCard extends CardDef {
 import { CardDef } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+}`.trim();
 
     await openNewFileModal('Card Definition');
 

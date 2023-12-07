@@ -23,7 +23,7 @@ import { Eye as EyeIcon } from '@cardstack/boxel-ui/icons';
 interface Signature {
   Args: {
     results: RealmCards[];
-    toggleSelect: (card?: CardDef) => void;
+    select: (card?: CardDef, ev?: KeyboardEvent | MouseEvent) => void;
     selectedCard: CardDef | undefined;
     context?: CardContext;
   };
@@ -63,7 +63,9 @@ export default class CardCatalog extends Component<Signature> {
                   />
                   <button
                     class='select'
-                    {{on 'click' (fn @toggleSelect card)}}
+                    {{on 'click' (fn @select card)}}
+                    {{on 'dblclick' (fn @select card)}}
+                    {{on 'keydown' (fn this.handleEnterKey card)}}
                     data-test-select={{card.id}}
                     aria-label='Select'
                   />
@@ -172,5 +174,12 @@ export default class CardCatalog extends Component<Signature> {
     realm.displayedCards.push(
       ...realm.cards.slice(num, num + this.displayCardCount),
     );
+  }
+
+  @action
+  handleEnterKey(card: CardDef, event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      this.args.select(card, event);
+    }
   }
 }

@@ -1,10 +1,9 @@
 import { on } from '@ember/modifier';
-import { v4 as uuidv4 } from 'uuid';
+
 import { action } from '@ember/object';
-import { service } from '@ember/service';
 import type Owner from '@ember/owner';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
 
 import { tracked } from '@glimmer/tracking';
 
@@ -12,6 +11,7 @@ import { restartableTask, timeout } from 'ember-concurrency';
 
 import difference from 'lodash/difference';
 import { type IAuthData, type IRequestTokenResponse } from 'matrix-js-sdk';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
   BoxelHeader,
@@ -22,6 +22,8 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { CheckMark } from '@cardstack/boxel-ui/icons';
+
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -48,7 +50,7 @@ interface Validation {
 
 export default class RegisterUser extends Component<Signature> {
   <template>
-    <BoxelHeader @title='Register User' @hasBackground={{true}} />
+    <BoxelHeader @title='Register User' @hasBackground={{false}} />
     <div class='registration-form' data-test-register-user>
       {{#if this.showEmailValidationStatus}}
         <div class='email' data-test-email-validation>
@@ -187,6 +189,7 @@ export default class RegisterUser extends Component<Signature> {
 
     <style>
       .registration-form {
+        background-color: var(--boxel-light);
         padding: var(--boxel-sp);
       }
 
@@ -457,7 +460,7 @@ export default class RegisterUser extends Component<Signature> {
   }
 
   private validateEmail = restartableTask(
-    async (clientSecret: string = uuidv4(), sendAttempt: number = 1) => {
+    async (clientSecret: string = uuidv4(), sendAttempt = 1) => {
       if (!this.email) {
         throw new Error(
           `bug: should never get here: validate button disabled when no email`,

@@ -27,6 +27,7 @@ import {
   RealmPaths,
   Deferred,
   SupportedMimeType,
+  maybeRelativeURL,
   type LocalPath,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
@@ -388,7 +389,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateCardInstanceButtonDisabled() {
     return (
-      !this.selectedCatalogEntry ||
+      (!this.selectedCatalogEntry && !this.definitionClass) ||
       !this.selectedRealmURL ||
       this.createCardInstance.isRunning
     );
@@ -487,7 +488,12 @@ export default class CreateFileModal extends Component<Signature> {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? this.selectedCatalogEntry)!; // we just checked above to make sure one of these exists
     let className = camelize(this.displayName);
-    let absoluteModule = new URL(module, this.selectedCatalogEntry?.id).href;
+    let absoluteModule = new URL(module, this.selectedCatalogEntry?.id);
+    let moduleURL = maybeRelativeURL(
+      absoluteModule,
+      url,
+      this.selectedRealmURL,
+    );
     // sanitize the name since it will be used in javascript code
     let safeName = this.displayName.replace(/[^A-Za-z \d-_]/g, '').trim();
     let src: string;
@@ -496,7 +502,7 @@ export default class CreateFileModal extends Component<Signature> {
     // reconcile that particular collision as necessary.
     if (className === exportName) {
       src = `
-import { ${exportName} as ${exportName}Parent } from '${absoluteModule}';
+import { ${exportName} as ${exportName}Parent } from '${moduleURL}';
 export class ${className} extends ${exportName}Parent {
   static displayName = "${safeName}";
 }`;
@@ -510,18 +516,18 @@ export class ${className} extends ${exportName}Parent {
       // check for parent/className declaration collision
       parent = parent === className ? `${parent}Parent` : parent;
       src = `
-import ${parent} from '${absoluteModule}';
+import ${parent} from '${moduleURL}';
 export class ${className} extends ${parent} {
   static displayName = "${safeName}";
 }`;
     } else {
       src = `
-import { ${exportName} } from '${absoluteModule}';
+import { ${exportName} } from '${moduleURL}';
 export class ${className} extends ${exportName} {
   static displayName = "${safeName}";
 }`;
     }
-    await this.cardService.saveSource(url, src);
+    await this.cardService.saveSource(url, src.trim());
     this.currentRequest.newFileDeferred.fulfill(url);
   });
 
@@ -531,18 +537,25 @@ export class ${className} extends ${exportName} {
         `Cannot createCardInstance when there is no this.currentRequest`,
       );
     }
-    if (!this.selectedCatalogEntry?.ref || !this.selectedRealmURL) {
-      return;
+    if (
+      (!this.selectedCatalogEntry?.ref && !this.definitionClass) ||
+      !this.selectedRealmURL
+    ) {
+      throw new Error(
+        `bug: cannot create card instance with out adoptsFrom ref and selected realm URL`,
+      );
     }
 
-    let { ref } = this.definitionClass
-      ? this.definitionClass
-      : this.selectedCatalogEntry;
+    let { ref } = (
+      this.definitionClass ? this.definitionClass : this.selectedCatalogEntry
+    )!; // we just checked above to make sure one of these exist
 
-    let relativeTo = new URL(this.selectedCatalogEntry.id);
+    let relativeTo = this.selectedCatalogEntry
+      ? new URL(this.selectedCatalogEntry.id)
+      : undefined;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
-    // definition comes from
+    // definition comes from. The server will make relative URL if appropriate after creation
     let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
     if ('name' in maybeRef && 'module' in maybeRef) {
       ref = maybeRef;

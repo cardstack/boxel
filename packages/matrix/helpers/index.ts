@@ -71,7 +71,7 @@ export async function toggleOperatorMode(page: Page) {
 export async function openChat(page: Page) {
   await page.locator('[data-test-open-chat]').click();
   await page.waitForFunction(() =>
-    document.querySelector('[data-test-matrix-ready]'),
+    document.querySelector('[data-test-close-chat-button]'),
   );
 }
 
@@ -151,7 +151,6 @@ export async function validateEmail(
 export async function gotoRegistration(page: Page) {
   await openRoot(page);
   await toggleOperatorMode(page);
-  await openChat(page);
   await page.locator('[data-test-register-user]').click();
   await expect(page.locator('[data-test-register-user]')).toHaveCount(1);
 }
@@ -164,7 +163,9 @@ export async function login(
 ) {
   await openRoot(page);
   await toggleOperatorMode(page);
-  await openChat(page);
+  await page.waitForFunction(() =>
+    document.querySelector('[data-test-username-field]'),
+  );
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
@@ -172,6 +173,7 @@ export async function login(
   if (opts?.expectFailure) {
     await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
   } else {
+    await openChat(page);
     await expect(page.locator('[data-test-rooms-list]')).toHaveCount(1);
   }
 }

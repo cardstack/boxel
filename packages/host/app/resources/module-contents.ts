@@ -73,9 +73,20 @@ interface Args {
 
 export class ModuleContentsResource extends Resource<Args> {
   @tracked private _declarations: ModuleDeclaration[] = [];
+  private _url: string | undefined;
+  private executableFile: Ready | undefined;
 
   get isLoading() {
     return this.load.isRunning;
+  }
+
+  // this resource is aware of loading new modules (ie it stores previous urls)
+  // it has to know this to distinguish the act of editing of a file and switching between definitions
+  // when editing a file we don't want to introduce loading state, whereas when switching between definitions we do
+  get isLoadingNewModule() {
+    return (
+      this.load.isRunning && this._url && this._url !== this.executableFile?.url
+    );
   }
 
   get declarations() {
@@ -84,10 +95,9 @@ export class ModuleContentsResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { executableFile } = named;
-    if (executableFile) {
-      this.load.perform(executableFile);
-    } else {
-      this._declarations = [];
+    this.executableFile = executableFile;
+    if (this.executableFile) {
+      this.load.perform(this.executableFile);
     }
   }
 
@@ -159,6 +169,7 @@ export class ModuleContentsResource extends Resource<Args> {
         }
       }
     });
+    this._url = executableFile.url;
   });
 }
 

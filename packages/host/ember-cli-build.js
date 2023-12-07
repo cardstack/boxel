@@ -53,10 +53,6 @@ module.exports = function (defaults) {
               process: 'process',
             }),
             new webpack.IgnorePlugin({
-              // workaround for https://github.com/embroider-build/ember-auto-import/issues/578
-              resourceRegExp: /moment-timezone/,
-            }),
-            new webpack.IgnorePlugin({
               resourceRegExp: /^https:\/\/cardstack\.com\/base/,
             }),
             new MomentLocalesPlugin({

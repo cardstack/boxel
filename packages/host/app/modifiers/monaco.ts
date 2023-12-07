@@ -107,7 +107,10 @@ export default class Monaco extends Modifier<Signature> {
       });
     }
     this.lastLanguage = language;
-    this.initializeCursorPosition.perform(initialCursorPosition);
+
+    if (initialCursorPosition != null) {
+      this.initializeCursorPosition.perform(initialCursorPosition);
+    }
   }
 
   private onContentChanged = restartableTask(
