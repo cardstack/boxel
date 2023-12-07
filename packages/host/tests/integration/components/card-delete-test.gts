@@ -219,9 +219,6 @@ module('Integration | card-delete', function (hooks) {
     assert
       .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
       .containsText('Delete the card Mango?');
-    await percySnapshot(
-      'Integration | card-delete | can delete a card from the index card stack item, modal',
-    );
 
     await this.expectEvents({
       assert,
