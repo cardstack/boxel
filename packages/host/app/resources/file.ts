@@ -17,6 +17,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type LoaderService from '../services/loader-service';
 
 import type MessageService from '../services/message-service';
+import { stripFileExtension } from '@cardstack/host/lib/utils';
 
 const log = logger('resource:file');
 const utf8 = new TextDecoder();
@@ -89,7 +90,7 @@ class _FileResource extends Resource<Args> {
 
   private setSubscription(
     realmURL: string,
-    callback: (ev: { type: string }) => void,
+    callback: (ev: { type: string; data: string }) => void,
   ) {
     let messageServiceUrl = `${realmURL}_message`;
     if (this.subscription && this.subscription.url !== messageServiceUrl) {
@@ -188,7 +189,22 @@ class _FileResource extends Resource<Args> {
       },
     });
 
-    this.setSubscription(realmURL, () => this.read.perform());
+    this.setSubscription(realmURL, (event: { data: string }) => {
+      let eventData = JSON.parse(event.data);
+
+      if (!eventData.invalidations) {
+        return;
+      }
+
+      let isInvalidated = eventData.invalidations.some(
+        (invalidationUrl: string) =>
+          invalidationUrl === stripFileExtension(this.url),
+      );
+
+      if (isInvalidated) {
+        this.read.perform();
+      }
+    });
   });
 
   writeTask = restartableTask(
