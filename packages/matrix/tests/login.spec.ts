@@ -84,7 +84,7 @@ test.describe('Login', () => {
     await assertLoggedIn(page);
   });
 
-  test.only('it reacts to enter keypresses', async ({ page }) => {
+  test('it reacts to enter keypresses', async ({ page }) => {
     await openRoot(page);
     await toggleOperatorMode(page);
 
