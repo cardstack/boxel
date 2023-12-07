@@ -882,7 +882,9 @@ export class MockRedirectedResponse extends Response {
   }
 }
 
-export async function percySnapshot(...args: any[]) {
+export async function percySnapshot(
+  ...args: Parameters<typeof originalPercySnapshot>
+) {
   // Adapted from: https://github.com/GoogleForCreators/web-stories-wp/pull/6324/files#diff-970412cd35c9346699038fab952d3c0c9a0e5060a60ed528813def9a00ca157b
   const weights = ['400', '500', '700'];
   const font = '12px Poppins';
@@ -900,7 +902,6 @@ export async function percySnapshot(...args: any[]) {
     }
   });
 
-  // @ts-ignore FIXME how to permit this?
   await originalPercySnapshot(...args);
 }
 
