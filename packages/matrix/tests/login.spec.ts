@@ -80,7 +80,20 @@ test.describe('Login', () => {
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
     await openChat(page);
-    
+
+    await assertLoggedIn(page);
+  });
+
+  test('it reacts to enter keypresses', async ({ page }) => {
+    await openRoot(page);
+    await toggleOperatorMode(page);
+
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('pass');
+
+    await page.keyboard.press('Enter');
+
+    await openChat(page);
     await assertLoggedIn(page);
   });
 });
