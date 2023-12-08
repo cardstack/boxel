@@ -440,18 +440,23 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 
-  // static isolated = class Isolated extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static embedded = class Embedded extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static edit = class Edit extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static atom = class Atom extends Component<typeof this> {
-  //   <template></template>
-  // }
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+  
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
 }`.trim();
     await openNewFileModal('Card Definition');
     assert
@@ -517,18 +522,23 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends Person {
   static displayName = "Test Card";
 
-  // static isolated = class Isolated extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static embedded = class Embedded extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static edit = class Edit extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static atom = class Atom extends Component<typeof this> {
-  //   <template></template>
-  // }
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+  
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
 }`.trim(),
         'the source is correct',
       );
@@ -574,15 +584,19 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class FieldThatExtendsFromBigInt extends BigInteger {
   static displayName = "Field that extends from big int";
 
-  // static embedded = class Embedded extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static edit = class Edit extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static atom = class Atom extends Component<typeof this> {
-  //   <template></template>
-  // }
+  /*
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
 }`.trim(),
         'the source is correct',
       );
@@ -621,18 +635,23 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends Pet {
   static displayName = "Test Card";
 
-  // static isolated = class Isolated extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static embedded = class Embedded extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static edit = class Edit extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static atom = class Atom extends Component<typeof this> {
-  //   <template></template>
-  // }
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+  
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
 }`.trim(),
         'the source is correct',
       );
@@ -672,18 +691,79 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class Pet extends PetParent {
   static displayName = "Pet";
 
-  // static isolated = class Isolated extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static embedded = class Embedded extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static edit = class Edit extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static atom = class Atom extends Component<typeof this> {
-  //   <template></template>
-  // }
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+  
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim(),
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can reconcile a classname collision with a javascript builtin object', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
+
+    // select card type
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Pet"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Map');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import Pet from './pet';
+import { Component } from 'https://cardstack.com/base/card-api';
+export class Map0 extends Pet {
+  static displayName = "Map";
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+  
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
 }`.trim(),
         'the source is correct',
       );
@@ -715,18 +795,23 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 
-  // static isolated = class Isolated extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static embedded = class Embedded extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static edit = class Edit extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static atom = class Atom extends Component<typeof this> {
-  //   <template></template>
-  // }
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+  
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
 }`.trim(),
         'the source is correct',
       );
@@ -746,18 +831,23 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 
-  // static isolated = class Isolated extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static embedded = class Embedded extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static edit = class Edit extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static atom = class Atom extends Component<typeof this> {
-  //   <template></template>
-  // }
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+  
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
 }`.trim();
 
     await openNewFileModal('Card Definition');
@@ -793,18 +883,23 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 
-  // static isolated = class Isolated extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static embedded = class Embedded extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static edit = class Edit extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static atom = class Atom extends Component<typeof this> {
-  //   <template></template>
-  // }
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+  
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
 }`.trim();
 
     await openNewFileModal('Card Definition');
@@ -840,18 +935,23 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 
-  // static isolated = class Isolated extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static embedded = class Embedded extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static edit = class Edit extends Component<typeof this> {
-  //   <template></template>
-  // }
-  // static atom = class Atom extends Component<typeof this> {
-  //   <template></template>
-  // }
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+  
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
 }`.trim();
 
     await openNewFileModal('Card Definition');
