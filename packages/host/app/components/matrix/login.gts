@@ -109,14 +109,14 @@ export default class Login extends Component<Signature> {
       .content {
         display: flex;
         flex-direction: column;
-        padding: var(--boxel-sp-xl);
+        padding: var(--boxel-sp) var(--boxel-sp-xl);
       }
       .title {
         font: 700 var(--boxel-font-med);
-        margin-bottom: var(--boxel-sp-lg);
+        margin-bottom: var(--boxel-sp-sm);
       }
       .field {
-        margin-top: var(--boxel-sp-lg);
+        margin-top: var(--boxel-sp);
       }
       .forgot-password {
         border: none;

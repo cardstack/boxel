@@ -21,7 +21,8 @@ export default class Auth extends Component {
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        height: 100vh;
+        min-height: 100vh;
+        overflow-x: auto;
       }
     </style>
   </template>
