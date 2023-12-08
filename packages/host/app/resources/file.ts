@@ -197,8 +197,20 @@ class _FileResource extends Resource<Args> {
       }
 
       let isInvalidated = eventData.invalidations.some(
-        (invalidationUrl: string) =>
-          invalidationUrl === stripFileExtension(this.url),
+        (invalidationUrl: string) => {
+          let invalidationUrlHasExtension = invalidationUrl
+            .split('/')
+            .pop()
+            .includes('.');
+
+          // This conditional is here because changes to card instance json files, for example `drafts/Authors/1.json`,
+          // will be in invalidations in the following form: `drafts/Authors/1` (without the .json extension)
+          if (invalidationUrlHasExtension) {
+            return this.url === invalidationUrl;
+          } else {
+            return stripFileExtension(this.url) === invalidationUrl;
+          }
+        },
       );
 
       // Do not reload this file if some other client else made changes to some other file
