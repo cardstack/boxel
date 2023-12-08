@@ -54,9 +54,15 @@ export default class CodeEditor extends Component<Signature> {
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
   private hasUnsavedSourceChanges = false;
+  private codePath;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    // note that we actually set our own `codePath` property because within
+    // registerDestructor we actually can no longer see the codePath that pertains
+    // to the component that is being destroyed--rather we see the new codePath
+    // that we are transitioning to.
+    this.codePath = this.operatorModeStateService.state.codePath;
 
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
@@ -99,10 +105,6 @@ export default class CodeEditor extends Component<Signature> {
       return this.maybeMonacoSDK;
     }
     throw new Error(`cannot use monaco SDK before it has loaded`);
-  }
-
-  private get codePath() {
-    return this.operatorModeStateService.state.codePath;
   }
 
   private get readyFile() {
