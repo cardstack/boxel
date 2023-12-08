@@ -27,6 +27,8 @@ import {
   maybeRelativeURL,
   trimExecutableExtension,
   codeRefWithAbsoluteURL,
+  baseCardRef,
+  baseFieldRef,
   type CodeRef,
 } from './index';
 //@ts-ignore unsure where these types live
@@ -459,9 +461,14 @@ function suggestedCardName(
   ref: { name: string; module: string },
   type: 'card' | 'field',
 ): string {
-  if (ref.name.toLowerCase().endsWith(type)) {
+  if (
+    ref.name.toLowerCase().endsWith(type) ||
+    isEqual(ref, baseCardRef) ||
+    isEqual(ref, baseFieldRef)
+  ) {
     return ref.name;
   }
+
   let name = ref.name;
   if (name === 'default') {
     name = ref.module.split('/').pop()!;

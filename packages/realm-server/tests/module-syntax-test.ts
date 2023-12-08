@@ -1,12 +1,17 @@
 import { module, test } from 'qunit';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import { dirSync } from 'tmp';
-import { Loader, baseRealm } from '@cardstack/runtime-common';
+import {
+  Loader,
+  baseRealm,
+  baseCardRef,
+  baseFieldRef,
+} from '@cardstack/runtime-common';
 import { testRealm, createRealm } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '../lib/externals';
 
-module.only('module-syntax', function () {
+module('module-syntax', function () {
   let loader = new Loader();
   loader.addURLMapping(
     new URL(baseRealm.url),
@@ -324,6 +329,76 @@ module.only('module-syntax', function () {
         }
       `,
       'original code formatting is preserved',
+    );
+  });
+
+  test('can add a base-card field to a card', async function (assert) {
+    let src = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+      export class Pet extends CardDef {
+        @field petName = contains(StringField);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
+
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // Card we want to add to
+      fieldName: 'card',
+      fieldRef: baseCardRef,
+      fieldType: 'linksTo',
+      fieldDefinitionType: 'card',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
+      outgoingRealmURL: undefined,
+    });
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        export class Pet extends CardDef {
+          @field petName = contains(StringField);
+          @field card = linksTo(CardDef);
+        }
+      `,
+    );
+  });
+
+  test('can add a base-field field to a card', async function (assert) {
+    let src = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+      export class Pet extends CardDef {
+        @field petName = contains(StringField);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
+
+    mod.addField({
+      cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // Card we want to add to
+      fieldName: 'field',
+      fieldRef: baseFieldRef,
+      fieldType: 'contains',
+      fieldDefinitionType: 'field',
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
+      outgoingRealmURL: undefined,
+    });
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { contains, field, CardDef, FieldDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        export class Pet extends CardDef {
+          @field petName = contains(StringField);
+          @field field = contains(FieldDef);
+        }
+      `,
     );
   });
 
