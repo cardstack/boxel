@@ -28,7 +28,7 @@ interface Signature {
 
 export default class Login extends Component<Signature> {
   <template>
-    <div class='login-form'>
+    <form class='login-form' {{on 'submit' this.handleSubmit}}>
       <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
         <:icon>
           <BoxelIcon />
@@ -82,7 +82,7 @@ export default class Login extends Component<Signature> {
           {{on 'click' @onRegistration}}
         >Create a new Boxel account</Button>
       </div>
-    </div>
+    </form>
 
     <style>
       .login-form {
@@ -160,6 +160,11 @@ export default class Login extends Component<Signature> {
     return (
       !this.username || !this.password || this.error || this.doLogin.isRunning
     );
+  }
+
+  @action handleSubmit(event: SubmitEvent) {
+    event.preventDefault(); // Don't actually submit the form
+    !this.isLoginButtonDisabled && this.login();
   }
 
   @action
