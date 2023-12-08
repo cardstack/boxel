@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Base64 Image Card",
+      "description": "A card capable of representing an image via base64 encoding.",
+      "ref": {
+        "module": "https://cardstack.com/base/base64-image",
+        "name": "Base64Image"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

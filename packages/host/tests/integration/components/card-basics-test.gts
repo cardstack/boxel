@@ -518,6 +518,8 @@ module('Integration | card-basics', function (hooks) {
       .containsText(`Module: http://localhost:4202/test/person Name: Person`);
   });
 
+  test('render base64 image card', async function (assert) {});
+
   test('render card typeDisplayName', async function (assert) {
     let { CardDef } = cardApi;
     class DriverCard extends CardDef {
