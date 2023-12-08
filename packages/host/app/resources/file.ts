@@ -9,6 +9,7 @@ import { Resource } from 'ember-resources';
 
 import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 
+import { stripFileExtension } from '@cardstack/host/lib/utils';
 import type CardService from '@cardstack/host/services/card-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -17,7 +18,6 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type LoaderService from '../services/loader-service';
 
 import type MessageService from '../services/message-service';
-import { stripFileExtension } from '@cardstack/host/lib/utils';
 
 const log = logger('resource:file');
 const utf8 = new TextDecoder();
@@ -201,6 +201,7 @@ class _FileResource extends Resource<Args> {
           invalidationUrl === stripFileExtension(this.url),
       );
 
+      // Do not reload this file if someone other client else made changes to some other file
       if (isInvalidated) {
         this.read.perform();
       }
