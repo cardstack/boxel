@@ -998,9 +998,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
@@ -1024,9 +1022,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
@@ -1049,9 +1045,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
@@ -1074,9 +1068,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
@@ -1100,9 +1092,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
@@ -1127,9 +1117,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
@@ -1171,12 +1159,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}exports.gts`,
-      codeSelection: {
-        codeRef: {
-          module: `${testRealmURL}exports`,
-          name: elementName,
-        },
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [],
@@ -1204,12 +1187,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}exports.gts`,
-      codeSelection: {
-        codeRef: {
-          module: `${testRealmURL}exports`,
-          name: elementName,
-        },
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [],
@@ -1238,12 +1216,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}exports.gts`,
-      codeSelection: {
-        codeRef: {
-          module: `${testRealmURL}exports`,
-          name: elementName,
-        },
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [],
@@ -1270,12 +1243,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        codeRef: {
-          module: `${testRealmURL}imports`,
-          name: elementName,
-        },
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [],
@@ -1304,12 +1272,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}exports.gts`,
-      codeSelection: {
-        codeRef: {
-          module: `${testRealmURL}exports`,
-          name: elementName,
-        },
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [],

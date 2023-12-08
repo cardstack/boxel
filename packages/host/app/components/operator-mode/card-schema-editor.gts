@@ -273,6 +273,8 @@ export default class CardSchemaEditor extends Component<Signature> {
               {{@cardType.module}}
               {{#if codeRef.name}}
                 ({{codeRef.name}})
+              {{else}}
+                ({{@cardType.localName}})
               {{/if}}
             </:content>
           </Tooltip>
