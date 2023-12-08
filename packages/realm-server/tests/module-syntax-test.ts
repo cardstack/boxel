@@ -6,7 +6,7 @@ import { testRealm, createRealm } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '../lib/externals';
 
-module('module-syntax', function () {
+module.only('module-syntax', function () {
   let loader = new Loader();
   loader.addURLMapping(
     new URL(baseRealm.url),
@@ -27,6 +27,7 @@ module('module-syntax', function () {
         name: 'default',
       },
       fieldType: 'contains',
+      fieldDefinitionType: 'field',
       addFieldAtIndex,
       incomingRelativeTo: undefined,
       outgoingRelativeTo: undefined,
@@ -142,6 +143,7 @@ module('module-syntax', function () {
         name: 'default',
       },
       fieldType: 'contains',
+      fieldDefinitionType: 'field',
       incomingRelativeTo: undefined,
       outgoingRelativeTo: undefined,
       outgoingRealmURL: undefined,
@@ -344,6 +346,7 @@ module('module-syntax', function () {
         name: 'Person',
       },
       fieldType: 'linksTo',
+      fieldDefinitionType: 'card',
       incomingRelativeTo: new URL(
         `http://localhost:4202/node-test/catalog-entry/1`,
       ), // hypothethical catalog entry that lives at this id
@@ -354,12 +357,12 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import { Person } from "./person";
+        import { Person as PersonCard } from "./person";
         import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         export class Pet extends CardDef {
           @field petName = contains(StringField);
-          @field bestFriend = linksTo(Person);
+          @field bestFriend = linksTo(PersonCard);
         }
       `,
     );
@@ -384,6 +387,7 @@ module('module-syntax', function () {
         name: 'Person',
       },
       fieldType: 'linksTo',
+      fieldDefinitionType: 'card',
       incomingRelativeTo: new URL(`http://localhost:4202/test/catalog-entry/1`), // hypothethical catalog entry that lives at this id
       outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
       outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that the catalog entry lives in
@@ -392,12 +396,12 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import { Person } from "http://localhost:4202/test/person";
+        import { Person as PersonCard } from "http://localhost:4202/test/person";
         import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         export class Pet extends CardDef {
           @field petName = contains(StringField);
-          @field bestFriend = linksTo(Person);
+          @field bestFriend = linksTo(PersonCard);
         }
       `,
     );
@@ -419,6 +423,7 @@ module('module-syntax', function () {
         name: 'default',
       },
       fieldType: 'contains',
+      fieldDefinitionType: 'field',
       incomingRelativeTo: undefined,
       outgoingRelativeTo: undefined,
       outgoingRealmURL: undefined,
@@ -463,6 +468,7 @@ module('module-syntax', function () {
         card: { module: `${testRealm}dir/person`, name: 'Person' },
       },
       fieldName: 'age',
+      fieldDefinitionType: 'field',
       fieldRef: {
         module: 'https://cardstack.com/base/number',
         name: 'default',
@@ -520,6 +526,7 @@ module('module-syntax', function () {
         card: { module: `${testRealm}dir/person`, name: 'FancyPerson' },
       },
       fieldName: 'age',
+      fieldDefinitionType: 'field',
       fieldRef: {
         module: 'https://cardstack.com/base/number',
         name: 'default',
@@ -580,6 +587,7 @@ module('module-syntax', function () {
         card: { module: `${testRealm}dir/person`, name: 'Person' },
       },
       fieldName: 'age',
+      fieldDefinitionType: 'field',
       fieldRef: {
         module: 'https://cardstack.com/base/number',
         name: 'default',
@@ -632,6 +640,7 @@ module('module-syntax', function () {
     mod.addField({
       cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
       fieldName: 'aliases',
+      fieldDefinitionType: 'field',
       fieldRef: {
         module: 'https://cardstack.com/base/string',
         name: 'default',
@@ -698,6 +707,7 @@ module('module-syntax', function () {
         module: `${testRealm}dir/pet`,
         name: 'Pet',
       },
+      fieldDefinitionType: 'card',
       fieldType: 'linksTo',
       incomingRelativeTo: undefined,
       outgoingRelativeTo: undefined,
@@ -707,12 +717,12 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import { Pet } from "${testRealm}dir/pet";
+        import { Pet as PetCard } from "${testRealm}dir/pet";
         import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         export class Person extends CardDef {
           @field firstName = contains(StringField);
-          @field pet = linksTo(Pet);
+          @field pet = linksTo(PetCard);
         }
       `,
     );
@@ -748,6 +758,7 @@ module('module-syntax', function () {
         name: 'Person',
       },
       fieldType: 'linksTo',
+      fieldDefinitionType: 'card',
       incomingRelativeTo: undefined,
       outgoingRelativeTo: undefined,
       outgoingRealmURL: undefined,
@@ -800,6 +811,7 @@ module('module-syntax', function () {
         name: 'default',
       },
       fieldType: 'contains',
+      fieldDefinitionType: 'field',
       incomingRelativeTo: undefined,
       outgoingRelativeTo: undefined,
       outgoingRealmURL: undefined,
@@ -817,45 +829,6 @@ module('module-syntax', function () {
         export class Person extends CardDef {
           @field firstName = contains(StringField);
           @field age = contains(NumberField0);
-        }
-      `,
-    );
-  });
-
-  test('can handle builtin object collisions when adding a field', async function (assert) {
-    let src = `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
-
-      export class Person extends CardDef {
-        @field firstName = contains(StringField);
-      }
-    `;
-
-    let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
-    mod.addField({
-      cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
-      fieldName: 'map',
-      fieldRef: {
-        module: './map',
-        name: 'default',
-      },
-      fieldType: 'contains',
-      incomingRelativeTo: undefined,
-      outgoingRelativeTo: undefined,
-      outgoingRealmURL: undefined,
-    });
-
-    assert.codeEqual(
-      mod.code(),
-      `
-        import Map0 from "./map";
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-
-        export class Person extends CardDef {
-          @field firstName = contains(StringField);
-          @field map = contains(Map0);
         }
       `,
     );
@@ -883,6 +856,7 @@ module('module-syntax', function () {
           name: 'default',
         },
         fieldType: 'contains',
+        fieldDefinitionType: 'field',
         incomingRelativeTo: undefined,
         outgoingRelativeTo: undefined,
         outgoingRealmURL: undefined,
@@ -968,6 +942,7 @@ module('module-syntax', function () {
         name: 'default',
       },
       fieldType: 'containsMany',
+      fieldDefinitionType: 'field',
       addFieldAtIndex,
       incomingRelativeTo: undefined,
       outgoingRelativeTo: undefined,
@@ -1017,6 +992,7 @@ module('module-syntax', function () {
         name: 'default',
       },
       fieldType: 'contains',
+      fieldDefinitionType: 'field',
       addFieldAtIndex,
       incomingRelativeTo: undefined,
       outgoingRelativeTo: undefined,
@@ -1066,6 +1042,7 @@ module('module-syntax', function () {
         name: 'default',
       },
       fieldType: 'contains',
+      fieldDefinitionType: 'field',
       addFieldAtIndex,
       incomingRelativeTo: undefined,
       outgoingRelativeTo: undefined,

@@ -745,7 +745,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       "code editor contains line 'luckyNumbers = containsMany(BigIntegerField)'",
     );
 
-    // Field is a card descending from CardDef (cardinality: one)
+    // Field is a definition descending from FieldDef (cardinality: one)
     await waitFor('[data-test-add-field-button]');
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
@@ -771,7 +771,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       "code editor contains line 'favPerson = linksTo(() => Person);'",
     );
 
-    // Field is a card descending from CardDef (cardinality: many)
+    // Field is a definition descending from FieldDef (cardinality: many)
     await waitFor('[data-test-add-field-button]');
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
