@@ -22,6 +22,7 @@ import { type ModuleDeclaration } from '@cardstack/host/resources/module-content
 
 import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -47,9 +48,10 @@ interface Signature {
 const log = logger('component:code-editor');
 
 export default class CodeEditor extends Component<Signature> {
-  @service declare monacoService: MonacoService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare cardService: CardService;
+  @service private declare monacoService: MonacoService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare cardService: CardService;
+  @service private declare environmentService: EnvironmentService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
@@ -213,13 +215,11 @@ export default class CodeEditor extends Component<Signature> {
 
   private contentChangedTask = restartableTask(async (content: string) => {
     this.hasUnsavedSourceChanges = true;
-    // note that there is already a debounce in the monaco modifier so there
-    // is no need to delay further for auto save initiation
-
     if (!isReady(this.args.file) || content === this.args.file?.content) {
       return;
     }
 
+    await timeout(this.environmentService.autoSaveDelayMs);
     this.writeSourceCodeToFile(this.args.file, content);
     this.waitForSourceCodeWrite.perform();
     this.hasUnsavedSourceChanges = false;

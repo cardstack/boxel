@@ -215,7 +215,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     let deferred = new Deferred<void>();
     let fileID = '';
 
-    this.onSave(async (json) => {
+    this.onSave(async (url, json) => {
+      fileID = url.href;
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -248,7 +249,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         },
         'relationships data is correct',
       );
-      fileID = json.data.id;
       deferred.fulfill();
     });
 
@@ -271,7 +271,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     let deferred = new Deferred<void>();
     let fileURL = '';
 
-    this.onSave(async (json) => {
+    this.onSave(async (url, json) => {
+      fileURL = url.href;
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -293,7 +294,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         },
         'adoptsFrom is correct',
       );
-      fileURL = json.data.id;
       deferred.fulfill();
     });
 
@@ -330,7 +330,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     let deferred = new Deferred<void>();
     let fileID = '';
 
-    this.onSave(async (json) => {
+    this.onSave(async (url, json) => {
+      fileID = url.href;
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -352,7 +353,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         },
         'adoptsFrom is correct',
       );
-      fileID = json.data.id;
       deferred.fulfill();
     });
 
@@ -393,7 +393,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     let deferred = new Deferred<void>();
     let fileID = '';
 
-    this.onSave(async (json) => {
+    this.onSave(async (url, json) => {
+      fileID = url.href;
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -415,7 +416,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         },
         'adoptsFrom is correct',
       );
-      fileID = json.data.id;
       deferred.fulfill();
     });
 
@@ -473,7 +473,7 @@ export class TestCard extends CardDef {
 
     await percySnapshot(assert);
 
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -510,7 +510,7 @@ export class TestCard extends CardDef {
     await fillIn('[data-test-file-name-field]', 'test-card');
 
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -572,7 +572,7 @@ export class TestCard extends Person {
     );
     await fillIn('[data-test-file-name-field]', 'big-int-v2');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -623,7 +623,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
     await fillIn('[data-test-display-name-field]', 'Test Card');
     await fillIn('[data-test-file-name-field]', 'test-card');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -679,7 +679,7 @@ export class TestCard extends Pet {
     await fillIn('[data-test-display-name-field]', 'Pet');
     await fillIn('[data-test-file-name-field]', 'test-card');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -735,7 +735,7 @@ export class Pet extends PetParent {
     await fillIn('[data-test-display-name-field]', 'Map');
     await fillIn('[data-test-file-name-field]', 'test-card');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -783,7 +783,7 @@ export class Map0 extends Pet {
     await fillIn('[data-test-display-name-field]', 'Test Card; { }');
     await fillIn('[data-test-file-name-field]', 'test-card');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -855,7 +855,7 @@ export class TestCard extends CardDef {
     await fillIn('[data-test-display-name-field]', 'Test Card');
     await fillIn('[data-test-file-name-field]', 'test-dir/test-card');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -907,7 +907,7 @@ export class TestCard extends CardDef {
     await fillIn('[data-test-display-name-field]', 'Test Card');
     await fillIn('[data-test-file-name-field]', 'test-card.gts');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -959,7 +959,7 @@ export class TestCard extends CardDef {
     await fillIn('[data-test-display-name-field]', 'Test Card');
     await fillIn('[data-test-file-name-field]', '/test-card');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }

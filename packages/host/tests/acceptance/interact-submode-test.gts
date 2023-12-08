@@ -790,7 +790,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
 
       let deferred = new Deferred<void>();
-      this.onSave((json) => {
+      this.onSave((_, json) => {
         if (typeof json === 'string') {
           throw new Error('expected JSON save data');
         }

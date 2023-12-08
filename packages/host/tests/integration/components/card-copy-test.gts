@@ -630,11 +630,11 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     let id: string | undefined;
-    this.onSave((json) => {
+    this.onSave((url, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      id = json.data.id.split('/').pop()!;
+      id = url.href.split('/').pop()!;
       assert.true(uuidValidate(id), 'card identifier is UUID');
       assert.strictEqual(json.data.id, `${testRealm2URL}Pet/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Mango');
@@ -734,7 +734,7 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     let savedCards: SingleCardDocument[] = [];
-    this.onSave((json) => {
+    this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -831,11 +831,11 @@ module('Integration | card-copy', function (hooks) {
     };
 
     let id: string | undefined;
-    this.onSave((json) => {
+    this.onSave((url, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      id = json.data.id.split('/').pop()!;
+      id = url.href.split('/').pop()!;
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
       assert.deepEqual(json.data.meta.adoptsFrom, {
@@ -948,11 +948,11 @@ module('Integration | card-copy', function (hooks) {
       }
     };
     let id: string | undefined;
-    this.onSave((json) => {
+    this.onSave((url, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      id = json.data.id.split('/').pop()!;
+      id = url.href.split('/').pop()!;
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Sakura');
       assert.deepEqual(json.data.meta.adoptsFrom, {
