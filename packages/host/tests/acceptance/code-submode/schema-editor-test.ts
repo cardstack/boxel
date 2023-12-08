@@ -970,7 +970,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-card-schema="Base"] [data-test-tooltip-content]');
     assert
       .dom('[data-test-card-schema="Base"] [data-test-tooltip-content]')
-      .hasText('https://cardstack.com/base/card-api');
+      .hasText('https://cardstack.com/base/card-api (BaseDef)');
 
     await triggerEvent(
       '[data-test-card-schema="Base"] [data-test-card-schema-navigational-button]',
