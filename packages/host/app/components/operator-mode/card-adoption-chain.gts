@@ -9,11 +9,11 @@ import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
 import { CardInheritance } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 
+import { stripFileExtension } from '@cardstack/host/lib/utils';
 import { Type } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
-import { stripFileExtension } from '@cardstack/host/lib/utils';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -126,7 +126,6 @@ export default class CardAdoptionChain extends Component<Signature> {
 
   @action allowFieldManipulation(file: Ready, cardType: Type): boolean {
     // Only allow add/edit/remove for fields from the currently opened module
-
     return stripFileExtension(file.url) === cardType.module;
   }
 }
