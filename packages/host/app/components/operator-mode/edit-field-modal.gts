@@ -229,6 +229,7 @@ export default class EditFieldModal extends Component<Signature> {
         fieldName,
         fieldRef: fieldRef as { module: string; name: string },
         fieldType,
+        fieldDefinitionType: this.isFieldDef ? 'field' : 'card',
         incomingRelativeTo,
         outgoingRelativeTo: this.loaderService.loader.reverseResolution(
           makeResolvedURL(this.operatorModeStateService.state.codePath!).href,

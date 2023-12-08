@@ -537,7 +537,7 @@ export class ${className} extends ${exportName} {
         `  static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  `,
+`,
       );
     }
     src.push(
