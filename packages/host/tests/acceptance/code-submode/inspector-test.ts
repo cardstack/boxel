@@ -1483,7 +1483,7 @@ export class TestCard extends ExportedCard {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -1701,7 +1701,7 @@ export class ExportedCard extends ExportedCardParent {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }

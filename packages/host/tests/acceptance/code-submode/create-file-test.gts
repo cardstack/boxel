@@ -444,7 +444,7 @@ export class TestCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -526,7 +526,7 @@ export class TestCard extends Person {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -639,7 +639,7 @@ export class TestCard extends Pet {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -695,7 +695,7 @@ export class Pet extends PetParent {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -751,7 +751,7 @@ export class Map0 extends Pet {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -799,7 +799,7 @@ export class TestCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -835,7 +835,7 @@ export class TestCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -887,7 +887,7 @@ export class TestCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -939,7 +939,7 @@ export class TestCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
