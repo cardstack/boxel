@@ -618,37 +618,33 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       'service:environment-service',
     ) as EnvironmentService;
     environment.autoSaveDelayMs = 1000; // slowdown the auto save so it doesn't interfere with this test
-    try {
-      assert.expect(2);
-      let operatorModeStateParam = stringify({
-        stacks: [[]],
-        submode: 'code',
-        codePath: `${testRealmURL}README.txt`,
-      })!;
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
-      await waitForCodeEditor();
-      let deferred = new Deferred<void>();
-      this.onSave((url, content) => {
-        if (typeof content !== 'string') {
-          throw new Error('expected string save data');
-        }
-        assert.strictEqual(url.href, `${testRealmURL}README.txt`);
-        assert.strictEqual(content, 'Hello Mars');
-        deferred.fulfill();
-      });
+    assert.expect(2);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}README.txt`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    let deferred = new Deferred<void>();
+    this.onSave((url, content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.strictEqual(url.href, `${testRealmURL}README.txt`);
+      assert.strictEqual(content, 'Hello Mars');
+      deferred.fulfill();
+    });
 
-      setMonacoContent('Hello Mars');
-      await new Promise((r) => setTimeout(r, 100));
-      await click(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`);
+    setMonacoContent('Hello Mars');
+    await new Promise((r) => setTimeout(r, 100));
+    await click(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`);
 
-      await deferred.promise;
-    } finally {
-      environment.autoSaveDelayMs = 0;
-    }
+    await deferred.promise;
   });
 
   test<TestContextWithSave>('unsaved changes made in card editor are saved when switching out of code submode', async function (assert) {
@@ -657,48 +653,44 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     ) as EnvironmentService;
     environment.autoSaveDelayMs = 1000; // slowdown the auto save so it doesn't interfere with this test
     let numSaves = 0;
-    try {
-      assert.expect(2);
+    assert.expect(2);
 
-      let operatorModeStateParam = stringify({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
-          ],
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            format: 'isolated',
+          },
         ],
-        submode: 'code',
-        codePath: `${testRealmURL}Pet/mango.json`,
-      })!;
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
-      await waitForCodeEditor();
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
 
-      this.onSave((url, json) => {
-        if (typeof json === 'string') {
-          throw new Error('expected JSON save data');
-        }
-        if (numSaves > 0) {
-          // this is the auto-save--we can ignore it
-        } else {
-          assert.strictEqual(url.href, `${testRealmURL}Pet/mango`);
-          assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
-          numSaves++;
-        }
-      });
+    this.onSave((url, json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      if (numSaves > 0) {
+        // this is the auto-save--we can ignore it
+      } else {
+        assert.strictEqual(url.href, `${testRealmURL}Pet/mango`);
+        assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+        numSaves++;
+      }
+    });
 
-      await click('[data-test-preview-card-footer-button-edit]');
-      await fillIn('[data-test-field="name"] input', 'MangoXXX');
-      await click('[data-test-submode-switcher] button');
-      await click('[data-test-boxel-menu-item-text="Interact"]');
-    } finally {
-      environment.autoSaveDelayMs = 0;
-    }
+    await click('[data-test-preview-card-footer-button-edit]');
+    await fillIn('[data-test-field="name"] input', 'MangoXXX');
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
   });
 
   test<TestContextWithSave>('invalid JSON card instance change made in monaco editor is NOT auto-saved', async function (assert) {
