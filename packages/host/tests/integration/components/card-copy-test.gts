@@ -2,7 +2,6 @@ import { waitUntil, waitFor, click } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
-import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import flatMap from 'lodash/flatMap';
 import { module, test } from 'qunit';
@@ -24,6 +23,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,

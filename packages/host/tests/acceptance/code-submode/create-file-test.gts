@@ -1,6 +1,5 @@
 import { visit, click, fillIn, waitFor } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -15,6 +14,7 @@ import type { OperatorModeState } from '@cardstack/host/services/operator-mode-s
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
+  percySnapshot,
   setupLocalIndexing,
   testRealmURL,
   setupOnSave,

@@ -1,6 +1,5 @@
 import { visit, click, waitFor, fillIn } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
@@ -16,6 +15,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   TestRealmAdapter,
+  percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
