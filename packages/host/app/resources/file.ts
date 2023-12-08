@@ -201,7 +201,7 @@ class _FileResource extends Resource<Args> {
           invalidationUrl === stripFileExtension(this.url),
       );
 
-      // Do not reload this file if someone other client else made changes to some other file
+      // Do not reload this file if some other client else made changes to some other file
       if (isInvalidated) {
         this.read.perform();
       }
