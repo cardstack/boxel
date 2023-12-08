@@ -200,7 +200,7 @@ class _FileResource extends Resource<Args> {
         (invalidationUrl: string) => {
           let invalidationUrlHasExtension = invalidationUrl
             .split('/')
-            .pop()
+            .pop()!
             .includes('.');
 
           // This conditional is here because changes to card instance json files, for example `drafts/Authors/1.json`,
