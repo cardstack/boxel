@@ -293,11 +293,11 @@ function getConstrainedImageSize(maxHeight: number) {
 
 export class Base64ImageField extends FieldDef {
   static displayName = 'Base64 Image Card';
-  @field base64 = contains(StringField);
   @field altText = contains(StringField);
   @field size = contains(ImageSizeField);
   @field height = contains(NumberField);
   @field width = contains(NumberField);
+  @field base64 = contains(StringField);
 
   static edit = Edit;
   static embedded = getConstrainedImageSize(embdeddedImgHeight);

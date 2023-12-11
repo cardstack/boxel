@@ -1906,6 +1906,22 @@ export class StringField extends FieldDef {
   };
 }
 
+// TODO: This is a simple workaround until the thumbnailURL is converted into an actual image field
+export class MaybeBase64Field extends StringField {
+  static embedded = class Embedded extends Component<typeof this> {
+    get model() {
+      if (this.args.model?.startsWith('data:image/')) {
+        return '[Base64 encoded value]';
+      }
+      return this.args.model;
+    }
+    <template>
+      {{this.model}}
+    </template>
+  };
+  static atom = MaybeBase64Field.embedded;
+}
+
 export class CardDef extends BaseDef {
   [isSavedInstance] = false;
   [realmInfo]: RealmInfo | undefined = undefined;
@@ -1913,7 +1929,10 @@ export class CardDef extends BaseDef {
   @field id = contains(IDField);
   @field title = contains(StringField);
   @field description = contains(StringField);
-  @field thumbnailURL = contains(StringField); // TODO: this will probably be an image or image url field card when we have it
+  // TODO: this will probably be an image or image url field card when we have it
+  // UPDATE: we now have a Base64ImageField card. we can probably refactor this
+  // to use it directly now (or wait until a better image field comes along)
+  @field thumbnailURL = contains(MaybeBase64Field);
   static displayName = 'Card';
   static isCardDef = true;
 

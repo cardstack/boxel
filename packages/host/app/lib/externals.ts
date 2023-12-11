@@ -9,14 +9,13 @@ import * as emberTemplate from '@ember/template';
 //@ts-expect-error
 import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
-//@ts-ignore no types available
 import * as glimmerTracking from '@glimmer/tracking';
 
 import * as dateFns from 'date-fns';
 import * as emberConcurrency from 'ember-concurrency';
-//@ts-ignore no types available
+//@ts-expect-error no types available
 import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
-//@ts-ignore no types available
+import * as cssUrl from 'ember-css-url';
 import * as emberModifier2 from 'ember-modifier';
 import * as emberResources from 'ember-resources';
 import * as ethers from 'ethers';
@@ -43,6 +42,7 @@ export function shimExternals(loader: Loader) {
     '@ember/component/template-only',
     emberComponentTemplateOnly,
   );
+  loader.shimModule('ember-css-url', cssUrl);
   loader.shimModule('@ember/template-factory', emberTemplateFactory);
   loader.shimModule('@ember/template', emberTemplate);
   loader.shimModule('@glimmer/tracking', glimmerTracking);

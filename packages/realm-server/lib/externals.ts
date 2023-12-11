@@ -40,6 +40,10 @@ export function shimExternals(loader: Loader) {
       return html;
     },
   });
+  // import * as cssUrl from 'ember-css-url';
+  loader.shimModule('ember-css-url', {
+    default: () => {},
+  });
   // import * as glimmerTracking from "@glimmer/tracking";
   loader.shimModule('@glimmer/tracking', {
     tracked() {},
