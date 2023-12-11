@@ -250,7 +250,6 @@ export default class SubmodeLayout extends Component<Signature> {
       .profile-icon {
         width: 40px;
         height: 40px;
-        background: blue;
         border-radius: 50px;
         border: 2px solid white;
         display: flex;
