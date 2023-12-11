@@ -12,6 +12,7 @@ module.exports = function (deployTarget) {
       's3',
       'fastboot-s3',
       'cloudfront',
+      'smart-compress',
     ],
     build: {},
     s3: {
