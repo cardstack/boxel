@@ -96,4 +96,19 @@ test.describe('Login', () => {
     await openChat(page);
     await assertLoggedIn(page);
   });
+
+  test('it returns to login when auth is invalid', async ({ page }) => {
+    await page.addInitScript({
+      content: `
+        window.localStorage.setItem(
+          'auth',
+          '{"user_id":"@b:stack.cards","access_token":"INVALID_TOKEN","home_server":"stack.cards","device_id":"HELLO","well_known":{"m.homeserver":{"base_url":"http://example.com/"}}}'
+        )`,
+    });
+
+    await openRoot(page);
+    await toggleOperatorMode(page);
+
+    await assertLoggedOut(page);
+  });
 });
