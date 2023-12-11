@@ -34,6 +34,12 @@ export function shimExternals(loader: Loader) {
   loader.shimModule('@ember/template-factory', {
     createTemplateFactory() {},
   });
+  // import * as emberTemplate from "ember-source/dist/packages/@ember/template";
+  loader.shimModule('@ember/template', {
+    htmlSafe(html: string) {
+      return html;
+    },
+  });
   // import * as glimmerTracking from "@glimmer/tracking";
   loader.shimModule('@glimmer/tracking', {
     tracked() {},

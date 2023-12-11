@@ -2,11 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Base64 Image Card",
-      "description": "A card capable of representing an image via base64 encoding.",
+      "title": "Base64 Image Field",
+      "description": "A field capable of representing an image via base64 encoding.",
       "ref": {
         "module": "https://cardstack.com/base/base64-image",
-        "name": "Base64Image"
+        "name": "Base64ImageField"
       }
     },
     "meta": {

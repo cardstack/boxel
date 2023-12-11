@@ -5,6 +5,7 @@ import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
 import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
+import * as emberTemplate from '@ember/template';
 //@ts-expect-error
 import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
@@ -43,6 +44,7 @@ export function shimExternals(loader: Loader) {
     emberComponentTemplateOnly,
   );
   loader.shimModule('@ember/template-factory', emberTemplateFactory);
+  loader.shimModule('@ember/template', emberTemplate);
   loader.shimModule('@glimmer/tracking', glimmerTracking);
   loader.shimModule('@ember/object', emberObject);
   loader.shimModule('@ember/object/internals', emberObjectInternals);
