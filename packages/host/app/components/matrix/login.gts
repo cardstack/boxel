@@ -118,6 +118,11 @@ export default class Login extends Component<Signature> {
       .field {
         margin-top: var(--boxel-sp);
       }
+      .field :deep(input:autofill) {
+        transition:
+          background-color 0s 600000s,
+          color 0s 600000s;
+      }
       .forgot-password {
         border: none;
         padding: 0;

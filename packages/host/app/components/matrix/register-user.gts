@@ -266,6 +266,11 @@ export default class RegisterUser extends Component<Signature> {
         ) {
         padding-right: 0;
       }
+      .registration-field :deep(input:autofill) {
+        transition:
+          background-color 0s 600000s,
+          color 0s 600000s;
+      }
       .registration-field :deep(.error-message) {
         margin-left: 0;
       }
