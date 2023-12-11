@@ -28,9 +28,6 @@ module.exports = function (deployTarget) {
       objectPaths: ['/*'],
       distribution: process.env.AWS_CLOUDFRONT_DISTRIBUTION,
     },
-    'smart-compress': {
-      keep: true,
-    },
   };
 
   if (deployTarget === 'staging') {
