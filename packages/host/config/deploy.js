@@ -8,7 +8,6 @@ module.exports = function (deployTarget) {
     plugins: [
       'build',
       'revision-data',
-      'compress',
       's3',
       'fastboot-s3',
       'cloudfront',
