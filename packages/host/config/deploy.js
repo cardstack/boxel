@@ -7,11 +7,11 @@ module.exports = function (deployTarget) {
     },
     plugins: [
       'build',
+      'smart-compress',
       'revision-data',
       's3',
       'fastboot-s3',
       'cloudfront',
-      'smart-compress',
     ],
     build: {},
     s3: {
