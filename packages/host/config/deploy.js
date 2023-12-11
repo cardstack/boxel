@@ -41,7 +41,7 @@ module.exports = function (deployTarget) {
 
   if (deployTarget === 'build-only') {
     ENV.build.environment = 'production';
-    ENV.plugins = ['build'];
+    ENV.plugins = ['build', 'smart-compress'];
   }
 
   if (
