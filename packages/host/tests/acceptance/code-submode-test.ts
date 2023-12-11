@@ -8,7 +8,6 @@ import {
   scrollTo,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -29,6 +28,7 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   getMonacoContent,
+  percySnapshot,
   setupAcceptanceTestRealm,
   setMonacoContent,
   setupLocalIndexing,

@@ -1,6 +1,5 @@
 import { visit, click, fillIn, waitFor } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -15,6 +14,7 @@ import type { OperatorModeState } from '@cardstack/host/services/operator-mode-s
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
+  percySnapshot,
   setupLocalIndexing,
   testRealmURL,
   setupOnSave,
@@ -471,8 +471,6 @@ export class TestCard extends CardDef {
       .dom('[data-test-create-definition]')
       .isEnabled('create button is enabled');
 
-    await percySnapshot(assert);
-
     this.onSave((content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
@@ -545,7 +543,6 @@ export class TestCard extends Person {
       deferred.fulfill();
     });
 
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -602,7 +599,6 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       );
       deferred.fulfill();
     });
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -714,7 +710,6 @@ export class Pet extends PetParent {
       deferred.fulfill();
     });
 
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -770,7 +765,6 @@ export class Map0 extends Pet {
       deferred.fulfill();
     });
 
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;

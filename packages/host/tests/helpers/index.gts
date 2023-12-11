@@ -45,8 +45,12 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
+import percySnapshot from './percy-snapshot';
+
 import { renderComponent } from './render-component';
 import { WebMessageStream, messageCloseHandler } from './stream';
+
+export { percySnapshot };
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 

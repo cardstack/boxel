@@ -6,7 +6,6 @@ import {
   triggerKeyEvent,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -19,6 +18,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
+  percySnapshot,
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
