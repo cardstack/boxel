@@ -71,10 +71,18 @@ interface Args {
   named: { executableFile: Ready | undefined };
 }
 
+interface State {
+  url?: string;
+  declarations: ModuleDeclaration[];
+}
+
 export class ModuleContentsResource extends Resource<Args> {
-  @tracked private _declarations: ModuleDeclaration[] = [];
-  private _url: string | undefined;
-  private executableFile: Ready | undefined;
+  private staleState: State = {
+    declarations: [],
+  };
+  @tracked private state: State = {
+    declarations: [],
+  };
 
   get isLoading() {
     return this.load.isRunning;
@@ -84,25 +92,21 @@ export class ModuleContentsResource extends Resource<Args> {
   // it has to know this to distinguish the act of editing of a file and switching between definitions
   // when editing a file we don't want to introduce loading state, whereas when switching between definitions we do
   get isLoadingNewModule() {
-    return (
-      this.load.isRunning && this._url && this._url !== this.executableFile?.url
-    );
+    return this.load.isRunning && this.staleState.url !== this.state.url;
   }
 
   get declarations() {
-    return this._declarations;
+    return this.state.declarations;
   }
 
   modify(_positional: never[], named: Args['named']) {
     let { executableFile } = named;
-    this.executableFile = executableFile;
-    if (this.executableFile) {
-      this.load.perform(this.executableFile);
+    if (executableFile) {
+      this.load.perform(executableFile);
     }
   }
 
   private load = restartableTask(async (executableFile: Ready) => {
-    //==loading module
     let moduleResource = importResource(this, () => executableFile.url);
     await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
     if (moduleResource.module === undefined) {
@@ -111,28 +115,38 @@ export class ModuleContentsResource extends Resource<Args> {
     let exportedCardsOrFields: Map<string, typeof BaseDef> =
       getExportedCardsOrFields(moduleResource.module);
 
-    //==building declaration structure
-    // This loop
-    // - adds card type (not necessarily loaded)
-    // - includes card/field, either
-    //   - an exported card/field
-    //   - a card/field that was local but related to another card/field which was exported, e.g. inherited OR a field of the exported card/field
     let moduleSyntax = new ModuleSyntax(
       executableFile.content,
       new URL(executableFile.url),
     );
+
+    this.updateState({
+      declarations: this.buildDeclarations(moduleSyntax, exportedCardsOrFields),
+      url: executableFile.url,
+    });
+  });
+
+  private updateState(state: State): void {
+    this.staleState = this.state;
+    this.state = state;
+  }
+
+  private buildDeclarations(
+    moduleSyntax: ModuleSyntax,
+    exportedCardsOrFields: Map<string, typeof BaseDef>,
+  ): ModuleDeclaration[] {
     let localCardsOrFields = collectLocalCardsOrFields(
       moduleSyntax,
       exportedCardsOrFields,
     );
-    this._declarations = [];
+    let declarations: ModuleDeclaration[] = [];
     moduleSyntax.declarations.forEach((value: Declaration) => {
       if (value.type === 'possibleCardOrField') {
         let cardOrField = value.exportName
           ? exportedCardsOrFields.get(value.exportName)
           : localCardsOrFields.get(value);
         if (cardOrField !== undefined) {
-          this._declarations.push({
+          declarations.push({
             ...value,
             cardOrField,
             cardType: getCardType(this, () => cardOrField as typeof BaseDef),
@@ -141,7 +155,7 @@ export class ModuleContentsResource extends Resource<Args> {
         }
         // case where things statically look like cards or fields but are not
         if (value.exportName !== undefined) {
-          this._declarations.push({
+          declarations.push({
             localName: value.localName,
             exportName: value.exportName,
             path: value.path,
@@ -156,7 +170,7 @@ export class ModuleContentsResource extends Resource<Args> {
             cardOrField = foundCardOrField;
           }
           if (cardOrField !== undefined) {
-            this._declarations.push({
+            declarations.push({
               ...value,
               cardOrField,
               cardType: getCardType(this, () => cardOrField as typeof BaseDef),
@@ -165,12 +179,12 @@ export class ModuleContentsResource extends Resource<Args> {
         }
       } else if (value.type === 'class' || value.type === 'function') {
         if (value.exportName !== undefined) {
-          this.declarations.push(value as ModuleDeclaration);
+          declarations.push(value as ModuleDeclaration);
         }
       }
     });
-    this._url = executableFile.url;
-  });
+    return declarations;
+  }
 }
 
 export function moduleContentsResource(
