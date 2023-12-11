@@ -1,10 +1,12 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { IconButton } from '@cardstack/boxel-ui/components';
+import { cn } from '@cardstack/boxel-ui/helpers';
 import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
 
 import ENV from '@cardstack/host/config/environment';
@@ -163,7 +165,9 @@ export default class SubmodeLayout extends Component<Signature> {
     <div class='profile-icon-container' data-test-profile-icon-container>
       <button
         class='profile-icon'
-        style='background: {{this.stringToColor this.matrixService.userId}}'
+        style={{htmlSafe
+          (cn 'background:' (this.stringToColor this.matrixService.userId))
+        }}
         data-test-profile-icon
       >
         <span>
