@@ -117,7 +117,7 @@ export async function validateEmail(
     .click();
   await expect(
     emailPage.frameLocator('.messageview iframe').locator('body'),
-  ).toContainText('Verify Your Email Address');
+  ).toContainText('Verify Email');
   await expect(emailPage.locator('.messageview .messageviewheader')).toContainText(
     `To:${email}`,
   );
@@ -129,7 +129,7 @@ export async function validateEmail(
   const validationPagePromise = context.waitForEvent('page');
   let textBtn = emailPage
       .frameLocator('.messageview iframe')
-      .getByText('Verify Your Email Address');
+      .getByText('Verify Email');
   // We have to delay before going to validation window
   // to avoid the validation window won't open
   await emailPage.waitForTimeout(500);

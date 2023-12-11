@@ -87,6 +87,9 @@ email:
   enable_notifs: true
   notif_for_new_users: false
   client_base_url: "http://localhost:4200"
-  validation_token_lifetime: "15m"
+  validation_token_lifetime: "48h"
   subjects:
     email_validation: "%(app)s Email Validation"
+
+templates:
+  custom_template_directory: "/custom/templates/"

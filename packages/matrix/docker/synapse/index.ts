@@ -123,6 +123,8 @@ export async function synapseStart(
       '--rm',
       '-v',
       `${synCfg.configDir}:/data`,
+      '-v',
+      `${path.join(__dirname, 'templates')}:/custom/templates/`,
       '-p',
       portMapping,
       '--network=boxel',
