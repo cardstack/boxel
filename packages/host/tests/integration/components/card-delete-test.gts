@@ -1,7 +1,6 @@
 import { waitUntil, waitFor, click, focus } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
@@ -20,6 +19,7 @@ import RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
+  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
@@ -219,9 +219,6 @@ module('Integration | card-delete', function (hooks) {
     assert
       .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
       .containsText('Delete the card Mango?');
-    await percySnapshot(
-      'Integration | card-delete | can delete a card from the index card stack item, modal',
-    );
 
     await this.expectEvents({
       assert,

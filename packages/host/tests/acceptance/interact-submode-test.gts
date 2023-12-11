@@ -8,7 +8,6 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
@@ -31,6 +30,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import {
+  percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
@@ -498,7 +498,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         submode: Submodes.Interact,
         fileView: 'inspector',
         openDirs: {},
-        codeSelection: {},
       });
 
       await waitFor('[data-test-pet="Mango"]');
@@ -524,7 +523,6 @@ module('Acceptance | interact submode tests', function (hooks) {
             submode: 'interact',
             fileView: 'inspector',
             openDirs: {},
-            codeSelection: {},
           })!,
         )}`,
       );
@@ -552,7 +550,6 @@ module('Acceptance | interact submode tests', function (hooks) {
             submode: 'interact',
             fileView: 'inspector',
             openDirs: {},
-            codeSelection: {},
           })!,
         )}`,
       );
@@ -870,7 +867,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         submode: Submodes.Interact,
         fileView: 'inspector',
         openDirs: {},
-        codeSelection: {},
       });
 
       // Close the last card in the last stack that is left - should get the empty state

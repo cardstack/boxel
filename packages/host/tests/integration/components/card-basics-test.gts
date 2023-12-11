@@ -6,7 +6,6 @@ import {
   RenderingTestContext,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
 import { setupRenderingTest } from 'ember-qunit';
@@ -31,6 +30,7 @@ import {
 import {
   cleanWhiteSpace,
   p,
+  percySnapshot,
   testRealmURL,
   shimModule,
   setupCardLogs,
