@@ -156,7 +156,7 @@ class CardRouteComponent extends Component<CardRouteSignature> {
       {{/if}}
     </div>
 
-    {{#if this.args.controller.operatorModeEnabled}}
+    {{#if @controller.operatorModeEnabled}}
       {{#if @model}}
         <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
       {{/if}}
