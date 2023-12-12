@@ -140,13 +140,17 @@ export default class MatrixService extends Service {
   }
 
   async logout() {
-    await this.flushMembership;
-    await this.flushTimeline;
-    clearAuth();
-    this.unbindEventListeners();
-    await this.client.stopClient();
-    await this.client.logout();
-    this.resetState();
+    try {
+      await this.flushMembership;
+      await this.flushTimeline;
+      clearAuth();
+      this.unbindEventListeners();
+      await this.client.logout(true);
+    } catch (e) {
+      console.log('Error logging out of Matrix', e);
+    } finally {
+      this.resetState();
+    }
   }
 
   async start(auth?: IAuthData) {
@@ -162,6 +166,7 @@ export default class MatrixService extends Service {
       user_id: userId,
       device_id: deviceId,
     } = auth;
+
     if (!accessToken) {
       throw new Error(
         `Cannot create matrix client from auth that has no access token: ${JSON.stringify(
@@ -199,8 +204,13 @@ export default class MatrixService extends Service {
       saveAuth(auth);
       this.bindEventListeners();
 
-      await this._client.startClient();
-      await this.initializeRooms();
+      try {
+        await this._client.startClient();
+        await this.initializeRooms();
+      } catch (e) {
+        console.log('Error starting Matrix client', e);
+        await this.logout();
+      }
     }
   }
 

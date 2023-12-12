@@ -94,7 +94,11 @@ export default class CreateFileModal extends Component<Signature> {
               />
             </FieldContainer>
             <FieldContainer
-              @label='Inherits From'
+              @label={{if
+                (eq this.maybeFileType.id 'card-instance')
+                'Adopted From'
+                'Inherits From'
+              }}
               class='field'
               data-test-inherits-from-field
             >
