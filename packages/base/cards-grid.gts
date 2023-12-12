@@ -19,6 +19,7 @@ import {
   cardTypeDisplayName,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
+// @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
