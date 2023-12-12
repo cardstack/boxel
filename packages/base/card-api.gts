@@ -5,7 +5,7 @@ import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { eq, pick } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, pick } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { startCase } from 'lodash';
 import { getBoxComponent, type BoxComponent } from './field-component';
@@ -1684,10 +1684,11 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;
     fields: Record<string, new () => GlimmerComponent>;
+    format: Format;
   };
 }> {
   <template>
-    <div class='default-card-template'>
+    <div class={{cn 'default-card-template' @format}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <FieldContainer
@@ -1704,6 +1705,12 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
       .default-card-template {
         display: grid;
         gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+      .default-card-template.edit {
+        padding-right: var(
+          --boxel-sp-xxl
+        ); /* allow room for trash/delete icons that appear on hover */
       }
     </style>
   </template>
@@ -1848,6 +1855,7 @@ export type BaseDefComponent = ComponentLike<{
   Args: {
     cardOrField: typeof BaseDef;
     fields: any;
+    format: Format;
     model: any;
     set: Setter;
     fieldName: string | undefined;
