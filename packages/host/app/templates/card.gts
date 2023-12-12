@@ -170,6 +170,11 @@ class CardRouteComponent extends Component<CardRouteSignature> {
       style='position: fixed; left: -100px; opacity: 0;'
       {{on 'click' this.toggleOperatorMode}}
     >Operator mode</button>
+    <style>
+      .card-isolated-component {
+        padding: var(--boxel-sp-lg);
+      }
+    </style>
   </template>
 }
 
