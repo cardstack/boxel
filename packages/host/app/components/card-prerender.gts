@@ -194,9 +194,3 @@ function getRunnerOpts(optsId: number): RunnerOpts {
     optsId,
   );
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    CardPrerender: typeof CardPrerender;
-  }
-}
