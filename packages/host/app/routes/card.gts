@@ -4,16 +4,22 @@ import { service } from '@ember/service';
 
 import ENV from '@cardstack/host/config/environment';
 
+import { getCard } from '@cardstack/host/resources/card-resource';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type CardService from '../services/card-service';
 
 const { ownRealmURL } = ENV;
 
 export type Model = CardDef | null;
+
+export type ErrorModel = {
+  message: string;
+  loadType: 'index' | 'card' | 'stack';
+  operatorModeState: string;
+};
 
 export default class RenderCard extends Route<Model | null> {
   queryParams = {
