@@ -1294,8 +1294,8 @@ importers:
         specifier: ^10.0.0
         version: 10.0.0(moment@2.29.4)
       ember-page-title:
-        specifier: ^7.0.0
-        version: 7.0.0
+        specifier: ^8.1.0
+        version: 8.1.0(ember-source@4.12.0)
       ember-qunit:
         specifier: ^6.2.0
         version: 6.2.0(@ember/test-helpers@2.9.3)(@glint/template@1.2.1)(ember-source@4.12.0)(qunit@2.19.4)(webpack@5.89.0)
@@ -1305,6 +1305,9 @@ importers:
       ember-resources:
         specifier: ^6.3.1
         version: 6.3.1(@ember/test-waiters@3.0.2)(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.2.1)(ember-concurrency@3.1.0)(ember-source@4.12.0)
+      ember-route-template:
+        specifier: ^1.0.3
+        version: 1.0.3
       ember-source:
         specifier: ~4.12.0
         version: 4.12.0(@babel/core@7.22.11)(@glimmer/component@1.1.2)(@glint/template@1.2.1)(webpack@5.89.0)
@@ -12298,6 +12301,18 @@ packages:
       - supports-color
     dev: true
 
+  /ember-page-title@8.1.0(ember-source@4.12.0):
+    resolution: {integrity: sha512-c5V4sWu+OSRhN6Fsa0M71PkdNpKkV7Lg9FwqogK3iE++R43G6ySLV/Ls0cE5K+IWS1om7XSPqcUvkfhrfZ3y0g==}
+    engines: {node: 16.* || >= 18}
+    peerDependencies:
+      ember-source: '>= 3.28.0'
+    dependencies:
+      '@embroider/addon-shim': 1.8.6
+      ember-source: 4.12.0(@babel/core@7.22.11)(@glimmer/component@1.1.2)(@glint/template@1.2.1)(webpack@5.89.0)
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
+
   /ember-qunit@5.1.2(@ember/test-helpers@2.9.3)(ember-source@3.27.0)(qunit@2.19.4):
     resolution: {integrity: sha512-mrnFaUhAJWkJWeRZKajLuuRmKsifRrhAla1sQAfIiuh7OCVY1eqFvSUFzLR7/WgdNwPrUzEOOx39MdVRZBd/7A==}
     engines: {node: 10.* || 12.* || >= 14.*}
@@ -12447,6 +12462,14 @@ packages:
 
   /ember-rfc176-data@0.3.18:
     resolution: {integrity: sha512-JtuLoYGSjay1W3MQAxt3eINWXNYYQliK90tLwtb8aeCuQK8zKGCRbBodVIrkcTqshULMnRuTOS6t1P7oQk3g6Q==}
+
+  /ember-route-template@1.0.3:
+    resolution: {integrity: sha512-p//Nk4g4Wu9F8cZdjB69rKxTRi6RRW32a8K5sYsi5cofTcJtPBXRWUXWpQEjJX6qcucgxooQwEm9+7MOy4lwNw==}
+    dependencies:
+      '@embroider/addon-shim': 1.8.6
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
 
   /ember-router-generator@2.0.0:
     resolution: {integrity: sha512-89oVHVJwmLDvGvAUWgS87KpBoRhy3aZ6U0Ql6HOmU4TrPkyaa8pM0W81wj9cIwjYprcQtN9EwzZMHnq46+oUyw==}

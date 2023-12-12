@@ -224,9 +224,3 @@ export default class OperatorModeContainer extends Component<Signature> {
     </style>
   </template>
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    'OperatorMode::Container': typeof OperatorModeContainer;
-  }
-}
