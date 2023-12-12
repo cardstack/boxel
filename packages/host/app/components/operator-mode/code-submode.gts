@@ -40,6 +40,7 @@ import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
+  type State,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -146,9 +147,13 @@ export default class CodeSubmode extends Component<Signature> {
       onCardInstanceChange: () => this.onCardLoaded,
     },
   );
-  private moduleContentsResource = moduleContentsResource(this, () => {
-    return this.isModule ? this.readyFile : undefined;
-  });
+  private moduleContentsResource = moduleContentsResource(
+    this,
+    () => {
+      return this.isModule ? this.readyFile : undefined;
+    },
+    this.onModuleEdit,
+  );
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -317,6 +322,21 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private dismissURLError() {
     this.userHasDismissedURLError = true;
+  }
+
+  @action private onModuleEdit(state: State, staleState: State) {
+    let selectedDeclaration = this.selectedDeclaration;
+    let editedDeclaration = state.declarations.find((d) => {
+      return (
+        d.path?.node?.body.loc.start.token ===
+          selectedDeclaration?.path?.node?.body.loc.start.token &&
+        d.path?.node?.body.loc.end.token ===
+          selectedDeclaration?.path?.node?.body.loc.end.token
+      );
+    });
+    if (editedDeclaration) {
+      this.openDefinition(undefined, editedDeclaration.localName);
+    }
   }
 
   private onCardLoaded = (

@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
@@ -24,6 +25,8 @@ import {
 import { type Ready } from '@cardstack/host/resources/file';
 
 import { importResource } from '@cardstack/host/resources/import';
+
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -68,21 +71,26 @@ function hasCardOrFieldProperties(declaration: ModuleDeclaration) {
 }
 
 interface Args {
-  named: { executableFile: Ready | undefined };
+  named: {
+    executableFile: Ready | undefined;
+    onModuleEdit: (state: State, staleState: State) => void;
+  };
 }
 
-interface State {
+export interface State {
   url?: string;
   declarations: ModuleDeclaration[];
 }
 
 export class ModuleContentsResource extends Resource<Args> {
+  @service declare operatorModeStateService: OperatorModeStateService;
   private staleState: State = {
     declarations: [],
   };
   @tracked private state: State = {
     declarations: [],
   };
+  private onModuleEdit?: (state: State, staleState: State) => void;
 
   get isLoading() {
     return this.load.isRunning;
@@ -100,7 +108,8 @@ export class ModuleContentsResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { executableFile } = named;
+    let { executableFile, onModuleEdit } = named;
+    this.onModuleEdit = onModuleEdit;
     if (executableFile) {
       this.load.perform(executableFile);
     }
@@ -127,6 +136,9 @@ export class ModuleContentsResource extends Resource<Args> {
   });
 
   private updateState(state: State): void {
+    if (state.url === this.staleState.url) {
+      this.onModuleEdit?.(state, this.staleState);
+    }
     this.staleState = this.state;
     this.state = state;
   }
@@ -190,10 +202,12 @@ export class ModuleContentsResource extends Resource<Args> {
 export function moduleContentsResource(
   parent: object,
   executableFile: () => Ready | undefined,
+  onModuleEdit: (state: State, staleState: State) => void,
 ): ModuleContentsResource {
   return ModuleContentsResource.from(parent, () => ({
     named: {
       executableFile: executableFile(),
+      onModuleEdit: onModuleEdit,
     },
   })) as unknown as ModuleContentsResource;
 }
