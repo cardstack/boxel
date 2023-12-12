@@ -50,9 +50,8 @@ jobs:
 
       - name: Deploy
         run: pnpm deploy:boxel-host ${{ inputs.environment }} --verbose
-        # FIXME restore?
-        # env:
-        #   EMBER_CLI_DEPLOY_REUSE_BUILD: "1"
+        env:
+          EMBER_CLI_DEPLOY_REUSE_BUILD: "1"
 
       - name: Send notification to Discord
         uses: cardstack/gh-actions/discord-notification-deploy@main
