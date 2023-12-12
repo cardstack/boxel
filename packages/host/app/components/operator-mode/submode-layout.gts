@@ -1,14 +1,15 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { BoxelButton, IconButton } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { IconButton } from '@cardstack/boxel-ui/components';
+
 import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
 
+import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
@@ -23,8 +24,6 @@ import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-
-import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
 const { APP } = ENV;
 
