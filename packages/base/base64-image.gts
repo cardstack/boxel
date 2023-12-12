@@ -85,7 +85,7 @@ class Edit extends Component<typeof Base64ImageField> {
                 {{#if this.usesActualSize}}
                   <img
                     data-test-actual-img
-                    src={{@model.base64}}
+                    src={{sanitizeBase64 @model.base64}}
                     height={{@model.height}}
                     width={{@model.width}}
                     alt={{@model.altText}}
@@ -328,7 +328,7 @@ export class Base64ImageField extends FieldDef {
         {{#if this.usesActualSize}}
           <img
             data-test-actual-img
-            src={{@model.base64}}
+            src={{sanitizeBase64 @model.base64}}
             height={{@model.height}}
             width={{@model.width}}
             alt={{@model.altText}}
@@ -362,6 +362,19 @@ export class Base64ImageField extends FieldDef {
   static embedded = Base64ImageField.isolated;
 }
 
+// from "ember-css-url"
+function sanitizeBase64(base64: string) {
+  // sanitize the base64 by making sure there are no unencoded double quotes
+  let encodedURL = base64.replace(/"/g, '%22');
+  let match = /^([^:]+):/.exec(encodedURL);
+  let proto = match?.[1].toLowerCase();
+  // also make sure "data:" protocol is used (prevents "javascript://" from older browsers)
+  if (proto !== 'data') {
+    throw new Error(`disallowed protocol in css url: ${base64}`);
+  }
+  return encodedURL;
+}
+
 function cssForBase64({
   base64,
   size,
@@ -378,6 +391,7 @@ function cssForBase64({
   }
 
   let css: string[] = [];
+  base64 = sanitizeBase64(base64);
   css.push(`background-image: url("${base64}");`);
   if (size && ['contain', 'cover'].includes(size)) {
     css.push(`background-size: ${size};`);
