@@ -6,7 +6,6 @@ import {
   waitFor,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
@@ -22,6 +21,7 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
+  percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,

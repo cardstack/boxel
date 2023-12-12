@@ -36,14 +36,7 @@ export interface DirectoryEntryRelationship {
 import { RealmPaths, type LocalPath } from './paths';
 import { Query } from './query';
 import { Loader } from './loader';
-export {
-  aiBotUsername,
-  baseRealm,
-  catalogEntryRef,
-  baseCardRef,
-  isField,
-  primitive,
-} from './constants';
+export * from './constants';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
 export { NotLoaded, isNotLoadedError } from './not-loaded';

@@ -1,6 +1,5 @@
 import { visit, click, fillIn, waitFor } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -15,6 +14,7 @@ import type { OperatorModeState } from '@cardstack/host/services/operator-mode-s
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
+  percySnapshot,
   setupLocalIndexing,
   testRealmURL,
   setupOnSave,
@@ -191,10 +191,13 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
     const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
-    assert.expect(12);
+    assert.expect(13);
     await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
     await waitFor(`[data-test-selected-type="General Card"]`);
+    assert
+      .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
+      .hasText('Adopted From');
     assert.dom(`[data-test-selected-type]`).hasText('General Card');
     assert
       .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
@@ -433,7 +436,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
-    assert.expect(7);
+    assert.expect(8);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
@@ -444,7 +447,7 @@ export class TestCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -464,14 +467,15 @@ export class TestCard extends CardDef {
       .isDisabled('create button is disabled');
     await fillIn('[data-test-display-name-field]', 'Test Card');
     assert
+      .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
+      .hasText('Inherits From');
+    assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
     await fillIn('[data-test-file-name-field]', 'test-card');
     assert
       .dom('[data-test-create-definition]')
       .isEnabled('create button is enabled');
-
-    await percySnapshot(assert);
 
     this.onSave((_, content) => {
       if (typeof content !== 'string') {
@@ -526,7 +530,7 @@ export class TestCard extends Person {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -545,7 +549,6 @@ export class TestCard extends Person {
       deferred.fulfill();
     });
 
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -602,7 +605,6 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       );
       deferred.fulfill();
     });
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -639,7 +641,7 @@ export class TestCard extends Pet {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -695,7 +697,7 @@ export class Pet extends PetParent {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -714,7 +716,6 @@ export class Pet extends PetParent {
       deferred.fulfill();
     });
 
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -751,7 +752,7 @@ export class Map0 extends Pet {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -770,7 +771,6 @@ export class Map0 extends Pet {
       deferred.fulfill();
     });
 
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -799,7 +799,7 @@ export class TestCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -835,7 +835,7 @@ export class TestCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -887,7 +887,7 @@ export class TestCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
@@ -939,7 +939,7 @@ export class TestCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }

@@ -94,7 +94,11 @@ export default class CreateFileModal extends Component<Signature> {
               />
             </FieldContainer>
             <FieldContainer
-              @label='Inherits From'
+              @label={{if
+                (eq this.maybeFileType.id 'card-instance')
+                'Adopted From'
+                'Inherits From'
+              }}
               class='field'
               data-test-inherits-from-field
             >
@@ -537,7 +541,7 @@ export class ${className} extends ${exportName} {
         `  static isolated = class Isolated extends Component<typeof this> {
     <template></template>
   }
-  `,
+`,
       );
     }
     src.push(

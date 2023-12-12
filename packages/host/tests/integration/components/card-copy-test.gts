@@ -2,7 +2,6 @@ import { waitUntil, waitFor, click } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
-import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import flatMap from 'lodash/flatMap';
 import { module, test } from 'qunit';
@@ -24,6 +23,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
@@ -486,7 +486,6 @@ module('Integration | card-copy', function (hooks) {
     await click(
       `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
-    await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="right"]')
       .exists('copy button with right arrow exists');
@@ -517,7 +516,6 @@ module('Integration | card-copy', function (hooks) {
     await click(
       ` [data-test-overlay-card="${testRealm2URL}Pet/paper"] button.select`,
     );
-    await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="left"]')
       .exists('copy button with left arrow exists');

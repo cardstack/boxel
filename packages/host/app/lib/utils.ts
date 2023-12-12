@@ -44,3 +44,7 @@ export async function getModulesInRealm(
   }
   return [...modules, ...nestedResults];
 }
+
+export function stripFileExtension(path: string): string {
+  return path.replace(/\.[^/.]+$/, '');
+}
