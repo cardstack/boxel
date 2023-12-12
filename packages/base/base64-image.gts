@@ -180,6 +180,9 @@ class Edit extends Component<typeof Base64ImageField> {
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
       }
+      .height-warning svg {
+        min-width: 20px;
+      }
       .height-warning span {
         margin-left: var(--boxel-sp-xxs);
       }
