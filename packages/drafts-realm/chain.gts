@@ -58,13 +58,20 @@ export class Chain extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Chain> {
     <template>
-      <FieldContainer @label='Title'><@fields.title />
-        (<@fields.title />)</FieldContainer>
-      <FieldContainer @label='Chain'><@fields.title />
-        (<@fields.chainId />)</FieldContainer>
-      <FieldContainer @label='BlockExplorer'>
-        <a href={{@model.blockExplorer}}>{{@model.blockExplorer}}</a>
-      </FieldContainer>
+      <div class='container'>
+        <FieldContainer @label='Title'><@fields.title />
+          (<@fields.title />)</FieldContainer>
+        <FieldContainer @label='Chain'><@fields.title />
+          (<@fields.chainId />)</FieldContainer>
+        <FieldContainer @label='BlockExplorer'>
+          <a href={{@model.blockExplorer}}>{{@model.blockExplorer}}</a>
+        </FieldContainer>
+      </div>
+      <style>
+        .container {
+          padding: var(--boxel-sp-xl);
+        }
+      </style>
     </template>
   };
   static embedded = class Embedded extends Component<typeof Chain> {

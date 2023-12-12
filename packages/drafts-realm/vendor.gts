@@ -125,7 +125,7 @@ export class Vendor extends CardDef {
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <VendorContainer>
+      <VendorContainer class='container'>
         <section>
           <h2>Title</h2>
           <@fields.title />
@@ -157,11 +157,16 @@ export class Vendor extends CardDef {
           {{/if}}
         </section>
       </VendorContainer>
+      <style>
+        .container {
+          padding: var(--boxel-sp-xl);
+        }
+      </style>
     </template>
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <VendorContainer>
+      <VendorContainer class='container'>
         <section>
           <h2>Vendor</h2>
           <@fields.vendor />
@@ -187,6 +192,12 @@ export class Vendor extends CardDef {
           <@fields.alternatePaymentMethod />
         </section>
       </VendorContainer>
+      <style>
+        .container {
+          padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
+            var(--boxel-sp-xl);
+        }
+      </style>
     </template>
   };
 }

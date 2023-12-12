@@ -43,9 +43,16 @@ export class Post extends CardDef {
   @field titleRef = contains(VeryBasicCard);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <h1><@fields.title /><img src='{{imageURL}}' /></h1>
-      <h3>by <@fields.author.firstName /> <@fields.author.lastName /></h3>
-      <p><@fields.body /></p>
+      <div class='container'>
+        <h1><@fields.title /><img src='{{imageURL}}' /></h1>
+        <h3>by <@fields.author.firstName /> <@fields.author.lastName /></h3>
+        <p><@fields.body /></p>
+      </div>
+      <style>
+        .container {
+          padding: var(--boxel-sp-xl);
+        }
+      </style>
     </template>
   };
   static embedded = class Embedded extends Component<typeof this> {

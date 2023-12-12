@@ -226,7 +226,7 @@ class Note extends FieldDef {
 
 class InvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
-    <InvoiceContainer>
+    <InvoiceContainer class='container'>
       <:default>
         <section>
           <h2>Title</h2>
@@ -307,6 +307,9 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
       </:extras>
     </InvoiceContainer>
     <style>
+      .container {
+        padding: var(--boxel-sp-xl);
+      }
       .line-items__title-row {
         display: grid;
         grid-template-columns: 3fr 1fr 2fr;
