@@ -5,7 +5,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { IconButton } from '@cardstack/boxel-ui/components';
+import { BoxelButton, IconButton } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
 
@@ -23,6 +23,8 @@ import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+
+import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
 const { APP } = ENV;
 
@@ -106,35 +108,6 @@ export default class SubmodeLayout extends Component<Signature> {
     this.closeSearchSheet();
   }
 
-  // Used to generate a color for the profile avatar
-  // Copied from https://github.com/mui/material-ui/issues/12700
-  stringToColor(string: string | null) {
-    if (!string) {
-      return 'transparent';
-    }
-
-    let hash = 0;
-    let i;
-
-    for (i = 0; i < string.length; i += 1) {
-      hash = string.charCodeAt(i) + ((hash << 5) - hash);
-    }
-
-    let color = '#';
-
-    for (i = 0; i < 3; i += 1) {
-      const value = (hash >> (i * 8)) & 0xff;
-      color += `00${value.toString(16)}`.substr(-2);
-    }
-
-    return color;
-  }
-
-  get userInitals() {
-    // transform @user:localhost into U, for example
-    return this.matrixService.userId?.split(':')[0].slice(1, 2).toUpperCase();
-  }
-
   <template>
     <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
       <SubmodeSwitcher
@@ -162,19 +135,7 @@ export default class SubmodeLayout extends Component<Signature> {
       {{/if}}
     </div>
 
-    <div class='profile-icon-container' data-test-profile-icon-container>
-      <button
-        class='profile-icon'
-        style={{htmlSafe
-          (cn 'background:' (this.stringToColor this.matrixService.userId))
-        }}
-        data-test-profile-icon
-      >
-        <span>
-          {{this.userInitals}}
-        </span>
-      </button>
-    </div>
+    <ProfileInfoPopover />
 
     <SearchSheet
       @mode={{this.searchSheetMode}}
@@ -184,7 +145,55 @@ export default class SubmodeLayout extends Component<Signature> {
       @onSearch={{this.expandSearchToShowResults}}
       @onCardSelect={{this.handleCardSelectFromSearch}}
     />
+
     <style>
+      .profile-popover {
+        width: 280px;
+        height: 280px;
+        position: absolute;
+        bottom: 68px;
+        left: 20px;
+        z-index: 1;
+        background: white;
+        padding: var(--boxel-sp);
+        flex-direction: column;
+        border-radius: var(--boxel-border-radius);
+        box-shadow: var(--boxel-deep-box-shadow);
+        transition: all 0.1s ease-out;
+        opacity: 0;
+        display: flex;
+      }
+
+      .profile-popover.opened {
+        opacity: 1;
+      }
+
+      .profile-popover-header {
+        font-color: var(--boxel-dark);
+        text-transform: uppercase;
+      }
+
+      .profile-popover-body {
+        margin: auto;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .profile-popover-body > * {
+        margin: auto;
+      }
+
+      .profile-popover-body > .profile-icon {
+        width: 70px;
+        height: 70px;
+        font-size: var(--boxel-font-size-xxl);
+      }
+
+      .profile-handle {
+        margin-top: var(--boxel-sp-xs);
+        color: var(--boxel-500);
+      }
+
       .operator-mode__with-chat {
         display: grid;
         grid-template-rows: 1fr;
@@ -245,6 +254,7 @@ export default class SubmodeLayout extends Component<Signature> {
         height: var(--search-sheet-closed-height);
         border-radius: 50px;
         margin-left: var(--boxel-sp);
+        z-index: 1;
       }
 
       .profile-icon {
