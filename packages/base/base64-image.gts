@@ -44,6 +44,10 @@ class Edit extends Component<typeof Base64ImageField> {
     };
   };
 
+  get usesActualSize() {
+    return this.args.model.size === 'actual' || this.args.model.size == null;
+  }
+
   get backgroundMaskStyle() {
     let css: string[] = [];
     if (this.args.model.height) {
@@ -78,7 +82,7 @@ class Edit extends Component<typeof Base64ImageField> {
                   </span>
                 </div>
               {{else}}
-                {{#if (eq @model.size 'actual')}}
+                {{#if this.usesActualSize}}
                   <img
                     data-test-actual-img
                     src={{@model.base64}}
@@ -316,9 +320,12 @@ export class Base64ImageField extends FieldDef {
   static edit = Edit;
   static atom = getConstrainedImageSize(atomImgHeight);
   static isolated = class Isolated extends Component<typeof this> {
+    get usesActualSize() {
+      return this.args.model.size === 'actual' || this.args.model.size == null;
+    }
     <template>
       {{#if @model.base64}}
-        {{#if (eq @model.size 'actual')}}
+        {{#if this.usesActualSize}}
           <img
             data-test-actual-img
             src={{@model.base64}}
