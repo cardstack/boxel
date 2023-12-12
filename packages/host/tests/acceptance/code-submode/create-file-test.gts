@@ -191,10 +191,13 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
     const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
-    assert.expect(12);
+    assert.expect(13);
     await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
     await waitFor(`[data-test-selected-type="General Card"]`);
+    assert
+      .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
+      .hasText('Adopted From');
     assert.dom(`[data-test-selected-type]`).hasText('General Card');
     assert
       .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
@@ -433,7 +436,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
-    assert.expect(7);
+    assert.expect(8);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
@@ -463,6 +466,9 @@ export class TestCard extends CardDef {
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
     await fillIn('[data-test-display-name-field]', 'Test Card');
+    assert
+      .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
+      .hasText('Inherits From');
     assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
