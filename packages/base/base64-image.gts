@@ -72,7 +72,7 @@ class Edit extends Component<typeof Base64ImageField> {
           {{#if @model.base64}}
             <div class='preview-wrapper'>
               {{#if this.needsHeight}}
-                <div class='height-warning'>
+                <div data-test-height-warning class='height-warning'>
                   <FailureBordered />
                   <span>
                     Can't render current image. Please provide a height when
@@ -82,6 +82,7 @@ class Edit extends Component<typeof Base64ImageField> {
               {{else}}
                 {{#if (eq @model.size 'actual')}}
                   <img
+                    data-test-actual-img
                     src={{@model.base64}}
                     height={{@model.height}}
                     width={{@model.width}}
@@ -93,6 +94,7 @@ class Edit extends Component<typeof Base64ImageField> {
                     style={{this.backgroundMaskStyle}}
                   >
                     <div
+                      data-test-contain-cover-img
                       role='img'
                       aria-label={{@model.altText}}
                       class='preview'
@@ -148,6 +150,8 @@ class Edit extends Component<typeof Base64ImageField> {
       }
       .preview {
         border-radius: var(--boxel-form-control-border-radius);
+        background-repeat: no-repeat;
+        background-position: center;
       }
       .preview-background {
         width: 100%;
@@ -201,6 +205,7 @@ class ImageSizeField extends FieldDef {
         <label for='{{this.radioGroup}}_actual'>
           Actual
           <input
+            data-test-actual-size-input
             type='radio'
             {{RadioInitializer @model 'actual'}}
             id='{{this.radioGroup}}_actual'
@@ -212,6 +217,7 @@ class ImageSizeField extends FieldDef {
         <label for='{{this.radioGroup}}_contain'>
           Contain
           <input
+            data-test-contain-size-input
             type='radio'
             {{RadioInitializer @model 'contain'}}
             id='{{this.radioGroup}}_contain'
@@ -223,6 +229,7 @@ class ImageSizeField extends FieldDef {
         <label for='{{this.radioGroup}}_cover'>
           Cover
           <input
+            data-test-cover-size-input
             type='radio'
             {{RadioInitializer @model 'cover'}}
             id='{{this.radioGroup}}_cover'
@@ -237,9 +244,9 @@ class ImageSizeField extends FieldDef {
     private radioGroup = `__cardstack_img_size${groupNumber++}__`;
     constructor(owner: unknown, args: any) {
       super(owner, args);
-      // initializes to false
+      // initializes to 'actual'
       if (this.args.model === undefined) {
-        this.args.set(false);
+        this.args.set('actual');
       }
     }
   };
@@ -277,6 +284,7 @@ function getConstrainedImageSize(maxHeight: number) {
     <template>
       {{#if @model.base64}}
         <div
+          data-test-contain-cover-img
           role='img'
           aria-label={{@model.altText}}
           class='preview'
@@ -286,7 +294,12 @@ function getConstrainedImageSize(maxHeight: number) {
         >
         </div>
       {{/if}}
-      <style></style>
+      <style>
+        .preview {
+          background-repeat: no-repeat;
+          background-position: center;
+        }
+      </style>
     </template>
   };
 }
@@ -307,6 +320,7 @@ export class Base64ImageField extends FieldDef {
       {{#if @model.base64}}
         {{#if (eq @model.size 'actual')}}
           <img
+            data-test-actual-img
             src={{@model.base64}}
             height={{@model.height}}
             width={{@model.width}}
@@ -314,6 +328,7 @@ export class Base64ImageField extends FieldDef {
           />
         {{else}}
           <div
+            data-test-contain-cover-img
             role='img'
             aria-label={{@model.altText}}
             class='preview'
@@ -329,6 +344,12 @@ export class Base64ImageField extends FieldDef {
           </div>
         {{/if}}
       {{/if}}
+      <style>
+        .preview {
+          background-repeat: no-repeat;
+          background-position: center;
+        }
+      </style>
     </template>
   };
 }
@@ -350,8 +371,6 @@ function cssForBase64({
 
   let css: string[] = [];
   css.push(`background-image: url("${base64}");`);
-  css.push(`background-repeat: no-repeat;`);
-  css.push(`background-position: center;`);
   if (size && ['contain', 'cover'].includes(size)) {
     css.push(`background-size: ${size};`);
   }
