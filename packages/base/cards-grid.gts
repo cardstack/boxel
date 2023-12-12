@@ -92,9 +92,10 @@ class Isolated extends Component<typeof CardsGrid> {
         --grid-card-width: 10.125rem;
         --grid-card-height: 15.125rem;
 
-        position: relative; /* Do not change this */
         max-width: 70rem;
         margin: 0 auto;
+        padding: var(--boxel-sp-xl);
+        position: relative; /* Do not change this */
       }
       .cards {
         list-style-type: none;
