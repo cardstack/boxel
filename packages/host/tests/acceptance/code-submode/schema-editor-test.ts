@@ -827,7 +827,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       getMonacoContent().includes('firstName = contains(StringCard)'),
     );
 
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error('expected string save data');
       }
@@ -911,7 +911,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await fillIn('[data-test-field-name-input]', 'friendCount');
     await click('[data-test-boxel-radio-option-id="one"]');
 
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error('expected string save data');
       }

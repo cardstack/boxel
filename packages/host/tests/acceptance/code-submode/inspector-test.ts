@@ -1530,7 +1530,7 @@ export class TestCard extends ExportedCard {
     assert.dom('[data-test-create-definition]').isEnabled();
 
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -1606,7 +1606,7 @@ export class TestCard extends ExportedCard {
     await fillIn('[data-test-file-name-field]', '/test-field');
 
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -1741,7 +1741,7 @@ export class ExportedCard extends ExportedCardParent {
     await fillIn('[data-test-file-name-field]', '/test-card');
 
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -1865,11 +1865,11 @@ export class ExportedCard extends ExportedCardParent {
 
     let deferred = new Deferred<void>();
     let id: string | undefined;
-    this.onSave((json) => {
+    this.onSave((url, json) => {
       if (typeof json === 'string') {
         throw new Error(`expected JSON save data`);
       }
-      id = json.data.id;
+      id = url.href;
       assert.strictEqual(
         json.data.attributes?.someString,
         null,
