@@ -100,11 +100,12 @@ export default class ModalContainer extends Component<Signature> {
         background: none;
         font: var(--boxel-font-lg);
         position: absolute;
-        top: 0;
-        right: 0;
+        top: 1px;
+        right: 1px;
         width: 50px;
         height: 50px;
-        padding: 0;
+        padding: var(--boxel-sp-xs);
+        border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
       }
 
       .dialog-box__close:hover {
