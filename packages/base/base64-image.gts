@@ -245,7 +245,7 @@ class ImageSizeField extends FieldDef {
     constructor(owner: unknown, args: any) {
       super(owner, args);
       // initializes to 'actual'
-      if (this.args.model === undefined) {
+      if (!this.args.model) {
         this.args.set('actual');
       }
     }
