@@ -75,6 +75,5 @@ export class RoomObjectiveField extends FieldDef {
   });
 
   static embedded = class Embedded extends View {};
-  static isolated = class Embedded extends View {};
   static edit = class Embedded extends View {};
 }
