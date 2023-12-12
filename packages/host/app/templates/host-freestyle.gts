@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 
+import { ComponentLike } from '@glint/template';
 import FreestyleGuide from 'ember-freestyle/components/freestyle-guide';
 import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 
