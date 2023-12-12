@@ -166,6 +166,7 @@ export default class MatrixService extends Service {
       user_id: userId,
       device_id: deviceId,
     } = auth;
+
     if (!accessToken) {
       throw new Error(
         `Cannot create matrix client from auth that has no access token: ${JSON.stringify(
