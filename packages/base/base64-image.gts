@@ -18,8 +18,7 @@ import { FieldContainer, BoxelInput } from '@cardstack/boxel-ui/components';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import { htmlSafe } from '@ember/template';
 
-const embdeddedImgHeight = 250;
-const atomImgHeight = 100;
+const atomImgHeight = 200;
 
 class Edit extends Component<typeof Base64ImageField> {
   @tracked error: string | undefined;
@@ -316,7 +315,6 @@ export class Base64ImageField extends FieldDef {
   @field base64 = contains(StringField);
 
   static edit = Edit;
-  static embedded = getConstrainedImageSize(embdeddedImgHeight);
   static atom = getConstrainedImageSize(atomImgHeight);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
@@ -355,6 +353,7 @@ export class Base64ImageField extends FieldDef {
       </style>
     </template>
   };
+  static embedded = Base64ImageField.isolated;
 }
 
 function cssForBase64({
