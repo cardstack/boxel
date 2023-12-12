@@ -37,7 +37,6 @@ class Edit extends Component<typeof Base64ImageField> {
     let reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
-      console.log(reader.result);
       here.args.model.base64 = reader.result as string;
     };
     reader.onerror = function (error) {
