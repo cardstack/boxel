@@ -144,12 +144,15 @@ export default class ProfileInfoPopover extends Component<Signature> {
         @onClose={{fn this.closeSettings}}
         @title='Settings'
         @size='large'
+        @centered={{true}}
         @isOpen={{this.settingsIsOpenFIXME}}
         data-test-settings-modal
       >
+        <:sidebar>
+          <Profile />
+        </:sidebar>
         <:content>
           FIXME here is settings
-          <Profile />
         </:content>
       </ModalContainer>
     {{/if}}

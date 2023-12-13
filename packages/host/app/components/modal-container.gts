@@ -26,6 +26,7 @@ interface Signature {
     content: [];
     header: [];
     footer: [];
+    sidebar: [];
   };
 }
 
@@ -47,9 +48,17 @@ export default class ModalContainer extends Component<Signature> {
       ...attributes
     >
       <CardContainer
-        class='dialog-box {{@cardContainerClass}}'
+        class='dialog-box
+          {{@cardContainerClass}}
+          {{if (has-block "sidebar") "dialog-box--with-sidebar"}}'
         @displayBoundaries={{true}}
       >
+        {{#if (has-block 'sidebar')}}
+          <section class='dialog-box__sidebar-header'></section>
+          <aside class='dialog-box__sidebar'>
+            {{yield to='sidebar'}}
+          </aside>
+        {{/if}}
         <Header @title={{@title}} class='dialog-box__header'>
           <IconButton
             @icon={{IconX}}
@@ -75,16 +84,43 @@ export default class ModalContainer extends Component<Signature> {
       .dialog-box {
         height: 100%;
         display: grid;
+        grid-template-areas:
+          'header'
+          'content'
+          'footer';
         grid-template-rows: auto 1fr auto;
         box-shadow: var(--boxel-deep-box-shadow);
       }
 
+      .dialog-box--with-sidebar {
+        grid-template-areas:
+          'sidebar-header header'
+          'sidebar content'
+          'sidebar footer';
+        grid-template-columns: 300px 1fr;
+      }
+
+      .dialog-box__sidebar-header {
+        grid-area: sidebar-header;
+        background-color: var(--boxel-100);
+        border-top-left-radius: var(--boxel-border-radius);
+      }
+
+      .dialog-box__sidebar {
+        grid-area: sidebar;
+        background-color: var(--boxel-100);
+
+        border-bottom-left-radius: var(--boxel-border-radius);
+      }
+
       .dialog-box__header {
         display: grid;
+        grid-area: header;
         gap: var(--boxel-sp-sm);
       }
 
       .dialog-box__content {
+        grid-area: content;
         padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
         height: 100%;
         overflow: auto;
@@ -112,6 +148,7 @@ export default class ModalContainer extends Component<Signature> {
       }
 
       .dialog-box__footer {
+        grid-area: footer;
         width: 100%;
         height: var(--stack-card-footer-height);
         padding: var(--boxel-sp);
