@@ -73,7 +73,7 @@ function hasCardOrFieldProperties(declaration: ModuleDeclaration) {
 interface Args {
   named: {
     executableFile: Ready | undefined;
-    onModuleEdit: (state: State, staleState: State) => void;
+    onModuleEdit: (state: State) => void;
   };
 }
 
@@ -84,13 +84,9 @@ export interface State {
 
 export class ModuleContentsResource extends Resource<Args> {
   @service declare operatorModeStateService: OperatorModeStateService;
-  private staleState: State = {
-    declarations: [],
-  };
-  @tracked private state: State = {
-    declarations: [],
-  };
-  private onModuleEdit?: (state: State, staleState: State) => void;
+  private staleState: State | undefined = undefined;
+  @tracked private state: State | undefined = undefined;
+  private onModuleEdit?: (state: State) => void;
 
   get isLoading() {
     return this.load.isRunning;
@@ -100,11 +96,16 @@ export class ModuleContentsResource extends Resource<Args> {
   // it has to know this to distinguish the act of editing of a file and switching between definitions
   // when editing a file we don't want to introduce loading state, whereas when switching between definitions we do
   get isLoadingNewModule() {
-    return this.load.isRunning && this.staleState.url !== this.state.url;
+    let x =
+      this.load.isRunning &&
+      this.staleState &&
+      this.state &&
+      this.staleState.url !== this.state?.url;
+    return x;
   }
 
   get declarations() {
-    return this.state.declarations;
+    return this.state?.declarations || [];
   }
 
   modify(_positional: never[], named: Args['named']) {
@@ -136,8 +137,8 @@ export class ModuleContentsResource extends Resource<Args> {
   });
 
   private updateState(state: State): void {
-    if (state.url === this.staleState.url) {
-      this.onModuleEdit?.(state, this.staleState);
+    if (state.url === this.staleState?.url || this.staleState === undefined) {
+      this.onModuleEdit?.(state);
     }
     this.staleState = this.state;
     this.state = state;
@@ -202,7 +203,7 @@ export class ModuleContentsResource extends Resource<Args> {
 export function moduleContentsResource(
   parent: object,
   executableFile: () => Ready | undefined,
-  onModuleEdit: (state: State, staleState: State) => void,
+  onModuleEdit: (state: State) => void,
 ): ModuleContentsResource {
   return ModuleContentsResource.from(parent, () => ({
     named: {

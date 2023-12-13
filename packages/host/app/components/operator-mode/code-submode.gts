@@ -30,7 +30,7 @@ import {
   hasExecutableExtension,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { isEquivalentPath } from '@cardstack/runtime-common//schema-analysis-plugin';
+import { isEquivalentBody } from '@cardstack/runtime-common//schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
@@ -329,7 +329,11 @@ export default class CodeSubmode extends Component<Signature> {
     let editedDeclaration = state.declarations.find(
       (newDeclaration: ModuleDeclaration) => {
         return this.selectedDeclaration
-          ? isEquivalentPath(this.selectedDeclaration.path, newDeclaration.path)
+          ? this.selectedDeclaration.localName !== newDeclaration.localName &&
+              isEquivalentBody(
+                this.selectedDeclaration.path,
+                newDeclaration.path,
+              )
           : false;
       },
     );
