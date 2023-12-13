@@ -54,14 +54,15 @@ export default class RegisterUser extends Component<Signature> {
           <span class='title' data-test-email-validation>Please check your email
             to complete registration.</span>
           <ul class='email-validation-instruction'>
-            <li>Leave this window while we verify your email</li>
-            <li>This scree will update once your email is verified</li>
+            <li>Leave this window open while we verify your email</li>
+            <li>This screen will update once your email is verified</li>
           </ul>
           <Button
             data-test-resend-validation
             {{on 'click' this.resendValidation}}
             class='resend-email'
             @kind='primary'
+            @disabled={{this.validateEmail.isRunning}}
           >Resend Email</Button>
         {{else if (eq this.state.type 'askForToken')}}
           <FieldContainer
@@ -378,11 +379,24 @@ export default class RegisterUser extends Component<Signature> {
 
   private get isRegisterButtonDisabled() {
     return (
+      this.hasRegistrationMissingField ||
+      this.hasRegistrationError ||
+      this.doRegistrationFlow.isRunning
+    );
+  }
+
+  private get hasRegistrationMissingField() {
+    return (
       !this.email ||
       !this.name ||
       !this.username ||
       !this.password ||
-      !this.confirmPassword ||
+      !this.confirmPassword
+    );
+  }
+
+  private get hasRegistrationError() {
+    return (
       this.emailError ||
       this.nameError ||
       this.usernameError ||
@@ -392,7 +406,7 @@ export default class RegisterUser extends Component<Signature> {
   }
 
   private get isNextButtonDisabled() {
-    return !this.token;
+    return !this.token || this.doRegistrationFlow.isRunning;
   }
 
   private get nameInputState() {
@@ -471,8 +485,6 @@ export default class RegisterUser extends Component<Signature> {
   private checkEmail() {
     if (!this.email) {
       this.emailError = 'Email address is missing';
-    } else if (!/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(this.email)) {
-      this.emailError = 'Email address is not a valid email';
     }
   }
 
@@ -503,7 +515,6 @@ export default class RegisterUser extends Component<Signature> {
   private checkPassword() {
     if (!this.password) {
       this.passwordError = 'Password is missing';
-      console.log(this.passwordError);
     } else if (
       !/^(?=.*[0-9])(?=.*[!@#$%^&*])[a-zA-Z0-9!@#$%^&*]{8,}$/.test(
         this.password,
@@ -580,6 +591,15 @@ export default class RegisterUser extends Component<Signature> {
 
   private validateEmail = restartableTask(
     async (clientSecret: string = uuidv4(), sendAttempt = 1) => {
+      if (
+        this.state.type !== 'validateEmail' &&
+        this.state.type !== 'waitForEmailValidation'
+      ) {
+        throw new Error(
+          `invalid state: cannot validateEmail() in state ${this.state.type}`,
+        );
+      }
+
       if (!this.email) {
         throw new Error(
           `bug: should never get here: validate button disabled when no email`,
@@ -597,25 +617,23 @@ export default class RegisterUser extends Component<Signature> {
         if (e.status === 400 && e.data.errcode === 'M_THREEPID_IN_USE') {
           this.emailError =
             'Email address is already attached to a Boxel account';
+        }
+        if (this.state.type === 'validateEmail') {
           this.state = { type: 'initial' };
         }
         throw e;
       }
-      let { sid } = res;
 
-      if (this.state.type === 'initial' || this.state.type === 'login') {
-        throw new Error(
-          `invalid state: cannot validateEmail() with sendAttempt=${sendAttempt} in state ${this.state.type}`,
-        );
+      if (this.state.type === 'validateEmail') {
+        let { sid } = res;
+        this.state = {
+          ...this.state,
+          type: 'register',
+          sid,
+          clientSecret,
+          sendAttempt,
+        };
       }
-
-      this.state = {
-        ...this.state,
-        type: 'register',
-        sid,
-        clientSecret,
-        sendAttempt,
-      };
       this.doRegistrationFlow.perform();
     },
   );
@@ -687,8 +705,7 @@ export default class RegisterUser extends Component<Signature> {
     }
 
     if (auth) {
-      await this.matrixService.start(auth);
-      await this.matrixService.client.setDisplayName(this.state.name);
+      await this.matrixService.startAndSetDisplayName(auth, this.state.name);
       this.args.onCancel();
     }
   });
