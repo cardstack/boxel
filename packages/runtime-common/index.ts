@@ -295,16 +295,14 @@ export interface Actions {
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
     fieldName?: string,
   ) => Promise<void>;
-  createCardDirectly: (
-    doc: LooseSingleCardDocument,
-    relativeTo: URL | undefined,
-  ) => Promise<void>;
+  editCard: (card: CardDef) => void;
+  saveCard(card: CardDef, dismissItem: boolean): void;
+  deleteCard: (card: CardDef, opts?: { afterDelete: () => void }) => void;
   doWithStableScroll: (
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
-  openCodeSubmode: (url: URL) => void;
-  // more CRUD ops to come...
+  changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
 }
 
 export function hasExecutableExtension(path: string): boolean {

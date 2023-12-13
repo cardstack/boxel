@@ -1732,7 +1732,7 @@ class MissingEmbeddedTemplate extends GlimmerComponent<{
         for
         {{if (isCardDef @cardOrField) 'CardDef' 'FieldDef'}}:
         {{@cardOrField.displayName}}</span>
-      {{#if @context.actions.openCodeSubmode}}
+      {{#if @context.actions.changeSubmode}}
         <span
           class='open-code-submode'
           {{on 'click' this.openCodeSubmode}}
@@ -1785,7 +1785,7 @@ class MissingEmbeddedTemplate extends GlimmerComponent<{
       return;
     }
     let moduleId = moduleFrom(ref);
-    this.args.context?.actions?.openCodeSubmode(new URL(moduleId));
+    this.args.context?.actions?.changeSubmode(new URL(moduleId), 'code');
   }
 }
 
