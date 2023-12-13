@@ -54,7 +54,13 @@ export default class ProfileInfoPopover extends Component<Signature> {
         opacity: 1;
       }
 
-      .profile-popover-header {
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .header .label {
         font-color: var(--boxel-dark);
         text-transform: uppercase;
       }
@@ -115,9 +121,19 @@ export default class ProfileInfoPopover extends Component<Signature> {
       }}
       data-test-profile-popover
     >
-      <div class='profile-popover-header'>
-        Signed in as
-      </div>
+      <header class='header'>
+        <div class='label'>
+          Signed in as
+        </div>
+
+        <BoxelButton
+          @kind='secondary-light'
+          @size='extra-small'
+          data-test-settings-button
+        >
+          Settings
+        </BoxelButton>
+      </header>
 
       <div class='profile-popover-body' data-test-profile-icon-container>
         <ProfileAvatarIcon
