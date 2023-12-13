@@ -85,7 +85,7 @@ export default class ModalContainer extends Component<Signature> {
       }
 
       .dialog-box__content {
-        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xl) var(--boxel-sp-xl);
         height: 100%;
         overflow: auto;
       }
@@ -100,11 +100,12 @@ export default class ModalContainer extends Component<Signature> {
         background: none;
         font: var(--boxel-font-lg);
         position: absolute;
-        top: 0;
-        right: 0;
+        top: 1px;
+        right: 1px;
         width: 50px;
         height: 50px;
-        padding: 0;
+        padding: var(--boxel-sp-xs);
+        border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
       }
 
       .dialog-box__close:hover {
