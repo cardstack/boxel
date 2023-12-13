@@ -12,21 +12,109 @@ permissions:
   pull-requests: write
 
 jobs:
-  host-test:
-    strategy:
-      matrix:
-        one: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        two: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-
-    name: Host Tests
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     concurrency:
-      group: boxel-host-test-${{ github.head_ref || github.run_id }}-${{matrix.one}}-${{matrix.two}}
+      group: lint-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
-      - run: echo ${{matrix.one}} ${{matrix.two}}
+      - name: Lint AI Bot
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/ai-bot
+      - name: Lint Boxel Motion
+        # This addition to each step causes the job to proceed even if one lint job fails so we can see all errors
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/boxel-motion
+      - name: Lint Boxel Motion Test App
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/boxel-motion-test-app
+      - name: Lint Boxel Motion Demo App
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/boxel-motion-demo-app
+      - name: Lint Boxel UI
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/boxel-ui/addon
+      - name: Build Boxel UI
+        # To faciliate linting of projects that depend on Boxel UI
+        if: always()
+        run: pnpm run build
+        working-directory: packages/boxel-ui/addon
+      - name: Lint Boxel UI Test App
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/boxel-ui/test-app
+      - name: Lint Host
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/host
+      - name: Lint Matrix
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/matrix
+      - name: Lint Realm Server
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/realm-server
+
+  ai-bot-test:
+    name: AI bot Tests
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ai-bot-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
+      - name: AI Bot test suite
+        run: pnpm test
+        working-directory: packages/ai-bot
+
+  boxel-motion-test:
+    name: Boxel Motion Tests
+    runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-motion-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
+      - name: Run Tests
+        run: pnpm run test:ember
+        working-directory: packages/boxel-motion-test-app
+
+  boxel-ui-test:
+    name: Boxel UI Tests
+    runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-ui-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/boxel-ui/test-app
+
+  host-test:
+    name: Host Tests
+    runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-host-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
@@ -39,12 +127,187 @@ jobs:
         run: pnpm start:all &
         working-directory: packages/realm-server
       - name: host test suite
-        # FIXME restore
-        run: pnpm test
+        run: pnpm test-with-percy
+        env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2.9.0
         if: always()
         with:
           junit_files: junit/host.xml
-          comment_mode: off
+
+  matrix-client-test:
+    name: Matrix Client Tests
+    runs-on: ubuntu-latest
+    concurrency:
+      group: matrix-client-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+        working-directory: packages/matrix
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+      - name: Build host dist/ for fastboot
+        run: pnpm build
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+        working-directory: packages/host
+      - name: Start realm servers
+        run: pnpm start:without-matrix &
+        working-directory: packages/realm-server
+      - name: Run Playwright tests
+        run: pnpm test
+        working-directory: packages/matrix
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: playwright-report
+          path: packages/matrix/playwright-report/
+          retention-days: 30
+
+  realm-server-test:
+    name: Realm Server Tests
+    runs-on: ubuntu-latest
+    concurrency:
+      group: realm-server-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+      - name: Build host dist/ for fastboot
+        run: pnpm build
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+        working-directory: packages/host
+      - name: Start base realm server
+        run: pnpm start:all &
+        working-directory: packages/realm-server
+      - name: realm server test suite
+        run: pnpm test:wait-for-servers
+        working-directory: packages/realm-server
+      - name: realm server DOM tests
+        run: pnpm test:dom
+        working-directory: packages/realm-server
+
+  change-check:
+    name: Check which packages changed
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      boxel: ${{ steps.filter.outputs.boxel }}
+      ai-bot: ${{ steps.filter.outputs.ai-bot }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            boxel:
+              - '.github/workflows/build-host.yml'
+              - '.github/workflows/deploy-host.yml'
+              - '.github/workflows/waypoint-build.yml'
+              - '.github/workflows/waypoint-deploy.yml'
+              - '.github/workflows/ci.yaml'
+              - 'packages/base/**'
+              - 'packages/boxel-ui/**'
+              - 'packages/host/**'
+              - 'packages/realm-server/**'
+              - 'packages/runtime-common/**'
+              - 'pnpm-lock.yaml'
+            ai-bot:
+              - '.github/workflows/waypoint-build.yml'
+              - '.github/workflows/waypoint-deploy.yml'
+              - '.github/workflows/ci.yaml'
+              - 'packages/runtime-common/**'
+              - 'packages/ai-bot/**'
+              - 'pnpm-lock.yaml'
+
+  build-host:
+    name: Build host
+    needs: [change-check]
+    if: ${{ needs.change-check.outputs.boxel == 'true' }}
+    uses: ./.github/workflows/build-host.yml
+    secrets: inherit
+    with:
+      environment: "staging"
+
+  build-realm-server:
+    name: Build realm-server
+    needs: [change-check]
+    if: ${{ needs.change-check.outputs.boxel == 'true' }}
+    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
+    secrets: inherit
+    with:
+      app: "boxel-realm-server"
+      environment: "staging"
+      restore-mtime: true
+      working-directory: "packages/realm-server"
+
+  build-ai-bot:
+    name: Build ai-bot
+    needs: [change-check]
+    if: ${{ needs.change-check.outputs.ai-bot == 'true' }}
+    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
+    secrets: inherit
+    with:
+      app: "boxel-ai-bot"
+      environment: "staging"
+      working-directory: "packages/ai-bot"
+
+  deploy-host:
+    name: Deploy host
+    needs:
+      - boxel-ui-test
+      - host-test
+      - realm-server-test
+      - build-host
+      - build-realm-server
+    uses: ./.github/workflows/deploy-host.yml
+    secrets: inherit
+    with:
+      environment: "staging"
+
+  realm-server-efs-config:
+    needs: [build-realm-server]
+    name: EFS Config
+    uses: ./.github/workflows/realm-server-efs-config.yml
+    with:
+      environment: "staging"
+
+  deploy-realm-server:
+    name: Deploy realm server to staging
+    needs:
+      - boxel-ui-test
+      - host-test
+      - realm-server-test
+      - build-host
+      - realm-server-efs-config
+    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
+    secrets: inherit
+    with:
+      app: "boxel-realm-server"
+      environment: "staging"
+      working-directory: "packages/realm-server"
+      efs-config: ${{ needs.realm-server-efs-config.outputs.config }}
+      retain: "0"
+
+  deploy-ai-bot:
+    name: Deploy ai-bot to staging
+    needs:
+      - ai-bot-test
+      - build-ai-bot
+    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
+    secrets: inherit
+    with:
+      app: "boxel-ai-bot"
+      environment: "staging"
+      working-directory: "packages/ai-bot"
+      retain: "0"
