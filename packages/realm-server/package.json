@@ -63,7 +63,7 @@
     "start:test-container": "http-server ./dom-tests -p 4205 --silent",
     "start:matrix": "cd ../matrix && pnpm assert-synapse-running",
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",
-    "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.card%2Bjson|http://localhost:8008' 'pnpm run wait' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.card%2Bjson' 'test'",
+    "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.card%2Bjson|http://localhost:8008|http://localhost:5001' 'pnpm run wait' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.card%2Bjson' 'test'",
     "setup:base-in-deployment": "rm -rf /persistent/base && cp -R ../base /persistent",
     "setup:drafts-in-deployment": "mkdir -p /persistent/drafts && cp --verbose --update --recursive ../drafts-realm/. /persistent/drafts/",
     "setup:published-in-deployment": "mkdir -p /persistent/published && cp --verbose --update --recursive ../published-realm/. /persistent/published/",
