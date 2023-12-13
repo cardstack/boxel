@@ -29,7 +29,7 @@ interface Signature {
     moduleContentsResource: ModuleContentsResource;
     cardTypeResource?: CardType;
     card: typeof BaseDef;
-    openDefinition: (
+    goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
     ) => void;
@@ -39,7 +39,7 @@ interface Signature {
       WithBoundArgs<typeof SchemaEditorTitle, 'totalFields'>,
       WithBoundArgs<
         typeof CardAdoptionChain,
-        'file' | 'moduleSyntax' | 'cardInheritanceChain' | 'openDefinition'
+        'file' | 'moduleSyntax' | 'cardInheritanceChain' | 'goToDefinition'
       >,
     ];
   };
@@ -133,7 +133,7 @@ export default class SchemaEditor extends Component<Signature> {
           file=@file
           moduleSyntax=this.moduleSyntax
           cardInheritanceChain=this.cardInheritanceChain.value
-          openDefinition=@openDefinition
+          goToDefinition=@goToDefinition
         )
       }}
     {{/if}}

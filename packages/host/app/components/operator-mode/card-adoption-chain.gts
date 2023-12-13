@@ -21,7 +21,7 @@ interface Signature {
     file: Ready;
     cardInheritanceChain: CardInheritance[];
     moduleSyntax: ModuleSyntax;
-    openDefinition: (
+    goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
     ) => void;
@@ -90,7 +90,7 @@ export default class CardAdoptionChain extends Component<Signature> {
               @file
               data.cardType
             }}
-            @openDefinition={{@openDefinition}}
+            @goToDefinition={{@goToDefinition}}
           />
           <div class='content-with-line'>
             <hr class='line' />

@@ -334,7 +334,7 @@ export default class CodeSubmode extends Component<Signature> {
       },
     );
     if (editedDeclaration) {
-      this.openDefinition(undefined, editedDeclaration.localName);
+      this.goToDefinition(undefined, editedDeclaration.localName);
     }
   }
 
@@ -392,11 +392,11 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this.openDefinition(undefined, dec.localName);
+    this.goToDefinition(undefined, dec.localName);
   }
 
   @action
-  openDefinition(
+  goToDefinition(
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) {
@@ -651,7 +651,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @selectDeclaration={{this.selectDeclaration}}
                           @delete={{perform this.delete}}
-                          @openDefinition={{this.openDefinition}}
+                          @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
                           data-test-card-inspector-panel
                         />
@@ -747,7 +747,7 @@ export default class CodeSubmode extends Component<Signature> {
                         @moduleContentsResource={{this.moduleContentsResource}}
                         @card={{this.selectedCardOrField.cardOrField}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
-                        @openDefinition={{this.openDefinition}}
+                        @goToDefinition={{this.goToDefinition}}
                         as |SchemaEditorTitle SchemaEditorPanel|
                       >
                         <A.Item

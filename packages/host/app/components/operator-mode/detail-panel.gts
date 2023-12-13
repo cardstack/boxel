@@ -74,7 +74,7 @@ interface Signature {
     cardInstance: CardDef | undefined;
     selectedDeclaration?: ModuleDeclaration;
     selectDeclaration: (dec: ModuleDeclaration) => void;
-    openDefinition: (
+    goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
     ) => void;
@@ -369,7 +369,7 @@ export default class DetailPanel extends Component<Signature> {
                     @fileURL={{this.cardInstanceType.type.module}}
                     @name={{this.cardInstanceType.type.displayName}}
                     @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
-                    @openDefinition={{@openDefinition}}
+                    @goToDefinition={{@goToDefinition}}
                     @codeRef={{codeRef}}
                   />
                 {{/let}}
@@ -407,7 +407,7 @@ export default class DetailPanel extends Component<Signature> {
                         @fileURL={{this.cardType.type.super.module}}
                         @name={{this.cardType.type.super.displayName}}
                         @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                        @openDefinition={{@openDefinition}}
+                        @goToDefinition={{@goToDefinition}}
                         @codeRef={{codeRef}}
                         @localName={{this.cardType.type.super.localName}}
                       />
@@ -421,7 +421,7 @@ export default class DetailPanel extends Component<Signature> {
                         @fileURL={{this.cardType.type.module}}
                         @name={{this.cardType.type.displayName}}
                         @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                        @openDefinition={{@openDefinition}}
+                        @goToDefinition={{@goToDefinition}}
                         @codeRef={{codeRef}}
                         @localName={{this.cardType.type.localName}}
                       />
