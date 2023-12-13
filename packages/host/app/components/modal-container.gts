@@ -85,7 +85,7 @@ export default class ModalContainer extends Component<Signature> {
       }
 
       .dialog-box__content {
-        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xl) var(--boxel-sp-xl);
         height: 100%;
         overflow: auto;
       }
