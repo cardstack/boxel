@@ -81,37 +81,35 @@ class Edit extends Component<typeof Base64ImageField> {
                     using the "contain" or "cover" size.
                   </span>
                 </div>
+              {{else if this.usesActualSize}}
+                <img
+                  data-test-actual-img
+                  src={{sanitizeBase64 @model.base64}}
+                  height={{@model.height}}
+                  width={{@model.width}}
+                  alt={{@model.altText}}
+                />
               {{else}}
-                {{#if this.usesActualSize}}
-                  <img
-                    data-test-actual-img
-                    src={{sanitizeBase64 @model.base64}}
-                    height={{@model.height}}
-                    width={{@model.width}}
-                    alt={{@model.altText}}
-                  />
-                {{else}}
+                <div
+                  class='checkerboard-preview-background'
+                  style={{this.backgroundMaskStyle}}
+                >
                   <div
-                    class='preview-background'
-                    style={{this.backgroundMaskStyle}}
+                    data-test-contain-cover-img
+                    role='img'
+                    aria-label={{@model.altText}}
+                    class='preview'
+                    style={{cssForBase64
+                      (hash
+                        base64=@model.base64
+                        size=@model.size
+                        height=@model.height
+                        width=@model.width
+                      )
+                    }}
                   >
-                    <div
-                      data-test-contain-cover-img
-                      role='img'
-                      aria-label={{@model.altText}}
-                      class='preview'
-                      style={{cssForBase64
-                        (hash
-                          base64=@model.base64
-                          size=@model.size
-                          height=@model.height
-                          width=@model.width
-                        )
-                      }}
-                    >
-                    </div>
                   </div>
-                {{/if}}
+                </div>
               {{/if}}
             </div>
           {{/if}}
@@ -155,7 +153,7 @@ class Edit extends Component<typeof Base64ImageField> {
         background-repeat: no-repeat;
         background-position: center;
       }
-      .preview-background {
+      .checkerboard-preview-background {
         width: 100%;
         border: 1px solid var(--boxel-form-control-border-color);
         border-radius: var(--boxel-form-control-border-radius);
@@ -206,7 +204,7 @@ class ImageSizeField extends FieldDef {
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div data-test-radio-group={{@fieldName}}>
+      <div class='radio-group' data-test-radio-group={{@fieldName}}>
         <label for='{{this.radioGroup}}_actual'>
           Actual
           <input
@@ -244,6 +242,12 @@ class ImageSizeField extends FieldDef {
           />
         </label>
       </div>
+      <style>
+        .radio-group {
+          display: flex;
+          justify-content: space-between;
+        }
+      </style>
     </template>
 
     private radioGroup = `__cardstack_img_size${groupNumber++}__`;

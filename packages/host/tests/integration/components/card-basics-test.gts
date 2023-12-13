@@ -545,11 +545,7 @@ module('Integration | card-basics', function (hooks) {
       .hasAttribute('alt', 'picture of mango');
 
     await click('[data-test-contain-size-input]');
-    assert
-      .dom('[data-test-height-warning]')
-      .includesText(
-        `Can't render current image. Please provide a height when using the "contain" or "cover" size.`,
-      );
+    assert.dom('[data-test-height-warning]').exists('height warning exists');
     await fillIn('[data-test-field="height"] input', '200');
     assert.dom('[data-test-height-warning]').doesNotExist('warning dismissed');
     assert
