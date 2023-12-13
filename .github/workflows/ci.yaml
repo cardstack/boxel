@@ -47,36 +47,3 @@ jobs:
         if: always()
         with:
           junit_files: junit/host.xml
-
-  change-check:
-    name: Check which packages changed
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    outputs:
-      boxel: ${{ steps.filter.outputs.boxel }}
-      ai-bot: ${{ steps.filter.outputs.ai-bot }}
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dorny/paths-filter@v2
-        id: filter
-        with:
-          filters: |
-            boxel:
-              - '.github/workflows/build-host.yml'
-              - '.github/workflows/deploy-host.yml'
-              - '.github/workflows/waypoint-build.yml'
-              - '.github/workflows/waypoint-deploy.yml'
-              - '.github/workflows/ci.yaml'
-              - 'packages/base/**'
-              - 'packages/boxel-ui/**'
-              - 'packages/host/**'
-              - 'packages/realm-server/**'
-              - 'packages/runtime-common/**'
-              - 'pnpm-lock.yaml'
-            ai-bot:
-              - '.github/workflows/waypoint-build.yml'
-              - '.github/workflows/waypoint-deploy.yml'
-              - '.github/workflows/ci.yaml'
-              - 'packages/runtime-common/**'
-              - 'packages/ai-bot/**'
-              - 'pnpm-lock.yaml'
