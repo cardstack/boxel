@@ -75,27 +75,6 @@ export default class ProfileInfoPopover extends Component<Signature> {
         text-transform: uppercase;
       }
 
-      .profile-popover-body {
-        margin: auto;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .profile-popover-body > * {
-        margin: auto;
-      }
-
-      .profile-popover-body > .profile-icon {
-        width: 70px;
-        height: 70px;
-        font-size: var(--boxel-font-size-xxl);
-      }
-
-      .profile-handle {
-        margin-top: var(--boxel-sp-xs);
-        color: var(--boxel-500);
-      }
-
       .profile-icon-container {
         bottom: 0;
         position: absolute;
@@ -123,48 +102,41 @@ export default class ProfileInfoPopover extends Component<Signature> {
       </button>
     </div>
 
-    <div
-      class='profile-popover {{if this.isOpened "opened"}}'
-      {{onClickOutside
-        (fn this.setPopoverProfileOpen false)
-        exceptSelector='.profile-icon-button'
-      }}
-      data-test-profile-popover
-    >
-      <header class='header'>
-        <div class='label'>
-          Signed in as
-        </div>
+    {{#if this.isOpened}}
+      <div
+        class='profile-popover {{if this.isOpened "opened"}}'
+        {{onClickOutside
+          (fn this.setPopoverProfileOpen false)
+          exceptSelector='.profile-icon-button'
+        }}
+        data-test-profile-popover
+      >
+        <header class='header'>
+          <div class='label'>
+            Signed in as
+          </div>
+
+          <BoxelButton
+            @kind='secondary-light'
+            @size='small'
+            {{on 'click' this.openSettings}}
+            data-test-settings-button
+          >
+            Settings
+          </BoxelButton>
+        </header>
+
+        <Profile />
 
         <BoxelButton
-          @kind='secondary-light'
-          @size='extra-small'
-          {{on 'click' this.openSettings}}
-          data-test-settings-button
+          {{on 'click' this.logout}}
+          @kind='primary-dark'
+          data-test-signout-button
         >
-          Settings
+          Sign out
         </BoxelButton>
-      </header>
-
-      <div class='profile-popover-body' data-test-profile-icon-container>
-        <ProfileAvatarIcon
-          @userId={{this.matrixService.userId}}
-          class='profile-icon--big'
-        />
-
-        <div class='profile-handle' data-test-profile-icon-handle>
-          {{this.matrixService.userId}}
-        </div>
       </div>
-
-      <BoxelButton
-        {{on 'click' this.logout}}
-        @kind='primary-dark'
-        data-test-signout-button
-      >
-        Sign out
-      </BoxelButton>
-    </div>
+    {{/if}}
 
     {{#if this.settingsIsOpenFIXME}}
       <Modal
@@ -175,7 +147,47 @@ export default class ProfileInfoPopover extends Component<Signature> {
         data-test-settings-modal
       >
         FIXME here is settings
+        <Profile />
       </Modal>
     {{/if}}
+  </template>
+}
+
+export class Profile extends Component<Signature> {
+  @service declare matrixService: MatrixService;
+
+  <template>
+    <div class='profile-popover-body' data-test-profile-icon-container>
+      <ProfileAvatarIcon
+        @userId={{this.matrixService.userId}}
+        class='profile-icon--big'
+      />
+
+      <div class='profile-handle' data-test-profile-icon-handle>
+        {{this.matrixService.userId}}
+      </div>
+    </div>
+    <style>
+      .profile-popover-body {
+        margin: auto;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .profile-popover-body > * {
+        margin: auto;
+      }
+
+      .profile-popover-body > .profile-icon {
+        width: 70px;
+        height: 70px;
+        font-size: var(--boxel-font-size-xxl);
+      }
+
+      .profile-handle {
+        margin-top: var(--boxel-sp-xs);
+        color: var(--boxel-500);
+      }
+    </style>
   </template>
 }

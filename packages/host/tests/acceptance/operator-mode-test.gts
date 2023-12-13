@@ -443,8 +443,14 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-profile-icon-button]');
     await click('[data-test-settings-button]');
 
-    assert.dom('[data-test-profile-popover]').doesNotHaveClass('opened');
+    assert.dom('[data-test-profile-popover]').doesNotExist();
     assert.dom('[data-test-settings-modal]').exists();
+    assert.dom('[data-test-profile-icon]').hasText('T');
+
+    assert
+      .dom('[data-test-profile-icon]')
+      .hasAttribute('style', 'background: #5ead6b');
+    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {
