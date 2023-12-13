@@ -21,7 +21,7 @@ jobs:
     name: Host Tests
     runs-on: ubuntu-latest
     concurrency:
-      group: boxel-host-test-${{ github.head_ref || github.run_id }}
+      group: boxel-host-test-${{ github.head_ref || github.run_id }}-${{matrix.one}}-${{matrix.two}}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
