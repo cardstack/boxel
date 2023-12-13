@@ -29,7 +29,6 @@ class Edit extends Component<typeof Base64ImageField> {
 
   fileChanged = (event: Event) => {
     this.error = undefined;
-    let here = this;
     let [file] = ((event.target as any).files as undefined | Blob[]) ?? [];
     if (!file) {
       return;
@@ -37,10 +36,10 @@ class Edit extends Component<typeof Base64ImageField> {
     let reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
-      here.args.model.base64 = reader.result as string;
+      this.args.model.base64 = reader.result as string;
     };
-    reader.onerror = function (error) {
-      here.error = String(error);
+    reader.onerror = (error) => {
+      this.error = String(error);
     };
   };
 
