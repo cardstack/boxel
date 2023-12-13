@@ -7,10 +7,11 @@ import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
-import { BoxelButton, Modal } from '@cardstack/boxel-ui/components';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 
 import { not } from '@cardstack/boxel-ui/helpers';
 
+import ModalContainer from '@cardstack/host/components/modal-container';
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -139,16 +140,18 @@ export default class ProfileInfoPopover extends Component<Signature> {
     {{/if}}
 
     {{#if this.settingsIsOpenFIXME}}
-      <Modal
+      <ModalContainer
         @onClose={{fn this.closeSettings}}
         @title='Settings'
-        @size='small'
+        @size='large'
         @isOpen={{this.settingsIsOpenFIXME}}
         data-test-settings-modal
       >
-        FIXME here is settings
-        <Profile />
-      </Modal>
+        <:content>
+          FIXME here is settings
+          <Profile />
+        </:content>
+      </ModalContainer>
     {{/if}}
   </template>
 }
