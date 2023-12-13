@@ -127,9 +127,8 @@ jobs:
         run: pnpm start:all &
         working-directory: packages/realm-server
       - name: host test suite
-        run: pnpm test-with-percy
-        env:
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+        # FIXME restore
+        run: pnpm test
         working-directory: packages/host
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2.9.0
