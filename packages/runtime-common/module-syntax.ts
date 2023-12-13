@@ -27,6 +27,8 @@ import {
   maybeRelativeURL,
   trimExecutableExtension,
   codeRefWithAbsoluteURL,
+  baseCardRef,
+  baseFieldRef,
   type CodeRef,
 } from './index';
 //@ts-ignore unsure where these types live
@@ -111,6 +113,7 @@ export class ModuleSyntax {
     fieldName,
     fieldRef,
     fieldType,
+    fieldDefinitionType,
     incomingRelativeTo,
     outgoingRelativeTo,
     outgoingRealmURL,
@@ -120,6 +123,7 @@ export class ModuleSyntax {
     fieldName: string;
     fieldRef: { name: string; module: string }; // module could be a relative path
     fieldType: FieldType;
+    fieldDefinitionType: 'card' | 'field';
     incomingRelativeTo: URL | undefined; // can be undefined when you know the url is not going to be relative
     outgoingRelativeTo: URL | undefined; // can be undefined when you know url is not going to be relative
     outgoingRealmURL: URL | undefined; // should be provided when the other 2 params are provided
@@ -138,6 +142,7 @@ export class ModuleSyntax {
       fieldRef,
       fieldType,
       fieldName,
+      fieldDefinitionType,
       cardBeingModified,
       incomingRelativeTo,
       outgoingRelativeTo,
@@ -362,6 +367,7 @@ function makeNewField({
   fieldRef,
   fieldType,
   fieldName,
+  fieldDefinitionType,
   cardBeingModified,
   incomingRelativeTo,
   outgoingRelativeTo,
@@ -370,6 +376,7 @@ function makeNewField({
 }: {
   target: NodePath<t.Node>;
   fieldRef: { name: string; module: string };
+  fieldDefinitionType: 'card' | 'field';
   fieldType: FieldType;
   fieldName: string;
   cardBeingModified: CodeRef;
@@ -425,7 +432,7 @@ function makeNewField({
     target as NodePath<any>,
     relativeFieldModuleRef,
     fieldRef.name,
-    suggestedCardName(fieldRef),
+    suggestedCardName(fieldRef, fieldDefinitionType),
   );
 
   if (
@@ -450,15 +457,23 @@ function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
   return currentPath as NodePath<t.Program>;
 }
 
-function suggestedCardName(ref: { name: string; module: string }): string {
-  if (ref.name.toLowerCase().endsWith('card')) {
+function suggestedCardName(
+  ref: { name: string; module: string },
+  type: 'card' | 'field',
+): string {
+  if (
+    ref.name.toLowerCase().endsWith(type) ||
+    isEqual(ref, baseCardRef) ||
+    isEqual(ref, baseFieldRef)
+  ) {
     return ref.name;
   }
+
   let name = ref.name;
   if (name === 'default') {
     name = ref.module.split('/').pop()!;
   }
-  return upperFirst(camelCase(`${name} card`));
+  return upperFirst(camelCase(`${name} ${type}`));
 }
 
 function insertFieldBeforePath(

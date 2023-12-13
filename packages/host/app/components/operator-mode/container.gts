@@ -11,8 +11,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { and, not } from '@cardstack/boxel-ui/helpers';
 
-import { type Loader } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query';
+import type { Loader, Query } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
@@ -194,6 +193,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-min-width: 20.5rem;
         --operator-mode-left-column: 14rem;
       }
+      :global(button:focus:not(:disabled)) {
+        outline-color: var(--boxel-highlight);
+      }
+      :global(dialog:focus) {
+        outline: none;
+      }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;
       }
@@ -224,10 +229,4 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    'OperatorMode::Container': typeof OperatorModeContainer;
-  }
 }

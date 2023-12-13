@@ -529,9 +529,3 @@ function chooseCardTitle(
     getSuggestionWithLowestDepth(suggestions) ?? DEFAULT_CHOOOSE_CARD_TITLE
   );
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    'CardCatalog::Modal': typeof CardCatalogModal;
-  }
-}

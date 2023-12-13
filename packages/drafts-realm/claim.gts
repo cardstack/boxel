@@ -91,7 +91,7 @@ class Isolated extends Component<typeof Claim> {
   web3Provider: CardPaySDK.Web3Provider | undefined;
   getSDK: typeof CardPaySDK.getSDK | undefined;
   <template>
-    <GridContainer>
+    <GridContainer class='container'>
       {{! include title field in template so that it can be indexed }}
       <@fields.title />
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -132,6 +132,11 @@ class Isolated extends Component<typeof Claim> {
         </Button>
       {{/if}}
     </GridContainer>
+    <style>
+      .container {
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
   </template>
 
   // chainId is not explicitly passed to resource

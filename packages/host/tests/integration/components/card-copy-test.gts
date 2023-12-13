@@ -2,7 +2,6 @@ import { waitUntil, waitFor, click } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
-import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import flatMap from 'lodash/flatMap';
 import { module, test } from 'qunit';
@@ -24,6 +23,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
@@ -486,7 +486,6 @@ module('Integration | card-copy', function (hooks) {
     await click(
       `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
-    await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="right"]')
       .exists('copy button with right arrow exists');
@@ -517,7 +516,6 @@ module('Integration | card-copy', function (hooks) {
     await click(
       ` [data-test-overlay-card="${testRealm2URL}Pet/paper"] button.select`,
     );
-    await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="left"]')
       .exists('copy button with left arrow exists');
@@ -630,11 +628,11 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     let id: string | undefined;
-    this.onSave((json) => {
+    this.onSave((url, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      id = json.data.id.split('/').pop()!;
+      id = url.href.split('/').pop()!;
       assert.true(uuidValidate(id), 'card identifier is UUID');
       assert.strictEqual(json.data.id, `${testRealm2URL}Pet/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Mango');
@@ -734,7 +732,7 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     let savedCards: SingleCardDocument[] = [];
-    this.onSave((json) => {
+    this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -831,11 +829,11 @@ module('Integration | card-copy', function (hooks) {
     };
 
     let id: string | undefined;
-    this.onSave((json) => {
+    this.onSave((url, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      id = json.data.id.split('/').pop()!;
+      id = url.href.split('/').pop()!;
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
       assert.deepEqual(json.data.meta.adoptsFrom, {
@@ -948,11 +946,11 @@ module('Integration | card-copy', function (hooks) {
       }
     };
     let id: string | undefined;
-    this.onSave((json) => {
+    this.onSave((url, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      id = json.data.id.split('/').pop()!;
+      id = url.href.split('/').pop()!;
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Sakura');
       assert.deepEqual(json.data.meta.adoptsFrom, {

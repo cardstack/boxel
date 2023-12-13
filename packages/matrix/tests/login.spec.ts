@@ -80,7 +80,35 @@ test.describe('Login', () => {
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
     await openChat(page);
-    
+
     await assertLoggedIn(page);
+  });
+
+  test('it reacts to enter keypresses', async ({ page }) => {
+    await openRoot(page);
+    await toggleOperatorMode(page);
+
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('pass');
+
+    await page.keyboard.press('Enter');
+
+    await openChat(page);
+    await assertLoggedIn(page);
+  });
+
+  test('it returns to login when auth is invalid', async ({ page }) => {
+    await page.addInitScript({
+      content: `
+        window.localStorage.setItem(
+          'auth',
+          '{"user_id":"@b:stack.cards","access_token":"INVALID_TOKEN","home_server":"stack.cards","device_id":"HELLO","well_known":{"m.homeserver":{"base_url":"http://example.com/"}}}'
+        )`,
+    });
+
+    await openRoot(page);
+    await toggleOperatorMode(page);
+
+    await assertLoggedOut(page);
   });
 });

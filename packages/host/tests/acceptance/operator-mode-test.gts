@@ -6,7 +6,6 @@ import {
   waitFor,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
@@ -22,6 +21,7 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
+  percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
@@ -471,7 +471,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
       fileView: 'inspector',
       openDirs: {},
-      codeSelection: {},
     });
 
     // Toggle back to interactive mode
@@ -494,7 +493,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       codePath: `${testRealmURL}country-with-no-embedded-template.gts`,
       fileView: 'inspector',
       openDirs: {},
-      codeSelection: {},
     });
   });
 
@@ -550,7 +548,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         codePath: `${testRealmURL}Pet/mango.json`,
         fileView: 'inspector',
         openDirs: { [testRealmURL]: ['Pet/'] },
-        codeSelection: {},
       });
 
       // Toggle back to interactive mode
@@ -579,7 +576,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         submode: Submodes.Interact,
         fileView: 'inspector',
         openDirs: { [testRealmURL]: ['Pet/'] },
-        codeSelection: {},
       });
     });
   });

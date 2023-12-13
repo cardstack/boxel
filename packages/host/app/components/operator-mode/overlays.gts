@@ -288,9 +288,3 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
   // TODO: actions for 'preview' and 'more-actions' buttons
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    OperatorModeOverlays: typeof OperatorModeOverlays;
-  }
-}

@@ -94,7 +94,11 @@ export default class CreateFileModal extends Component<Signature> {
               />
             </FieldContainer>
             <FieldContainer
-              @label='Inherits From'
+              @label={{if
+                (eq this.maybeFileType.id 'card-instance')
+                'Adopted From'
+                'Inherits From'
+              }}
               class='field'
               data-test-inherits-from-field
             >
@@ -488,6 +492,10 @@ export default class CreateFileModal extends Component<Signature> {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? this.selectedCatalogEntry)!; // we just checked above to make sure one of these exists
     let className = camelize(this.displayName);
+    // make sure we don't collide with a javascript built-in object
+    if (typeof (globalThis as any)[className] !== 'undefined') {
+      className = `${className}0`;
+    }
     let absoluteModule = new URL(module, this.selectedCatalogEntry?.id);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
@@ -496,16 +504,16 @@ export default class CreateFileModal extends Component<Signature> {
     );
     // sanitize the name since it will be used in javascript code
     let safeName = this.displayName.replace(/[^A-Za-z \d-_]/g, '').trim();
-    let src: string;
+    let src: string[] = [];
 
     // There is actually only one possible declaration collision: `className` and `parent`,
     // reconcile that particular collision as necessary.
     if (className === exportName) {
-      src = `
+      src.push(`
 import { ${exportName} as ${exportName}Parent } from '${moduleURL}';
+import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName}Parent {
-  static displayName = "${safeName}";
-}`;
+  static displayName = "${safeName}";`);
     } else if (exportName === 'default') {
       let parent = camelize(
         module
@@ -515,19 +523,44 @@ export class ${className} extends ${exportName}Parent {
       );
       // check for parent/className declaration collision
       parent = parent === className ? `${parent}Parent` : parent;
-      src = `
+      src.push(`
 import ${parent} from '${moduleURL}';
+import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${parent} {
-  static displayName = "${safeName}";
-}`;
+  static displayName = "${safeName}";`);
     } else {
-      src = `
+      src.push(`
 import { ${exportName} } from '${moduleURL}';
+import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName} {
-  static displayName = "${safeName}";
-}`;
+  static displayName = "${safeName}";`);
     }
-    await this.cardService.saveSource(url, src.trim());
+    src.push(`\n  /*`);
+    if (this.fileType.id === 'card-definition') {
+      src.push(
+        `  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+`,
+      );
+    }
+    src.push(
+      `  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }`,
+    );
+    src.push(`  */`);
+    src.push(`}`);
+
+    await this.cardService.saveSource(url, src.join('\n').trim());
     this.currentRequest.newFileDeferred.fulfill(url);
   });
 

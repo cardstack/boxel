@@ -1,10 +1,12 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { IconButton } from '@cardstack/boxel-ui/components';
+import { cn } from '@cardstack/boxel-ui/helpers';
 import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
 
 import ENV from '@cardstack/host/config/environment';
@@ -19,6 +21,7 @@ import SearchSheet, {
 } from '../search-sheet';
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
+import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const { APP } = ENV;
@@ -40,6 +43,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare matrixService: MatrixService;
 
   private get chatVisibilityClass() {
     return this.isChatVisible ? 'chat-open' : 'chat-closed';
@@ -102,6 +106,35 @@ export default class SubmodeLayout extends Component<Signature> {
     this.closeSearchSheet();
   }
 
+  // Used to generate a color for the profile avatar
+  // Copied from https://github.com/mui/material-ui/issues/12700
+  stringToColor(string: string | null) {
+    if (!string) {
+      return 'transparent';
+    }
+
+    let hash = 0;
+    let i;
+
+    for (i = 0; i < string.length; i += 1) {
+      hash = string.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    let color = '#';
+
+    for (i = 0; i < 3; i += 1) {
+      const value = (hash >> (i * 8)) & 0xff;
+      color += `00${value.toString(16)}`.substr(-2);
+    }
+
+    return color;
+  }
+
+  get userInitals() {
+    // transform @user:localhost into U, for example
+    return this.matrixService.userId?.split(':')[0].slice(1, 2).toUpperCase();
+  }
+
   <template>
     <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
       <SubmodeSwitcher
@@ -128,6 +161,21 @@ export default class SubmodeLayout extends Component<Signature> {
         {{/if}}
       {{/if}}
     </div>
+
+    <div class='profile-icon-container' data-test-profile-icon-container>
+      <button
+        class='profile-icon'
+        style={{htmlSafe
+          (cn 'background:' (this.stringToColor this.matrixService.userId))
+        }}
+        data-test-profile-icon
+      >
+        <span>
+          {{this.userInitals}}
+        </span>
+      </button>
+    </div>
+
     <SearchSheet
       @mode={{this.searchSheetMode}}
       @onBlur={{this.closeSearchSheet}}
@@ -187,6 +235,31 @@ export default class SubmodeLayout extends Component<Signature> {
         height: 100vh;
         grid-column: 2;
         z-index: 1;
+      }
+
+      .profile-icon-container {
+        bottom: 0;
+        display: flex;
+        position: absolute;
+        width: var(--search-sheet-closed-height);
+        height: var(--search-sheet-closed-height);
+        border-radius: 50px;
+        margin-left: var(--boxel-sp);
+      }
+
+      .profile-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50px;
+        border: 2px solid white;
+        display: flex;
+      }
+
+      .profile-icon > span {
+        color: white;
+        margin: auto;
+
+        font-size: var(--boxel-font-size-lg);
       }
     </style>
   </template>

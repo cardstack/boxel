@@ -62,7 +62,7 @@ export class Transaction extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Transaction> {
     <template>
-      <GridContainer>
+      <GridContainer class='container'>
         <FieldContainer @label='Title'><@fields.title /></FieldContainer>
         <FieldContainer @label='Status'><@fields.status /></FieldContainer>
         <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
@@ -81,6 +81,11 @@ export class Transaction extends CardDef {
 
         <FieldContainer @label='Memo'><@fields.memo /></FieldContainer>
       </GridContainer>
+      <style>
+        .container {
+          padding: var(--boxel-sp-xl);
+        }
+      </style>
     </template>
   };
 }

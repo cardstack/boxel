@@ -33,7 +33,6 @@ import {
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import config from '@cardstack/host/config/environment';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
@@ -44,6 +43,7 @@ import {
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -70,7 +70,6 @@ interface Signature {
     saveCardOnClose: (card: CardDef) => void;
   };
 }
-const { autoSaveDelayMs } = config;
 
 type PanelWidths = {
   rightPanel: number;
@@ -113,6 +112,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare recentFilesService: RecentFilesService;
   @service declare loaderService: LoaderService;
+  @service declare environmentService: EnvironmentService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private cardError: Error | undefined;
@@ -344,25 +344,11 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get _selectedDeclaration() {
+    let codeSelection = this.operatorModeStateService.state.codeSelection;
     return this.moduleContentsResource?.declarations.find((dec) => {
-      // when refreshing module,
-      // checks localName from serialized url
-      if (
-        this.operatorModeStateService.state.codeSelection.localName ===
-        dec.localName
-      ) {
-        return true;
-      }
-
-      // when opening new definition,
-      // checks codeRef from serialized url
-      let codeRef = this.operatorModeStateService.state.codeSelection?.codeRef;
-      if (isCardOrFieldDeclaration(dec) && codeRef) {
-        return (
-          dec.exportName === codeRef.name || dec.localName === codeRef.name
-        );
-      }
-      return false;
+      return codeSelection
+        ? dec.exportName === codeSelection || dec.localName === codeSelection
+        : false;
     });
   }
 
@@ -387,8 +373,7 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this.operatorModeStateService.updateLocalNameSelection(dec.localName);
-    this.updateCursorByDeclaration?.(dec);
+    this.openDefinition(undefined, dec.localName);
   }
 
   @action
@@ -396,15 +381,11 @@ export default class CodeSubmode extends Component<Signature> {
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) {
-    if (codeRef) {
-      this.operatorModeStateService.updateCodeRefSelection(codeRef);
-      this.operatorModeStateService.updateCodePath(new URL(codeRef.module));
-    } else if (localName) {
-      this.operatorModeStateService.updateLocalNameSelection(localName);
-      this.updateCursorByDeclaration?.(this.selectedDeclaration!);
-    } else {
-      console.log('No reference to codeRef or name found within module');
-    }
+    this.operatorModeStateService.updateCodePathWithCodeSelection(
+      codeRef,
+      localName,
+      () => this.updateCursorByDeclaration?.(this.selectedDeclaration!),
+    );
   }
 
   private onCardChange = () => {
@@ -414,7 +395,7 @@ export default class CodeSubmode extends Component<Signature> {
   private initiateAutoSaveTask = restartableTask(async () => {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
-      await timeout(autoSaveDelayMs);
+      await timeout(this.environmentService.autoSaveDelayMs);
       await this.saveCard.perform(this.card);
       this.hasUnsavedCardChanges = false;
     }

@@ -11,7 +11,6 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
 
@@ -30,6 +29,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -706,7 +706,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-enter-room="test_a"]');
 
     await waitFor('[data-test-command-apply]');
-    this.onSave((json) => {
+    this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -969,7 +969,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
-    this.onSave((json) => {
+    this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -1059,8 +1059,6 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
 
-    await percySnapshot(assert);
-
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
     assert.dom(`[data-test-cards-grid-item]`).exists();
     assert
@@ -1100,11 +1098,8 @@ module('Integration | operator-mode', function (hooks) {
     );
     let saved = new Deferred<void>();
     let savedCards = new Set<string>();
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      savedCards.add(json.data.id);
+    this.onSave((url) => {
+      savedCards.add(url.href);
       saved.fulfill();
     });
 
@@ -1186,12 +1181,7 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     let savedCards = new Set<string>();
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      savedCards.add(json.data.id);
-    });
+    this.onSave((url) => savedCards.add(url.href));
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
@@ -1276,7 +1266,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .containsText('Mad As a Hatter by Alice Enwunder');
 
-    this.onSave((json) => {
+    this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -1382,12 +1372,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     let savedCards = new Set<string>();
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      savedCards.add(json.data.id);
-    });
+    this.onSave((url) => savedCards.add(url.href));
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
@@ -1537,12 +1522,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     let savedCards = new Set<string>();
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      savedCards.add(json.data.id);
-    });
+    this.onSave((url) => savedCards.add(url.href));
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
@@ -1583,12 +1563,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     let savedCards = new Set<string>();
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      savedCards.add(json.data.id);
-    });
+    this.onSave((url) => savedCards.add(url.href));
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     await click('[data-test-edit-button]');
@@ -2382,7 +2357,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
-    await percySnapshot(assert);
 
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
