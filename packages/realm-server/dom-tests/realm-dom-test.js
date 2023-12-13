@@ -1,6 +1,6 @@
 /* eslint-env browser */
 /* globals QUnit */
-const { test } = QUnit;
+const { test, assert } = QUnit;
 const testRealmURL = 'http://localhost:4202/node-test';
 const testContainerId = 'test-container';
 const iframeSelectorTempId = 'iframe-selector-temp';
@@ -142,7 +142,11 @@ async function boot(url, waitForSelector, isLoginRequired) {
   return messenger;
 }
 
-async function bootToCodeModeFile(pathToFile, waitForSelector, isLoginRequired) {
+async function bootToCodeModeFile(
+  pathToFile,
+  waitForSelector,
+  isLoginRequired,
+) {
   let codeModeStateParam = JSON.stringify({
     stacks: [[]],
     submode: 'code',
@@ -154,7 +158,11 @@ async function bootToCodeModeFile(pathToFile, waitForSelector, isLoginRequired) 
     codeModeStateParam,
   )}`;
 
-  return await boot(`${testRealmURL}/${path}`, waitForSelector, isLoginRequired);
+  return await boot(
+    `${testRealmURL}/${path}`,
+    waitForSelector,
+    isLoginRequired,
+  );
 }
 
 async function login(username, password, messenger) {
@@ -237,7 +245,7 @@ QUnit.module(
         '[data-test-directory-level]',
         true,
       );
-  
+
       let nav = await querySelector('nav', messenger);
       assert.ok(nav, '<nav> element exists');
       let dirContents = nav.textContent;
@@ -298,7 +306,11 @@ QUnit.module(
     });
 
     test('renders card instance', async function (assert) {
-      messenger = await bootToCodeModeFile('person-2.json', '[data-test-card]', true);
+      messenger = await bootToCodeModeFile(
+        'person-2.json',
+        '[data-test-card]',
+        true,
+      );
 
       let card = await querySelector('[data-test-card]', messenger);
       assert.strictEqual(

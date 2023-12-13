@@ -15,6 +15,9 @@ patchedDependencies:
   '@types/eventsource@1.1.11':
     hash: itunl7o524papufrlp7tcpsoiu
     path: patches/@types__eventsource@1.1.11.patch
+  ember-css-url@1.0.0:
+    hash: aglq5wzlwgv75jfevvip6brqo4
+    path: patches/ember-css-url@1.0.0.patch
   fastboot@4.1.0:
     hash: kizxbxhfcldguz4jcwonfduu2y
     path: patches/fastboot@4.1.0.patch
@@ -181,6 +184,9 @@ importers:
       ember-concurrency:
         specifier: ^3.1.0
         version: 3.1.0(@babel/core@7.22.11)(ember-source@4.12.0)
+      ember-css-url:
+        specifier: ^1.0.0
+        version: 1.0.0(patch_hash=aglq5wzlwgv75jfevvip6brqo4)
       ember-modifier:
         specifier: ^4.1.0
         version: 4.1.0(ember-source@4.12.0)
@@ -401,7 +407,7 @@ importers:
         version: 4.0.2
       ember-css-url:
         specifier: ^1.0.0
-        version: 1.0.0
+        version: 1.0.0(patch_hash=aglq5wzlwgv75jfevvip6brqo4)
       ember-export-application-global:
         specifier: ^2.0.1
         version: 2.0.1
@@ -591,7 +597,7 @@ importers:
         version: 4.0.2
       ember-css-url:
         specifier: ^1.0.0
-        version: 1.0.0
+        version: 1.0.0(patch_hash=aglq5wzlwgv75jfevvip6brqo4)
       ember-export-application-global:
         specifier: ^2.0.1
         version: 2.0.1
@@ -699,7 +705,7 @@ importers:
         version: 5.0.0
       ember-css-url:
         specifier: ^1.0.0
-        version: 1.0.0
+        version: 1.0.0(patch_hash=aglq5wzlwgv75jfevvip6brqo4)
       ember-focus-trap:
         specifier: ^1.0.1
         version: 1.0.1
@@ -956,7 +962,7 @@ importers:
         version: 4.0.2
       ember-css-url:
         specifier: ^1.0.0
-        version: 1.0.0
+        version: 1.0.0(patch_hash=aglq5wzlwgv75jfevvip6brqo4)
       ember-export-application-global:
         specifier: ^2.0.1
         version: 2.0.1
@@ -1271,7 +1277,7 @@ importers:
         version: 3.1.0(@babel/core@7.22.11)(ember-source@4.12.0)
       ember-css-url:
         specifier: ^1.0.0
-        version: 1.0.0
+        version: 1.0.0(patch_hash=aglq5wzlwgv75jfevvip6brqo4)
       ember-focus-trap:
         specifier: ^1.0.1
         version: 1.0.1
@@ -12050,12 +12056,13 @@ packages:
       - supports-color
     dev: true
 
-  /ember-css-url@1.0.0:
+  /ember-css-url@1.0.0(patch_hash=aglq5wzlwgv75jfevvip6brqo4):
     resolution: {integrity: sha512-d7RkClUcOSxH1Ro3o3UeoTmVPp3utj9T0JdsW4JvOmZTKle6Q44s8urja6PhVdAUU1k0wWkN89DiXbDFi+P7Yg==}
     dependencies:
       '@embroider/addon-shim': 1.8.6
     transitivePeerDependencies:
       - supports-color
+    patched: true
 
   /ember-destroyable-polyfill@2.0.3(@babel/core@7.22.11):
     resolution: {integrity: sha512-TovtNqCumzyAiW0/OisSkkVK93xnVF4NRU6+FN0ubpfwEOpRrmM2RqDwXI6YAChCgSHON1cz0DfQStpA1Gjuuw==}
