@@ -35,7 +35,7 @@ function randB64Bytes(numBytes: number): string {
   return crypto.randomBytes(numBytes).toString('base64').replace(/=*$/, '');
 }
 
-async function cfgDirFromTemplate(
+export async function cfgDirFromTemplate(
   template: string,
   dataDir?: string,
 ): Promise<SynapseConfig> {
@@ -222,6 +222,30 @@ export async function registerUser(
       },
     })
   ).json();
+  return {
+    homeServer: response.home_server,
+    accessToken: response.access_token,
+    userId: response.user_id,
+    deviceId: response.device_id,
+  };
+}
+
+export async function loginUser(
+  synapse: SynapseInstance,
+  username: string,
+  password: string,
+): Promise<Credentials> {
+  let response = await (await fetch(
+    `http://127.0.0.1:${synapse.mappedPort}/_matrix/client/r0/login`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'm.login.password',
+        user: username,
+        password,
+      }),
+    },
+  )).json();
   return {
     homeServer: response.home_server,
     accessToken: response.access_token,
