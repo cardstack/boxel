@@ -422,6 +422,31 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
+  test('can view and change settings via profile info popover', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await click('[data-test-profile-icon-button]');
+    await click('[data-test-settings-button]');
+
+    assert.dom('[data-test-profile-popover]').doesNotHaveClass('opened');
+    assert.dom('[data-test-settings-modal]').exists();
+  });
+
   test('can open code submode when card or field has no embedded template', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [

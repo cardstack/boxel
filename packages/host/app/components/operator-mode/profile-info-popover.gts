@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { BoxelButton, Modal } from '@cardstack/boxel-ui/components';
 
 import { not } from '@cardstack/boxel-ui/helpers';
 
@@ -22,9 +22,19 @@ interface Signature {
 export default class ProfileInfoPopover extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @tracked private isOpened = false;
+  @tracked private settingsIsOpenFIXME = false;
 
   @action setPopoverProfileOpen(open: boolean) {
     this.isOpened = open;
+  }
+
+  @action openSettings() {
+    this.isOpened = false;
+    this.settingsIsOpenFIXME = true;
+  }
+
+  @action closeSettings() {
+    this.settingsIsOpenFIXME = false;
   }
 
   @action logout() {
@@ -129,6 +139,7 @@ export default class ProfileInfoPopover extends Component<Signature> {
         <BoxelButton
           @kind='secondary-light'
           @size='extra-small'
+          {{on 'click' this.openSettings}}
           data-test-settings-button
         >
           Settings
@@ -154,5 +165,17 @@ export default class ProfileInfoPopover extends Component<Signature> {
         Sign out
       </BoxelButton>
     </div>
+
+    {{#if this.settingsIsOpenFIXME}}
+      <Modal
+        @onClose={{fn this.closeSettings}}
+        @title='Settings'
+        @size='small'
+        @isOpen={{this.settingsIsOpenFIXME}}
+        data-test-settings-modal
+      >
+        FIXME here is settings
+      </Modal>
+    {{/if}}
   </template>
 }
