@@ -47,3 +47,4 @@ jobs:
         if: always()
         with:
           junit_files: junit/host.xml
+          comment_mode: off
