@@ -677,9 +677,3 @@ class ContentElement extends Modifier<ContentElementSignature> {
     onSetup(element);
   }
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    OperatorModeStackItem: typeof OperatorModeStackItem;
-  }
-}
