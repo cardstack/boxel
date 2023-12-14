@@ -1,11 +1,13 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { next } from '@ember/runloop';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+import { modifier } from 'ember-modifier';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
@@ -23,10 +25,23 @@ interface Signature {
 export default class ProfileInfoPopover extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @tracked private isOpened = false;
+  @tracked private isRendered = false;
   @tracked private settingsIsOpenFIXME = false;
 
   @action setPopoverProfileOpen(open: boolean) {
     this.isOpened = open;
+
+    if (!open) {
+      this.setIsRendered(false);
+    }
+  }
+
+  @action setRenderedNext() {
+    next(this, this.setIsRendered, true);
+  }
+
+  @action setIsRendered(rendered: boolean) {
+    this.isRendered = rendered;
   }
 
   @action openSettings() {
@@ -61,7 +76,7 @@ export default class ProfileInfoPopover extends Component<Signature> {
         display: flex;
       }
 
-      .profile-popover.opened {
+      .profile-popover.rendered {
         opacity: 1;
       }
 
@@ -105,7 +120,8 @@ export default class ProfileInfoPopover extends Component<Signature> {
 
     {{#if this.isOpened}}
       <div
-        class='profile-popover {{if this.isOpened "opened"}}'
+        class='profile-popover {{if this.isRendered "rendered"}}'
+        {{insertedModifier this.setRenderedNext}}
         {{onClickOutside
           (fn this.setPopoverProfileOpen false)
           exceptSelector='.profile-icon-button'
@@ -207,3 +223,13 @@ export class Profile extends Component<Signature> {
     </style>
   </template>
 }
+
+let insertedModifier = modifier(
+  (
+    element: HTMLElement,
+    [callback]: [(element: HTMLElement) => void],
+    _named: {},
+  ) => {
+    callback(element);
+  },
+);
