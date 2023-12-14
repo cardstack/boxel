@@ -48,10 +48,12 @@ export default class ProfileInfoPopover extends Component<Signature> {
         transition: all 0.1s ease-out;
         opacity: 0;
         display: flex;
+        pointer-events: none;
       }
 
       .profile-popover.opened {
         opacity: 1;
+        pointer-events: auto;
       }
 
       .profile-popover-header {
