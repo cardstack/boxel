@@ -55,7 +55,7 @@ export default class ProfileInfoPopover extends Component<Signature> {
       }
 
       .profile-popover-header {
-        font-color: var(--boxel-dark);
+        color: var(--boxel-dark);
         text-transform: uppercase;
       }
 
