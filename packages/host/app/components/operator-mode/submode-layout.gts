@@ -244,32 +244,6 @@ export default class SubmodeLayout extends Component<Signature> {
         grid-column: 2;
         z-index: 1;
       }
-
-      .profile-icon-container {
-        bottom: 0;
-        display: flex;
-        position: absolute;
-        width: var(--search-sheet-closed-height);
-        height: var(--search-sheet-closed-height);
-        border-radius: 50px;
-        margin-left: var(--boxel-sp);
-        z-index: 1;
-      }
-
-      .profile-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 50px;
-        border: 2px solid white;
-        display: flex;
-      }
-
-      .profile-icon > span {
-        color: white;
-        margin: auto;
-
-        font-size: var(--boxel-font-size-lg);
-      }
     </style>
   </template>
 }

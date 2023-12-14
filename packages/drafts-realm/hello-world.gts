@@ -18,19 +18,24 @@ export class HelloWorld extends CardDef {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <img class='hero' src={{@model.heroUrl}} />
+      <div class='container'>
+        <img class='hero' src={{@model.heroUrl}} />
 
-      <h1>About Me</h1>
-      <div>
-        <img class='headshot' src={{@model.headshotUrl}} />
-        <h2>About {{@model.fullName}}</h2>
-        <blockquote>
-          &ldquo;{{@model.quote}}&rdquo;
-        </blockquote>
-        <@fields.bio />
+        <h1>About Me</h1>
+        <div>
+          <img class='headshot' src={{@model.headshotUrl}} />
+          <h2>About {{@model.fullName}}</h2>
+          <blockquote>
+            &ldquo;{{@model.quote}}&rdquo;
+          </blockquote>
+          <@fields.bio />
+        </div>
       </div>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap');
+        .container {
+          padding: var(--boxel-sp-xl);
+        }
         h1 {
           font-family: 'DM Serif Display', serif;
           font-size: 4em;

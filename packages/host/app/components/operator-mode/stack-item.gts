@@ -59,6 +59,7 @@ import { type StackItem } from '@cardstack/host/lib/stack-item';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 import {
   IconPencil,
   IconX,
@@ -88,8 +89,6 @@ interface Signature {
   };
 }
 
-let { autoSaveDelayMs } = config;
-
 export interface RenderedCardForOverlayActions {
   element: HTMLElement;
   card: CardDef;
@@ -100,8 +99,9 @@ export interface RenderedCardForOverlayActions {
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
-  @tracked selectedCards = new TrackedArray<CardDef>([]);
   @service declare cardService: CardService;
+  @service declare environmentService: EnvironmentService;
+  @tracked selectedCards = new TrackedArray<CardDef>([]);
   @tracked isHoverOnRealmIcon = false;
   @tracked isSaving = false;
   @tracked lastSaved: number | undefined;
@@ -276,7 +276,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   };
 
   private initiateAutoSaveTask = restartableTask(async () => {
-    await timeout(autoSaveDelayMs);
+    await timeout(this.environmentService.autoSaveDelayMs);
     this.isSaving = true;
     this.args.save(this.args.item, false);
     this.isSaving = false;
@@ -675,11 +675,5 @@ class ContentElement extends Modifier<ContentElementSignature> {
     { onSetup }: ContentElementSignature['Args']['Named'],
   ) {
     onSetup(element);
-  }
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    OperatorModeStackItem: typeof OperatorModeStackItem;
   }
 }

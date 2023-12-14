@@ -148,7 +148,7 @@ export class CatalogEntry extends CardDef {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CatalogEntryContainer>
+      <CatalogEntryContainer class='container'>
         <h1 data-test-title><@fields.title /></h1>
         <em data-test-description><@fields.description /></em>
         <div data-test-ref>
@@ -170,6 +170,9 @@ export class CatalogEntry extends CardDef {
         {{/if}}
       </CatalogEntryContainer>
       <style>
+        .container {
+          padding: var(--boxel-sp);
+        }
         .realm-name {
           color: var(--boxel-teal);
           font-size: var(--boxel-font-size-xs);

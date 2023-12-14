@@ -72,7 +72,7 @@ export default class ProfileInfoPopover extends Component<Signature> {
       }
 
       .header .label {
-        font-color: var(--boxel-dark);
+        color: var(--boxel-dark);
         text-transform: uppercase;
       }
 
