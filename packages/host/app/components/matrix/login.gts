@@ -196,17 +196,14 @@ export default class Login extends Component<Signature> {
     }
     let auth: IAuthData | undefined;
     try {
-      auth = await this.matrixService.client.loginWithPassword(
-        this.username,
-        this.password,
-      );
+      auth = await this.matrixService.login(this.username, this.password);
     } catch (e: any) {
       if (isMatrixError(e)) {
         this.error =
           'Sign in failed. Please check your credentials and try again.';
-      } else {
-        throw e;
       }
+
+      throw e;
     }
     if (auth) {
       await this.matrixService.start(auth);
