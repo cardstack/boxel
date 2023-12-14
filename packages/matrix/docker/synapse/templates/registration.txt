@@ -1,4 +1,4 @@
-Please confirm that {{ email }} is your e-mail address by clicking this link within 48 hours.
+Please confirm that {{ email }} is your e-mail address by clicking this link.
 
 {{ link }}
 
