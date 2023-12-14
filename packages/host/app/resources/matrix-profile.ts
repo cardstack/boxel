@@ -16,7 +16,11 @@ export class MatrixProfileResource extends Resource<{}> {
 
   modify(_positional: never[], _named: never) {
     this.loading = this.load.perform();
-    // FIXME need to listen for profile change events
+  }
+
+  setDisplayName(newName: string) {
+    // FIXME is this a weird interface?
+    this.displayName = newName;
   }
 
   private load = restartableTask(async () => {

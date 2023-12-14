@@ -1,5 +1,9 @@
 import { expect } from '@playwright/test';
-import { registerUser } from '../docker/synapse';
+import {
+  Credentials,
+  registerUser,
+  updateDisplayName,
+} from '../docker/synapse';
 import {
   assertLoggedIn,
   assertLoggedOut,
@@ -12,9 +16,11 @@ import {
   test,
 } from '../helpers';
 
+let registeredUser: Credentials | undefined;
+
 test.describe('Login', () => {
   test.beforeEach(async ({ synapse }) => {
-    await registerUser(synapse, 'user1', 'pass');
+    registeredUser = await registerUser(synapse, 'user1', 'pass');
   });
 
   test('it can login', async ({ page }) => {
@@ -71,6 +77,29 @@ test.describe('Login', () => {
     );
     await page.locator('[data-test-signout-button]').click();
     await expect(page.locator('[data-test-login-form]')).toBeVisible();
+  });
+
+  test('the profile reflects display name changes', async ({
+    page,
+    synapse,
+  }) => {
+    await login(page, 'user1', 'pass');
+
+    await page.locator('[data-test-profile-icon-button]').click();
+    await expect(page.locator('[data-test-profile-display-name]')).toHaveText(
+      'user1',
+    );
+
+    await updateDisplayName(
+      synapse,
+      registeredUser!.userId,
+      registeredUser!.accessToken,
+      'newname',
+    );
+
+    await expect(page.locator('[data-test-profile-display-name]')).toHaveText(
+      'newname',
+    );
   });
 
   test('it shows an error when invalid credentials are provided', async ({
