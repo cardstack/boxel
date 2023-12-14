@@ -28,7 +28,11 @@ interface Signature {
 
 export default class Login extends Component<Signature> {
   <template>
-    <form class='login-form' {{on 'submit' this.handleSubmit}}>
+    <form
+      class='login-form'
+      {{on 'submit' this.handleSubmit}}
+      data-test-login-form
+    >
       <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
         <:icon>
           <BoxelIcon />
