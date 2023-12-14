@@ -31,6 +31,7 @@ export default class ProfileAvatarIcon extends Component<Signature> {
       .profile-icon--big {
         width: 80px;
         height: 80px;
+        border: 0;
       }
 
       .profile-icon > span {
