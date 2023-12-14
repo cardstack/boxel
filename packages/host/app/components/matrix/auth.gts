@@ -7,21 +7,29 @@ import RegisterUser from './register-user';
 
 export default class Auth extends Component {
   <template>
-    <div class='container'>
-      {{#if this.isRegistrationMode}}
-        <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
-      {{else}}
-        <Login @onRegistration={{this.toggleRegistrationMode}} />
-      {{/if}}
+    <div class='auth'>
+      <div class='container'>
+        {{#if this.isRegistrationMode}}
+          <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
+        {{else}}
+          <Login @onRegistration={{this.toggleRegistrationMode}} />
+        {{/if}}
+      </div>
     </div>
 
     <style>
+      .auth {
+        height: 100%;
+        overflow: auto;
+      }
+
       .container {
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        height: 100vh;
+        min-height: 100%;
+        padding: var(--boxel-sp-lg);
       }
     </style>
   </template>
