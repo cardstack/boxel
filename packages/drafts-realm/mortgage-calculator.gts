@@ -1,23 +1,39 @@
-import NumberField from "https://cardstack.com/base/number";
-import { CardDef, Component, field, contains } from 'https://cardstack.com/base/card-api';
+import NumberField from 'https://cardstack.com/base/number';
+import {
+  CardDef,
+  Component,
+  field,
+  contains,
+} from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 
-  const formatter = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  });
+const formatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+});
 
-function formatUsd(val) {
+function formatUsd(val: number | undefined) {
+  if (val === undefined) {
+    return '';
+  }
   return formatter.format(val);
 }
 
-function svgPieStartAngle({data, index, total, start = 0}) {
-  return data
-    .slice(0, index)
-    .reduce((sum, item) => {
-      const angle = item.value / total * 360 || 0;
-      return sum + angle;
-    }, start);
+function svgPieStartAngle({
+  data,
+  index,
+  total,
+  start = 0,
+}: {
+  data: { value?: number }[];
+  index: number;
+  total: number;
+  start?: number;
+}) {
+  return data.slice(0, index).reduce((sum, item) => {
+    const angle = ((item.value || 0) / total) * 360 || 0;
+    return sum + angle;
+  }, start);
 }
 
 interface DonutSectionSignature {
@@ -25,31 +41,37 @@ interface DonutSectionSignature {
   Args: {
     fill: string;
     size: number;
-    value: number;
-    total:  number;
+    value: number | undefined;
+    total: number;
     startAngle: number;
-  }
+  };
 }
 
 class DonutSection extends GlimmerComponent<DonutSectionSignature> {
   get halfWidth() {
     return this.args.size / 2;
   }
-  
+
   get radius() {
     return this.halfWidth;
   }
 
   get startX() {
-    return this.halfWidth + this.radius * Math.cos(this.args.startAngle * (Math.PI / 180));
+    return (
+      this.halfWidth +
+      this.radius * Math.cos(this.args.startAngle * (Math.PI / 180))
+    );
   }
 
   get startY() {
-    return this.halfWidth + this.radius * Math.sin(this.args.startAngle * (Math.PI / 180));
+    return (
+      this.halfWidth +
+      this.radius * Math.sin(this.args.startAngle * (Math.PI / 180))
+    );
   }
 
   get angle() {
-    const angle = this.args.value / this.args.total * 360;
+    const angle = ((this.args.value || 0) / this.args.total) * 360;
     return angle < 359.99 ? angle : 359.99;
   }
 
@@ -66,22 +88,26 @@ class DonutSection extends GlimmerComponent<DonutSectionSignature> {
   }
 
   get endX() {
-    return this.halfWidth + this.radius * Math.cos(this.endAngle * (Math.PI / 180));
+    return (
+      this.halfWidth + this.radius * Math.cos(this.endAngle * (Math.PI / 180))
+    );
   }
 
   get endY() {
-    return this.halfWidth + this.radius * Math.sin(this.endAngle * (Math.PI / 180));
+    return (
+      this.halfWidth + this.radius * Math.sin(this.endAngle * (Math.PI / 180))
+    );
   }
 
   <template>
     <g fill={{@fill}} ...attributes>
       <path
-        d="
+        d='
           M {{this.halfWidth}} {{this.halfWidth}}
           L {{this.startX}} {{this.startY}}
           A {{this.radius}} {{this.radius}} 0 {{this.largeArcFlag}} {{this.sweepFlag}} {{this.endX}} {{this.endY}}
           Z
-        "
+        '
       ></path>
     </g>
   </template>
@@ -90,7 +116,9 @@ class DonutSection extends GlimmerComponent<DonutSectionSignature> {
 interface DonutSectionData {
   class?: string;
   color: string;
-  value: number;
+  value: number | undefined;
+  label: string;
+  percent: number | undefined;
 }
 
 interface DonutChartSignature {
@@ -98,7 +126,7 @@ interface DonutChartSignature {
   Args: {
     data: DonutSectionData[];
     size: number;
-  }
+  };
 }
 
 class DonutChart extends GlimmerComponent<DonutChartSignature> {
@@ -109,7 +137,7 @@ class DonutChart extends GlimmerComponent<DonutChartSignature> {
 
   get total() {
     const { data } = this.args;
-    return data.reduce((sum, item) => sum + item.value, 0);
+    return data.reduce((sum, item) => sum + (item.value || 0), 0);
   }
 
   get center() {
@@ -121,7 +149,12 @@ class DonutChart extends GlimmerComponent<DonutChartSignature> {
   }
 
   <template>
-    <svg width={{@size}} height={{@size}} viewBox={{this.viewBox}} preserveAspectRatio='xMinYMin'>
+    <svg
+      width={{@size}}
+      height={{@size}}
+      viewBox={{this.viewBox}}
+      preserveAspectRatio='xMinYMin'
+    >
       {{#each @data as |item index|}}
         <DonutSection
           class={{item.class}}
@@ -129,10 +162,20 @@ class DonutChart extends GlimmerComponent<DonutChartSignature> {
           @size={{@size}}
           @value={{item.value}}
           @total={{this.total}}
-          @startAngle={{svgPieStartAngle data=@data index=index total=this.total start=-90}}
+          @startAngle={{svgPieStartAngle
+            data=@data
+            index=index
+            total=this.total
+            start=-90
+          }}
         />
       {{/each}}
-      <circle cx={{this.center}} cy={{this.center}} r={{this.holeRadius}} fill="#ffffff" />
+      <circle
+        cx={{this.center}}
+        cy={{this.center}}
+        r={{this.holeRadius}}
+        fill='#ffffff'
+      />
     </svg>
   </template>
 }
@@ -148,199 +191,225 @@ export class MortgageCalculator extends CardDef {
   @field downPayment = contains(NumberField, {
     computeVia(this: MortgageCalculator) {
       return this.homePrice * (this.downPaymentPercentage / 100);
-    }
+    },
   });
   @field loanAmount = contains(NumberField, {
     computeVia(this: MortgageCalculator) {
       return this.homePrice - this.downPayment;
-    }
+    },
   });
   @field numberOfPayments = contains(NumberField, {
     computeVia(this: MortgageCalculator) {
       return this.loanTermYears * 12;
-    }
+    },
   });
   @field monthlyInterestRate = contains(NumberField, {
     computeVia(this: MortgageCalculator) {
       return this.interestRatePercentage / 100 / 12;
-    }
+    },
   });
   @field monthlyMortgagePayment = contains(NumberField, {
     computeVia(this: MortgageCalculator) {
-      return this.loanAmount *
-      (
-        this.monthlyInterestRate * Math.pow((1 + this.monthlyInterestRate), this.numberOfPayments)
-        /
-        (Math.pow((1 + this.monthlyInterestRate), this.numberOfPayments) - 1)
-      )
-    }
+      return (
+        this.loanAmount *
+        ((this.monthlyInterestRate *
+          Math.pow(1 + this.monthlyInterestRate, this.numberOfPayments)) /
+          (Math.pow(1 + this.monthlyInterestRate, this.numberOfPayments) - 1))
+      );
+    },
   });
   @field monthlyTotal = contains(NumberField, {
-    computeVia(this: DraftMortgageCalculator) {
-      return this.monthlyMortgagePayment + this.taxPerMonth + this.insurancePerMonth + this.hoaFeesPerMonth;
-    }
+    computeVia(this: MortgageCalculator) {
+      return (
+        this.monthlyMortgagePayment +
+        this.taxPerMonth +
+        this.insurancePerMonth +
+        this.hoaFeesPerMonth
+      );
+    },
   });
   @field lifetimeMortgagePayment = contains(NumberField, {
-    computeVia(this: DraftMortgageCalculator) {
+    computeVia(this: MortgageCalculator) {
       return this.monthlyMortgagePayment * this.numberOfPayments;
-    }
+    },
   });
-  @field lifetimeTaxes =  contains(NumberField, {
-    computeVia(this: DraftMortgageCalculator) {
+  @field lifetimeTaxes = contains(NumberField, {
+    computeVia(this: MortgageCalculator) {
       return this.taxPerMonth * this.numberOfPayments;
-    }
+    },
   });
-  @field lifetimeInsurance =  contains(NumberField, {
-    computeVia(this: DraftMortgageCalculator) {
+  @field lifetimeInsurance = contains(NumberField, {
+    computeVia(this: MortgageCalculator) {
       return this.insurancePerMonth * this.numberOfPayments;
-    }
+    },
   });
-  @field lifetimeHoaFees =  contains(NumberField, {
-    computeVia(this: DraftMortgageCalculator) {
+  @field lifetimeHoaFees = contains(NumberField, {
+    computeVia(this: MortgageCalculator) {
       return this.hoaFeesPerMonth * this.numberOfPayments;
-    }
+    },
   });
   @field lifetimeTotal = contains(NumberField, {
-    computeVia(this: DraftMortgageCalculator) {
-      return this.lifetimeMortgagePayment + this.taxPerMonth + this.insurancePerMonth + this.hoaFeesPerMonth;
-    }
+    computeVia(this: MortgageCalculator) {
+      return (
+        this.lifetimeMortgagePayment +
+        this.taxPerMonth +
+        this.insurancePerMonth +
+        this.hoaFeesPerMonth
+      );
+    },
   });
-  
-  static displayName = "Mortgage Calculator";
+
+  static displayName = 'Mortgage Calculator';
 
   static isolated = class Isolated extends Component<typeof this> {
-    get chartData() {
+    get chartData(): DonutSectionData[] {
       let { model } = this.args;
       return [
         {
           value: model.monthlyMortgagePayment,
-          color: "#30EF9D",
-          label: "Principal & Interest",
-          percent: Math.round((model.monthlyMortgagePayment / model.monthlyTotal) * 100)
+          color: '#30EF9D',
+          label: 'Principal & Interest',
+          percent:
+            model.monthlyMortgagePayment &&
+            model.monthlyTotal &&
+            Math.round(
+              (model.monthlyMortgagePayment / model.monthlyTotal) * 100,
+            ),
         },
         {
           value: model.taxPerMonth,
-          color: "#589BFF",
-          label: "Property Taxes",
-          percent: Math.round((model.taxPerMonth / model.monthlyTotal) * 100)
+          color: '#589BFF',
+          label: 'Property Taxes',
+          percent:
+            model.taxPerMonth &&
+            model.monthlyTotal &&
+            Math.round((model.taxPerMonth / model.monthlyTotal) * 100),
         },
         {
           value: model.insurancePerMonth,
-          color: "#FF2F8A",
-          label: "Home Insurance",
-          percent: Math.round((model.insurancePerMonth / model.monthlyTotal) * 100)
+          color: '#FF2F8A',
+          label: 'Home Insurance',
+          percent:
+            model.insurancePerMonth &&
+            model.monthlyTotal &&
+            Math.round((model.insurancePerMonth / model.monthlyTotal) * 100),
         },
         {
           value: model.hoaFeesPerMonth,
-          color: "#FFB74A",
-          label: "HOA Fees",
-          percent: Math.round((model.hoaFeesPerMonth / model.monthlyTotal) * 100)
-        }
+          color: '#FFB74A',
+          label: 'HOA Fees',
+          percent:
+            model.hoaFeesPerMonth &&
+            model.monthlyTotal &&
+            Math.round((model.hoaFeesPerMonth / model.monthlyTotal) * 100),
+        },
       ];
-    };
+    }
 
     <template>
-      <div class="wrapper">
-        <aside class="form-container">
+      <div class='wrapper'>
+        <aside class='form-container'>
           <label>Home price</label>
-          <@fields.homePrice @format="edit" />
+          <@fields.homePrice @format='edit' />
 
-                    <label>Down payment (%)</label>
-          <@fields.downPaymentPercentage @format="edit" />
+          <label>Down payment (%)</label>
+          <@fields.downPaymentPercentage @format='edit' />
 
           <label>Loan term (years)</label>
-          <@fields.loanTermYears @format="edit" />
+          <@fields.loanTermYears @format='edit' />
 
           <label>Interest rate (%)</label>
-          <@fields.interestRatePercentage @format="edit" />
+          <@fields.interestRatePercentage @format='edit' />
 
           <label>Prop. tax per month</label>
-          <@fields.taxPerMonth @format="edit" />
+          <@fields.taxPerMonth @format='edit' />
 
           <label>Home ins. per month</label>
-          <@fields.insurancePerMonth @format="edit" />
+          <@fields.insurancePerMonth @format='edit' />
 
           <label>HOA fees per month</label>
-          <@fields.hoaFeesPerMonth @format="edit" />
+          <@fields.hoaFeesPerMonth @format='edit' />
 
         </aside>
-        <div class="results-container">
-          <div class="results">
-            <div class="loan-amount">
+        <div class='results-container'>
+          <div class='results'>
+            <div class='loan-amount'>
               <label>Loan Amount:</label>
               <span>
                 {{formatUsd @model.loanAmount}}
               </span>
             </div>
 
-            <div class="down-payment">
+            <div class='down-payment'>
               <label>Down Payment:</label>
               <span>
                 {{formatUsd @model.downPayment}}
               </span>
             </div>
 
-            <div class="header-monthly">Monthly</div>
-            <div class="header-total">Total</div>
+            <div class='header-monthly'>Monthly</div>
+            <div class='header-total'>Total</div>
 
-            <div class="mortgage-payment label">
+            <div class='mortgage-payment label'>
               Mortgage Payment
             </div>
-            <div class="mortgage-payment monthly">
+            <div class='mortgage-payment monthly'>
               {{formatUsd @model.monthlyMortgagePayment}}
             </div>
-            <div class="mortgage-payment total">
+            <div class='mortgage-payment total'>
               {{formatUsd @model.lifetimeMortgagePayment}}
             </div>
 
-            <div class="tax label">
+            <div class='tax label'>
               Property Tax
             </div>
-            <div class="tax monthly">
+            <div class='tax monthly'>
               {{formatUsd @model.taxPerMonth}}
             </div>
-            <div class="tax total">
+            <div class='tax total'>
               <@fields.lifetimeTaxes />
             </div>
 
-            <div class="insurance label">
+            <div class='insurance label'>
               Home Insurance
             </div>
-            <div class="insurance monthly">
+            <div class='insurance monthly'>
               {{formatUsd @model.insurancePerMonth}}
             </div>
-            <div class="insurance total">
+            <div class='insurance total'>
               {{formatUsd @model.lifetimeInsurance}}
             </div>
 
-            <div class="hoa label">
+            <div class='hoa label'>
               HOA Fees
             </div>
-            <div class="hoa monthly">
+            <div class='hoa monthly'>
               {{formatUsd @model.hoaFeesPerMonth}}
             </div>
-            <div class="hoa total">
+            <div class='hoa total'>
               {{formatUsd @model.lifetimeHoaFees}}
             </div>
 
-            <div class="aggregate label">
+            <div class='aggregate label'>
               Total Out-of-Pocket
             </div>
-            <div class="aggregate monthly">
+            <div class='aggregate monthly'>
               {{formatUsd @model.monthlyTotal}}
             </div>
-            <div class="aggregate total">
+            <div class='aggregate total'>
               {{formatUsd @model.lifetimeTotal}}
             </div>
-            <div class="chart">
-              <DonutChart
-                @data={{this.chartData}}
-                @size={{160}}
-              />
+            <div class='chart'>
+              <DonutChart @data={{this.chartData}} @size={{160}} />
             </div>
-            <div class="legend">
+            <div class='legend'>
               {{#each this.chartData as |item|}}
-                <div><div class="swatch" style="background: {{item.color}}"></div> {{item.percent}}% - {{item.label}}</div>
+                <div><div
+                    class='swatch'
+                    style='background: {{item.color}}'
+                  ></div>
+                  {{item.percent}}% -
+                  {{item.label}}</div>
               {{/each}}
             </div>
           </div>
@@ -367,7 +436,7 @@ export class MortgageCalculator extends CardDef {
           margin-bottom: 0.1em;
         }
         .form-container :deep(input) {
-          background: #EEEEF3;
+          background: #eeeef3;
           border: none;
           border-radius: 24px;
         }
@@ -391,53 +460,96 @@ export class MortgageCalculator extends CardDef {
           padding: 6px 12px;
         }
 
-        .monthly, .total {
+        .monthly,
+        .total {
           text-align: right;
         }
 
-        .loan-amount { grid-area: 1 / 1 / 2 / 2; }
-        .down-payment { grid-area: 1 / 2 / 2 / 4; }
-        .loan-amount, .down-payment {
+        .loan-amount {
+          grid-area: 1 / 1 / 2 / 2;
+        }
+        .down-payment {
+          grid-area: 1 / 2 / 2 / 4;
+        }
+        .loan-amount,
+        .down-payment {
           padding: 6px 12px;
           border-bottom: 1px solid #ececf1;
           text-align: center;
         }
-        .loan-amount span, .down-payment span {
+        .loan-amount span,
+        .down-payment span {
           font-weight: 800;
           font-size: 1.1em;
         }
-        .header-monthly { grid-area: 2 / 2 / 3 / 3; }
-        .header-total { grid-area: 2 / 3 / 3 / 4; }
-        .header-monthly, .header-total {
+        .header-monthly {
+          grid-area: 2 / 2 / 3 / 3;
+        }
+        .header-total {
+          grid-area: 2 / 3 / 3 / 4;
+        }
+        .header-monthly,
+        .header-total {
           text-transform: uppercase;
           font-weight: 800;
           text-align: right;
           padding-top: 18px;
         }
-        .mortgage-payment.label { grid-area: 3 / 1 / 4 / 2; }
-        .mortgage-payment.monthly { grid-area: 3 / 2 / 4 / 3; }
-        .mortgage-payment.total { grid-area: 3 / 3 / 4 / 4; }
-        .mortgage-payment, .aggregate {
-          background-color: #EEEEF3;
+        .mortgage-payment.label {
+          grid-area: 3 / 1 / 4 / 2;
+        }
+        .mortgage-payment.monthly {
+          grid-area: 3 / 2 / 4 / 3;
+        }
+        .mortgage-payment.total {
+          grid-area: 3 / 3 / 4 / 4;
+        }
+        .mortgage-payment,
+        .aggregate {
+          background-color: #eeeef3;
           font-size: 1.2em;
           font-weight: 800;
           padding-top: 12px;
         }
-        .tax.label { grid-area: 4 / 1 / 5 / 2; }
-        .tax.monthly { grid-area: 4 / 2 / 5 / 3; }
-        .tax.total { grid-area: 4 / 3 / 5 / 4; }
+        .tax.label {
+          grid-area: 4 / 1 / 5 / 2;
+        }
+        .tax.monthly {
+          grid-area: 4 / 2 / 5 / 3;
+        }
+        .tax.total {
+          grid-area: 4 / 3 / 5 / 4;
+        }
         .tax {
           padding-top: 12px;
         }
-        .insurance.label { grid-area: 5 / 1 / 6 / 2; }
-        .insurance.monthly { grid-area: 5 / 2 / 6 / 3; }
-        .insurance.total { grid-area: 5 / 3 / 6 / 4; }
-        .hoa.label { grid-area: 6 / 1 / 7 / 2; }
-        .hoa.monthly { grid-area: 6 / 2 / 7 / 3; }
-        .hoa.total { grid-area: 6 / 3 / 7 / 4; }
-        .aggregate.label { grid-area: 7 / 1 / 8 / 2; }
-        .aggregate.monthly { grid-area: 7 / 2 / 8 / 3; }
-        .aggregate.total { grid-area: 7 / 3 / 8 / 4; }
+        .insurance.label {
+          grid-area: 5 / 1 / 6 / 2;
+        }
+        .insurance.monthly {
+          grid-area: 5 / 2 / 6 / 3;
+        }
+        .insurance.total {
+          grid-area: 5 / 3 / 6 / 4;
+        }
+        .hoa.label {
+          grid-area: 6 / 1 / 7 / 2;
+        }
+        .hoa.monthly {
+          grid-area: 6 / 2 / 7 / 3;
+        }
+        .hoa.total {
+          grid-area: 6 / 3 / 7 / 4;
+        }
+        .aggregate.label {
+          grid-area: 7 / 1 / 8 / 2;
+        }
+        .aggregate.monthly {
+          grid-area: 7 / 2 / 8 / 3;
+        }
+        .aggregate.total {
+          grid-area: 7 / 3 / 8 / 4;
+        }
 
         .chart {
           grid-area: 8 / 1 / 9 / 2;
@@ -468,8 +580,8 @@ export class MortgageCalculator extends CardDef {
         }
       </style>
     </template>
-  }
-  
+  };
+
   /*
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
@@ -482,5 +594,12 @@ export class MortgageCalculator extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
+
+
+
   */
 }
