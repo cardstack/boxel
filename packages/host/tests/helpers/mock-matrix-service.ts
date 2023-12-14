@@ -6,6 +6,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import { type MatrixCardError } from '@cardstack/runtime-common';
 
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
+import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
@@ -52,6 +53,9 @@ export class MockMatrixService extends Service {
   @tracked client: MockClient = new MockClient('@testuser:staging');
   // @ts-ignore
   cardAPI!: typeof cardApi;
+
+  profile = getMatrixProfile(this);
+
   // These will be empty in the tests, but we need to define them to satisfy the interface
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =

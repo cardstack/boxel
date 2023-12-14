@@ -169,6 +169,10 @@ export class Profile extends Component<Signature> {
         class='profile-icon--big'
       />
 
+      <div class='display-name' data-test-profile-display-name>
+        {{this.matrixService.profile.displayName}}
+      </div>
+
       <div class='profile-handle' data-test-profile-icon-handle>
         {{this.matrixService.userId}}
       </div>
@@ -190,8 +194,14 @@ export class Profile extends Component<Signature> {
         font-size: var(--boxel-font-size-xxl);
       }
 
+      .display-name {
+        margin-top: var(--boxel-sp-xxxs);
+        font-size: var(--boxel-font-size);
+        font-weight: bold;
+      }
+
       .profile-handle {
-        margin-top: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-xxxxs);
         color: var(--boxel-500);
       }
     </style>

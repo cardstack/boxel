@@ -407,6 +407,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-profile-icon-button]');
 
+    assert.dom('[data-test-profile-display-name]').hasText('@testuser:staging');
     assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
 
     await click('[data-test-signout-button]');
@@ -483,6 +484,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-profile-popover]').doesNotExist();
     assert.dom('[data-test-settings-modal]').exists();
     assert.dom('[data-test-profile-icon]').hasText('T');
+    assert.dom('[data-test-profile-display-name]').hasText('@testuser:staging');
 
     assert
       .dom('[data-test-profile-icon]')
