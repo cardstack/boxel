@@ -122,7 +122,7 @@ pnpm stop:synapse
 
 #### Matrix Administration
 
-Matrix administration requires an administrative user and a special client in order to use. Matrix administration is used for creating users, creating rooms, creating registration tokens, managing media, viewing events, etc. Note that you will need to use the matrix administration UI to create tokens to register new matrix users.
+Matrix administration requires an administrative user and a special client in order to use. Matrix administration is used for creating users, creating rooms, creating registration tokens, managing media, viewing events, etc. Note that you will need to use the matrix administration UI to create tokens to register new matrix users or you can execute `pnpm register-test-token` and use the token `dev-token`.
 
 First you must create an administrative user:
 
@@ -131,6 +131,7 @@ First you must create an administrative user:
    ```
    docker exec -it boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u admin -p your_admin_password --admin
    ```
+   Alternatively, you can execute `pnpm register-test-admin` and utilize the following credentials: `user: admin` and `password: test`.
 3. Run the docker container:
    ```
    docker run --name synapse-admin -p 8080:80 -d awesometechnologies/synapse-admin
