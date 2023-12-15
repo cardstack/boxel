@@ -34,7 +34,6 @@ interface Signature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
     publicAPI: Actions;
-    delete: (card: CardDef) => void;
     toggleSelect?: (card: CardDef) => void;
     selectedCards?: TrackedArray<CardDef>;
   };
@@ -126,7 +125,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
                   @closeMenu={{dd.close}}
                   @items={{array
                     (menuItem
-                      'Delete' (fn @delete card) icon=IconTrash dangerous=true
+                      'Delete'
+                      (fn @publicAPI.deleteCard card)
+                      icon=IconTrash
+                      dangerous=true
                     )
                   }}
                   {{on

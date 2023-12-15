@@ -1,0 +1,5 @@
+Please confirm that {{ email }} is your e-mail address by clicking this link.
+
+{{ link }}
+
+If this was not you, you can safely ignore this email. Thank you.

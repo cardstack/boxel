@@ -153,6 +153,11 @@ export default class MatrixService extends Service {
     }
   }
 
+  async startAndSetDisplayName(auth: IAuthData, displayName: string) {
+    this.start(auth);
+    this.client.setDisplayName(displayName);
+  }
+
   async start(auth?: IAuthData) {
     if (!auth) {
       auth = getAuth();
