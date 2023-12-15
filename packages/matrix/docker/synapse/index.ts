@@ -271,7 +271,11 @@ export async function updateDisplayName(
     },
   );
 
-  console.log(`Received: ${response.status}, ${response.statusText}`);
+  console.log(
+    `Received: ${response.status}, ${response.statusText}, ${JSON.stringify(
+      await response.json(),
+    )}`,
+  );
 
   return;
 }

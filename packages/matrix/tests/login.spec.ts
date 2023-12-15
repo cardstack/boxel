@@ -83,6 +83,7 @@ test.describe('Login', () => {
     page,
     synapse,
   }) => {
+    page.on('console', (msg) => console.log(msg.text()));
     await login(page, 'user1', 'pass');
 
     await page.locator('[data-test-profile-icon-button]').click();
