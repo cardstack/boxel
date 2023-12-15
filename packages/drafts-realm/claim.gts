@@ -114,7 +114,7 @@ class Isolated extends Component<typeof Claim> {
             Claiming...
           {{else if this.hasBeenClaimed}}
             Claim has been used
-          {{else if @context.actions.createCardDirectly}}
+          {{else if @context.actions.createCard}}
             Claim
           {{else if this.inEnvThatCanCreateNewCard}}
             Claim
@@ -166,7 +166,7 @@ class Isolated extends Component<typeof Claim> {
   get cannotClickClaimButton() {
     return (
       this.hasBeenClaimed ||
-      (!!!this.args.context?.actions?.createCardDirectly &&
+      (!!!this.args.context?.actions?.createCard &&
         !this.inEnvThatCanCreateNewCard)
     );
   }
@@ -252,19 +252,17 @@ class Isolated extends Component<typeof Claim> {
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: `${realmUrl.href}transaction`,
-              name: 'Transaction',
-            },
-          },
         },
       };
-      if (this.args.context?.actions?.createCardDirectly) {
+
+      if (this.args.context?.actions?.createCard) {
         // create using operator mode action
-        await this.args.context.actions.createCardDirectly(
-          transactionDoc,
+        await this.args.context.actions.createCard(
+          transactionCardRef,
           undefined,
+          {
+            doc: transactionDoc,
+          },
         );
       } else {
         // create using create card modal

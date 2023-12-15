@@ -19,6 +19,8 @@ export interface RecentFile {
 }
 
 export default class RecentFilesService extends Service {
+  // we shouldn't be making assumptions about what realm the files are coming
+  // from, the caller should just tell us
   @service declare operatorModeStateService: OperatorModeStateService;
 
   @tracked recentFiles = new TrackedArray<RecentFile>([]);
@@ -47,6 +49,8 @@ export default class RecentFilesService extends Service {
     if (!url) {
       return;
     }
+    // TODO this wont work when visiting files that come from multiple realms in
+    // code mode...
     let realmURL = this.operatorModeStateService.resolvedRealmURL;
 
     if (realmURL) {
@@ -58,6 +62,8 @@ export default class RecentFilesService extends Service {
   }
 
   addRecentFile(file: LocalPath) {
+    // TODO this wont work when visiting files that come from multiple realms in
+    // code mode...
     let currentRealmUrl = this.operatorModeStateService.realmURL;
 
     if (!currentRealmUrl) {
@@ -95,6 +101,8 @@ export default class RecentFilesService extends Service {
   }
 
   private findRecentFileIndex(path: LocalPath) {
+    // TODO this wont work when visiting files that come from multiple realms in
+    // code mode...
     let currentRealmUrl = this.operatorModeStateService.realmURL;
 
     return this.recentFiles.findIndex(
