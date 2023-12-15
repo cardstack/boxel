@@ -274,9 +274,11 @@ export default class MatrixService extends Service {
         msgtype: 'org.boxel.message',
         body,
         formatted_body: html,
-        context: {
-          openCards: serializedCards,
-          submode: context.submode,
+        data: {
+          context: {
+            openCards: serializedCards,
+            submode: context.submode,
+          },
         },
       });
       return;
@@ -294,7 +296,9 @@ export default class MatrixService extends Service {
         msgtype: 'org.boxel.card',
         body,
         formatted_body: html,
-        instance: serializedCard,
+        data: {
+          instance: serializedCard!,
+        },
       });
     } else {
       await this.client.sendHtmlMessage(roomId, body ?? '', html);

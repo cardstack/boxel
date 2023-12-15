@@ -33,6 +33,19 @@ const openai = new OpenAI();
 
 let startTime = Date.now();
 
+async function sendEvent(
+  client: MatrixClient,
+  room: Room,
+  eventType: string,
+  content: any,
+) {
+  if (content.data) {
+    content.data = JSON.stringify(content.data);
+  }
+  log.info('Sending', content);
+  return await client.sendEvent(room.roomId, eventType, content);
+}
+
 async function sendMessage(
   client: MatrixClient,
   room: Room,
@@ -58,7 +71,7 @@ async function sendMessage(
       event_id: previous,
     };
   }
-  return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
+  return await sendEvent(client, room, 'm.room.message', messageObject);
 }
 
 async function sendOption(client: MatrixClient, room: Room, content: any) {
@@ -68,23 +81,23 @@ async function sendOption(client: MatrixClient, room: Room, content: any) {
     patch = patch['attributes'];
   }
   let id = content['id'];
-
+  let command = {
+    type: 'patch',
+    id: id,
+    patch: {
+      attributes: patch,
+    },
+  };
   let messageObject = {
     body: 'patch',
     msgtype: 'org.boxel.command',
     formatted_body: 'A patch',
     format: 'org.matrix.custom.html',
-    command: {
-      type: 'patch',
-      id: id,
-      patch: {
-        attributes: patch,
-      },
+    data: {
+      command: command,
     },
   };
-  log.info(JSON.stringify(messageObject, null, 2));
-  log.info('Sending', messageObject);
-  return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
+  return await sendEvent(client, room, 'm.room.message', messageObject);
 }
 
 async function sendStream(
@@ -146,10 +159,9 @@ async function sendStream(
 
 function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
   for (let event of history.slice().reverse()) {
-    const content = event.content;
-    if (content.msgtype === 'org.boxel.card') {
-      let card = content.instance.data;
-      return card.id;
+    if (event.content.msgtype === 'org.boxel.card') {
+      const cardInstance = event.content.data.instance;
+      return cardInstance.data.id;
     }
   }
   return undefined;
@@ -273,24 +285,14 @@ Common issues are:
             initialMessage.event_id,
           );
         }
-        let messageObject = {
-          body: 'some response, a patch',
-          msgtype: 'org.boxel.command',
-          formatted_body: 'some response, a patch',
-          format: 'org.matrix.custom.html',
-          command: {
-            type: 'patch',
-            id: getLastUploadedCardID(history),
-            patch: {
-              attributes: attributes,
-            },
+        let command = {
+          type: 'patch',
+          id: getLastUploadedCardID(history),
+          patch: {
+            attributes: attributes,
           },
         };
-        return await client.sendEvent(
-          room.roomId,
-          'm.room.message',
-          messageObject,
-        );
+        return await sendOption(client, room, command);
       }
       try {
         const stream = await getResponse(history, userId);
