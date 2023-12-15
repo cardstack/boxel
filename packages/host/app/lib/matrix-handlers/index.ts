@@ -67,8 +67,8 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
   // If we are receiving an event which contains
   // a data field, we need to parse it
   // because matrix doesn't support all json types
-  // Corresponding auto-encoding is done in
-  // onTimeline in ./timeline.ts
+  // Corresponding encoding is done in
+  // sendEvent in the matrix-service
   if (event.content?.data) {
     event.content.data = JSON.parse(event.content.data);
   }
