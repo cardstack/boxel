@@ -99,6 +99,7 @@ export class ModuleContentsResource extends Resource<Args> {
   modify(_positional: never[], named: Args['named']) {
     let { executableFile } = named;
     this.executableFile = executableFile;
+    this.moduleError = undefined;
     if (this.executableFile) {
       this.load.perform(this.executableFile);
     }
