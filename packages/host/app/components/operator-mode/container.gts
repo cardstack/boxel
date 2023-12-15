@@ -193,7 +193,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-min-width: 20.5rem;
         --operator-mode-left-column: 14rem;
       }
-      :global(button:focus:not(:disabled)) {
+      :global(button:focus:not(:hover):not(:disabled)) {
         outline-color: var(--boxel-highlight);
       }
       :global(dialog:focus) {

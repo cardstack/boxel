@@ -22,6 +22,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface Signature {
   Args: {
+    onForgotPassword: () => void;
     onRegistration: () => void;
   };
 }
@@ -66,7 +67,11 @@ export default class Login extends Component<Signature> {
             @onInput={{this.setPassword}}
           />
         </FieldContainer>
-        <Button @kind='text-only' class='forgot-password'>Forgot password?</Button>
+        <Button
+          @kind='text-only'
+          class='forgot-password'
+          {{on 'click' @onForgotPassword}}
+        >Forgot password?</Button>
         <Button
           class='button'
           data-test-login-btn
@@ -113,7 +118,8 @@ export default class Login extends Component<Signature> {
       .content {
         display: flex;
         flex-direction: column;
-        padding: var(--boxel-sp) var(--boxel-sp-xl);
+        padding: var(--boxel-sp) var(--boxel-sp-xl) calc(var(--boxel-sp) * 2)
+          var(--boxel-sp-xl);
       }
       .title {
         font: 700 var(--boxel-font-med);

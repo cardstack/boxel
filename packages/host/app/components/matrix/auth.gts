@@ -1,18 +1,28 @@
 import { action } from '@ember/object';
+import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
+import ForgotPassword from './forgot-password';
 import Login from './login';
 import RegisterUser from './register-user';
+
+type Mode = 'login' | 'register' | 'forgot-password';
 
 export default class Auth extends Component {
   <template>
     <div class='auth'>
       <div class='container'>
-        {{#if this.isRegistrationMode}}
-          <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
+        {{#if (eq this.mode 'register')}}
+          <RegisterUser @onCancel={{fn this.setMode 'login'}} />
+        {{else if (eq this.mode 'forgot-password')}}
+          <ForgotPassword @onLogin={{fn this.setMode 'login'}} />
         {{else}}
-          <Login @onRegistration={{this.toggleRegistrationMode}} />
+          <Login
+            @onRegistration={{fn this.setMode 'register'}}
+            @onForgotPassword={{fn this.setMode 'forgot-password'}}
+          />
         {{/if}}
       </div>
     </div>
@@ -34,11 +44,11 @@ export default class Auth extends Component {
     </style>
   </template>
 
-  @tracked isRegistrationMode = false;
+  @tracked mode: Mode = 'forgot-password';
 
   @action
-  toggleRegistrationMode() {
-    this.isRegistrationMode = !this.isRegistrationMode;
+  setMode(mode: Mode) {
+    this.mode = mode;
   }
 }
 

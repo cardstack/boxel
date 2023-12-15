@@ -221,7 +221,8 @@ export default class RegisterUser extends Component<Signature> {
       .content {
         display: flex;
         flex-direction: column;
-        padding: var(--boxel-sp) var(--boxel-sp-xl);
+        padding: var(--boxel-sp) var(--boxel-sp-xl) calc(var(--boxel-sp) * 2)
+          var(--boxel-sp-xl);
       }
       .title {
         font: 700 var(--boxel-font-med);
