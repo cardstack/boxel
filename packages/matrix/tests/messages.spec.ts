@@ -205,6 +205,28 @@ test.describe('Room messages', () => {
     ]);
   });
 
+  test('can send cards with types unsupported by matrix', async ({ page }) => {
+    const testCard = `${testHost}/type-examples`;
+    await login(page, 'user1', 'pass');
+    await createRoom(page, { name: 'Room 1', invites: ['user2'] });
+
+    // Send a card that contains a type that matrix doesn't support
+    await sendMessage(page, 'Room 1', undefined, testCard);
+
+    // To avoid seeing a pending message, login as the other user
+    await logout(page);
+    await login(page, 'user2', 'pass');
+    await joinRoom(page, 'Room 1');
+    await openRoom(page, 'Room 1');
+
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        card: { id: testCard, text: '1.1' },
+      },
+    ]);
+  });
+
   test('can remove a card from a pending message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');

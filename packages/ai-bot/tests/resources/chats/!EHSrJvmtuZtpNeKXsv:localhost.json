@@ -7,22 +7,24 @@
       "msgtype": "org.boxel.card",
       "body": "Please fill in the body and description as requested (Card: Terry Pratchett, http://localhost:4201/drafts/Author/1)",
       "formatted_body": "<p>Please fill in the body and description as requested</p>\n",
-      "instance": {
-        "data": {
-          "type": "card",
-          "id": "http://localhost:4201/drafts/Author/1",
-          "attributes": {
-            "firstName": "Terry",
-            "lastName": "Pratchett",
-            "photo": null,
-            "body": "Short bio goes here",
-            "description": "Bio summary in English, followed by it translated into french.",
-            "thumbnailURL": null
-          },
-          "meta": {
-            "adoptsFrom": {
-              "module": "../author",
-              "name": "Author"
+      "data": {
+        "instance": {
+          "data": {
+            "type": "card",
+            "id": "http://localhost:4201/drafts/Author/1",
+            "attributes": {
+              "firstName": "Terry",
+              "lastName": "Pratchett",
+              "photo": null,
+              "body": "Short bio goes here",
+              "description": "Bio summary in English, followed by it translated into french.",
+              "thumbnailURL": null
+            },
+            "meta": {
+              "adoptsFrom": {
+                "module": "../author",
+                "name": "Author"
+              }
             }
           }
         }

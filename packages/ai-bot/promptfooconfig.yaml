@@ -1,7 +1,7 @@
 # This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 
 prompts: [scripts/run_prompt.js:modify]
-providers: [openai:gpt-4-0613]
+providers: [openai:chat:gpt-4-1106-preview]
 defaultTest:
   options:
     rubricPrompt: >-
@@ -31,18 +31,21 @@ tests:
               {
                 "msgtype": "org.boxel.card",
                 "body": "Can you change their name to Dave?",
-                "instance":
+                "data":
                   {
-                    "data":
+                    "instance":
                       {
-                        "type": "card",
-                        "id": "http://localhost:4201/drafts/Author/1",
-                        "attributes":
-                          { "firstName": "Bob", "lastName": "Enwunder" },
-                        "meta":
+                        "data":
                           {
-                            "adoptsFrom":
-                              { "module": "../author", "name": "Author" },
+                            "type": "card",
+                            "id": "http://localhost:4201/drafts/Author/1",
+                            "attributes":
+                              { "firstName": "Bob", "lastName": "Enwunder" },
+                            "meta":
+                              {
+                                "adoptsFrom":
+                                  { "module": "../author", "name": "Author" },
+                              },
                           },
                       },
                   },
@@ -84,18 +87,21 @@ tests:
               {
                 "msgtype": "org.boxel.card",
                 "body": "Can make this about Hemmingway instead?",
-                "instance":
+                "data":
                   {
-                    "data":
+                    "instance":
                       {
-                        "type": "card",
-                        "id": "http://localhost:4201/drafts/Author/1",
-                        "attributes":
-                          { "firstName": "Bob", "lastName": "Enwunder" },
-                        "meta":
+                        "data":
                           {
-                            "adoptsFrom":
-                              { "module": "../author", "name": "Author" },
+                            "type": "card",
+                            "id": "http://localhost:4201/drafts/Author/1",
+                            "attributes":
+                              { "firstName": "Bob", "lastName": "Enwunder" },
+                            "meta":
+                              {
+                                "adoptsFrom":
+                                  { "module": "../author", "name": "Author" },
+                              },
                           },
                       },
                   },
