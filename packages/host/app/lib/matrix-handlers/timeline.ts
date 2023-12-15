@@ -22,17 +22,6 @@ import {
 
 export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {
-    // If we are sending an event which contains
-    // a data field, we need to stringify it
-    // because matrix doesn't support all json types
-    // Corresponding auto-decoding is done in
-    // addRoomEvent in ./index.ts
-    if (e.isSending()) {
-      let content = e.getContent();
-      if (content.data) {
-        content.data = JSON.stringify(content.data);
-      }
-    }
     context.timelineQueue.push(e);
     debouncedTimelineDrain(context);
   };

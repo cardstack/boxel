@@ -256,6 +256,17 @@ export default class MatrixService extends Service {
     );
   }
 
+  private async sendEvent(
+    roomId: string,
+    eventType: string,
+    content: MatrixSDK.IContent,
+  ) {
+    if (content.data) {
+      content.data = JSON.stringify(content.data);
+    }
+    await this.client.sendEvent(roomId, eventType, content);
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
@@ -263,14 +274,13 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
-    console.log(context);
     if (context?.submode === 'interact') {
       let serializedCards = await Promise.all(
         context!.openCards.map(async (card) => {
           return await this.cardService.serializeCard(card);
         }),
       );
-      await this.client.sendEvent(roomId, 'm.room.message', {
+      await this.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.message',
         body,
         formatted_body: html,
@@ -292,7 +302,7 @@ export default class MatrixService extends Service {
       })`.trim();
     }
     if (card) {
-      await this.client.sendEvent(roomId, 'm.room.message', {
+      await this.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.card',
         body,
         formatted_body: html,
