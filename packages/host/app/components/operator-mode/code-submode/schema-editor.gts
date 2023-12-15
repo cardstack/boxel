@@ -28,7 +28,7 @@ interface Signature {
     file: Ready;
     moduleContentsResource: ModuleContentsResource;
     cardTypeResource?: CardType;
-    card: typeof BaseDef;
+    card?: typeof BaseDef;
     openDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,

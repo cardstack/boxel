@@ -725,7 +725,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </div>
                   {{else if
                     (or
-                      (bool this.selectedCardOrField)
+                      (bool this.selectedCardOrField.cardOrField)
                       (bool this.moduleContentsResource.moduleError)
                     )
                   }}
