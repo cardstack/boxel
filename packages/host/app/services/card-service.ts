@@ -97,11 +97,15 @@ export default class CardService extends Service {
       ...args,
     });
     if (!response.ok) {
+      let responseText = await response.text();
       let err = new Error(
         `status: ${response.status} -
-          ${response.statusText}. ${await response.text()}`,
-      );
-      (err as any).status = response.status;
+          ${response.statusText}. ${responseText}`,
+      ) as any;
+
+      err.status = response.status;
+      err.responseText = responseText;
+
       throw err;
     }
     if (response.status !== 204) {

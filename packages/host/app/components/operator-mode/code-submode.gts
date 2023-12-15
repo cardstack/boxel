@@ -21,7 +21,7 @@ import {
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { and, not, bool, eq, or } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -63,6 +63,7 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
 interface Signature {
   Args: {
@@ -115,7 +116,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare environmentService: EnvironmentService;
 
   @tracked private loadFileError: string | null = null;
-  @tracked private cardError: Error | undefined;
+
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
   @tracked private previewFormat: Format = 'isolated';
@@ -217,6 +218,14 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
+  private get isCard() {
+    return (
+      this.isReady &&
+      this.readyFile.name.endsWith('.json') &&
+      isCardDocumentString(this.readyFile.content)
+    );
+  }
+
   private get hasCardDefOrFieldDef() {
     return this.declarations.some(isCardOrFieldDeclaration);
   }
@@ -244,7 +253,16 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
-    // If file is incompatible
+    if (this.isCard) {
+      if (this.cardResource.cardError) {
+        return `Card preview failed. Make sure both the card instance data and card definition files have no syntax errors and that their data schema matches. `;
+      }
+    }
+
+    if (this.moduleContentsResource.moduleError) {
+      return null; // Handled in code-submode schema editor
+    }
+
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
     }
@@ -269,14 +287,6 @@ export default class CodeSubmode extends Component<Signature> {
         return null;
       }
       return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
-    }
-
-    // TODO: handle card preview errors (when json is valid but card returns error)
-    // This code is never reached but is temporarily placed here to please linting
-    // - a card runtime error will crash entire app
-    // - a json error will be caught by incompatibleFile
-    if (this.cardError) {
-      return `card preview error ${this.cardError.message}`;
     }
 
     if (
@@ -713,15 +723,12 @@ export default class CodeSubmode extends Component<Signature> {
                     >
                       {{this.fileIncompatibilityMessage}}
                     </div>
-                  {{else if this.card}}
-                    <CardPreviewPanel
-                      @card={{this.loadedCard}}
-                      @realmURL={{this.realmURL}}
-                      @format={{this.previewFormat}}
-                      @setFormat={{this.setPreviewFormat}}
-                      data-test-card-resource-loaded
-                    />
-                  {{else if this.selectedCardOrField}}
+                  {{else if
+                    (or
+                      (bool this.selectedCardOrField)
+                      (bool this.moduleContentsResource.moduleError)
+                    )
+                  }}
                     <Accordion as |A|>
                       <SchemaEditor
                         @file={{this.readyFile}}
@@ -747,11 +754,25 @@ export default class CodeSubmode extends Component<Signature> {
                             <SchemaEditorTitle />
                           </:title>
                           <:content>
-                            <SchemaEditorPanel class='accordion-content' />
+                            {{#if this.moduleContentsResource.moduleError}}
+                              <SyntaxErrorDisplay
+                                @syntaxErrors={{this.moduleContentsResource.moduleError.message}}
+                              />
+                            {{else}}
+                              <SchemaEditorPanel class='accordion-content' />
+                            {{/if}}
                           </:content>
                         </A.Item>
                       </SchemaEditor>
                     </Accordion>
+                  {{else if this.card}}
+                    <CardPreviewPanel
+                      @card={{this.loadedCard}}
+                      @realmURL={{this.realmURL}}
+                      @format={{this.previewFormat}}
+                      @setFormat={{this.setPreviewFormat}}
+                      data-test-card-resource-loaded
+                    />
                   {{/if}}
                 {{/if}}
               </InnerContainer>

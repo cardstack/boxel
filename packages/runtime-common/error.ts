@@ -91,6 +91,7 @@ export class CardError extends Error implements SerializedError {
         {
           title: response.statusText,
           status: response.status,
+          responseText: text,
         },
       );
     }

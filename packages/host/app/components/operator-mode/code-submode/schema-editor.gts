@@ -36,7 +36,7 @@ interface Signature {
   };
   Blocks: {
     default: [
-      WithBoundArgs<typeof SchemaEditorTitle, 'totalFields'>,
+      WithBoundArgs<typeof SchemaEditorTitle, 'totalFields' | 'hasModuleError'>,
       WithBoundArgs<
         typeof CardAdoptionChain,
         'file' | 'moduleSyntax' | 'cardInheritanceChain' | 'openDefinition'
@@ -53,17 +53,35 @@ export type CardInheritance = {
 interface TitleSignature {
   Args: {
     totalFields: number;
+    hasModuleError: boolean;
   };
 }
 
 class SchemaEditorTitle extends Component<TitleSignature> {
   <template>
     Schema Editor
-    <div class='total-fields' data-test-total-fields>
-      <span class='total-fields-value'>{{@totalFields}}</span>
-      <span class='total-fields-label'>{{getPlural 'Field' @totalFields}}</span>
-    </div>
+
+    {{#if @hasModuleError}}
+      <span class='syntax-error'>Fail to parse</span>
+    {{else}}
+      <div class='total-fields' data-test-total-fields>
+        <span class='total-fields-value'>{{@totalFields}}</span>
+        <span class='total-fields-label'>{{getPlural
+            'Field'
+            @totalFields
+          }}</span>
+      </div>
+    {{/if}}
+
     <style>
+      .syntax-error {
+        margin-left: auto;
+        color: var(--boxel-400);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 500;
+        margin-right: var(--boxel-sp-sm);
+        margin-top: 3px;
+      }
       .total-fields {
         display: flex;
         align-items: baseline;
@@ -113,6 +131,10 @@ export default class SchemaEditor extends Component<Signature> {
     );
   }
 
+  get hasModuleError() {
+    return !!this.args?.moduleContentsResource?.moduleError?.message;
+  }
+
   <template>
     <style>
       .loading {
@@ -126,8 +148,13 @@ export default class SchemaEditor extends Component<Signature> {
         <LoadingIndicator />
       </div>
     {{else}}
+
       {{yield
-        (component SchemaEditorTitle totalFields=this.totalFields)
+        (component
+          SchemaEditorTitle
+          totalFields=this.totalFields
+          hasModuleError=this.hasModuleError
+        )
         (component
           CardAdoptionChain
           file=@file
