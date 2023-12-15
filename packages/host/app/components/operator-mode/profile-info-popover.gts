@@ -157,7 +157,7 @@ export default class ProfileInfoPopover extends Component<Signature> {
 
     {{#if this.settingsIsOpenFIXME}}
       <ModalContainer
-        @onClose={{fn this.closeSettings}}
+        @onClose={{this.closeSettings}}
         @title='Settings'
         @size='large'
         @centered={{true}}
