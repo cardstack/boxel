@@ -35,7 +35,7 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
       }
     </style>
 
-    <div class='syntax-error-container'>
+    <div class='syntax-error-container' data-test-syntax-error>
       <div class='syntax-error-box'>
         <div class='syntax-error-text'>
           Syntax Error
