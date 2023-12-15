@@ -41,7 +41,7 @@ interface Signature {
 
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <div data-test-links-to-many={{this.args.field.name}}>
+    <div data-test-links-to-many={{@field.name}}>
       {{#if (eq @format 'edit')}}
         {{#if @arrayField.children.length}}
           <ul class='list'>
