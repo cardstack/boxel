@@ -28,6 +28,7 @@ import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
+  RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -452,34 +453,54 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(async (card: CardDef) => {
-    if (!card.id) {
-      // the card isn't actually saved yet, so do nothing
+  private delete = dropTask(async (item: CardDef | URL | null | undefined) => {
+    if (!item) {
       return;
     }
-    if (!this.card) {
-      throw new Error(`TODO: non-card instance deletes are not yet supported`);
-    }
-
     if (!this.deleteModal) {
       throw new Error(`bug: DeleteModal not instantiated`);
     }
+    if (!(item instanceof URL)) {
+      if (!item.id) {
+        // the card isn't actually saved yet, so do nothing
+        return;
+      }
+    }
+
     let deferred: Deferred<void>;
     let isDeleteConfirmed = await this.deleteModal.confirmDelete(
-      card,
+      item,
       (d) => (deferred = d),
     );
     if (!isDeleteConfirmed) {
       return;
     }
 
-    await this.withTestWaiters(async () => {
-      await this.operatorModeStateService.deleteCard(card);
-      deferred!.fulfill();
-    });
+    if (!(item instanceof URL)) {
+      let card = item;
+      await this.withTestWaiters(async () => {
+        await this.operatorModeStateService.deleteCard(card);
+        deferred!.fulfill();
+      });
+    } else {
+      let file = item;
+      await this.withTestWaiters(async () => {
+        // TODO: This is a side effect of the recent-file service making assumptions about
+        // what realm we are in. we should refactor that so that callers have to tell
+        // it the realm of the file in question
+        let realmURL = this.operatorModeStateService.realmURL;
+
+        if (realmURL) {
+          let realmPaths = new RealmPaths(realmURL);
+          let filePath = realmPaths.local(file);
+          this.recentFilesService.removeRecentFile(filePath);
+        }
+        await this.cardService.deleteSource(file);
+        deferred!.fulfill();
+      });
+    }
 
     let recentFile = this.recentFilesService.recentFiles[0];
-
     if (recentFile) {
       let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
 
