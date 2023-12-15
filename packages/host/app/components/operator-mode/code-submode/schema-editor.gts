@@ -28,7 +28,7 @@ interface Signature {
     file: Ready;
     moduleContentsResource: ModuleContentsResource;
     cardTypeResource?: CardType;
-    card?: typeof BaseDef;
+    card: typeof BaseDef;
     openDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
@@ -52,12 +52,12 @@ export type CardInheritance = {
 
 interface TitleSignature {
   Args: {
-    totalFields: number;
-    hasModuleError: boolean;
+    totalFields?: number;
+    hasModuleError?: boolean;
   };
 }
 
-class SchemaEditorTitle extends Component<TitleSignature> {
+export class SchemaEditorTitle extends Component<TitleSignature> {
   <template>
     Schema Editor
 

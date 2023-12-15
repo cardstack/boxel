@@ -57,7 +57,7 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import SchemaEditor from './code-submode/schema-editor';
+import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
@@ -253,6 +253,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
+    debugger;
     if (this.isCard) {
       if (this.cardResource.cardError) {
         return `Card preview failed. Make sure both the card instance data and card definition files have no syntax errors and that their data schema matches. `;
@@ -723,12 +724,7 @@ export default class CodeSubmode extends Component<Signature> {
                     >
                       {{this.fileIncompatibilityMessage}}
                     </div>
-                  {{else if
-                    (or
-                      (bool this.selectedCardOrField.cardOrField)
-                      (bool this.moduleContentsResource.moduleError)
-                    )
-                  }}
+                  {{else if this.selectedCardOrField.cardOrField}}
                     <Accordion as |A|>
                       <SchemaEditor
                         @file={{this.readyFile}}
@@ -754,16 +750,28 @@ export default class CodeSubmode extends Component<Signature> {
                             <SchemaEditorTitle />
                           </:title>
                           <:content>
-                            {{#if this.moduleContentsResource.moduleError}}
-                              <SyntaxErrorDisplay
-                                @syntaxErrors={{this.moduleContentsResource.moduleError.message}}
-                              />
-                            {{else}}
-                              <SchemaEditorPanel class='accordion-content' />
-                            {{/if}}
+                            <SchemaEditorPanel class='accordion-content' />
                           </:content>
                         </A.Item>
                       </SchemaEditor>
+                    </Accordion>
+                  {{else if this.moduleContentsResource.moduleError}}
+                    <Accordion as |A|>
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'schema-editor'}}
+                        @isOpen={{true}}
+                      >
+                        <:title>
+                          <SchemaEditorTitle @hasModuleError={{true}} />
+                        </:title>
+                        <:content>
+                          <SyntaxErrorDisplay
+                            @syntaxErrors={{this.moduleContentsResource.moduleError.message}}
+                          />
+                        </:content>
+                      </A.Item>
                     </Accordion>
                   {{else if this.card}}
                     <CardPreviewPanel
