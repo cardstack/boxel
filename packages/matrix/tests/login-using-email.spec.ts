@@ -49,18 +49,20 @@ test.describe('Login using email', () => {
     await clearLocalStorage(page);
     await gotoRegistration(page);
 
-    await validateEmail(page, 'user1@example.com');
-
     await expect(
       page.locator('[data-test-token-field]'),
       'token field is not displayed',
     ).toHaveCount(0);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('Test User');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1');
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('mypassword');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword1!');
     await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
     await page.locator('[data-test-register-btn]').click();
 
@@ -73,9 +75,11 @@ test.describe('Login using email', () => {
     await page.locator('[data-test-token-field]').fill('abc123');
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
+
+    await validateEmail(page, 'user1@example.com');
     
     await openChat(page);
-    await assertLoggedIn(page, { email: 'user1@example.com' });
+    await assertLoggedIn(page, { email: 'user1@example.com', displayName: 'Test User' });
     await logout(page);
     await assertLoggedOut(page);
     
@@ -83,11 +87,11 @@ test.describe('Login using email', () => {
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1@example.com');
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('mypassword');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
     await openChat(page);
 
-    await assertLoggedIn(page, { email: 'user1@example.com' });
+    await assertLoggedIn(page, { email: 'user1@example.com', displayName: 'Test User' });
   });
 });
