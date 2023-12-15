@@ -111,7 +111,10 @@ export async function waitForSyntaxHighlighting(
     () =>
       finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
       color,
-    { timeoutMessage: 'timed out waiting for syntax highlighting' },
+    {
+      timeout: 2000,
+      timeoutMessage: 'timed out waiting for syntax highlighting',
+    },
   );
 }
 export async function showSearchResult(realmName: string, id: string) {

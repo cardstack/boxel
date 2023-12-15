@@ -38,9 +38,3 @@ export default class CardError extends Component<Signature> {
     </style>
   </template>
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    CardError: typeof CardError;
-  }
-}

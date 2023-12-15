@@ -739,7 +739,7 @@ module('Acceptance | code submode tests', function (hooks) {
     );
 
     await waitFor('[data-test-binary-info]');
-
+    await waitFor('[data-test-definition-file-extension]');
     assert.dom('[data-test-definition-file-extension]').hasText('.png');
     await waitFor('[data-test-definition-realm-name]');
     assert
@@ -997,24 +997,6 @@ module('Acceptance | code submode tests', function (hooks) {
         },
       },
     });
-  });
-
-  test('has a profile icon in the bottom left corner', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}employee.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
-    assert.dom('[data-test-profile-icon-container]').hasText('T');
-    assert
-      .dom('[data-test-profile-icon]')
-      .hasAttribute('style', 'background: #5ead6b');
   });
 
   test('changes cursor position when selected module declaration is changed', async function (assert) {

@@ -15,6 +15,7 @@ import BoxelInput, {
   InputBottomTreatments as BoxelInputBottomTreatments,
   InputValidationStates as BoxelInputValidationStates,
 } from './components/input/index.gts';
+import BoxelInputGroup from './components/input-group/index.gts';
 import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import Menu from './components/menu/index.gts';
@@ -35,6 +36,7 @@ export {
   BoxelInput,
   BoxelInputBottomTreatment,
   BoxelInputBottomTreatments,
+  BoxelInputGroup,
   BoxelInputValidationState,
   BoxelInputValidationStates,
   BoxelMessage,

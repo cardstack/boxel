@@ -33,7 +33,6 @@ import {
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import config from '@cardstack/host/config/environment';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
@@ -44,6 +43,7 @@ import {
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -70,7 +70,6 @@ interface Signature {
     saveCardOnClose: (card: CardDef) => void;
   };
 }
-const { autoSaveDelayMs } = config;
 
 type PanelWidths = {
   rightPanel: number;
@@ -113,6 +112,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare recentFilesService: RecentFilesService;
   @service declare loaderService: LoaderService;
+  @service declare environmentService: EnvironmentService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private cardError: Error | undefined;
@@ -395,7 +395,7 @@ export default class CodeSubmode extends Component<Signature> {
   private initiateAutoSaveTask = restartableTask(async () => {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
-      await timeout(autoSaveDelayMs);
+      await timeout(this.environmentService.autoSaveDelayMs);
       await this.saveCard.perform(this.card);
       this.hasUnsavedCardChanges = false;
     }

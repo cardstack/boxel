@@ -28,7 +28,11 @@ interface Signature {
 
 export default class Login extends Component<Signature> {
   <template>
-    <form class='login-form' {{on 'submit' this.handleSubmit}}>
+    <form
+      class='login-form'
+      {{on 'submit' this.handleSubmit}}
+      data-test-login-form
+    >
       <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
         <:icon>
           <BoxelIcon />
@@ -37,7 +41,7 @@ export default class Login extends Component<Signature> {
       <div class='content'>
         <span class='title'>Sign in to your Boxel Account</span>
         <FieldContainer
-          @label='Username'
+          @label='Email Address or Username'
           @tag='label'
           @vertical={{true}}
           class='field'
@@ -109,14 +113,19 @@ export default class Login extends Component<Signature> {
       .content {
         display: flex;
         flex-direction: column;
-        padding: var(--boxel-sp-xl);
+        padding: var(--boxel-sp) var(--boxel-sp-xl);
       }
       .title {
         font: 700 var(--boxel-font-med);
-        margin-bottom: var(--boxel-sp-lg);
+        margin-bottom: var(--boxel-sp-sm);
       }
       .field {
-        margin-top: var(--boxel-sp-lg);
+        margin-top: var(--boxel-sp);
+      }
+      .field :deep(input:autofill) {
+        transition:
+          background-color 0s 600000s,
+          color 0s 600000s;
       }
       .forgot-password {
         border: none;
@@ -196,17 +205,14 @@ export default class Login extends Component<Signature> {
     }
     let auth: IAuthData | undefined;
     try {
-      auth = await this.matrixService.client.loginWithPassword(
-        this.username,
-        this.password,
-      );
+      auth = await this.matrixService.login(this.username, this.password);
     } catch (e: any) {
       if (isMatrixError(e)) {
         this.error =
           'Sign in failed. Please check your credentials and try again.';
-      } else {
-        throw e;
       }
+
+      throw e;
     }
     if (auth) {
       await this.matrixService.start(auth);

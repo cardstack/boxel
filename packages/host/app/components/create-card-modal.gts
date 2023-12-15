@@ -122,9 +122,3 @@ export default class CreateCardModal extends Component {
     }
   }
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    CreateCardModal: typeof CreateCardModal;
-  }
-}

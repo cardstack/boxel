@@ -57,6 +57,22 @@ test.describe('Login', () => {
     await assertLoggedOut(page);
   });
 
+  test('it can logout using the profile menu', async ({ page }) => {
+    await login(page, 'user1', 'pass');
+
+    await expect(
+      page.locator(
+        '[data-test-profile-icon-button] > [data-test-profile-icon]',
+      ),
+    ).toHaveText('U');
+    await page.locator('[data-test-profile-icon-button]').click();
+    await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
+      '@user1:localhost',
+    );
+    await page.locator('[data-test-signout-button]').click();
+    await expect(page.locator('[data-test-login-form]')).toBeVisible();
+  });
+
   test('it shows an error when invalid credentials are provided', async ({
     page,
   }) => {

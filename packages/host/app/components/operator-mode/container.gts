@@ -193,6 +193,15 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-min-width: 20.5rem;
         --operator-mode-left-column: 14rem;
       }
+      :global(button:focus:not(:disabled):hover) {
+        outline: transparent;
+      }
+      :global(button:focus:not(:disabled):not(:hover)) {
+        outline-color: var(--boxel-highlight);
+      }
+      :global(dialog:focus) {
+        outline: none;
+      }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;
       }
@@ -223,10 +232,4 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    'OperatorMode::Container': typeof OperatorModeContainer;
-  }
 }

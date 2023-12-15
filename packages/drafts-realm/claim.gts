@@ -91,7 +91,7 @@ class Isolated extends Component<typeof Claim> {
   web3Provider: CardPaySDK.Web3Provider | undefined;
   getSDK: typeof CardPaySDK.getSDK | undefined;
   <template>
-    <GridContainer>
+    <GridContainer class='container'>
       {{! include title field in template so that it can be indexed }}
       <@fields.title />
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -114,7 +114,7 @@ class Isolated extends Component<typeof Claim> {
             Claiming...
           {{else if this.hasBeenClaimed}}
             Claim has been used
-          {{else if @context.actions.createCardDirectly}}
+          {{else if @context.actions.createCard}}
             Claim
           {{else if this.inEnvThatCanCreateNewCard}}
             Claim
@@ -132,6 +132,11 @@ class Isolated extends Component<typeof Claim> {
         </Button>
       {{/if}}
     </GridContainer>
+    <style>
+      .container {
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
   </template>
 
   // chainId is not explicitly passed to resource
@@ -161,7 +166,7 @@ class Isolated extends Component<typeof Claim> {
   get cannotClickClaimButton() {
     return (
       this.hasBeenClaimed ||
-      (!!!this.args.context?.actions?.createCardDirectly &&
+      (!!!this.args.context?.actions?.createCard &&
         !this.inEnvThatCanCreateNewCard)
     );
   }
@@ -247,19 +252,17 @@ class Isolated extends Component<typeof Claim> {
               },
             },
           },
-          meta: {
-            adoptsFrom: {
-              module: `${realmUrl.href}transaction`,
-              name: 'Transaction',
-            },
-          },
         },
       };
-      if (this.args.context?.actions?.createCardDirectly) {
+
+      if (this.args.context?.actions?.createCard) {
         // create using operator mode action
-        await this.args.context.actions.createCardDirectly(
-          transactionDoc,
+        await this.args.context.actions.createCard(
+          transactionCardRef,
           undefined,
+          {
+            doc: transactionDoc,
+          },
         );
       } else {
         // create using create card modal

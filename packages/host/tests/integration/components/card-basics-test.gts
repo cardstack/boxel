@@ -1,11 +1,14 @@
 import {
   waitUntil,
+  waitFor,
   fillIn,
   click,
   render,
   RenderingTestContext,
+  triggerEvent,
 } from '@ember/test-helpers';
 
+import percySnapshot from '@percy/ember';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
 import { setupRenderingTest } from 'ember-qunit';
@@ -19,6 +22,7 @@ import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import { mango } from '../../helpers/image-fixture';
 
 import {
   BaseDef,
@@ -30,7 +34,6 @@ import {
 import {
   cleanWhiteSpace,
   p,
-  percySnapshot,
   testRealmURL,
   shimModule,
   setupCardLogs,
@@ -46,6 +49,7 @@ let datetime: typeof import('https://cardstack.com/base/datetime');
 let boolean: typeof import('https://cardstack.com/base/boolean');
 let codeRef: typeof import('https://cardstack.com/base/code-ref');
 let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
+let base64Image: typeof import('https://cardstack.com/base/base64-image');
 let primitive: typeof primitiveType;
 let queryableValue: typeof queryableValueType;
 
@@ -75,6 +79,7 @@ module('Integration | card-basics', function (hooks) {
     boolean = await loader.import(`${baseRealm.url}boolean`);
     codeRef = await loader.import(`${baseRealm.url}code-ref`);
     catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
+    base64Image = await loader.import(`${baseRealm.url}base64-image`);
   });
 
   test('primitive field type checking', async function (assert) {
@@ -516,6 +521,57 @@ module('Integration | card-basics', function (hooks) {
     assert
       .dom('[data-test-ref')
       .containsText(`Module: http://localhost:4202/test/person Name: Person`);
+  });
+
+  test('render base64 image card', async function (assert) {
+    let { field, contains, CardDef } = cardApi;
+    let { Base64ImageField } = base64Image;
+    class DriverCard extends CardDef {
+      @field image = contains(Base64ImageField);
+    }
+
+    let driver = new DriverCard();
+    await renderCard(loader, driver, 'edit');
+    triggerEvent('[data-test-base64-field]', 'change', {
+      files: [base64ToBlob(mango, 'image/png')],
+    });
+    await waitFor('[data-test-actual-img]');
+    await fillIn('[data-test-field="altText"] input', 'picture of mango');
+    assert
+      .dom('[data-test-actual-img]')
+      .hasAttribute('src', `data:image/png;base64,${mango}`);
+    assert
+      .dom('[data-test-actual-img]')
+      .hasAttribute('alt', 'picture of mango');
+
+    await click('[data-test-contain-size-input]');
+    assert.dom('[data-test-height-warning]').exists('height warning exists');
+    await fillIn('[data-test-field="height"] input', '200');
+    assert.dom('[data-test-height-warning]').doesNotExist('warning dismissed');
+    assert
+      .dom('[data-test-contain-cover-img]')
+      .hasAttribute(
+        'style',
+        `background-image: url("data:image/png;base64,${mango}"); background-size: contain; height: 200px;`,
+      );
+    assert.dom('[data-test-contain-cover-img]').hasAttribute('role', 'img');
+    assert
+      .dom('[data-test-contain-cover-img]')
+      .hasAttribute('aria-label', 'picture of mango');
+
+    await percySnapshot(assert);
+
+    await renderCard(loader, driver, 'isolated');
+    assert
+      .dom('[data-test-contain-cover-img]')
+      .hasAttribute(
+        'style',
+        `background-image: url("data:image/png;base64,${mango}"); background-size: contain; height: 200px;`,
+      );
+    assert.dom('[data-test-contain-cover-img]').hasAttribute('role', 'img');
+    assert
+      .dom('[data-test-contain-cover-img]')
+      .hasAttribute('aria-label', 'picture of mango');
   });
 
   test('render card typeDisplayName', async function (assert) {
@@ -2336,6 +2392,22 @@ function getDateFromInput(selector: string): Date | undefined {
     return parseISO(input.value);
   }
   return undefined;
+}
+
+function base64ToBlob(base64: string, mimeType: string) {
+  // Decode Base64 to binary
+  let binaryString = atob(base64);
+
+  // Convert binary to ArrayBuffer
+  let arrayBuffer = new ArrayBuffer(binaryString.length);
+  let uint8Array = new Uint8Array(arrayBuffer);
+  for (let i = 0; i < binaryString.length; i++) {
+    uint8Array[i] = binaryString.charCodeAt(i);
+  }
+
+  // Create Blob from ArrayBuffer
+  let blob = new Blob([arrayBuffer], { type: mimeType });
+  return blob;
 }
 
 interface TestShape {

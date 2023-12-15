@@ -708,7 +708,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-enter-room="test_a"]');
 
     await waitFor('[data-test-command-apply]');
-    this.onSave((json) => {
+    this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -975,7 +975,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
-    this.onSave((json) => {
+    this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -1104,11 +1104,8 @@ module('Integration | operator-mode', function (hooks) {
     );
     let saved = new Deferred<void>();
     let savedCards = new Set<string>();
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      savedCards.add(json.data.id);
+    this.onSave((url) => {
+      savedCards.add(url.href);
       saved.fulfill();
     });
 
@@ -1190,12 +1187,7 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     let savedCards = new Set<string>();
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      savedCards.add(json.data.id);
-    });
+    this.onSave((url) => savedCards.add(url.href));
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
@@ -1280,7 +1272,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .containsText('Mad As a Hatter by Alice Enwunder');
 
-    this.onSave((json) => {
+    this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -1386,12 +1378,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     let savedCards = new Set<string>();
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      savedCards.add(json.data.id);
-    });
+    this.onSave((url) => savedCards.add(url.href));
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
@@ -1541,12 +1528,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     let savedCards = new Set<string>();
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      savedCards.add(json.data.id);
-    });
+    this.onSave((url) => savedCards.add(url.href));
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
@@ -1587,12 +1569,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     let savedCards = new Set<string>();
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      savedCards.add(json.data.id);
-    });
+    this.onSave((url) => savedCards.add(url.href));
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     await click('[data-test-edit-button]');

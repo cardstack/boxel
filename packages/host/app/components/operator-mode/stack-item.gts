@@ -59,6 +59,7 @@ import { type StackItem } from '@cardstack/host/lib/stack-item';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 import {
   IconPencil,
   IconX,
@@ -75,9 +76,6 @@ interface Signature {
     publicAPI: Actions;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => void;
-    edit: (item: StackItem) => void;
-    save: (item: StackItem, dismiss: boolean) => void;
-    delete: (card: CardDef) => void;
     onSelectedCards: (selectedCards: CardDef[], stackItem: StackItem) => void;
     setupStackItem: (
       stackItem: StackItem,
@@ -87,8 +85,6 @@ interface Signature {
     ) => void;
   };
 }
-
-let { autoSaveDelayMs } = config;
 
 export interface RenderedCardForOverlayActions {
   element: HTMLElement;
@@ -100,8 +96,9 @@ export interface RenderedCardForOverlayActions {
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
-  @tracked selectedCards = new TrackedArray<CardDef>([]);
   @service declare cardService: CardService;
+  @service declare environmentService: EnvironmentService;
+  @tracked selectedCards = new TrackedArray<CardDef>([]);
   @tracked isHoverOnRealmIcon = false;
   @tracked isSaving = false;
   @tracked lastSaved: number | undefined;
@@ -276,9 +273,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   };
 
   private initiateAutoSaveTask = restartableTask(async () => {
-    await timeout(autoSaveDelayMs);
+    await timeout(this.environmentService.autoSaveDelayMs);
     this.isSaving = true;
-    this.args.save(this.args.item, false);
+    this.args.publicAPI.saveCard(this.card, false);
     this.isSaving = false;
     this.lastSaved = Date.now();
     this.calculateLastSavedMsg();
@@ -393,7 +390,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                       @height='24px'
                       class='icon-button'
                       aria-label='Edit'
-                      {{on 'click' (fn @edit @item)}}
+                      {{on 'click' (fn @publicAPI.editCard this.card)}}
                       data-test-edit-button
                     />
                   </:trigger>
@@ -410,7 +407,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                       @height='24px'
                       class='icon-save'
                       aria-label='Finish Editing'
-                      {{on 'click' (fn @save @item true)}}
+                      {{on 'click' (fn @publicAPI.saveCard this.card true)}}
                       data-test-edit-button
                     />
                   </:trigger>
@@ -451,7 +448,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         )
                         (menuItem
                           'Delete'
-                          (fn @delete this.card)
+                          (fn @publicAPI.deleteCard this.card)
                           icon=IconTrash
                           dangerous=true
                           disabled=(not this.card.id)
@@ -501,7 +498,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @publicAPI={{@publicAPI}}
-              @delete={{@delete}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCards={{this.selectedCards}}
             />
@@ -675,11 +671,5 @@ class ContentElement extends Modifier<ContentElementSignature> {
     { onSetup }: ContentElementSignature['Args']['Named'],
   ) {
     onSetup(element);
-  }
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    OperatorModeStackItem: typeof OperatorModeStackItem;
   }
 }

@@ -104,6 +104,7 @@ export function getBoxComponent(
               @cardOrField={{card}}
               @model={{model.value}}
               @fields={{f.fields}}
+              @format={{f.format}}
               @set={{model.set}}
               @fieldName={{model.name}}
               @context={{context}}
@@ -120,6 +121,7 @@ export function getBoxComponent(
               @cardOrField={{card}}
               @model={{model.value}}
               @fields={{f.fields}}
+              @format={{f.format}}
               @set={{model.set}}
               @fieldName={{model.name}}
               @context={{context}}
@@ -130,6 +132,7 @@ export function getBoxComponent(
             @cardOrField={{card}}
             @model={{model.value}}
             @fields={{f.fields}}
+            @format={{f.format}}
             @set={{model.set}}
             @fieldName={{model.name}}
             @context={{context}}
@@ -137,17 +140,8 @@ export function getBoxComponent(
         {{/if}}
       {{/let}}
       <style>
-        .field-component-card {
+        .field-component-card.embedded-format {
           padding: var(--boxel-sp);
-        }
-
-        .field-component-card.isolated-format {
-          padding: var(--boxel-sp-xl);
-        }
-
-        .field-component-card.edit-format {
-          padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
-            var(--boxel-sp-xl);
         }
 
         .field-component-card.atom-format {

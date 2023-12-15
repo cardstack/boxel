@@ -377,6 +377,43 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
+  test('has a profile icon in the bottom left corner that opens profile info popover', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    assert.dom('[data-test-profile-icon]').hasText('T');
+    assert
+      .dom('[data-test-profile-icon]')
+      .hasAttribute('style', 'background: #5ead6b');
+
+    assert.dom('[data-test-profile-popover]').doesNotHaveClass('opened');
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-popover]').hasClass('opened');
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-popover]').doesNotHaveClass('opened'); // Clicking again closes the popover
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
+
+    await click('[data-test-signout-button]');
+
+    assert.dom('[data-test-login-form]').exists();
+  });
+
   test('visiting index card and entering operator mode', async function (assert) {
     await visit('/');
 

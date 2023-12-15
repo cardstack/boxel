@@ -4,8 +4,8 @@ import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { eq, pick } from '@cardstack/boxel-ui/helpers';
+import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
+import { cn, eq, pick } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { startCase } from 'lodash';
 import { getBoxComponent, type BoxComponent } from './field-component';
@@ -47,7 +47,6 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol('cardstack-serialize');
@@ -1684,10 +1683,11 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;
     fields: Record<string, new () => GlimmerComponent>;
+    format: Format;
   };
 }> {
   <template>
-    <div class='default-card-template'>
+    <div class={{cn 'default-card-template' @format}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <FieldContainer
@@ -1704,6 +1704,12 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
       .default-card-template {
         display: grid;
         gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+      .default-card-template.edit {
+        padding-right: var(
+          --boxel-sp-xxl
+        ); /* allow room for trash/delete icons that appear on hover */
       }
     </style>
   </template>
@@ -1726,7 +1732,7 @@ class MissingEmbeddedTemplate extends GlimmerComponent<{
         for
         {{if (isCardDef @cardOrField) 'CardDef' 'FieldDef'}}:
         {{@cardOrField.displayName}}</span>
-      {{#if @context.actions.openCodeSubmode}}
+      {{#if @context.actions.changeSubmode}}
         <span
           class='open-code-submode'
           {{on 'click' this.openCodeSubmode}}
@@ -1779,7 +1785,7 @@ class MissingEmbeddedTemplate extends GlimmerComponent<{
       return;
     }
     let moduleId = moduleFrom(ref);
-    this.args.context?.actions?.openCodeSubmode(new URL(moduleId));
+    this.args.context?.actions?.changeSubmode(new URL(moduleId), 'code');
   }
 }
 
@@ -1848,6 +1854,7 @@ export type BaseDefComponent = ComponentLike<{
   Args: {
     cardOrField: typeof BaseDef;
     fields: any;
+    format: Format;
     model: any;
     set: Setter;
     fieldName: string | undefined;
@@ -1907,6 +1914,23 @@ export class StringField extends FieldDef {
   };
 }
 
+// TODO: This is a simple workaround until the thumbnailURL is converted into an actual image field
+export class MaybeBase64Field extends StringField {
+  static embedded = class Embedded extends Component<typeof this> {
+    get isBase64() {
+      return this.args.model?.startsWith('data:');
+    }
+    <template>
+      {{#if this.isBase64}}
+        <em>(Base64 encoded value)</em>
+      {{else}}
+        {{@model}}
+      {{/if}}
+    </template>
+  };
+  static atom = MaybeBase64Field.embedded;
+}
+
 export class CardDef extends BaseDef {
   [isSavedInstance] = false;
   [realmInfo]: RealmInfo | undefined = undefined;
@@ -1914,7 +1938,10 @@ export class CardDef extends BaseDef {
   @field id = contains(IDField);
   @field title = contains(StringField);
   @field description = contains(StringField);
-  @field thumbnailURL = contains(StringField); // TODO: this will probably be an image or image url field card when we have it
+  // TODO: this will probably be an image or image url field card when we have it
+  // UPDATE: we now have a Base64ImageField card. we can probably refactor this
+  // to use it directly now (or wait until a better image field comes along)
+  @field thumbnailURL = contains(MaybeBase64Field);
   static displayName = 'Card';
   static isCardDef = true;
 

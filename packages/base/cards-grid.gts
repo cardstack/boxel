@@ -19,6 +19,8 @@ import {
   cardTypeDisplayName,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
+// @ts-ignore no types
+import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
 
@@ -41,11 +43,16 @@ class Isolated extends Component<typeof CardsGrid> {
             data-cards-grid-item={{card.id}}
           >
             <div class='grid-card'>
-              <div class='grid-thumbnail'>
-                <div
-                  class='grid-thumbnail-text'
-                  data-test-cards-grid-item-thumbnail-text
-                >{{cardTypeDisplayName card}}</div>
+              <div
+                class='grid-thumbnail'
+                style={{cssUrl 'background-image' card.thumbnailURL}}
+              >
+                {{#unless card.thumbnailURL}}
+                  <div
+                    class='grid-thumbnail-text'
+                    data-test-cards-grid-item-thumbnail-text
+                  >{{cardTypeDisplayName card}}</div>
+                {{/unless}}
               </div>
               <h3
                 class='grid-title'
@@ -86,9 +93,10 @@ class Isolated extends Component<typeof CardsGrid> {
         --grid-card-width: 10.125rem;
         --grid-card-height: 15.125rem;
 
-        position: relative; /* Do not change this */
         max-width: 70rem;
         margin: 0 auto;
+        padding: var(--boxel-sp-xl);
+        position: relative; /* Do not change this */
       }
       .cards {
         list-style-type: none;
@@ -132,6 +140,9 @@ class Isolated extends Component<typeof CardsGrid> {
         align-items: center;
         height: var(--grid-card-text-thumbnail-height);
         background-color: var(--boxel-teal);
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
         color: var(--boxel-light);
         padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius);

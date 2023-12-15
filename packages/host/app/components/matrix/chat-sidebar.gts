@@ -71,9 +71,3 @@ export default class ChatSidebar extends Component<Args> {
     }
   }
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    'Matrix::ChatSidebar': typeof ChatSidebar;
-  }
-}

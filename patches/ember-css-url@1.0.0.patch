@@ -1,0 +1,13 @@
+diff --git a/dist/index.js b/dist/index.js
+index 9e0053dfc561890ab1a10a7dadc6eacbc3c49c74..909f0c075c5aa09fabb4f293002177a71784e0b0 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -19,7 +19,7 @@ function cssUrl(propertyName, url) {
+   if (m) {
+     let proto = m[1].toLowerCase();
+ 
+-    if (proto !== 'http' && proto !== 'https') {
++    if (proto !== 'http' && proto !== 'https' && proto !== 'data') {
+       throw new Error(`disallowed protocol in css url: ${url}`);
+     }
+   } // Step 3: Use our own double quotes, which the url cannot break out
