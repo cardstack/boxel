@@ -445,7 +445,7 @@ export class RoomField extends FieldDef {
         };
         let messageField = undefined;
         if (event.content.msgtype === 'org.boxel.card') {
-          let cardDoc = event.content.instance;
+          let cardDoc = event.content.data.instance;
           let attachedCardId = cardDoc.data.id;
           if (attachedCardId == null) {
             throw new Error(`cannot handle cards in room without an ID`);
@@ -453,18 +453,18 @@ export class RoomField extends FieldDef {
           messageField = new MessageField({ ...cardArgs, attachedCardId });
         } else if (event.content.msgtype === 'org.boxel.command') {
           // We only handle patches for now
-          if (event.content.command.type !== 'patch') {
+          let command = event.content.data.command;
+          if (command.type !== 'patch') {
             throw new Error(
-              `cannot handle commands in room with type ${event.content.command.type}`,
+              `cannot handle commands in room with type ${command.type}`,
             );
           }
-          let command = new PatchField({
-            commandType: event.content.command.type,
-            payload: event.content.command,
-          });
           messageField = new MessageField({
             ...cardArgs,
-            command,
+            command: new PatchField({
+              commandType: command.type,
+              payload: command,
+            }),
           });
         } else {
           messageField = new MessageField(cardArgs);
@@ -597,7 +597,9 @@ interface MessageEvent extends BaseMatrixEvent {
 interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
-    command: any;
+    data: {
+      command: any;
+    };
     'm.relates_to'?: {
       rel_type: string;
       event_id: string;
@@ -626,7 +628,9 @@ interface CardMessageEvent extends BaseMatrixEvent {
     format: 'org.matrix.custom.html';
     body: string;
     formatted_body: string;
-    instance: LooseSingleCardDocument;
+    data: {
+      instance: LooseSingleCardDocument;
+    };
   };
   unsigned: {
     age: number;
