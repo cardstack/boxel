@@ -19,7 +19,12 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
-import { IconInherit, IconTrash, IconPlus } from '@cardstack/boxel-ui/icons';
+import {
+  IconInherit,
+  IconTrash,
+  IconPlus,
+  Copy,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   hasExecutableExtension,
@@ -84,6 +89,7 @@ interface Signature {
         displayName: string;
         ref: ResolvedCodeRef;
       },
+      sourceInstance?: CardDef,
     ) => Promise<void>;
     delete: (
       card: CardDef | typeof CardDef | undefined,
@@ -185,6 +191,20 @@ export default class DetailPanel extends Component<Signature> {
         : []),
       { label: 'Delete', icon: IconTrash, handler: this.args.delete },
     ];
+  }
+
+  @action private duplicateInstance() {
+    if (!this.args.cardInstance) {
+      throw new Error('must have a selected card instance');
+    }
+    let id: NewFileType = 'duplicate-instance';
+    let cardDef = Reflect.getPrototypeOf(this.args.cardInstance)!
+      .constructor as typeof CardDef;
+    this.args.createFile(
+      { id, displayName: capitalize(cardDef.displayName || 'Instance') },
+      undefined,
+      this.args.cardInstance,
+    );
   }
 
   @action private createInstance() {
@@ -346,6 +366,9 @@ export default class DetailPanel extends Component<Signature> {
                 @fileExtension='.JSON'
                 @infoText={{this.lastModified.value}}
                 @actions={{array
+                  (hash
+                    label='Duplicate' handler=this.duplicateInstance icon=Copy
+                  )
                   (hash
                     label='Delete'
                     handler=(fn @delete @cardInstance)
