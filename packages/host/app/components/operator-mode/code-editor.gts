@@ -84,7 +84,7 @@ export default class CodeEditor extends Component<Signature> {
 
     this.args.onSetup(
       this.updateMonacoCursorPositionByDeclaration,
-      this.updateCursorByName,
+      this.updateMonacoCursorByName,
     );
   }
 
@@ -145,7 +145,7 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   @action
-  private updateCursorByName(name: string) {
+  private updateMonacoCursorByName(name: string) {
     let declaration = this.findDeclarationByName(name);
     if (declaration === undefined) return;
     return this.updateMonacoCursorPositionByDeclaration(declaration);
