@@ -79,7 +79,7 @@ export default class CodeEditor extends Component<Signature> {
 
     this.loadMonaco.perform();
 
-    this.args.onSetup(this.updateMonacoCursorByName);
+    this.args.onSetup(this.updateMonacoCursorPositionByName);
   }
 
   private get isReady() {
@@ -139,7 +139,7 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   @action
-  private updateMonacoCursorByName(name: string) {
+  private updateMonacoCursorPositionByName(name: string) {
     let declaration = this.findDeclarationByName(name);
     if (declaration === undefined) return;
     return this.updateMonacoCursorPositionByDeclaration(declaration);
