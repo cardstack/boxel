@@ -39,7 +39,7 @@ export class Pet extends CardDef {
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <GridContainer>
+      <GridContainer class='container'>
         <h2><@fields.title /></h2>
         <div>
           <div>Sleeps On the Couch: <@fields.sleepsOnTheCouch /></div>
@@ -48,6 +48,11 @@ export class Pet extends CardDef {
           <div>Cuteness Rating: <@fields.cutenessRating /></div>
         </div>
       </GridContainer>
+      <style>
+        .container {
+          padding: var(--boxel-sp-xl);
+        }
+      </style>
     </template>
   };
 }

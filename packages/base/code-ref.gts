@@ -61,7 +61,6 @@ export default class CodeRefField extends FieldDef {
   }
 
   static embedded = class Embedded extends BaseView {};
-  static isolated = class Isolated extends BaseView {};
   // The edit template is meant to be read-only, this field card is not mutable
   static edit = class Edit extends BaseView {};
 }

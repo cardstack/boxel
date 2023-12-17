@@ -40,7 +40,8 @@ export default class BinaryFileInfo extends Component<Signature> {
       </div>
       <div class='file-name' data-test-file-name>{{this.baseName}}</div>
       <div class='info size' data-test-size>{{this.size}}</div>
-      <div class='info' data-test-last-modified>Last modified
+      <div class='info' data-test-last-modified data-test-percy-hide>Last
+        modified
         {{this.lastModified}}</div>
     </div>
 

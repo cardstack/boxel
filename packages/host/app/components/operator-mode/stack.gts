@@ -19,9 +19,6 @@ interface Signature {
     stackIndex: number;
     publicAPI: Actions;
     close: (stackItem: StackItem) => void;
-    edit: (stackItem: StackItem) => void;
-    save: (stackItem: StackItem, dismiss: boolean) => void;
-    delete: (card: CardDef) => void;
     onSelectedCards: (selectedCards: CardDef[], stackItem: StackItem) => void;
     setupStackItem: (
       stackItem: StackItem,
@@ -53,9 +50,6 @@ export default class OperatorModeStack extends Component<Signature> {
             @publicAPI={{@publicAPI}}
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
             @close={{@close}}
-            @edit={{@edit}}
-            @save={{@save}}
-            @delete={{@delete}}
             @onSelectedCards={{@onSelectedCards}}
             @setupStackItem={{@setupStackItem}}
           />

@@ -10,6 +10,7 @@ import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import get from 'lodash/get';
+import { isEqual } from 'lodash';
 
 import { dropTask, restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -22,15 +23,13 @@ import {
   Deferred,
   baseCardRef,
   chooseCard,
+  codeRefWithAbsoluteURL,
+  moduleFrom,
+  RealmPaths,
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import {
-  moduleFrom,
-  codeRefWithAbsoluteURL,
-} from '@cardstack/runtime-common/code-ref';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -43,6 +42,7 @@ import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import OperatorModeStack from './stack';
 import SubmodeLayout from './submode-layout';
+import type { Submode } from '../submode-switcher';
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
@@ -191,25 +191,22 @@ export default class InteractSubmode extends Component<Signature> {
         await newItem.ready();
         here.addToStack(newItem);
       },
-      createCardDirectly: async (
-        doc: LooseSingleCardDocument,
-        relativeTo: URL | undefined,
-      ): Promise<void> => {
-        let newCard = await here.cardService.createFromSerialized(
-          doc.data,
-          doc,
-          relativeTo ?? here.cardService.defaultURL,
+      editCard(card: CardDef): void {
+        let item = here.findCardInStack(card, stackIndex);
+        here.operatorModeStateService.replaceItemInStack(
+          item,
+          item.clone({
+            request: new Deferred(),
+            format: 'edit',
+          }),
         );
-        await here.cardService.saveModel(here, newCard);
-        let newItem = new StackItem({
-          owner: here,
-          card: newCard,
-          format: 'isolated',
-          stackIndex,
-        });
-        await newItem.ready();
-        here.addToStack(newItem);
-        return;
+      },
+      saveCard(card: CardDef, dismissItem: boolean): void {
+        let item = here.findCardInStack(card, stackIndex);
+        here.save.perform(item, dismissItem);
+      },
+      deleteCard: (card: CardDef, opts?: { afterDelete: () => void }): void => {
+        here.delete.perform(card, opts);
       },
       doWithStableScroll: async (
         card: CardDef,
@@ -229,9 +226,9 @@ export default class InteractSubmode extends Component<Signature> {
         }
         await changeSizeCallback();
       },
-      openCodeSubmode: (url: URL): void => {
+      changeSubmode: (url: URL, submode: Submode = 'code'): void => {
         here.operatorModeStateService.updateCodePath(url);
-        here.operatorModeStateService.updateSubmode('code');
+        here.operatorModeStateService.updateSubmode(submode);
       },
     };
   }
@@ -249,6 +246,16 @@ export default class InteractSubmode extends Component<Signature> {
     return false;
   }
 
+  private findCardInStack(card: CardDef, stackIndex: number): StackItem {
+    let item = this.stacks[stackIndex].find((item: StackItem) =>
+      card.id ? item.card.id === card.id : isEqual(item.card, card),
+    );
+    if (!item) {
+      throw new Error(`Could not find card ${card.id} in stack ${stackIndex}`);
+    }
+    return item;
+  }
+
   private addCard = restartableTask(async () => {
     let type = baseCardRef;
     let chosenCard: CardDef | undefined = await chooseCard({
@@ -256,14 +263,8 @@ export default class InteractSubmode extends Component<Signature> {
     });
 
     if (chosenCard) {
-      let newItem = new StackItem({
-        owner: this,
-        card: chosenCard,
-        format: 'isolated',
-        stackIndex: 0, // This is called when there are no cards in the stack left, so we can assume the stackIndex is 0
-      });
-      await newItem.ready();
-      this.addToStack(newItem);
+      // This is called when there are no cards in the stack left, so we can assume the stackIndex is 0
+      this.publicAPI(this, 0).viewCard(chosenCard, 'isolated');
     }
   });
 
@@ -314,58 +315,47 @@ export default class InteractSubmode extends Component<Signature> {
     }
   });
 
-  @action
-  edit(item: StackItem) {
-    this.operatorModeStateService.replaceItemInStack(
-      item,
-      item.clone({
-        request: new Deferred(),
-        format: 'edit',
-      }),
-    );
-  }
-
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(async (card: CardDef, afterDelete?: () => void) => {
-    if (!card.id) {
-      // the card isn't actually saved yet, so do nothing
-      return;
-    }
+  private delete = dropTask(
+    async (card: CardDef, opts?: { afterDelete: () => void }) => {
+      if (!card.id) {
+        // the card isn't actually saved yet, so do nothing
+        return;
+      }
 
-    if (!this.deleteModal) {
-      throw new Error(`bug: DeleteModal not instantiated`);
-    }
-    let deferred: Deferred<void>;
-    let isDeleteConfirmed = await this.deleteModal.confirmDelete(
-      card,
-      (d) => (deferred = d),
-    );
-    if (!isDeleteConfirmed) {
-      return;
-    }
+      if (!this.deleteModal) {
+        throw new Error(`bug: DeleteModal not instantiated`);
+      }
+      let deferred: Deferred<void>;
+      let isDeleteConfirmed = await this.deleteModal.confirmDelete(
+        card,
+        (d) => (deferred = d),
+      );
+      if (!isDeleteConfirmed) {
+        return;
+      }
 
-    for (let stack of this.stacks) {
-      // remove all selections for the deleted card
-      for (let item of stack) {
-        let selections = cardSelections.get(item);
-        if (!selections) {
-          continue;
-        }
-        let removedCard = [...selections].find((c) => c.id === card.id);
-        if (removedCard) {
-          selections.delete(removedCard);
+      for (let stack of this.stacks) {
+        // remove all selections for the deleted card
+        for (let item of stack) {
+          let selections = cardSelections.get(item);
+          if (!selections) {
+            continue;
+          }
+          let removedCard = [...selections].find((c) => c.id === card.id);
+          if (removedCard) {
+            selections.delete(removedCard);
+          }
         }
       }
-    }
-    await this.withTestWaiters(async () => {
-      await this.operatorModeStateService.deleteCard(card);
-      deferred!.fulfill();
-    });
+      await this.withTestWaiters(async () => {
+        await this.operatorModeStateService.deleteCard(card);
+        deferred!.fulfill();
+      });
 
-    if (afterDelete) {
-      afterDelete();
-    }
-  });
+      opts?.afterDelete();
+    },
+  );
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
     try {
@@ -488,29 +478,14 @@ export default class InteractSubmode extends Component<Signature> {
             stackIndex + 1,
           );
         }
-
-        let stackItem = new StackItem({
-          owner: this,
-          card,
-          format: 'isolated',
-          stackIndex: 0,
-        });
-        await stackItem.ready();
-        this.operatorModeStateService.addItemToStack(stackItem);
+        this.publicAPI(this, 0).viewCard(card, 'isolated');
 
         // In case the right button was clicked, the card will be added to stack with index 1.
       } else if (
         searchSheetTrigger ===
         SearchSheetTriggers.DropCardToRightNeighborStackButton
       ) {
-        let stackItem = new StackItem({
-          owner: this,
-          card,
-          format: 'isolated',
-          stackIndex: this.stacks.length,
-        });
-        await stackItem.ready();
-        this.operatorModeStateService.addItemToStack(stackItem);
+        this.publicAPI(this, this.stacks.length).viewCard(card, 'isolated');
       } else {
         // In case, that the search was accessed directly without clicking right and left buttons,
         // the rightmost stack will be REPLACED by the selection
@@ -522,14 +497,7 @@ export default class InteractSubmode extends Component<Signature> {
           numberOfStacks === 0 ||
           this.operatorModeStateService.stackIsEmpty(stackIndex)
         ) {
-          let stackItem = new StackItem({
-            owner: this,
-            format: 'isolated',
-            stackIndex: 0,
-            card,
-          });
-          await stackItem.ready();
-          this.operatorModeStateService.addItemToStack(stackItem);
+          this.publicAPI(this, 0).viewCard(card, 'isolated');
         } else {
           stack = this.operatorModeStateService.rightMostStack();
           if (stack) {
@@ -622,10 +590,7 @@ export default class InteractSubmode extends Component<Signature> {
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @close={{perform this.close}}
-                @edit={{this.edit}}
                 @onSelectedCards={{this.onSelectedCards}}
-                @save={{perform this.save}}
-                @delete={{perform this.delete}}
                 @setupStackItem={{this.setupStackItem}}
               />
             {{/let}}

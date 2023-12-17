@@ -22,6 +22,7 @@ import { type ModuleDeclaration } from '@cardstack/host/resources/module-content
 
 import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -47,16 +48,23 @@ interface Signature {
 const log = logger('component:code-editor');
 
 export default class CodeEditor extends Component<Signature> {
-  @service declare monacoService: MonacoService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare cardService: CardService;
+  @service private declare monacoService: MonacoService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare cardService: CardService;
+  @service private declare environmentService: EnvironmentService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
   private hasUnsavedSourceChanges = false;
+  private codePath;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    // note that we actually set our own `codePath` property because within
+    // registerDestructor we actually can no longer see the codePath that pertains
+    // to the component that is being destroyed--rather we see the new codePath
+    // that we are transitioning to.
+    this.codePath = this.operatorModeStateService.state.codePath;
 
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
@@ -99,10 +107,6 @@ export default class CodeEditor extends Component<Signature> {
       return this.maybeMonacoSDK;
     }
     throw new Error(`cannot use monaco SDK before it has loaded`);
-  }
-
-  private get codePath() {
-    return this.operatorModeStateService.state.codePath;
   }
 
   private get readyFile() {
@@ -211,13 +215,11 @@ export default class CodeEditor extends Component<Signature> {
 
   private contentChangedTask = restartableTask(async (content: string) => {
     this.hasUnsavedSourceChanges = true;
-    // note that there is already a debounce in the monaco modifier so there
-    // is no need to delay further for auto save initiation
-
     if (!isReady(this.args.file) || content === this.args.file?.content) {
       return;
     }
 
+    await timeout(this.environmentService.autoSaveDelayMs);
     this.writeSourceCodeToFile(this.args.file, content);
     this.waitForSourceCodeWrite.perform();
     this.hasUnsavedSourceChanges = false;
@@ -285,6 +287,7 @@ export default class CodeEditor extends Component<Signature> {
         <div
           class='monaco-container'
           data-test-editor
+          data-test-percy-hide
           {{monacoModifier
             content=this.readyFile.content
             contentChanged=(perform this.contentChangedTask)

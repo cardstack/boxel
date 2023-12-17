@@ -23,7 +23,7 @@ interface Signature {
 export default class DeleteModal extends Component<Signature> {
   <template>
     <Modal
-      data-test-delete-modal={{this.currentConfirmation.card.id}}
+      data-test-delete-modal={{this.id}}
       @layer='urgent'
       @size='x-small'
       @isOpen={{this.showModal}}
@@ -31,8 +31,15 @@ export default class DeleteModal extends Component<Signature> {
       style={{cssVar boxel-modal-offset-top='40vh'}}
     >
       <section class='delete'>
-        <p class='content'>Delete the card<br />
-          <strong>{{this.currentConfirmation.card.title}}</strong>?
+        <p class='content' data-test-delete-msg>
+          {{#if this.name}}
+            Delete the
+            {{this.currentConfirmation.type}}<br />
+            <strong>{{this.name}}</strong>?
+          {{else}}
+            Delete this
+            {{this.currentConfirmation.type}}?
+          {{/if}}
         </p>
         <p class='content disclaimer'>This action is not reversible.</p>
         <footer class='buttons'>
@@ -105,20 +112,45 @@ export default class DeleteModal extends Component<Signature> {
 
   @tracked private currentConfirmation:
     | {
+        type: 'card';
         card: CardDef;
+        choiceDeferred: Deferred<boolean>;
+        deleteDeferred: Deferred<void>;
+      }
+    | {
+        type: 'file';
+        url: URL;
         choiceDeferred: Deferred<boolean>;
         deleteDeferred: Deferred<void>;
       }
     | undefined;
 
+  private get name() {
+    if (this.currentConfirmation?.type === 'card') {
+      return this.currentConfirmation.card.title;
+    } else if (this.currentConfirmation?.type === 'file') {
+      return this.currentConfirmation.url.href.split('/').pop()!;
+    }
+    return;
+  }
+
+  private get id() {
+    if (this.currentConfirmation?.type === 'card') {
+      return this.currentConfirmation.card.id;
+    } else if (this.currentConfirmation?.type === 'file') {
+      return this.currentConfirmation.url.href;
+    }
+    return;
+  }
+
   // public API for callers to use this component
   async confirmDelete(
-    card: CardDef,
+    item: CardDef | URL,
     setDeferred: (deleteDeferred: Deferred<void>) => void,
   ) {
     let deleteDeferred = new Deferred<void>();
     setDeferred(deleteDeferred);
-    return await this.presentChoice.perform(card, deleteDeferred);
+    return await this.presentChoice.perform(item, deleteDeferred);
   }
 
   private get showModal() {
@@ -126,12 +158,22 @@ export default class DeleteModal extends Component<Signature> {
   }
 
   private presentChoice = enqueueTask(
-    async (card: CardDef, deleteDeferred: Deferred<void>) => {
-      this.currentConfirmation = {
-        card,
-        choiceDeferred: new Deferred(),
-        deleteDeferred,
-      };
+    async (item: CardDef | URL, deleteDeferred: Deferred<void>) => {
+      if (item instanceof URL) {
+        this.currentConfirmation = {
+          type: 'file',
+          url: item,
+          choiceDeferred: new Deferred(),
+          deleteDeferred,
+        };
+      } else {
+        this.currentConfirmation = {
+          type: 'card',
+          card: item,
+          choiceDeferred: new Deferred(),
+          deleteDeferred,
+        };
+      }
       let choice = await this.currentConfirmation.choiceDeferred.promise;
       return choice ?? false;
     },

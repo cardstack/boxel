@@ -15,6 +15,7 @@
     "@types/marked": "^4.3.0",
     "ember-cli-htmlbars": "^6.3.0",
     "ember-concurrency": "^3.1.0",
+    "ember-css-url": "^1.0.0",
     "ember-modifier": "^3.2.1",
     "ethers": "^6.6.2",
     "tracked-built-ins": "^2.0.1"

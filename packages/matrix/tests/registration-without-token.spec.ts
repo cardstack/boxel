@@ -38,15 +38,18 @@ test.describe('User Registration w/o Token', () => {
   }) => {
     await clearLocalStorage(page);
     await gotoRegistration(page);
-    await validateEmail(page, 'user1@example.com');
+
     await expect(
       page.locator('[data-test-token-field]'),
       'token field is not displayed',
     ).toHaveCount(0);
+    await page.locator('[data-test-name-field]').fill('user1');
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
     await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword');
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword1!');
     await page.locator('[data-test-register-btn]').click();
+    await validateEmail(page, 'user1@example.com');
     
     await openChat(page);
     await assertLoggedIn(page);

@@ -37,7 +37,7 @@ module.exports = function (defaults) {
         module: {
           rules: [
             {
-              test: /\.ttf$/,
+              test: /\.woff2$/,
               type: 'asset',
             },
           ],

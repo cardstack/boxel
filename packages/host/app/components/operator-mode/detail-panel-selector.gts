@@ -307,9 +307,3 @@ export default class Selector extends Component<Signature> {
     </style>
   </template>
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    Selector: typeof Selector;
-  }
-}

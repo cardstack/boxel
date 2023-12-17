@@ -57,6 +57,22 @@ test.describe('Login', () => {
     await assertLoggedOut(page);
   });
 
+  test('it can logout using the profile menu', async ({ page }) => {
+    await login(page, 'user1', 'pass');
+
+    await expect(
+      page.locator(
+        '[data-test-profile-icon-button] > [data-test-profile-icon]',
+      ),
+    ).toHaveText('U');
+    await page.locator('[data-test-profile-icon-button]').click();
+    await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
+      '@user1:localhost',
+    );
+    await page.locator('[data-test-signout-button]').click();
+    await expect(page.locator('[data-test-login-form]')).toBeVisible();
+  });
+
   test('it shows an error when invalid credentials are provided', async ({
     page,
   }) => {
@@ -95,5 +111,20 @@ test.describe('Login', () => {
 
     await openChat(page);
     await assertLoggedIn(page);
+  });
+
+  test('it returns to login when auth is invalid', async ({ page }) => {
+    await page.addInitScript({
+      content: `
+        window.localStorage.setItem(
+          'auth',
+          '{"user_id":"@b:stack.cards","access_token":"INVALID_TOKEN","home_server":"stack.cards","device_id":"HELLO","well_known":{"m.homeserver":{"base_url":"http://example.com/"}}}'
+        )`,
+    });
+
+    await openRoot(page);
+    await toggleOperatorMode(page);
+
+    await assertLoggedOut(page);
   });
 });

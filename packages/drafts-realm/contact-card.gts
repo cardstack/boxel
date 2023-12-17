@@ -7,15 +7,40 @@ import {
   field,
   contains,
   containsMany,
+  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 
+class Alias extends CardDef {
+  static displayName = 'Alias';
+  @field name = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: Alias) {
+      return this.name;
+    },
+  });
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <@fields.name />
+    </template>
+  };
+}
+
 export class PhoneField extends FieldDef {
+  static displayName = 'Phone';
   @field country = contains(NumberField);
   @field area = contains(NumberField);
   @field number = contains(NumberField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      (+<@fields.country />) <@fields.area />-<@fields.number />
+    </template>
+  };
 }
 
 export class EmergencyContactField extends FieldDef {
+  static displayName = 'Emergency Contact';
   @field name = contains(StringField);
   @field phoneNumber = contains(PhoneField);
   @field email = contains(StringField);
@@ -29,9 +54,14 @@ export class EmergencyContactField extends FieldDef {
   };
 }
 
+class Name extends StringField {
+  static displayName = 'Name';
+}
+
 class Guest extends FieldDef {
+  static displayName = 'Guest';
   @field name = contains(StringField);
-  @field additionalNames = containsMany(StringField);
+  @field additionalNames = containsMany(Name);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -45,11 +75,9 @@ export class ContactCard extends CardDef {
   @field name = contains(StringField);
   @field phone = contains(PhoneField);
   @field emergencyContact = contains(EmergencyContactField);
-  @field namesInvited = containsMany(StringField);
+  @field guestNames = containsMany(Name);
   @field guest = contains(Guest);
-  // @field aliases;
-  // @field vendor;
-  // @field vendors;
+  @field aliases = linksToMany(Alias);
   @field title = contains(StringField, {
     computeVia: function (this: ContactCard) {
       return this.name;
@@ -60,9 +88,6 @@ export class ContactCard extends CardDef {
     <template>
       <@fields.name />
       <@fields.phone />
-      <@fields.emergencyContact />
-      <@fields.namesInvited />
-      <@fields.guest />
     </template>
   };
 }

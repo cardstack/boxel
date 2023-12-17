@@ -38,7 +38,10 @@ import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
 
-export type CardSaveSubscriber = (content: SingleCardDocument | string) => void;
+export type CardSaveSubscriber = (
+  url: URL,
+  content: SingleCardDocument | string,
+) => void;
 
 const { ownRealmURL, otherRealmURLs } = ENV;
 
@@ -191,7 +194,7 @@ export default class CardService extends Service {
         result = trackCard(owner, result, realmURL);
       }
       if (this.subscriber) {
-        this.subscriber(json);
+        this.subscriber(new URL(json.data.id), json);
       }
       return result;
     } catch (err) {
@@ -222,7 +225,26 @@ export default class CardService extends Service {
       console.error(errorMessage);
       throw new Error(errorMessage);
     }
-    this.subscriber?.(content);
+    this.subscriber?.(url, content);
+    return response;
+  }
+
+  async deleteSource(url: URL, loader?: Loader) {
+    loader = loader ?? this.loaderService.loader;
+    let response = await loader.fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Could not delete file ${url}, status ${
+        response.status
+      }: ${response.statusText} - ${await response.text()}`;
+      console.error(errorMessage);
+      throw new Error(errorMessage);
+    }
     return response;
   }
 
@@ -279,7 +301,7 @@ export default class CardService extends Service {
       loader,
     )) as CardDef;
     if (this.subscriber) {
-      this.subscriber(json);
+      this.subscriber(new URL(json.data.id), json);
     }
     return result;
   }

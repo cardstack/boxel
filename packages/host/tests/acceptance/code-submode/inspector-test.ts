@@ -8,7 +8,6 @@ import {
   currentURL,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -30,6 +29,7 @@ import {
   TestRealmAdapter,
   elementIsVisible,
   getMonacoContent,
+  percySnapshot,
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -438,6 +438,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             },
           },
         },
+        'readme.md': 'hello world',
         'not-json.json': 'I am not JSON.',
         'Person/1.json': {
           data: {
@@ -853,6 +854,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-action-button="Delete"]`);
     await click('[data-test-action-button="Delete"]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
+    assert
+      .dom('[data-test-delete-msg]')
+      .includesText('Delete the card Van Gogh?');
     await percySnapshot(assert);
     await this.expectEvents({
       assert,
@@ -976,6 +980,155 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
       'the deleted card has been removed from recent files',
     );
+  });
+
+  test<TestContextWithSSE>('can delete a card definition and fallback to recent file', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [
+            `${testRealmURL}pet.gts`,
+            `${testRealmURL}Pet/mango`,
+            `${testRealmURL}Pet/vangogh`,
+          ],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    })!;
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([
+        [testRealmURL, 'pet.gts'],
+        [testRealmURL, 'Pet/mango.json'],
+      ]),
+    );
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    assert.strictEqual(
+      window.localStorage.getItem('recent-files'),
+      JSON.stringify([
+        [testRealmURL, 'pet.gts'],
+        [testRealmURL, 'Pet/mango.json'],
+      ]),
+    );
+
+    await waitFor(`[data-test-delete-module-button]`);
+    await click('[data-test-delete-module-button]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}pet.gts"]`);
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => {
+        await click('[data-test-confirm-delete-button]');
+      },
+    });
+    await waitForCodeEditor();
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango.json`);
+
+    assert.deepEqual(
+      window.localStorage.getItem('recent-files'),
+      JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
+      'the deleted card has been removed from recent files',
+    );
+
+    let notFound = await adapter.openFile('pet.gts');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
+  });
+
+  test<TestContextWithSSE>('can delete a card definition with no recent files to fall back on', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [
+            `${testRealmURL}pet.gts`,
+            `${testRealmURL}Pet/mango`,
+            `${testRealmURL}Pet/vangogh`,
+          ],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    })!;
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([[testRealmURL, 'pet.gts']]),
+    );
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    assert.strictEqual(
+      window.localStorage.getItem('recent-files'),
+      JSON.stringify([[testRealmURL, 'pet.gts']]),
+    );
+
+    await waitFor(`[data-test-delete-module-button]`);
+    await click('[data-test-delete-module-button]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}pet.gts"]`);
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => {
+        await click('[data-test-confirm-delete-button]');
+      },
+    });
+    await waitFor('[data-test-empty-code-mode]');
+
+    assert.deepEqual(
+      window.localStorage.getItem('recent-files'),
+      '[]',
+      'the deleted card has been removed from recent files',
+    );
+
+    let notFound = await adapter.openFile('pet.gts');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
+  });
+
+  test('can delete a misc file', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}readme.md`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+
+    await waitFor(`[data-test-action-button="Delete"]`);
+    await click('[data-test-action-button="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}readme.md"]`);
+    assert
+      .dom('[data-test-delete-msg]')
+      .includesText('Delete the file readme.md?');
+    await click('[data-test-confirm-delete-button]');
+    await waitFor('[data-test-empty-code-mode]');
+
+    let notFound = await adapter.openFile('readme.md');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
   test('After opening inherited definition inside inheritance panel, "in-this-file" highlights selected definition', async function (assert) {
@@ -1530,7 +1683,7 @@ export class TestCard extends ExportedCard {
     assert.dom('[data-test-create-definition]').isEnabled();
 
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -1606,7 +1759,7 @@ export class TestCard extends ExportedCard {
     await fillIn('[data-test-file-name-field]', '/test-field');
 
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -1741,14 +1894,13 @@ export class ExportedCard extends ExportedCardParent {
     await fillIn('[data-test-file-name-field]', '/test-card');
 
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
       assert.strictEqual(content, expectedSrc, 'the source is correct');
       deferred.fulfill();
     });
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -1866,11 +2018,11 @@ export class ExportedCard extends ExportedCardParent {
 
     let deferred = new Deferred<void>();
     let id: string | undefined;
-    this.onSave((json) => {
+    this.onSave((url, json) => {
       if (typeof json === 'string') {
         throw new Error(`expected JSON save data`);
       }
-      id = json.data.id;
+      id = url.href;
       assert.strictEqual(
         json.data.attributes?.someString,
         null,

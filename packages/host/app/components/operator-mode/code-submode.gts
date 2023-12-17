@@ -28,13 +28,13 @@ import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
+  RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { isEquivalentBody } from '@cardstack/runtime-common//schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import config from '@cardstack/host/config/environment';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
@@ -46,6 +46,7 @@ import {
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -72,7 +73,6 @@ interface Signature {
     saveCardOnClose: (card: CardDef) => void;
   };
 }
-const { autoSaveDelayMs } = config;
 
 type PanelWidths = {
   rightPanel: number;
@@ -115,6 +115,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare recentFilesService: RecentFilesService;
   @service declare loaderService: LoaderService;
+  @service declare environmentService: EnvironmentService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private cardError: Error | undefined;
@@ -418,7 +419,7 @@ export default class CodeSubmode extends Component<Signature> {
   private initiateAutoSaveTask = restartableTask(async () => {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
-      await timeout(autoSaveDelayMs);
+      await timeout(this.environmentService.autoSaveDelayMs);
       await this.saveCard.perform(this.card);
       this.hasUnsavedCardChanges = false;
     }
@@ -475,34 +476,54 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(async (card: CardDef) => {
-    if (!card.id) {
-      // the card isn't actually saved yet, so do nothing
+  private delete = dropTask(async (item: CardDef | URL | null | undefined) => {
+    if (!item) {
       return;
     }
-    if (!this.card) {
-      throw new Error(`TODO: non-card instance deletes are not yet supported`);
-    }
-
     if (!this.deleteModal) {
       throw new Error(`bug: DeleteModal not instantiated`);
     }
+    if (!(item instanceof URL)) {
+      if (!item.id) {
+        // the card isn't actually saved yet, so do nothing
+        return;
+      }
+    }
+
     let deferred: Deferred<void>;
     let isDeleteConfirmed = await this.deleteModal.confirmDelete(
-      card,
+      item,
       (d) => (deferred = d),
     );
     if (!isDeleteConfirmed) {
       return;
     }
 
-    await this.withTestWaiters(async () => {
-      await this.operatorModeStateService.deleteCard(card);
-      deferred!.fulfill();
-    });
+    if (!(item instanceof URL)) {
+      let card = item;
+      await this.withTestWaiters(async () => {
+        await this.operatorModeStateService.deleteCard(card);
+        deferred!.fulfill();
+      });
+    } else {
+      let file = item;
+      await this.withTestWaiters(async () => {
+        // TODO: This is a side effect of the recent-file service making assumptions about
+        // what realm we are in. we should refactor that so that callers have to tell
+        // it the realm of the file in question
+        let realmURL = this.operatorModeStateService.realmURL;
+
+        if (realmURL) {
+          let realmPaths = new RealmPaths(realmURL);
+          let filePath = realmPaths.local(file);
+          this.recentFilesService.removeRecentFile(filePath);
+        }
+        await this.cardService.deleteSource(file);
+        deferred!.fulfill();
+      });
+    }
 
     let recentFile = this.recentFilesService.recentFiles[0];
-
     if (recentFile) {
       let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
 
