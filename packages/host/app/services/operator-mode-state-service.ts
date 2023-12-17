@@ -244,18 +244,18 @@ export default class OperatorModeStateService extends Service {
   updateCodePathWithCodeSelection(
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
-    onLocalSelection: () => void,
+    onLocalSelection?: (name: string) => void,
   ) {
     //moving from one definition to another
     if (codeRef) {
       //(possibly) in a different module
       this.state.codeSelection = codeRef.name;
       this.updateCodePath(new URL(codeRef.module));
-    } else if (localName) {
+    } else if (localName && onLocalSelection) {
       //in the same module
       this.state.codeSelection = localName;
-      onLocalSelection();
       this.schedulePersist();
+      onLocalSelection(localName)
     }
   }
 

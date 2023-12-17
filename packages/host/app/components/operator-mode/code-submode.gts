@@ -130,6 +130,7 @@ export default class CodeSubmode extends Component<Signature> {
   private updateCursorByDeclaration:
     | ((declaration: ModuleDeclaration) => void)
     | undefined;
+  private updateCursorByName: ((name: string) => void) | undefined;
   #currentCard: CardDef | undefined;
 
   private deleteModal: DeleteModal | undefined;
@@ -367,13 +368,16 @@ export default class CodeSubmode extends Component<Signature> {
     return this.moduleContentsResource?.declarations;
   }
 
+  private findDeclarationByName(name: string) {
+    return this.moduleContentsResource?.declarations.find((dec) => {
+      return dec.exportName === name || dec.localName === name;
+    });
+  }
+
   private get _selectedDeclaration() {
     let codeSelection = this.operatorModeStateService.state.codeSelection;
-    return this.moduleContentsResource?.declarations.find((dec) => {
-      return codeSelection
-        ? dec.exportName === codeSelection || dec.localName === codeSelection
-        : false;
-    });
+    if (codeSelection === undefined) return;
+    return this.findDeclarationByName(codeSelection);
   }
 
   private get selectedDeclaration() {
@@ -408,7 +412,7 @@ export default class CodeSubmode extends Component<Signature> {
     this.operatorModeStateService.updateCodePathWithCodeSelection(
       codeRef,
       localName,
-      () => this.updateCursorByDeclaration?.(this.selectedDeclaration!),
+      this.updateCursorByName,
     );
   }
 
@@ -584,8 +588,10 @@ export default class CodeSubmode extends Component<Signature> {
 
   private setupCodeEditor = (
     updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
+    updateCursorByName: (name: string) => void,
   ) => {
     this.updateCursorByDeclaration = updateCursorByDeclaration;
+    this.updateCursorByName = updateCursorByName;
   };
 
   @action private openSearchResultInEditor(card: CardDef) {

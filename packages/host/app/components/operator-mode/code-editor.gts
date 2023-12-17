@@ -41,6 +41,7 @@ interface Signature {
     onFileSave: (status: 'started' | 'finished') => void;
     onSetup: (
       updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
+      updateCursorByName: (name: string) => void,
     ) => void;
   };
 }
@@ -81,7 +82,10 @@ export default class CodeEditor extends Component<Signature> {
 
     this.loadMonaco.perform();
 
-    this.args.onSetup(this.updateMonacoCursorPositionByDeclaration);
+    this.args.onSetup(
+      this.updateMonacoCursorPositionByDeclaration,
+      this.updateCursorByName,
+    );
   }
 
   private get isReady() {
@@ -132,6 +136,19 @@ export default class CodeEditor extends Component<Signature> {
       return new Position(start.line, start.column);
     }
     return undefined;
+  }
+
+  private findDeclarationByName(name: string) {
+    return this.declarations.find((dec) => {
+      return dec.exportName === name || dec.localName === name;
+    });
+  }
+
+  @action
+  private updateCursorByName(name: string) {
+    let declaration = this.findDeclarationByName(name);
+    if (declaration === undefined) return;
+    return this.updateMonacoCursorPositionByDeclaration(declaration);
   }
 
   @action
