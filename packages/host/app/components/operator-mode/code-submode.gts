@@ -127,9 +127,6 @@ export default class CodeSubmode extends Component<Signature> {
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
-  private updateCursorByDeclaration:
-    | ((declaration: ModuleDeclaration) => void)
-    | undefined;
   private updateCursorByName: ((name: string) => void) | undefined;
   #currentCard: CardDef | undefined;
 
@@ -586,11 +583,7 @@ export default class CodeSubmode extends Component<Signature> {
     this.createFileModal = createFileModal;
   };
 
-  private setupCodeEditor = (
-    updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
-    updateCursorByName: (name: string) => void,
-  ) => {
-    this.updateCursorByDeclaration = updateCursorByDeclaration;
+  private setupCodeEditor = (updateCursorByName: (name: string) => void) => {
     this.updateCursorByName = updateCursorByName;
   };
 

@@ -39,10 +39,7 @@ interface Signature {
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
-    onSetup: (
-      updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
-      updateCursorByName: (name: string) => void,
-    ) => void;
+    onSetup: (updateCursorByName: (name: string) => void) => void;
   };
 }
 
@@ -82,10 +79,7 @@ export default class CodeEditor extends Component<Signature> {
 
     this.loadMonaco.perform();
 
-    this.args.onSetup(
-      this.updateMonacoCursorPositionByDeclaration,
-      this.updateMonacoCursorByName,
-    );
+    this.args.onSetup(this.updateMonacoCursorByName);
   }
 
   private get isReady() {
