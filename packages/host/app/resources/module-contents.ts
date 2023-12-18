@@ -1,7 +1,7 @@
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 
 import { Resource } from 'ember-resources';
 
@@ -116,7 +116,7 @@ export class ModuleContentsResource extends Resource<Args> {
     }
   }
 
-  private load = restartableTask(async (executableFile: Ready) => {
+  private load = task({ restartable: true }, async (executableFile: Ready) => {
     let moduleResource = importResource(this, () => executableFile.url);
     await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
     if (moduleResource.module === undefined) {
@@ -137,9 +137,7 @@ export class ModuleContentsResource extends Resource<Args> {
   });
 
   private updateState(state: State): void {
-    if (state.url === this.staleState?.url || this.staleState === undefined) {
-      this.onModuleEdit?.(state);
-    }
+    this.onModuleEdit?.(state);
     this.staleState = this.state;
     this.state = state;
   }
