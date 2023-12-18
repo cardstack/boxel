@@ -114,9 +114,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare recentFilesService: RecentFilesService;
   @service declare loaderService: LoaderService;
   @service declare environmentService: EnvironmentService;
-
   @tracked private loadFileError: string | null = null;
-
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
   @tracked private previewFormat: Format = 'isolated';
@@ -253,7 +251,6 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
-    debugger;
     if (this.isCard) {
       if (this.cardResource.cardError) {
         return `Card preview failed. Make sure both the card instance data and card definition files have no syntax errors and that their data schema matches. `;
