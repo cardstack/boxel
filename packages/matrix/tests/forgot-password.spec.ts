@@ -103,7 +103,7 @@ test.describe('Forgot password', () => {
     await assertLoggedIn(page);
   });
 
-  test('It shows an error when email does not belonged to any account', async ({ page }) => {
+  test('It shows an error when email does not belong to any account', async ({ page }) => {
     await gotoForgotPassword(page);
 
     await expect(page.locator('[data-test-reset-your-password-btn]')).toBeDisabled();
