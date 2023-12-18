@@ -42,8 +42,6 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type MessageService from '@cardstack/host/services/message-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -108,12 +106,10 @@ const defaultPanelHeights: PanelHeights = {
 const waiter = buildWaiter('code-submode:waiter');
 
 export default class CodeSubmode extends Component<Signature> {
-  @service declare cardService: CardService;
-  @service declare messageService: MessageService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare recentFilesService: RecentFilesService;
-  @service declare loaderService: LoaderService;
-  @service declare environmentService: EnvironmentService;
+  @service private declare cardService: CardService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare recentFilesService: RecentFilesService;
+  @service private declare environmentService: EnvironmentService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private cardError: Error | undefined;
@@ -518,6 +514,7 @@ export default class CodeSubmode extends Component<Signature> {
         displayName: string;
         ref: ResolvedCodeRef;
       },
+      sourceInstance?: CardDef,
     ) => {
       if (!this.createFileModal) {
         throw new Error(`bug: CreateFileModal not instantiated`);
@@ -527,6 +524,7 @@ export default class CodeSubmode extends Component<Signature> {
         fileType,
         this.realmURL,
         definitionClass,
+        sourceInstance,
       );
       this.isCreateModalOpen = false;
       if (url) {
