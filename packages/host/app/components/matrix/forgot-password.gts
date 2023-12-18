@@ -56,13 +56,14 @@ export default class ForgotPassword extends Component<Signature> {
           </FieldContainer>
           <Button
             class='button'
-            data-test-forgot-password-btn
+            data-test-reset-your-password-btn
             @kind='primary'
             @disabled={{this.isForgotPasswordBtnDisabled}}
             {{on 'click' this.sendEmailValidation}}
           >Reset Your Password</Button>
         {{else if (eq this.state.type 'waitForEmailValidation')}}
-          <span class='title'>Please check your email to reset your password</span>
+          <span class='title' data-test-email-validation>Please check your email
+            to reset your password</span>
           <ul class='email-validation-instruction'>
             {{! @glint-ignore Property 'email' should be exist on 'waitForEmailValidation' type }}
             <li>We've sent an email to <b>{{this.state.email}}</b></li>
@@ -73,7 +74,7 @@ export default class ForgotPassword extends Component<Signature> {
           <div class='button-wrapper'>
             <Button
               class='button'
-              data-test-resend-validation-btn
+              data-test-have-validated-btn
               @kind='primary'
               @disabled={{this.sendEmailValidationTask.isRunning}}
               {{on 'click' this.continueToResetPassword}}
@@ -122,23 +123,27 @@ export default class ForgotPassword extends Component<Signature> {
           </FieldContainer>
           <Button
             class='button'
-            data-test-forgot-password-btn
+            data-test-reset-password-btn
             @kind='primary'
             @disabled={{this.isResetPasswordBtnDisabled}}
             style='width: 100%'
             {{on 'click' (perform this.resetPassword)}}
           >Reset Password</Button>
           {{#if this.error}}
-            <span class='error'>{{this.error}}</span>
+            <span
+              class='error'
+              data-test-reset-password-error
+            >{{this.error}}</span>
           {{/if}}
         {{else if (eq this.state.type 'resetPasswordSuccess')}}
-          <span class='title'>Your password is now reset</span>
+          <span class='title' data-test-reset-password-success>Your password is
+            now reset</span>
           <p class='info'>Your password has been successfully reset. You can use
             the link below to sign into your Boxel account with your new
             password.</p>
           <Button
             class='button'
-            data-test-forgot-password-btn
+            data-test-back-to-login-btn
             @kind='primary'
             @disabled={{this.isForgotPasswordBtnDisabled}}
             style='width: 100%'
@@ -285,7 +290,9 @@ export default class ForgotPassword extends Component<Signature> {
   @service private declare matrixService: MatrixService;
 
   private get isForgotPasswordBtnDisabled() {
-    return !this.email || this.error || this.sendEmailValidationTask.isRunning;
+    return (
+      !this.email || this.emailError || this.sendEmailValidationTask.isRunning
+    );
   }
 
   private get isResetPasswordBtnDisabled() {
@@ -462,7 +469,7 @@ export default class ForgotPassword extends Component<Signature> {
       };
     } catch (e: any) {
       if (isMatrixError(e)) {
-        this.error = 'Please make sure you have validated your email';
+        this.error = 'Please check your email to validate reset password';
         setTimeout(() => (this.error = undefined), 2000);
       }
 

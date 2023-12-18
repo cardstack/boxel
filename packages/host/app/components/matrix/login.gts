@@ -70,6 +70,7 @@ export default class Login extends Component<Signature> {
         <Button
           @kind='text-only'
           class='forgot-password'
+          data-test-forgot-password
           {{on 'click' @onForgotPassword}}
         >Forgot password?</Button>
         <Button

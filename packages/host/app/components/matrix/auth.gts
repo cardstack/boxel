@@ -44,7 +44,7 @@ export default class Auth extends Component {
     </style>
   </template>
 
-  @tracked mode: Mode = 'forgot-password';
+  @tracked mode: Mode = 'login';
 
   @action
   setMode(mode: Mode) {
