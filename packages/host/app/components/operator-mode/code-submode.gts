@@ -42,6 +42,7 @@ import {
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
   type State,
+  findDeclarationByName,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -365,16 +366,10 @@ export default class CodeSubmode extends Component<Signature> {
     return this.moduleContentsResource?.declarations;
   }
 
-  private findDeclarationByName(name: string) {
-    return this.moduleContentsResource?.declarations.find((dec) => {
-      return dec.exportName === name || dec.localName === name;
-    });
-  }
-
   private get _selectedDeclaration() {
     let codeSelection = this.operatorModeStateService.state.codeSelection;
     if (codeSelection === undefined) return;
-    return this.findDeclarationByName(codeSelection);
+    return findDeclarationByName(codeSelection, this.declarations);
   }
 
   private get selectedDeclaration() {

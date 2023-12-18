@@ -311,3 +311,12 @@ function findLocalField(
     }
   }
 }
+
+export function findDeclarationByName(
+  name: string,
+  declarations: ModuleDeclaration[],
+) {
+  return declarations.find((dec) => {
+    return dec.exportName === name || dec.localName === name;
+  });
+}

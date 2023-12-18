@@ -18,7 +18,10 @@ import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
-import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
+import {
+  type ModuleDeclaration,
+  findDeclarationByName,
+} from '@cardstack/host/resources/module-contents';
 
 import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
@@ -132,15 +135,9 @@ export default class CodeEditor extends Component<Signature> {
     return undefined;
   }
 
-  private findDeclarationByName(name: string) {
-    return this.declarations.find((dec) => {
-      return dec.exportName === name || dec.localName === name;
-    });
-  }
-
   @action
   private updateMonacoCursorPositionByName(name: string) {
-    let declaration = this.findDeclarationByName(name);
+    let declaration = findDeclarationByName(name, this.declarations);
     if (declaration === undefined) return;
     return this.updateMonacoCursorPositionByDeclaration(declaration);
   }
