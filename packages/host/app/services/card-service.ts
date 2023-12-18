@@ -7,6 +7,7 @@ import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  baseRealm,
   SupportedMimeType,
   type LooseCardResource,
   isSingleCardDocument,
@@ -37,7 +38,10 @@ import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
 
-export type CardSaveSubscriber = (content: SingleCardDocument | string) => void;
+export type CardSaveSubscriber = (
+  url: URL,
+  content: SingleCardDocument | string,
+) => void;
 
 const { ownRealmURL, otherRealmURLs } = ENV;
 
@@ -57,6 +61,10 @@ export default class CardService extends Service {
     );
     return api;
   });
+
+  // This is temporary until we have a better way of discovering the realms that
+  // are available for a user // unresolved URLs
+  realmURLs = [...new Set([ownRealmURL, baseRealm.url, ...otherRealmURLs])];
 
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
@@ -91,7 +99,7 @@ export default class CardService extends Service {
     if (!response.ok) {
       let err = new Error(
         `status: ${response.status} -
-        ${response.statusText}. ${await response.text()}`,
+          ${response.statusText}. ${await response.text()}`,
       );
       (err as any).status = response.status;
       throw err;
@@ -186,7 +194,7 @@ export default class CardService extends Service {
         result = trackCard(owner, result, realmURL);
       }
       if (this.subscriber) {
-        this.subscriber(json);
+        this.subscriber(new URL(json.data.id), json);
       }
       return result;
     } catch (err) {
@@ -217,7 +225,7 @@ export default class CardService extends Service {
       console.error(errorMessage);
       throw new Error(errorMessage);
     }
-    this.subscriber?.(content);
+    this.subscriber?.(url, content);
     return response;
   }
 
@@ -274,7 +282,7 @@ export default class CardService extends Service {
       loader,
     )) as CardDef;
     if (this.subscriber) {
-      this.subscriber(json);
+      this.subscriber(new URL(json.data.id), json);
     }
     return result;
   }
@@ -355,8 +363,7 @@ export default class CardService extends Service {
   }
 
   getRealmURLFor(url: URL) {
-    let realmURLS = new Set([ownRealmURL, ...otherRealmURLs]);
-    for (let realmURL of realmURLS) {
+    for (let realmURL of this.realmURLs) {
       let path = new RealmPaths(realmURL);
       if (path.inRealm(url)) {
         return new URL(realmURL);

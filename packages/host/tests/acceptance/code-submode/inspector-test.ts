@@ -1,14 +1,22 @@
-import { visit, click, waitFor, currentURL } from '@ember/test-helpers';
+import {
+  fillIn,
+  find,
+  visit,
+  click,
+  settled,
+  waitFor,
+  currentURL,
+} from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -19,14 +27,19 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   TestRealmAdapter,
+  elementIsVisible,
   getMonacoContent,
+  percySnapshot,
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
   setupServerSentEvents,
+  setupOnSave,
   waitForCodeEditor,
   type TestContextWithSSE,
+  type TestContextWithSave,
 } from '../../helpers';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -299,6 +312,62 @@ const importsSource = `
   }
 `;
 
+const reExportSource = `
+  import {
+    CardDef,
+    FieldDef,
+    BaseDef as BDef,
+    contains,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+  import NumberCard from 'https://cardstack.com/base/number';
+
+  export const exportedVar = 'exported var';
+
+  export { StringCard as StrCard };
+
+  export { FieldDef as FDef, CardDef, contains, BDef };
+
+  export * from './in-this-file'; //Will not display inside "in-this-file"
+
+  export default NumberCard;
+  export { Person as Human } from './person';
+
+  export { default as Date } from 'https://cardstack.com/base/date';
+`;
+
+const localInheritSource = `
+  import {
+    contains,
+    field,
+    CardDef,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+
+  class GrandParent extends CardDef {
+    static displayName = 'local grandparent';
+  }
+
+  class Parent extends GrandParent {
+    static displayName = 'local parent';
+  }
+
+  class Activity extends FieldDef {
+    static displayName = 'my activity';
+  }
+  class Hobby extends Activity {
+    static displayName = 'my hobby';
+  }
+  class Sport extends Hobby {
+    static displayName = 'my sport';
+  }
+
+  export class Child extends Parent {
+    static displayName = 'exported child';
+    @field sport = contains(Sport);
+  }
+`;
+
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -307,7 +376,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
+  setupOnSave(hooks);
   setupWindowMock(hooks);
+  setupMatrixServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
@@ -334,6 +405,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'exports.gts': exportsSource,
         'special-exports.gts': specialExportsSource,
         'imports.gts': importsSource,
+        're-export.gts': reExportSource,
+        'local-inherit.gts': localInheritSource,
         'person-entry.json': {
           data: {
             type: 'card',
@@ -666,7 +739,70 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
   });
 
-  test<TestContextWithSSE>('Can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
+  test('inspector persists scroll position but choosing another element overrides it', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+
+    let defaultClassSelector =
+      '[data-test-boxel-selector-item-text="DefaultClass"]';
+    let defaultClassElement = find(defaultClassSelector);
+
+    if (!defaultClassElement) {
+      assert.ok(defaultClassElement, 'default class should exist');
+    } else {
+      assert.notOk(
+        await elementIsVisible(defaultClassElement),
+        'expected default class not to be within view',
+      );
+
+      defaultClassElement.scrollIntoView({ block: 'center' });
+
+      assert.ok(
+        await elementIsVisible(defaultClassElement),
+        'expected default class to now be within view',
+      );
+    }
+
+    await click('[data-test-file-browser-toggle]');
+    assert.dom(defaultClassSelector).doesNotExist();
+
+    await click('[data-test-inspector-toggle]');
+    await waitFor(defaultClassSelector);
+
+    let position = new MonacoSDK.Position(15, 0);
+    monacoService.updateCursorPosition(position);
+
+    await settled();
+
+    let exportedClassSelector =
+      '[data-test-boxel-selector-item-text="ExportedClass"]';
+    let exportedClassElement = find(exportedClassSelector);
+
+    if (!exportedClassElement) {
+      assert.ok(exportedClassElement, 'local class element should exist');
+    } else {
+      assert.ok(
+        await elementIsVisible(exportedClassElement),
+        'expected exported class to have scrolled into view',
+      );
+    }
+  });
+
+  test<TestContextWithSSE>('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
     let expectedEvents = [
       {
         type: 'index',
@@ -728,7 +864,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     });
     await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
-      'Acceptance | operator mode tests | Can delete a card instance from code submode with no recent files - empty code submode',
+      'Acceptance | operator mode tests | can delete a card instance from code submode with no recent files - empty code submode',
     );
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
@@ -862,17 +998,15 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
     });
     let selected = 'AncestorCard2 card';
-    await waitFor(`[data-test-definition-container]`);
-    await click(`[data-test-definition-container]`);
+    await waitFor(`[data-test-clickable-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
@@ -888,17 +1022,15 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
     });
     selected = 'default (DefaultAncestorCard) card';
-    await waitFor(`[data-test-definition-container]`);
-    await click(`[data-test-definition-container]`);
+    await waitFor(`[data-test-clickable-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
@@ -913,17 +1045,15 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
     });
     selected = 'RenamedAncestorCard (AncestorCard) card';
-    await waitFor(`[data-test-definition-container]`);
-    await click(`[data-test-definition-container]`);
+    await waitFor(`[data-test-clickable-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
@@ -938,16 +1068,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
     });
     selected = 'AncestorCard3 card';
-    await click(`[data-test-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
@@ -964,17 +1092,15 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
     });
     selected = 'ChildCard2 card';
-    await waitFor(`[data-test-definition-container]`);
-    await click(`[data-test-definition-container]`);
+    await waitFor(`[data-test-clickable-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
 
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
@@ -991,16 +1117,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        localName: elementName,
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [[]],
       submode: Submodes.Code,
     });
     selected = 'AncestorField1 field';
-    await click(`[data-test-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
   });
@@ -1035,12 +1159,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}exports.gts`,
-      codeSelection: {
-        codeRef: {
-          module: `${testRealmURL}exports`,
-          name: elementName,
-        },
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [],
@@ -1068,12 +1187,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}exports.gts`,
-      codeSelection: {
-        codeRef: {
-          module: `${testRealmURL}exports`,
-          name: elementName,
-        },
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [],
@@ -1102,12 +1216,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}exports.gts`,
-      codeSelection: {
-        codeRef: {
-          module: `${testRealmURL}exports`,
-          name: elementName,
-        },
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [],
@@ -1134,12 +1243,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}imports.gts`,
-      codeSelection: {
-        codeRef: {
-          module: `${testRealmURL}imports`,
-          name: elementName,
-        },
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [],
@@ -1168,12 +1272,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}exports.gts`,
-      codeSelection: {
-        codeRef: {
-          module: `${testRealmURL}exports`,
-          name: elementName,
-        },
-      },
+      codeSelection: elementName,
       fileView: 'inspector',
       openDirs: {},
       stacks: [],
@@ -1183,5 +1282,677 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert
       .dom('[data-test-boxel-selector-item-selected]')
       .hasText(`${elementName} card`);
+  });
+
+  test('in-this-file panel displays re-exports', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}re-export.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    //default is the 1st index
+    let elementName = 'StrCard (StringCard) field';
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(elementName);
+    //TODO: intentionally not care about default line position for exports
+    //currently, only focus cursor if selecting declaration; not the reverse
+    //assert.true(monacoService.getLineCursorOn()?.includes('Str'));
+
+    // elements must be ordered by the way they appear in the source code
+    const expectedElementNames = [
+      'StrCard (StringCard) field',
+      'FDef (FieldDef) field',
+      'CardDef card',
+      'BDef base',
+      'default (NumberCard) field',
+      'Human (Person) card',
+      'Date (default) field',
+    ];
+    expectedElementNames.forEach(async (elementName, index) => {
+      await waitFor(
+        `[data-test-boxel-selector-item]:nth-of-type(${index + 1})`,
+      );
+      assert
+        .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
+        .hasText(elementName);
+    });
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 7 });
+
+    //clicking on a base card
+    elementName = 'BDef';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} base`);
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert
+      .dom('[data-test-definition-header]')
+      .includesText('Re-exported Base Definition');
+    assert.dom('[data-test-card-module-definition]').includesText('Base');
+    assert.true(monacoService.getLineCursorOn()?.includes('BDef'));
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.',
+      );
+
+    //clicking on re-export (which doesn't enter module scope)
+    elementName = 'Person';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`Human (${elementName}) card`);
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert
+      .dom('[data-test-definition-header]')
+      .includesText('Re-exported Card Definition');
+    assert.dom('[data-test-card-module-definition]').includesText('Card');
+    assert.true(monacoService.getLineCursorOn()?.includes('Human'));
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.',
+      );
+  });
+
+  test('in-this-file displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}local-inherit.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    //default is the 1st index
+    let elementName = 'GrandParent card';
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(elementName);
+    assert.true(monacoService.getLineCursorOn()?.includes('GrandParent'));
+    assert.true(monacoService.getLineCursorOn()?.includes('CardDef'));
+    // elements must be ordered by the way they appear in the source code
+    const expectedElementNames = [
+      'GrandParent card',
+      'Parent card',
+      'Activity field',
+      'Hobby field',
+      'Sport field',
+      'Child card',
+    ];
+    expectedElementNames.forEach(async (elementName, index) => {
+      await waitFor(
+        `[data-test-boxel-selector-item]:nth-of-type(${index + 1})`,
+      );
+      assert
+        .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
+        .hasText(elementName);
+    });
+
+    //select card defined locally
+    elementName = 'Parent';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert.dom('[data-test-definition-header]').includesText('Card Definition');
+    assert
+      .dom('[data-test-card-module-definition]')
+      .includesText('local parent');
+    await waitFor('[data-test-card-schema="local parent"]');
+    assert
+      .dom('[data-test-card-schema="local grandparent"]')
+      .exists({ count: 1 });
+    assert.dom(`[data-test-card-schema="local parent"]`).exists();
+    assert.dom(`[data-test-card-schema="local grandparent"]`).exists();
+    assert.dom(`[data-test-total-fields]`).containsText('3 Fields');
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+    assert.true(monacoService.getLineCursorOn()?.includes('GrandParent'));
+
+    //select field defined locally
+    elementName = 'Sport';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert
+      .dom('[data-test-definition-header]')
+      .includesText('Field Definition');
+    assert.dom('[data-test-card-module-definition]').includesText('my sport');
+    await waitFor('[data-test-card-schema="my sport"]');
+    assert.dom('[data-test-card-schema="my sport"]').exists({ count: 1 });
+    assert.dom(`[data-test-card-schema="my hobby"]`).exists({ count: 1 });
+    assert.dom(`[data-test-card-schema="my activity"]`).exists({ count: 1 });
+    assert.dom(`[data-test-total-fields]`).containsText('0 Fields');
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+
+    //clicking on inherited field defined locally
+    await waitFor(`[data-test-clickable-definition-container]`);
+    await click(`[data-test-clickable-definition-container]`); //clicking on Hobby
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText('Hobby field');
+    await waitFor('[data-test-card-schema="my hobby"]');
+    assert.dom(`[data-test-card-schema="my hobby"]`).exists({ count: 1 });
+    assert.dom(`[data-test-card-schema="my activity"]`).exists({ count: 1 });
+    assert.dom(`[data-test-total-fields]`).containsText('0 Fields');
+    assert.true(monacoService.getLineCursorOn()?.includes('Hobby'));
+    assert.true(monacoService.getLineCursorOn()?.includes('Activity'));
+  });
+
+  test<TestContextWithSave>('can inherit from an exported card def declaration', async function (assert) {
+    assert.expect(11);
+    let expectedSrc = `
+import { ExportedCard } from './in-this-file';
+import { Component } from 'https://cardstack.com/base/card-api';
+export class TestCard extends ExportedCard {
+  static displayName = "Test Card";
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim();
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    assert
+      .dom('[data-test-inherits-from-field] .pill.inert')
+      .includesText('exported card', 'the inherits from is correct');
+    assert.dom('[data-test-create-definition]').isDisabled();
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    assert.dom('[data-test-create-definition]').isDisabled();
+    await fillIn('[data-test-file-name-field]', '/test-card');
+    assert.dom('[data-test-create-definition]').isEnabled();
+
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+      deferred.fulfill();
+    });
+    await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    await waitForCodeEditor();
+    assert.strictEqual(
+      getMonacoContent(),
+      expectedSrc,
+      'monaco displays the new definition',
+    );
+
+    await waitFor('[data-test-card-schema="Test Card"]');
+    assert
+      .dom('[data-test-card-schema]')
+      .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
+    assert.dom('[data-test-total-fields]').containsText('4 Fields');
+
+    // assert modal state is cleared
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+    assert
+      .dom('[data-test-inherits-from-field] .pill.inert')
+      .includesText('Test Card', 'the inherits from is correct');
+    assert
+      .dom('[data-test-display-name-field]')
+      .hasNoValue('display name field is empty');
+    assert
+      .dom('[data-test-file-name-field]')
+      .hasNoValue('filename field is empty');
+  });
+
+  test<TestContextWithSave>('can inherit from an exported field def declaration', async function (assert) {
+    assert.expect(2);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
+
+    await click('[data-boxel-selector-item-text="ExportedField"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    assert
+      .dom('[data-test-inherits-from-field] .pill.inert')
+      .includesText('exported field', 'the inherits from is correct');
+
+    await fillIn('[data-test-display-name-field]', 'Test Field');
+    await fillIn('[data-test-file-name-field]', '/test-field');
+
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import { ExportedField } from './in-this-file';
+import { Component } from 'https://cardstack.com/base/card-api';
+export class TestField extends ExportedField {
+  static displayName = "Test Field";
+
+  /*
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim(),
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('inherit modal state is cleared when modal is cancelled', async function (assert) {
+    assert.expect(3);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', '/test-card');
+    this.onSave(() => assert.ok(false, 'should not save a file'));
+    await click('[data-test-cancel-create-file]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+
+    // assert modal state is cleared
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+    assert
+      .dom('[data-test-inherits-from-field] .pill.inert')
+      .includesText('exported card', 'the inherits from is correct');
+    assert
+      .dom('[data-test-display-name-field]')
+      .hasNoValue('display name field is empty');
+    assert
+      .dom('[data-test-file-name-field]')
+      .hasNoValue('filename field is empty');
+  });
+
+  test<TestContextWithSave>(`can handle the situation where there is a class name collision with the inherited cards class name`, async function (assert) {
+    assert.expect(4);
+    let expectedSrc = `
+import { ExportedCard as ExportedCardParent } from './in-this-file';
+import { Component } from 'https://cardstack.com/base/card-api';
+export class ExportedCard extends ExportedCardParent {
+  static displayName = "Exported Card";
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim();
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    await fillIn('[data-test-display-name-field]', 'Exported Card'); // this name collides with the parent card
+    await fillIn('[data-test-file-name-field]', '/test-card');
+
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(content, expectedSrc, 'the source is correct');
+      deferred.fulfill();
+    });
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    await waitForCodeEditor();
+    assert.strictEqual(
+      getMonacoContent(),
+      expectedSrc,
+      'monaco displays the new definition',
+    );
+
+    await waitFor('[data-test-card-schema="Exported Card"]');
+    assert
+      .dom('[data-test-card-schema]')
+      .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
+    assert.dom('[data-test-total-fields]').containsText('4 Fields');
+  });
+
+  test('field error message displays if you try to inherit using a filename that already exists', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'in-this-file');
+    await click('[data-test-create-definition]');
+
+    assert
+      .dom(
+        '[data-test-file-name-field][data-test-boxel-input-validation-state="invalid"]',
+      )
+      .exists('error state for filename field is displayed');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .includesText('This file already exists');
+
+    await fillIn('[data-test-file-name-field]', 'test-file');
+    assert
+      .dom(
+        '[data-test-file-name-field][data-test-boxel-input-validation-state="invalid"]',
+      )
+      .doesNotExist('error state for filename field is not displayed');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .doesNotExist('no error message displayed');
+  });
+
+  test('Inherit action item is not displayed when definition is not exported', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
+
+    await click('[data-boxel-selector-item-text="LocalCard"]');
+    await waitFor('[data-test-card-module-definition]');
+    assert
+      .dom('[data-test-action-button="Inherit"]')
+      .doesNotExist('non-exported cards do not display an inherit button');
+  });
+
+  test<TestContextWithSave>('can create an instance from an exported card definition', async function (assert) {
+    assert.expect(8);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Create Instance"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    assert
+      .dom('[data-test-inherits-from-field] .pill.inert')
+      .includesText('exported card', 'the inherits from is correct');
+    assert.dom('[data-test-create-card-instance]').isEnabled();
+
+    let deferred = new Deferred<void>();
+    let id: string | undefined;
+    this.onSave((url, json) => {
+      if (typeof json === 'string') {
+        throw new Error(`expected JSON save data`);
+      }
+      id = url.href;
+      assert.strictEqual(
+        json.data.attributes?.someString,
+        null,
+        'someString field is empty',
+      );
+      assert.strictEqual(
+        json.data.meta.realmURL,
+        testRealmURL,
+        'realm url is correct',
+      );
+      assert.deepEqual(
+        json.data.meta.adoptsFrom,
+        {
+          module: '../in-this-file',
+          name: 'ExportedCard',
+        },
+        'adoptsFrom is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await percySnapshot(assert);
+    await click('[data-test-create-card-instance]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    if (!id) {
+      assert.ok(false, 'card instance ID does not exist');
+    }
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
+    assert
+      .dom('[data-test-card-resource-loaded]')
+      .containsText('exported card');
+    assert.dom('[data-test-field="someString"] input').hasValue('');
+    assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
+  });
+
+  test('Create instance action is not displayed for non-exported Card definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
+
+    await click('[data-boxel-selector-item-text="LocalCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Instance"]')
+      .doesNotExist(
+        'non-exported card defs do not display a create instance button',
+      );
+  });
+
+  test('Create instance action is not displayed for field definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
+
+    await click('[data-boxel-selector-item-text="ExportedField"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Instance"]')
+      .doesNotExist('field defs do not display a create instance button');
   });
 });

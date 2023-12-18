@@ -1,6 +1,6 @@
 import { type EmptyObject } from '@ember/component/helper';
 
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -21,7 +21,10 @@ import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
+  isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
+
+import { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface SelectorItemOptions {
   action: Function;
@@ -34,6 +37,7 @@ export class SelectorItem {
   selected: boolean;
   disabled: boolean;
   action: Function | undefined;
+  url: string | undefined;
 
   constructor(
     declaration: ModuleDeclaration,
@@ -41,6 +45,7 @@ export class SelectorItem {
   ) {
     this.declaration = declaration;
     this.action = options.action;
+    this.url = options.url;
     this.selected = options.selected || false;
     this.disabled = options.disabled || false;
   }
@@ -78,6 +83,19 @@ interface Signature {
   Blocks: EmptyObject;
 }
 
+function typeOfCardOrField(cardOrField: typeof BaseDef) {
+  if (isCardDef(cardOrField)) {
+    return 'card';
+  } else if (isFieldDef(cardOrField)) {
+    return 'field';
+  } else if (isBaseDef(cardOrField)) {
+    return 'base';
+  }
+  throw new Error(
+    `in-this-file panel: declaration should either be card, field, or base.`,
+  );
+}
+
 export default class Selector extends Component<Signature> {
   @action invokeSelectorItemAction(
     action: unknown,
@@ -93,21 +111,16 @@ export default class Selector extends Component<Signature> {
   }
 
   getType(declaration: ModuleDeclaration) {
-    let type = declaration.type as string;
     if (isCardOrFieldDeclaration(declaration)) {
-      if (isCardDef(declaration.cardOrField)) {
-        type = 'card';
-      } else if (isFieldDef(declaration.cardOrField)) {
-        type = 'field';
-      } else if (isBaseDef(declaration.cardOrField)) {
-        type = 'base';
-      } else {
-        throw new Error(
-          'card or field declaration does not have an appropriate type',
-        );
-      }
+      return typeOfCardOrField(declaration.cardOrField);
+    } else if (isReexportCardOrField(declaration)) {
+      return typeOfCardOrField(declaration.cardOrField);
+    } else if (declaration.type === 'class') {
+      return 'class';
+    } else if (declaration.type === 'function') {
+      return 'function';
     }
-    return type;
+    return '';
   }
 
   <template>
@@ -125,7 +138,13 @@ export default class Selector extends Component<Signature> {
                 }}
                 data-test-boxel-selector-item
                 data-test-boxel-selector-item-selected={{selectorItem.selected}}
-                {{scrollIntoViewModifier selectorItem.selected}}
+                {{scrollIntoViewModifier
+                  selectorItem.selected
+                  container='inspector'
+                  key=(concat
+                    selectorItem.url '#' selectorItem.declaration.localName
+                  )
+                }}
               >
                 {{! template-lint-disable require-context-role }}
                 <div
@@ -145,16 +164,16 @@ export default class Selector extends Component<Signature> {
                   disabled={{selectorItem.disabled}}
                 >
                   <div class='selector-item'>
-                    {{#if selectorItem.declaration.exportedAs}}
+                    {{#if selectorItem.declaration.exportName}}
                       <span class='exported-arrow'>
                         <DiagonalArrowLeftUp width='20' height='20' />
                       </span>
                       <span
                         class='exported'
-                      >{{selectorItem.declaration.exportedAs}}</span>
+                      >{{selectorItem.declaration.exportName}}</span>
                       {{#unless
                         (eq
-                          selectorItem.declaration.exportedAs
+                          selectorItem.declaration.exportName
                           selectorItem.declaration.localName
                         )
                       }}<span
@@ -287,10 +306,4 @@ export default class Selector extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    Selector: typeof Selector;
-  }
 }

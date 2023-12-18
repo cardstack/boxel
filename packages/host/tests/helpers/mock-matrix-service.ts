@@ -1,4 +1,5 @@
 import Service, { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -17,7 +18,13 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 class MockClient {
   lastSentEvent: any;
-  public getProfileInfo(userId: string) {
+  userId: string | undefined;
+
+  constructor(userId: string | undefined) {
+    this.userId = userId;
+  }
+
+  public getProfileInfo(userId: string | null) {
     return Promise.resolve({
       displayname: userId,
     });
@@ -33,13 +40,16 @@ class MockClient {
       ],
     });
   }
+  public getUserId() {
+    return this.userId;
+  }
 }
 
 export class MockMatrixService extends Service {
   @service declare loaderService: LoaderService;
   lastMessageSent: any;
   // @ts-ignore
-  client: MockClient = new MockClient();
+  @tracked client: MockClient = new MockClient('@testuser:staging');
   // @ts-ignore
   cardAPI!: typeof cardApi;
   // These will be empty in the tests, but we need to define them to satisfy the interface
@@ -50,10 +60,10 @@ export class MockMatrixService extends Service {
   async start(_auth?: any) {}
 
   get isLoggedIn() {
-    return true;
+    return this.userId !== undefined;
   }
   get userId() {
-    return '@testuser:staging';
+    return this.client.getUserId();
   }
 
   async allowedToSetObjective(_roomId: string): Promise<boolean> {
@@ -75,6 +85,10 @@ export class MockMatrixService extends Service {
     context?: OperatorModeContext,
   ) {
     this.lastMessageSent = { roomId, body, card, context };
+  }
+
+  async logout() {
+    this.client = new MockClient(undefined);
   }
 
   public createAndJoinRoom(roomId: string) {
@@ -112,4 +126,14 @@ export class MockMatrixService extends Service {
       },
     });
   }
+}
+
+export function setupMatrixServiceMock(hooks: NestedHooks) {
+  hooks.beforeEach(function () {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+  });
 }

@@ -150,7 +150,11 @@ export class Active extends Component<ActiveSignature> {
           {{actionButton.label}}
         </Button>
       {{/each}}
-      <div class='info-footer' data-test-definition-info-text>
+      <div
+        class='info-footer'
+        data-test-definition-info-text
+        data-test-percy-hide
+      >
         <div class='message'>{{@infoText}}</div>
       </div>
     </div>

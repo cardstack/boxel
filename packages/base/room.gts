@@ -104,18 +104,25 @@ const messageStyle = {
 
 class RoomMemberView extends Component<typeof RoomMemberField> {
   <template>
-    <div>
-      User ID:
-      {{@model.userId}}
+    <div class='container'>
+      <div>
+        User ID:
+        {{@model.userId}}
+      </div>
+      <div>
+        Name:
+        {{@model.displayName}}
+      </div>
+      <div>
+        Membership:
+        {{@model.membership}}
+      </div>
     </div>
-    <div>
-      Name:
-      {{@model.displayName}}
-    </div>
-    <div>
-      Membership:
-      {{@model.membership}}
-    </div>
+    <style>
+      .container {
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
   </template>
 }
 

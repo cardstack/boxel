@@ -45,8 +45,12 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
+import percySnapshot from './percy-snapshot';
+
 import { renderComponent } from './render-component';
 import { WebMessageStream, messageCloseHandler } from './stream';
+
+export { percySnapshot };
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
@@ -107,7 +111,10 @@ export async function waitForSyntaxHighlighting(
     () =>
       finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
       color,
-    { timeoutMessage: 'timed out waiting for syntax highlighting' },
+    {
+      timeout: 2000,
+      timeoutMessage: 'timed out waiting for syntax highlighting',
+    },
   );
 }
 export async function showSearchResult(realmName: string, id: string) {
@@ -878,4 +885,16 @@ export class MockRedirectedResponse extends Response {
   get url() {
     return this._mockUrl;
   }
+}
+
+export async function elementIsVisible(element: Element) {
+  return new Promise((resolve) => {
+    let intersectionObserver = new IntersectionObserver(function (entries) {
+      intersectionObserver.unobserve(element);
+
+      resolve(entries[0].isIntersecting);
+    });
+
+    intersectionObserver.observe(element);
+  });
 }

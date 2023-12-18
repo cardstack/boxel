@@ -20,7 +20,6 @@ test.describe('Login', () => {
   test('it can login', async ({ page }) => {
     await openRoot(page);
     await toggleOperatorMode(page);
-    await openChat(page);
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
@@ -29,6 +28,7 @@ test.describe('Login', () => {
     await page.locator('[data-test-password-field]').fill('pass');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
+    await openChat(page);
 
     await assertLoggedIn(page);
 
@@ -53,8 +53,24 @@ test.describe('Login', () => {
     await assertLoggedOut(page);
 
     // reload to page to show that the logout state persists
-    await reloadAndOpenChat(page);
+    await page.reload();
     await assertLoggedOut(page);
+  });
+
+  test('it can logout using the profile menu', async ({ page }) => {
+    await login(page, 'user1', 'pass');
+
+    await expect(
+      page.locator(
+        '[data-test-profile-icon-button] > [data-test-profile-icon]',
+      ),
+    ).toHaveText('U');
+    await page.locator('[data-test-profile-icon-button]').click();
+    await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
+      '@user1:localhost',
+    );
+    await page.locator('[data-test-signout-button]').click();
+    await expect(page.locator('[data-test-login-form]')).toBeVisible();
   });
 
   test('it shows an error when invalid credentials are provided', async ({
@@ -62,7 +78,6 @@ test.describe('Login', () => {
   }) => {
     await openRoot(page);
     await toggleOperatorMode(page);
-    await openChat(page);
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('bad pass');
     await expect(
@@ -71,7 +86,7 @@ test.describe('Login', () => {
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
     await expect(page.locator('[data-test-login-error]')).toContainText(
-      'Invalid username or password',
+      'Sign in failed. Please check your credentials and try again',
     );
 
     await page.locator('[data-test-password-field]').fill('pass');
@@ -80,7 +95,36 @@ test.describe('Login', () => {
       'login error message is not displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
+    await openChat(page);
 
     await assertLoggedIn(page);
+  });
+
+  test('it reacts to enter keypresses', async ({ page }) => {
+    await openRoot(page);
+    await toggleOperatorMode(page);
+
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('pass');
+
+    await page.keyboard.press('Enter');
+
+    await openChat(page);
+    await assertLoggedIn(page);
+  });
+
+  test('it returns to login when auth is invalid', async ({ page }) => {
+    await page.addInitScript({
+      content: `
+        window.localStorage.setItem(
+          'auth',
+          '{"user_id":"@b:stack.cards","access_token":"INVALID_TOKEN","home_server":"stack.cards","device_id":"HELLO","well_known":{"m.homeserver":{"base_url":"http://example.com/"}}}'
+        )`,
+    });
+
+    await openRoot(page);
+    await toggleOperatorMode(page);
+
+    await assertLoggedOut(page);
   });
 });

@@ -1,16 +1,20 @@
 import { visit, click, fillIn, waitFor } from '@ember/test-helpers';
+
 import { setupApplicationTest } from 'ember-qunit';
-import { module, test } from 'qunit';
-import stringify from 'safe-stable-stringify';
-import percySnapshot from '@percy/ember';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, test } from 'qunit';
+import stringify from 'safe-stable-stringify';
+
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
-import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
+
 import type { Submode } from '@cardstack/host/components/submode-switcher';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+
 import {
+  percySnapshot,
   setupLocalIndexing,
   testRealmURL,
   setupOnSave,
@@ -21,6 +25,7 @@ import {
   TestRealmAdapter,
   type TestContextWithSave,
 } from '../../helpers';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
@@ -134,14 +139,16 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
+  setupMatrixServiceMock(hooks);
 
   async function openNewFileModal(menuSelection: string) {
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor('[data-test-new-file-button]');
     await click('[data-test-new-file-button]');
     await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
-    await waitFor('[data-test-create-file-modal][data-test-ready]');
-    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace A"]`,
+    );
   }
 
   hooks.afterEach(async function () {
@@ -184,10 +191,13 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
     const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
-    assert.expect(12);
+    assert.expect(13);
     await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
     await waitFor(`[data-test-selected-type="General Card"]`);
+    assert
+      .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
+      .hasText('Adopted From');
     assert.dom(`[data-test-selected-type]`).hasText('General Card');
     assert
       .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
@@ -208,7 +218,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     let deferred = new Deferred<void>();
     let fileID = '';
 
-    this.onSave(async (json) => {
+    this.onSave(async (url, json) => {
+      fileID = url.href;
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -241,7 +252,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         },
         'relationships data is correct',
       );
-      fileID = json.data.id;
       deferred.fulfill();
     });
 
@@ -264,7 +274,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     let deferred = new Deferred<void>();
     let fileURL = '';
 
-    this.onSave(async (json) => {
+    this.onSave(async (url, json) => {
+      fileURL = url.href;
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -286,7 +297,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         },
         'adoptsFrom is correct',
       );
-      fileURL = json.data.id;
       deferred.fulfill();
     });
 
@@ -323,7 +333,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     let deferred = new Deferred<void>();
     let fileID = '';
 
-    this.onSave(async (json) => {
+    this.onSave(async (url, json) => {
+      fileID = url.href;
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -345,7 +356,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         },
         'adoptsFrom is correct',
       );
-      fileID = json.data.id;
       deferred.fulfill();
     });
 
@@ -386,7 +396,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     let deferred = new Deferred<void>();
     let fileID = '';
 
-    this.onSave(async (json) => {
+    this.onSave(async (url, json) => {
+      fileID = url.href;
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
@@ -408,7 +419,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         },
         'adoptsFrom is correct',
       );
-      fileID = json.data.id;
       deferred.fulfill();
     });
 
@@ -425,18 +435,40 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('can create a new card definition', async function (assert) {
-    assert.expect(7);
+  test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
+    assert.expect(8);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim();
     await openNewFileModal('Card Definition');
     assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
     await fillIn('[data-test-display-name-field]', 'Test Card');
+    assert
+      .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
+      .hasText('Inherits From');
     assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
@@ -445,9 +477,7 @@ export class TestCard extends CardDef {
       .dom('[data-test-create-definition]')
       .isEnabled('create button is enabled');
 
-    await percySnapshot(assert);
-
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -469,7 +499,63 @@ export class TestCard extends CardDef {
     assert.dom('[data-test-total-fields]').containsText('3 Fields');
   });
 
+  test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
+
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Person"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import { Person } from './person';
+import { Component } from 'https://cardstack.com/base/card-api';
+export class TestCard extends Person {
+  static displayName = "Test Card";
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim(),
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
   test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
+    assert.expect(2);
     await openNewFileModal('Field Definition');
     await click('[data-test-select-card-type]');
     await waitFor('[data-test-card-catalog-modal]');
@@ -489,7 +575,7 @@ export class TestCard extends CardDef {
     );
     await fillIn('[data-test-file-name-field]', 'big-int-v2');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -497,14 +583,28 @@ export class TestCard extends CardDef {
         content,
         `
 import BigInteger from 'https://cardstack.com/base/big-integer';
+import { Component } from 'https://cardstack.com/base/card-api';
 export class FieldThatExtendsFromBigInt extends BigInteger {
   static displayName = "Field that extends from big int";
-}`,
+
+  /*
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
     });
-    await percySnapshot(assert);
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -525,23 +625,152 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
     await fillIn('[data-test-display-name-field]', 'Test Card');
     await fillIn('[data-test-file-name-field]', 'test-card');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
       assert.strictEqual(
         content,
         `
-import Pet from '${testRealmURL}pet';
+import Pet from './pet';
+import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends Pet {
   static displayName = "Test Card";
-}`,
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
     });
 
     await percySnapshot(assert);
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can reconcile a classname collision with the selected name of extending a card definition which uses a default export', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
+
+    // select card type
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Pet"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Pet');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import PetParent from './pet';
+import { Component } from 'https://cardstack.com/base/card-api';
+export class Pet extends PetParent {
+  static displayName = "Pet";
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim(),
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can reconcile a classname collision with a javascript builtin object', async function (assert) {
+    assert.expect(1);
+    await openNewFileModal('Card Definition');
+
+    // select card type
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Pet"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Map');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import Pet from './pet';
+import { Component } from 'https://cardstack.com/base/card-api';
+export class Map0 extends Pet {
+  static displayName = "Map";
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim(),
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -554,7 +783,7 @@ export class TestCard extends Pet {
     await fillIn('[data-test-display-name-field]', 'Test Card; { }');
     await fillIn('[data-test-file-name-field]', 'test-card');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -562,9 +791,28 @@ export class TestCard extends Pet {
         content,
         `
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`,
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim(),
         'the source is correct',
       );
       deferred.fulfill();
@@ -579,16 +827,35 @@ export class TestCard extends CardDef {
     assert.expect(2);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim();
 
     await openNewFileModal('Card Definition');
 
     await fillIn('[data-test-display-name-field]', 'Test Card');
     await fillIn('[data-test-file-name-field]', 'test-dir/test-card');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -612,16 +879,35 @@ export class TestCard extends CardDef {
     assert.expect(2);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim();
 
     await openNewFileModal('Card Definition');
 
     await fillIn('[data-test-display-name-field]', 'Test Card');
     await fillIn('[data-test-file-name-field]', 'test-card.gts');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -645,16 +931,35 @@ export class TestCard extends CardDef {
     assert.expect(2);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
-}`;
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim();
 
     await openNewFileModal('Card Definition');
 
     await fillIn('[data-test-display-name-field]', 'Test Card');
     await fillIn('[data-test-file-name-field]', '/test-card');
     let deferred = new Deferred<void>();
-    this.onSave((content) => {
+    this.onSave((_, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }

@@ -25,14 +25,6 @@ export default class MarkdownField extends FieldDef {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
 
-  static isolated = class Isolated extends Component<typeof this> {
-    <template>
-      <div>
-        {{{toHtml @model}}}
-      </div>
-    </template>
-  };
-
   static embedded = View;
   static atom = View;
 

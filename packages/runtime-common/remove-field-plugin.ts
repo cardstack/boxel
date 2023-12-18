@@ -1,5 +1,5 @@
 import type {
-  PossibleCardOrFieldClass,
+  PossibleCardOrFieldDeclaration,
   PossibleField,
 } from './schema-analysis-plugin';
 import { types as t } from '@babel/core';
@@ -11,7 +11,7 @@ interface State {
 }
 
 export interface Options {
-  card: PossibleCardOrFieldClass;
+  card: PossibleCardOrFieldDeclaration;
   field: PossibleField;
 }
 export function removeFieldPlugin() {

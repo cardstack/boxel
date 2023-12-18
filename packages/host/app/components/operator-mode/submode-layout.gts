@@ -1,12 +1,15 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { IconButton } from '@cardstack/boxel-ui/components';
+
 import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
 
+import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
@@ -19,6 +22,7 @@ import SearchSheet, {
 } from '../search-sheet';
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
+import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const { APP } = ENV;
@@ -40,6 +44,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare matrixService: MatrixService;
 
   private get chatVisibilityClass() {
     return this.isChatVisible ? 'chat-open' : 'chat-closed';
@@ -128,6 +133,9 @@ export default class SubmodeLayout extends Component<Signature> {
         {{/if}}
       {{/if}}
     </div>
+
+    <ProfileInfoPopover />
+
     <SearchSheet
       @mode={{this.searchSheetMode}}
       @onBlur={{this.closeSearchSheet}}
@@ -136,6 +144,7 @@ export default class SubmodeLayout extends Component<Signature> {
       @onSearch={{this.expandSearchToShowResults}}
       @onCardSelect={{this.handleCardSelectFromSearch}}
     />
+
     <style>
       .operator-mode__with-chat {
         display: grid;

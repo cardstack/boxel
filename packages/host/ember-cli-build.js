@@ -40,6 +40,10 @@ module.exports = function (defaults) {
                 test: /\.ttf$/,
                 type: 'asset',
               },
+              {
+                test: /\.woff2$/,
+                type: 'asset',
+              },
             ],
           },
           plugins: [
@@ -47,10 +51,6 @@ module.exports = function (defaults) {
             new MonacoWebpackPlugin(),
             new webpack.ProvidePlugin({
               process: 'process',
-            }),
-            new webpack.IgnorePlugin({
-              // workaround for https://github.com/embroider-build/ember-auto-import/issues/578
-              resourceRegExp: /moment-timezone/,
             }),
             new webpack.IgnorePlugin({
               resourceRegExp: /^https:\/\/cardstack\.com\/base/,

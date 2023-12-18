@@ -25,13 +25,8 @@ import {
 
 import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
-import {
-  isSingleCardDocument,
-  baseRealm,
-  catalogEntryRef,
-} from '@cardstack/runtime-common';
+import { catalogEntryRef } from '@cardstack/runtime-common';
 
-import ENV from '@cardstack/host/config/environment';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentCards from '@cardstack/host/services/recent-cards-service';
 
@@ -39,10 +34,10 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import SearchResult from './search-result';
 
+import { getCard } from '../../resources/card-resource';
+
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
-
-const { otherRealmURLs } = ENV;
 
 export const SearchSheetModes = {
   Closed: 'closed',
@@ -154,27 +149,22 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
-  getCard = restartableTask(async (cardURL: string) => {
+  private getCard = restartableTask(async (cardURL: string) => {
     this.clearSearchCardResults();
 
-    let response = await this.loaderService.loader.fetch(cardURL, {
-      headers: {
-        Accept: 'application/vnd.card+json',
-      },
+    let maybeIndexCardURL = this.cardService.realmURLs.find(
+      (u) => u === cardURL + '/',
+    );
+    const cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {
+      isLive: () => false,
     });
-    if (response.ok) {
-      let maybeCardDoc = await response.json();
-      if (isSingleCardDocument(maybeCardDoc)) {
-        let card = await this.cardService.createFromSerialized(
-          maybeCardDoc.data,
-          maybeCardDoc,
-          new URL(maybeCardDoc.data.id),
-        );
-
-        this.clearSearchCardResults();
-        this.searchCardResults.push(card);
-      }
+    await cardResource.loaded;
+    let { card } = cardResource;
+    if (!card) {
+      console.warn(`Unable to fetch card at ${cardURL}`);
+      return;
     }
+    this.searchCardResults.push(card);
   });
 
   @action
@@ -266,11 +256,7 @@ export default class SearchSheet extends Component<Signature> {
 
     let cards = flatMap(
       await Promise.all(
-        [
-          this.cardService.defaultURL.href,
-          baseRealm.url,
-          ...otherRealmURLs,
-        ].map(
+        this.cardService.realmURLs.map(
           async (realm) => await this.cardService.search(query, new URL(realm)),
         ),
       ),
@@ -377,8 +363,8 @@ export default class SearchSheet extends Component<Signature> {
         display: flex;
         flex-direction: column;
         justify-content: stretch;
-        left: var(--boxel-sp);
-        width: calc(100% - (2 * var(--boxel-sp)));
+        left: calc(6 * var(--boxel-sp-xs));
+        width: calc(100% - (7 * var(--boxel-sp)));
         position: absolute;
         z-index: 1;
         transition:

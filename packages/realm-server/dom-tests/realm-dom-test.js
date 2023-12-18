@@ -1,9 +1,11 @@
 /* eslint-env browser */
 /* globals QUnit */
-const { test } = QUnit;
+const { test, assert } = QUnit;
 const testRealmURL = 'http://localhost:4202/node-test';
 const testContainerId = 'test-container';
 const iframeSelectorTempId = 'iframe-selector-temp';
+const username = 'user';
+const password = 'password';
 
 class Messenger {
   #request;
@@ -119,7 +121,7 @@ async function querySelectorAll(selector, messenger) {
   );
 }
 
-async function boot(url, waitForSelector) {
+async function boot(url, waitForSelector, isLoginRequired) {
   let container = document.getElementById(testContainerId);
   let iframe = document.createElement('iframe');
   iframe.setAttribute('src', url);
@@ -128,7 +130,11 @@ async function boot(url, waitForSelector) {
   await new Promise((res) => setTimeout(res, 1000));
   let messenger = new Messenger(iframe);
   try {
-    // waits for app to boot
+    if (isLoginRequired) {
+      await waitFor('[data-test-login-btn]', messenger);
+      await login(username, password, messenger);
+    }
+
     await waitFor(waitForSelector, messenger);
   } catch (err) {
     throw new Error(`error encountered while booting ${url}: ${err.message}`);
@@ -136,7 +142,11 @@ async function boot(url, waitForSelector) {
   return messenger;
 }
 
-async function bootToCodeModeFile(pathToFile, waitForSelector) {
+async function bootToCodeModeFile(
+  pathToFile,
+  waitForSelector,
+  isLoginRequired,
+) {
   let codeModeStateParam = JSON.stringify({
     stacks: [[]],
     submode: 'code',
@@ -148,7 +158,52 @@ async function bootToCodeModeFile(pathToFile, waitForSelector) {
     codeModeStateParam,
   )}`;
 
-  return await boot(`${testRealmURL}/${path}`, waitForSelector);
+  return await boot(
+    `${testRealmURL}/${path}`,
+    waitForSelector,
+    isLoginRequired,
+  );
+}
+
+async function login(username, password, messenger) {
+  let err = await messenger.send({
+    fillInput: ['[data-test-username-field]', username],
+  });
+  if (err) {
+    assert.ok(false, `encountered error: ${err}`);
+  }
+  err = await messenger.send({
+    fillInput: ['[data-test-password-field]', password],
+  });
+  if (err) {
+    assert.ok(false, `encountered error: ${err}`);
+  }
+  err = await messenger.send({
+    click: '[data-test-login-btn]',
+  });
+  if (err) {
+    assert.ok(false, `encountered error: ${err}`);
+  }
+}
+
+async function logout(messenger) {
+  let openChatBtn = await querySelector('[data-test-open-chat]', messenger);
+  if (!openChatBtn) {
+    return;
+  }
+  let err = await messenger.send({
+    click: '[data-test-open-chat]',
+  });
+  if (err) {
+    assert.ok(false, `encountered error: ${err}`);
+  }
+  err = await messenger.send({
+    click: '[data-test-logout-btn]',
+  });
+  if (err) {
+    assert.ok(false, `encountered error: ${err}`);
+  }
+  await waitFor('[data-test-login-btn]', messenger);
 }
 
 QUnit.module(
@@ -166,7 +221,10 @@ QUnit.module(
     }
 
     hooks.beforeEach(resetTestContainer);
-    hooks.afterEach(resetTestContainer);
+    hooks.afterEach(async () => {
+      await logout(messenger);
+      resetTestContainer();
+    });
 
     test('renders app', async function (assert) {
       messenger = await boot(testRealmURL, 'p');
@@ -185,6 +243,7 @@ QUnit.module(
       messenger = await bootToCodeModeFile(
         'person-1.json',
         '[data-test-directory-level]',
+        true,
       );
 
       let nav = await querySelector('nav', messenger);
@@ -212,6 +271,7 @@ QUnit.module(
       messenger = await bootToCodeModeFile(
         'person.gts',
         '[data-test-card-schema="Person"]',
+        true,
       );
       let location = await messenger.send('location');
       assert.strictEqual(
@@ -246,7 +306,11 @@ QUnit.module(
     });
 
     test('renders card instance', async function (assert) {
-      messenger = await bootToCodeModeFile('person-2.json', '[data-test-card]');
+      messenger = await bootToCodeModeFile(
+        'person-2.json',
+        '[data-test-card]',
+        true,
+      );
 
       let card = await querySelector('[data-test-card]', messenger);
       assert.strictEqual(
@@ -260,6 +324,7 @@ QUnit.module(
       messenger = await bootToCodeModeFile(
         'person.gts',
         '[data-test-directory-level]',
+        true,
       );
       let error = await messenger.send({
         click: '[data-test-file="person-1.json"]',

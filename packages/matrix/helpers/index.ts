@@ -71,7 +71,7 @@ export async function toggleOperatorMode(page: Page) {
 export async function openChat(page: Page) {
   await page.locator('[data-test-open-chat]').click();
   await page.waitForFunction(() =>
-    document.querySelector('[data-test-matrix-ready]'),
+    document.querySelector('[data-test-close-chat-button]'),
   );
 }
 
@@ -85,7 +85,7 @@ export async function clearLocalStorage(page: Page) {
 }
 
 export async function validateEmail(
-  page: Page,
+  appPage: Page,
   email: string,
   opts?: {
     onEmailPage?: (page: Page) => Promise<void>;
@@ -95,63 +95,56 @@ export async function validateEmail(
   },
 ) {
   let sendAttempts = opts?.sendAttempts ?? 1;
-  await expect(page.locator('[data-test-validate-btn]')).toBeDisabled();
-  await page.locator('[data-test-email-field]').fill(email);
-  await expect(page.locator('[data-test-validate-btn]')).toBeEnabled();
-  await page.locator('[data-test-validate-btn]').click();
-  await expect(page.locator('[data-test-email-validation]')).toContainText(
-    'The email address user1@example.com has not been validated',
+  await expect(appPage.locator('[data-test-email-validation]')).toContainText(
+    'Please check your email to complete registration.',
   );
 
   for (let i = 0; i < sendAttempts - 1; i++) {
-    await page.waitForTimeout(500);
-    await page.locator('[data-test-resend-validation]').click();
+    await appPage.waitForTimeout(500);
+    await appPage.locator('[data-test-resend-validation]').click();
   }
 
-  await page.goto(mailHost);
+  let context = appPage.context();
+  let emailPage = await context.newPage();
+  await emailPage.goto(mailHost);
   await expect(
-    page.locator('.messagelist .unread').filter({ hasText: email }),
+    emailPage.locator('.messagelist .unread').filter({ hasText: email }),
   ).toHaveCount(sendAttempts);
-  await page
+  await emailPage
     .locator('.messagelist .unread')
     .filter({ hasText: email })
     .first()
     .click();
   await expect(
-    page.frameLocator('.messageview iframe').locator('body'),
-  ).toContainText('Verify Your Email Address');
-  await expect(page.locator('.messageview .messageviewheader')).toContainText(
+    emailPage.frameLocator('.messageview iframe').locator('body'),
+  ).toContainText('Verify Email');
+  await expect(emailPage.locator('.messageview .messageviewheader')).toContainText(
     `To:${email}`,
   );
 
   if (opts?.onEmailPage) {
-    await opts.onEmailPage(page);
+    await opts.onEmailPage(emailPage);
   }
 
-  let context = page.context();
-  const [validationPage] = await Promise.all([
-    context.waitForEvent('page'),
-    await page
+  const validationPagePromise = context.waitForEvent('page');
+  let textBtn = emailPage
       .frameLocator('.messageview iframe')
-      .getByText('Verify Your Email Address')
-      .click(),
-  ]);
+      .getByText('Verify Email');
+  // We have to delay before going to validation window
+  // to avoid the validation window won't open
+  await emailPage.waitForTimeout(500);
+  await textBtn.click();
+
+  const validationPage = await validationPagePromise;
   await validationPage.waitForLoadState();
   if (opts?.onValidationPage) {
     await opts.onValidationPage(validationPage);
-  }
-  await gotoRegistration(page);
-  if (!opts?.isLoggedInWhenValidated) {
-    await expect(page.locator('[data-test-email-validation]')).toContainText(
-      'The email address user1@example.com has been validated',
-    );
   }
 }
 
 export async function gotoRegistration(page: Page) {
   await openRoot(page);
   await toggleOperatorMode(page);
-  await openChat(page);
   await page.locator('[data-test-register-user]').click();
   await expect(page.locator('[data-test-register-user]')).toHaveCount(1);
 }
@@ -164,7 +157,9 @@ export async function login(
 ) {
   await openRoot(page);
   await toggleOperatorMode(page);
-  await openChat(page);
+  await page.waitForFunction(() =>
+    document.querySelector('[data-test-username-field]'),
+  );
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
@@ -172,6 +167,7 @@ export async function login(
   if (opts?.expectFailure) {
     await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
   } else {
+    await openChat(page);
     await expect(page.locator('[data-test-rooms-list]')).toHaveCount(1);
   }
 }

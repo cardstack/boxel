@@ -8,7 +8,6 @@ import {
   scrollTo,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -29,6 +28,7 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   getMonacoContent,
+  percySnapshot,
   setupAcceptanceTestRealm,
   setMonacoContent,
   setupLocalIndexing,
@@ -37,6 +37,7 @@ import {
   waitForCodeEditor,
   type TestContextWithSSE,
 } from '../helpers';
+import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -370,6 +371,7 @@ module('Acceptance | code submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupWindowMock(hooks);
+  setupMatrixServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
@@ -737,7 +739,7 @@ module('Acceptance | code submode tests', function (hooks) {
     );
 
     await waitFor('[data-test-binary-info]');
-
+    await waitFor('[data-test-definition-file-extension]');
     assert.dom('[data-test-definition-file-extension]').hasText('.png');
     await waitFor('[data-test-definition-realm-name]');
     assert
@@ -1185,7 +1187,7 @@ module('Acceptance | code submode tests', function (hooks) {
       'cursor is at Employee declaration',
     );
 
-    await click(`[data-test-definition-container="${testRealmURL}person"]`);
+    await click(`[data-test-clickable-definition-container`);
     await waitFor(`[data-boxel-selector-item-text="Person"]`);
     await waitUntil(() => monacoService.hasFocus);
     lineCursorOn = monacoService.getLineCursorOn();

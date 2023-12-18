@@ -14,6 +14,7 @@ import { Position } from 'monaco-editor';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { logger } from '@cardstack/runtime-common';
+import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
@@ -21,6 +22,7 @@ import { type ModuleDeclaration } from '@cardstack/host/resources/module-content
 
 import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -46,16 +48,23 @@ interface Signature {
 const log = logger('component:code-editor');
 
 export default class CodeEditor extends Component<Signature> {
-  @service declare monacoService: MonacoService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare cardService: CardService;
+  @service private declare monacoService: MonacoService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare cardService: CardService;
+  @service private declare environmentService: EnvironmentService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
   private hasUnsavedSourceChanges = false;
+  private codePath;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    // note that we actually set our own `codePath` property because within
+    // registerDestructor we actually can no longer see the codePath that pertains
+    // to the component that is being destroyed--rather we see the new codePath
+    // that we are transitioning to.
+    this.codePath = this.operatorModeStateService.state.codePath;
 
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
@@ -98,10 +107,6 @@ export default class CodeEditor extends Component<Signature> {
       return this.maybeMonacoSDK;
     }
     throw new Error(`cannot use monaco SDK before it has loaded`);
-  }
-
-  private get codePath() {
-    return this.operatorModeStateService.state.codePath;
   }
 
   private get readyFile() {
@@ -150,6 +155,34 @@ export default class CodeEditor extends Component<Signature> {
           new Position(start.line, start.column),
         );
       }
+    } else if (
+      declaration.path?.node &&
+      'loc' in declaration.path?.node &&
+      declaration.path.node.loc
+    ) {
+      //This is a fallback path if we cannot find declaration / code for element
+      if (declaration.path?.isExportNamedDeclaration()) {
+        //capturing position of named export declarations
+        //this will always divert to the end of the specifier
+        let specifier = declaration.path?.node.specifiers.find(
+          (specifier) => getName(specifier.exported) === declaration.exportName,
+        );
+        if (
+          specifier &&
+          specifier.exported.loc !== null &&
+          specifier.exported.loc !== undefined
+        ) {
+          let { start, end } = specifier.exported.loc;
+          this.monacoService.updateCursorPosition(
+            new Position(start.line, end.column + 1), //need to +1 for specifier positions
+          );
+        }
+      } else if (declaration.path.isExportDefaultDeclaration()) {
+        let { start, end } = declaration.path.node.loc;
+        this.monacoService.updateCursorPosition(
+          new Position(start.line, end.column),
+        );
+      }
     }
   }
 
@@ -182,13 +215,11 @@ export default class CodeEditor extends Component<Signature> {
 
   private contentChangedTask = restartableTask(async (content: string) => {
     this.hasUnsavedSourceChanges = true;
-    // note that there is already a debounce in the monaco modifier so there
-    // is no need to delay further for auto save initiation
-
     if (!isReady(this.args.file) || content === this.args.file?.content) {
       return;
     }
 
+    await timeout(this.environmentService.autoSaveDelayMs);
     this.writeSourceCodeToFile(this.args.file, content);
     this.waitForSourceCodeWrite.perform();
     this.hasUnsavedSourceChanges = false;
@@ -256,6 +287,7 @@ export default class CodeEditor extends Component<Signature> {
         <div
           class='monaco-container'
           data-test-editor
+          data-test-percy-hide
           {{monacoModifier
             content=this.readyFile.content
             contentChanged=(perform this.contentChangedTask)

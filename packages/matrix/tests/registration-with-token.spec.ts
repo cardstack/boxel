@@ -13,8 +13,8 @@ import {
   assertLoggedOut,
   logout,
   test,
-  mailHost,
   setupMatrixOverride,
+  openChat,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -39,7 +39,7 @@ test.describe('User Registration w/ Token', () => {
     await smtpStop();
   });
 
-  test('it can register a user with a registration token', async ({ page }) => {
+  test('it can register a user with a registration token', async ({ page, }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await createRegistrationToken(
       synapse,
@@ -48,6 +48,33 @@ test.describe('User Registration w/ Token', () => {
     );
     await clearLocalStorage(page);
     await gotoRegistration(page);
+
+    await expect(
+      page.locator('[data-test-token-field]'),
+      'token field is not displayed',
+    ).toHaveCount(0);
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('Test User');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword1!');
+    await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
+    await page.locator('[data-test-register-btn]').click();
+
+    await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-test-username-field]'),
+      'username field is not displayed',
+    ).toHaveCount(0);
+    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
+    await page.locator('[data-test-token-field]').fill('abc123');
+    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
+    await page.locator('[data-test-next-btn]').click();
 
     await validateEmail(page, 'user1@example.com', {
       onEmailPage: async (page) => {
@@ -65,31 +92,9 @@ test.describe('User Registration w/ Token', () => {
         });
       },
     });
-
-    await expect(
-      page.locator('[data-test-token-field]'),
-      'token field is not displayed',
-    ).toHaveCount(0);
-    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
-    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('mypassword');
-    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword');
-    await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
-    await page.locator('[data-test-register-btn]').click();
-
-    await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
-    await expect(
-      page.locator('[data-test-username-field]'),
-      'username field is not displayed',
-    ).toHaveCount(0);
-    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
-    await page.locator('[data-test-token-field]').fill('abc123');
-    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
-    await page.locator('[data-test-next-btn]').click();
-
-    await assertLoggedIn(page, { email: 'user1@example.com' });
+    
+    await openChat(page);
+    await assertLoggedIn(page, { email: 'user1@example.com', displayName: 'Test User' });
 
     // assert that the registration mode state is cleared properly
     await logout(page);
@@ -109,40 +114,32 @@ test.describe('User Registration w/ Token', () => {
     await clearLocalStorage(page);
 
     await gotoRegistration(page);
-    await validateEmail(page, 'user1@example.com');
+
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('Test User');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-email-field]').fill('user2@example.com');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword');
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword');
-    await expect(
-      page.locator(
-        '[data-test-username-field][data-test-boxel-input-validation-state="initial"]',
-      ),
-      'username field displays initial validation state',
-    ).toHaveCount(1);
-    await expect(
-      page.locator(
-        '[data-test-username-field] ~ [data-test-boxel-input-error-message]',
-      ),
-      'no error message is displayed',
-    ).toHaveCount(0);
-    await page.locator('[data-test-register-btn]').click();
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword1!');
 
     await expect(
       page.locator(
-        '[data-test-username-field][data-test-boxel-input-validation-state="invalid"]',
+        '[data-test-username-field][data-test-boxel-input-group-validation-state="invalid"]',
       ),
       'username field displays invalid validation state',
     ).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-username-field] ~ [data-test-boxel-input-error-message]',
+        '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
       ),
-    ).toContainText('User ID already taken');
+    ).toContainText('User Name is already taken');
 
     await page.locator('[data-test-username-field]').fill('user2');
     await expect(
       page.locator(
-        '[data-test-username-field] ~ [data-test-boxel-input-error-message]',
+        '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
       ),
       'no error message is displayed',
     ).toHaveCount(0);
@@ -151,9 +148,12 @@ test.describe('User Registration w/ Token', () => {
     await page.locator('[data-test-token-field]').fill('abc123');
     await page.locator('[data-test-next-btn]').click();
 
+    await validateEmail(page, 'user2@example.com');
+    
+    await openChat(page);
     await assertLoggedIn(page, {
       userId: '@user2:localhost',
-      displayName: 'user2',
+      displayName: 'Test User',
     });
   });
 
@@ -169,10 +169,14 @@ test.describe('User Registration w/ Token', () => {
     await clearLocalStorage(page);
 
     await gotoRegistration(page);
-    await validateEmail(page, 'user1@example.com');
+    
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('Test User');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
     await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword');
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword1!');
     await page.locator('[data-test-register-btn]').click();
 
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
@@ -216,21 +220,67 @@ test.describe('User Registration w/ Token', () => {
       'no error message is displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-next-btn]').click();
-
-    await assertLoggedIn(page);
+    await validateEmail(page, 'user1@example.com');
+    
+    await openChat(page);
+    await assertLoggedIn(page, {
+      userId: '@user1:localhost',
+      displayName: 'Test User',
+    });
   });
 
   test(`it shows an error when passwords do not match`, async ({ page }) => {
     await clearLocalStorage(page);
     await gotoRegistration(page);
-    await validateEmail(page, 'user1@example.com');
 
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('user1');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
     await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword');
-    await page
-      .locator('[data-test-confirm-password-field]')
-      .fill('does not match');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword1!!');
     await page.locator('[data-test-register-btn]').click();
+    await expect(
+      page.locator(
+        '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
+      ),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-confirm-password-field] ~ [data-test-boxel-input-error-message]',
+      ),
+    ).toHaveText('Passwords do not match');
+
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword1!');
+    await expect(
+      page.locator(
+        '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
+      ),
+      'password field does not have error state',
+    ).toHaveCount(0);
+    await expect(
+      page.locator(
+        '[data-test-confirm-password-field] ~ [data-test-boxel-input-error-message]',
+      ),
+      'password error message does not appear',
+    ).toHaveCount(0);
+    await page.locator('[data-test-register-btn]').click();
+    await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
+  });
+
+  test(`it shows an error when password doesn't follow requirement`, async ({
+    page,
+  }) => {
+    await clearLocalStorage(page);
+    await gotoRegistration(page);
+
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('user1');
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword1');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword1');
     await expect(
       page.locator(
         '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
@@ -240,14 +290,23 @@ test.describe('User Registration w/ Token', () => {
       page.locator(
         '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
       ),
-    ).toHaveText('Passwords do not match');
+    ).toHaveText('Password must be at least 8 characters long and include a number and a symbol');
+
+    await page.locator('[data-test-password-field]').fill('mypassword!');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword!');
     await expect(
       page.locator(
-        '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
+        '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
     ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
+      ),
+    ).toHaveText('Password must be at least 8 characters long and include a number and a symbol');
 
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword');
+    await page.locator('[data-test-password-field]').fill('mypassword!1');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword!1');
     await expect(
       page.locator(
         '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
@@ -260,95 +319,90 @@ test.describe('User Registration w/ Token', () => {
       ),
       'password error message does not appear',
     ).toHaveCount(0);
-    await expect(
-      page.locator(
-        '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
-      ),
-      'confirm password field does not have error state',
-    ).toHaveCount(0);
+
     await page.locator('[data-test-register-btn]').click();
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
   });
 
-  test(`it can register a user when email validation is performed after providing registration token`, async ({
+  test(`it shows an error when password doesn't meet the requirement`, async ({
     page,
   }) => {
+    await clearLocalStorage(page);
+    await gotoRegistration(page);
+
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('user1');
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword1');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword1');
+    await expect(
+      page.locator(
+        '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
+      ),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
+      ),
+    ).toHaveText('Password must be at least 8 characters long and include a number and a symbol');
+
+    await page.locator('[data-test-password-field]').fill('mypassword!');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword!');
+    await expect(
+      page.locator(
+        '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
+      ),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
+      ),
+    ).toHaveText('Password must be at least 8 characters long and include a number and a symbol');
+
+    await page.locator('[data-test-password-field]').fill('mypassword!1');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword!1');
+    await expect(
+      page.locator(
+        '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
+      ),
+      'password field does not have error state',
+    ).toHaveCount(0);
+    await expect(
+      page.locator(
+        '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
+      ),
+      'password error message does not appear',
+    ).toHaveCount(0);
+
+    await page.locator('[data-test-register-btn]').click();
+    await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
+  });
+
+  test(`it can resend email validation message`, async ({ page }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    await clearLocalStorage(page);
     await createRegistrationToken(
       synapse,
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
-    await clearLocalStorage(page);
     await gotoRegistration(page);
 
-    await validateEmail(page, 'user1@example.com', {
-      isLoggedInWhenValidated: true,
-      onEmailPage: async (page) => {
-        await gotoRegistration(page);
-        await expect(
-          page.locator('[data-test-email-validation]'),
-        ).toContainText(
-          'The email address user1@example.com has not been validated',
-        );
-        await expect(
-          page.locator('[data-test-token-field]'),
-          'token field is not displayed',
-        ).toHaveCount(0);
-        await page.locator('[data-test-username-field]').fill('user1');
-        await page.locator('[data-test-password-field]').fill('mypassword');
-        await page
-          .locator('[data-test-confirm-password-field]')
-          .fill('mypassword');
-        await page.locator('[data-test-register-btn]').click();
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('user1');
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword1!');
+    await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
+    await page.locator('[data-test-register-btn]').click();
 
-        await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
-        await expect(
-          page.locator('[data-test-username-field]'),
-          'username field is not displayed',
-        ).toHaveCount(0);
-        await page.locator('[data-test-token-field]').fill('abc123');
-        await page.locator('[data-test-next-btn]').click();
+    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
+    await page.locator('[data-test-token-field]').fill('abc123');
+    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
+    await page.locator('[data-test-next-btn]').click();
 
-        await expect(
-          page.locator('[data-test-email-validation]'),
-        ).toContainText(
-          'The email address user1@example.com has not been validated',
-        );
-        await expect(
-          page.locator('[data-test-username-field]'),
-          'username field is not displayed',
-        ).toHaveCount(0);
-        await expect(
-          page.locator('[data-test-token-field]'),
-          'token field is not displayed',
-        ).toHaveCount(0);
-
-        await page.goto(mailHost);
-        await expect(
-          page
-            .locator('.messagelist .unread')
-            .filter({ hasText: 'user1@example.com' }),
-        ).toHaveCount(1);
-        await page
-          .locator('.messagelist .unread')
-          .filter({ hasText: 'user1@example.com' })
-          .first()
-          .click();
-        await expect(
-          page.frameLocator('.messageview iframe').locator('body'),
-        ).toContainText('Verify Your Email Address');
-        await expect(
-          page.locator('.messageview .messageviewheader'),
-        ).toContainText(`To:user1@example.com`);
-      },
-    });
-    await assertLoggedIn(page, { email: 'user1@example.com' });
-  });
-
-  test(`it can resend email validation message`, async ({ page }) => {
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
     await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
   });
 });

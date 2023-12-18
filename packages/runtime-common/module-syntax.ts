@@ -4,11 +4,13 @@ import { parse, print } from 'recast';
 import {
   schemaAnalysisPlugin,
   type Options,
-  type PossibleCardOrFieldClass,
+  type PossibleCardOrFieldDeclaration,
   type Declaration,
   type BaseDeclaration,
   type ClassReference,
-  isPossibleCardOrFieldClass,
+  type FunctionDeclaration,
+  type ClassDeclaration,
+  type Reexport,
   isInternalReference,
 } from './schema-analysis-plugin';
 import {
@@ -25,6 +27,8 @@ import {
   maybeRelativeURL,
   trimExecutableExtension,
   codeRefWithAbsoluteURL,
+  baseCardRef,
+  baseFieldRef,
   type CodeRef,
 } from './index';
 //@ts-ignore unsure where these types live
@@ -40,11 +44,18 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type { PossibleCardOrFieldClass, Declaration, BaseDeclaration };
-export { isPossibleCardOrFieldClass, isInternalReference };
+export type {
+  PossibleCardOrFieldDeclaration,
+  Declaration,
+  BaseDeclaration,
+  FunctionDeclaration,
+  ClassDeclaration,
+  Reexport,
+};
+export { isInternalReference };
 
 export class ModuleSyntax {
-  declare possibleCardsOrFields: PossibleCardOrFieldClass[];
+  declare possibleCardsOrFields: PossibleCardOrFieldDeclaration[];
   declare declarations: Declaration[];
   private declare ast: t.File;
   private url: URL;
@@ -102,6 +113,7 @@ export class ModuleSyntax {
     fieldName,
     fieldRef,
     fieldType,
+    fieldDefinitionType,
     incomingRelativeTo,
     outgoingRelativeTo,
     outgoingRealmURL,
@@ -111,6 +123,7 @@ export class ModuleSyntax {
     fieldName: string;
     fieldRef: { name: string; module: string }; // module could be a relative path
     fieldType: FieldType;
+    fieldDefinitionType: 'card' | 'field';
     incomingRelativeTo: URL | undefined; // can be undefined when you know the url is not going to be relative
     outgoingRelativeTo: URL | undefined; // can be undefined when you know url is not going to be relative
     outgoingRealmURL: URL | undefined; // should be provided when the other 2 params are provided
@@ -129,6 +142,7 @@ export class ModuleSyntax {
       fieldRef,
       fieldType,
       fieldName,
+      fieldDefinitionType,
       cardBeingModified,
       incomingRelativeTo,
       outgoingRelativeTo,
@@ -260,11 +274,11 @@ export class ModuleSyntax {
   // This function performs the same job as
   // @cardstack/runtime-common/code-ref.ts#loadCard() but using syntax instead
   // of running code
-  private getCard(codeRef: CodeRef): PossibleCardOrFieldClass {
-    let cardOrFieldClass: PossibleCardOrFieldClass | undefined;
+  private getCard(codeRef: CodeRef): PossibleCardOrFieldDeclaration {
+    let cardOrFieldClass: PossibleCardOrFieldDeclaration | undefined;
     if (!('type' in codeRef)) {
       cardOrFieldClass = this.possibleCardsOrFields.find(
-        (c) => c.exportedAs === codeRef.name,
+        (c) => c.exportName === codeRef.name,
       );
     } else if (codeRef.type === 'ancestorOf') {
       let classRef = this.getCard(codeRef.card).super;
@@ -300,13 +314,13 @@ export class ModuleSyntax {
 
   private getPossibleCardForClassReference(
     classRef: ClassReference,
-  ): PossibleCardOrFieldClass | undefined {
+  ): PossibleCardOrFieldDeclaration | undefined {
     if (classRef.type === 'external') {
       if (
         trimExecutableExtension(new URL(classRef.module, this.url)) === this.url
       ) {
         return this.possibleCardsOrFields.find(
-          (c) => c.exportedAs === classRef.name,
+          (c) => c.exportName === classRef.name,
         );
       }
       throw new Error(
@@ -353,6 +367,7 @@ function makeNewField({
   fieldRef,
   fieldType,
   fieldName,
+  fieldDefinitionType,
   cardBeingModified,
   incomingRelativeTo,
   outgoingRelativeTo,
@@ -361,6 +376,7 @@ function makeNewField({
 }: {
   target: NodePath<t.Node>;
   fieldRef: { name: string; module: string };
+  fieldDefinitionType: 'card' | 'field';
   fieldType: FieldType;
   fieldName: string;
   cardBeingModified: CodeRef;
@@ -416,7 +432,7 @@ function makeNewField({
     target as NodePath<any>,
     relativeFieldModuleRef,
     fieldRef.name,
-    suggestedCardName(fieldRef),
+    suggestedCardName(fieldRef, fieldDefinitionType),
   );
 
   if (
@@ -441,15 +457,23 @@ function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
   return currentPath as NodePath<t.Program>;
 }
 
-function suggestedCardName(ref: { name: string; module: string }): string {
-  if (ref.name.toLowerCase().endsWith('card')) {
+function suggestedCardName(
+  ref: { name: string; module: string },
+  type: 'card' | 'field',
+): string {
+  if (
+    ref.name.toLowerCase().endsWith(type) ||
+    isEqual(ref, baseCardRef) ||
+    isEqual(ref, baseFieldRef)
+  ) {
     return ref.name;
   }
+
   let name = ref.name;
   if (name === 'default') {
     name = ref.module.split('/').pop()!;
   }
-  return upperFirst(camelCase(`${name} card`));
+  return upperFirst(camelCase(`${name} ${type}`));
 }
 
 function insertFieldBeforePath(

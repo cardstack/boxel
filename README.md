@@ -43,6 +43,8 @@ In order to run the ember-cli hosted app:
 
 The app is available at http://localhost:4200. It will serve the draft realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and draft cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/draft in the browser (and additionally the published realm by entering http://localhost:4201/published).
 
+If you want to use operator mode, you need to register an account on Matrix. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
+
 When you are done running the app you can stop the synapse server by running the following from the `packages/matrix` workspace:
 
 ```
@@ -64,17 +66,17 @@ Live reloads are not available in this mode, but you can just refresh the page t
 
 Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
 
-| Port  | Description                                           | Running `start:all` | Running `start:base` |
-| ----- | ----------------------------------------------------- | ------------------- | -------------------- |
-| :4201 | `/base` base realm                                    | ✅                  | ✅                   |
-| :4201 | `/drafts` draft realm                                 | ✅                  | 🚫                   |
-| :4201 | `/published` draft realm                              | ✅                  | 🚫                   |
-| :4202 | `/test` host test realm, `/node-test` node test realm | ✅                  | 🚫                   |
-| :4203 | `root (/)` base realm                                 | ✅                  | 🚫                   |
-| :4204 | `root (/)` drafts realm                               | ✅                  | 🚫                   |
-| :4205 | qunit server mounting realms in iframes for testing   | ✅                  | 🚫                   |
-| :5001 | Mail user interface for viewing emails sent to local SMTP | ✅              | 🚫                   | 
-| :8008 | Matrix synapse server                                 | ✅                  | 🚫                   |
+| Port  | Description                                               | Running `start:all` | Running `start:base` |
+| ----- | --------------------------------------------------------- | ------------------- | -------------------- |
+| :4201 | `/base` base realm                                        | ✅                  | ✅                   |
+| :4201 | `/drafts` draft realm                                     | ✅                  | 🚫                   |
+| :4201 | `/published` draft realm                                  | ✅                  | 🚫                   |
+| :4202 | `/test` host test realm, `/node-test` node test realm     | ✅                  | 🚫                   |
+| :4203 | `root (/)` base realm                                     | ✅                  | 🚫                   |
+| :4204 | `root (/)` drafts realm                                   | ✅                  | 🚫                   |
+| :4205 | qunit server mounting realms in iframes for testing       | ✅                  | 🚫                   |
+| :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
+| :8008 | Matrix synapse server                                     | ✅                  | 🚫                   |
 
 #### Using `start:development`
 
@@ -88,16 +90,17 @@ In order to support server-side rendered cards, this project incorporates FastBo
 The realm server also uses FastBoot to pre-render card html. The realm server boots up the host app in a FastBoot container. The realm server will automatically look for the host app's `dist/` output to use when booting up the infrastructure for pre-rendering cards. Make sure to start to the host app first before starting the realm server so that the host app's `dist/` output will be generated. If you are making changes that effect the `/render` route in the host app, you'll want to restart the host app (or run `pnpm build`) in order for the realm server to pick up your changes.
 
 ### Request Accept Header
-The realm server uses the request accept header to determine the type of request being made and in what format it should return the content. 
 
-| Accept Header | URL rules | Description |
-|---------------|-------------------|-------------|
-| `application/vnd.card+json`| If card instance URL includes the `.json` extension, the server will redirect to the URL without the extension.| Used to request card instances for normal consumption|
-| `application/vnd.card+source`| For code modules we support node-like resolution, which means that the extension is optional. If the extension is not provided the server will redirect to the URL with the extension. We also support card instance requests without the `.json` extension. The server will redirect to the URL with the extension.| Used to request source file format for code modules or card instances (note that card instances are returned using file serialization which notably contains no `id` property)|
-| `application/vnd.api+json` | Directory listing requests need to have their URL's end with a `/` character| Used to request a directory listing or to get realm info|
-| `text/event-stream`| only `<REALM_URL>/_messages` is supported |Used to subscribe to realm events via Server Sent Events|
-| `text/html`| Card instance URL's should not include the `.json` file extension. This is considered a 404 | Used to request rendered card instance html (this serves the host application) |
-|`*/*` | We support node-like resolution, which means that the extension is optional | Used to request transpiled executable code modules|
+The realm server uses the request accept header to determine the type of request being made and in what format it should return the content.
+
+| Accept Header                 | URL rules                                                                                                                                                                                                                                                                                                            | Description                                                                                                                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `application/vnd.card+json`   | If card instance URL includes the `.json` extension, the server will redirect to the URL without the extension.                                                                                                                                                                                                      | Used to request card instances for normal consumption                                                                                                                          |
+| `application/vnd.card+source` | For code modules we support node-like resolution, which means that the extension is optional. If the extension is not provided the server will redirect to the URL with the extension. We also support card instance requests without the `.json` extension. The server will redirect to the URL with the extension. | Used to request source file format for code modules or card instances (note that card instances are returned using file serialization which notably contains no `id` property) |
+| `application/vnd.api+json`    | Directory listing requests need to have their URL's end with a `/` character                                                                                                                                                                                                                                         | Used to request a directory listing or to get realm info                                                                                                                       |
+| `text/event-stream`           | only `<REALM_URL>/_messages` is supported                                                                                                                                                                                                                                                                            | Used to subscribe to realm events via Server Sent Events                                                                                                                       |
+| `text/html`                   | Card instance URL's should not include the `.json` file extension. This is considered a 404                                                                                                                                                                                                                          | Used to request rendered card instance html (this serves the host application)                                                                                                 |
+| `*/*`                         | We support node-like resolution, which means that the extension is optional                                                                                                                                                                                                                                          | Used to request transpiled executable code modules                                                                                                                             |
 
 ### Matrix Server
 
@@ -119,7 +122,7 @@ pnpm stop:synapse
 
 #### Matrix Administration
 
-Matrix administration requires an administrative user and a special client in order to use. Matrix administration is used for creating users, creating rooms, creating registration tokens, managing media, viewing events, etc. Note that you will need to use the matrix administration UI to create tokens to register new matrix users.
+Matrix administration requires an administrative user and a special client in order to use. Matrix administration is used for creating users, creating rooms, creating registration tokens, managing media, viewing events, etc. Note that you will need to use the matrix administration UI to create tokens to register new matrix users or you can execute `pnpm register-test-token` and use the token `dev-token`.
 
 First you must create an administrative user:
 
@@ -128,6 +131,7 @@ First you must create an administrative user:
    ```
    docker exec -it boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u admin -p your_admin_password --admin
    ```
+   Alternatively, you can execute `pnpm register-test-admin` and utilize the following credentials: `user: admin` and `password: test`.
 3. Run the docker container:
    ```
    docker run --name synapse-admin -p 8080:80 -d awesometechnologies/synapse-admin

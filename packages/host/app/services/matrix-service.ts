@@ -144,13 +144,22 @@ export default class MatrixService extends Service {
   }
 
   async logout() {
-    await this.flushMembership;
-    await this.flushTimeline;
-    clearAuth();
-    this.unbindEventListeners();
-    await this.client.stopClient();
-    await this.client.logout();
-    this.resetState();
+    try {
+      await this.flushMembership;
+      await this.flushTimeline;
+      clearAuth();
+      this.unbindEventListeners();
+      await this.client.logout(true);
+    } catch (e) {
+      console.log('Error logging out of Matrix', e);
+    } finally {
+      this.resetState();
+    }
+  }
+
+  async startAndSetDisplayName(auth: IAuthData, displayName: string) {
+    this.start(auth);
+    this.client.setDisplayName(displayName);
   }
 
   async start(auth?: IAuthData) {
@@ -166,6 +175,7 @@ export default class MatrixService extends Service {
       user_id: userId,
       device_id: deviceId,
     } = auth;
+
     if (!accessToken) {
       throw new Error(
         `Cannot create matrix client from auth that has no access token: ${JSON.stringify(
@@ -203,8 +213,13 @@ export default class MatrixService extends Service {
       saveAuth(auth);
       this.bindEventListeners();
 
-      await this._client.startClient();
-      await this.initializeRooms();
+      try {
+        await this._client.startClient();
+        await this.initializeRooms();
+      } catch (e) {
+        console.log('Error starting Matrix client', e);
+        await this.logout();
+      }
     }
   }
 
@@ -409,6 +424,52 @@ export default class MatrixService extends Service {
     );
     let { users } = await response.json();
     return users;
+  }
+
+  // the matrix SDK is using an old version of this API and
+  // doesn't provide login using email, so we use the API directly
+  async loginWithEmail(email: string, password: string) {
+    let response = await fetch(`${matrixURL}/_matrix/client/v3/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        identifier: {
+          type: 'm.id.thirdparty',
+          medium: 'email',
+          address: email,
+        },
+        password,
+        type: 'm.login.password',
+      }),
+    });
+    if (response.ok) {
+      return (await response.json()) as MatrixSDK.IAuthData;
+    } else {
+      let data = (await response.json()) as { errcode: string; error: string };
+      let error = new Error(data.error) as any;
+      error.data = data;
+      error.status = response.status;
+      throw error;
+    }
+  }
+
+  async login(usernameOrEmail: string, password: string) {
+    try {
+      const cred = await this.client.loginWithPassword(
+        usernameOrEmail,
+        password,
+      );
+      return cred;
+    } catch (error) {
+      try {
+        const cred = await this.loginWithEmail(usernameOrEmail, password);
+        return cred;
+      } catch (error2) {
+        throw error;
+      }
+    }
   }
 
   private resetState() {

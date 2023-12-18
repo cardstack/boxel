@@ -6,7 +6,6 @@ import {
   triggerKeyEvent,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -19,11 +18,13 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
+  percySnapshot,
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
   waitForCodeEditor,
 } from '../../helpers';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -184,6 +185,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupWindowMock(hooks);
+  setupMatrixServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');

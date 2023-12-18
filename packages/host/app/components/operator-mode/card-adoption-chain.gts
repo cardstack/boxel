@@ -7,8 +7,9 @@ import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
-import { CardInheritance } from '@cardstack/host/components/operator-mode/schema-editor-column';
+import { CardInheritance } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 
+import { stripFileExtension } from '@cardstack/host/lib/utils';
 import { Type } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
@@ -21,8 +22,8 @@ interface Signature {
     cardInheritanceChain: CardInheritance[];
     moduleSyntax: ModuleSyntax;
     openDefinition: (
-      moduleHref: string,
       codeRef: ResolvedCodeRef | undefined,
+      localName: string | undefined,
     ) => void;
   };
 }
@@ -125,8 +126,6 @@ export default class CardAdoptionChain extends Component<Signature> {
 
   @action allowFieldManipulation(file: Ready, cardType: Type): boolean {
     // Only allow add/edit/remove for fields from the currently opened module
-
-    // Strip the file extension from the file url
-    return file.url.replace(/\.[^/.]+$/, '') === cardType.module;
+    return stripFileExtension(file.url) === cardType.module;
   }
 }

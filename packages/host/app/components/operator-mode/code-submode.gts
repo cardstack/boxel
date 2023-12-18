@@ -1,6 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -12,28 +11,28 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
+
 import perform from 'ember-concurrency/helpers/perform';
 
+import { Accordion } from '@cardstack/boxel-ui/components';
+
 import {
-  Button,
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { cn, and, not } from '@cardstack/boxel-ui/helpers';
+import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
-import config from '@cardstack/host/config/environment';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
@@ -44,6 +43,7 @@ import {
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -55,6 +55,10 @@ import FileTree from '../editor/file-tree';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
+import InnerContainer from './code-submode/inner-container';
+import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
+import SchemaEditor from './code-submode/schema-editor';
+import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
@@ -66,7 +70,6 @@ interface Signature {
     saveCardOnClose: (card: CardDef) => void;
   };
 }
-const { autoSaveDelayMs } = config;
 
 type PanelWidths = {
   rightPanel: number;
@@ -79,6 +82,8 @@ type PanelHeights = {
   filePanel: number;
   recentPanel: number;
 };
+
+type SelectedAccordionItem = 'schema-editor' | null;
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
 const defaultPanelWidths: PanelWidths = {
@@ -107,12 +112,14 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare recentFilesService: RecentFilesService;
   @service declare loaderService: LoaderService;
+  @service declare environmentService: EnvironmentService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
   @tracked private previewFormat: Format = 'isolated';
+  @tracked private isCreateModalOpen = false;
 
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -123,6 +130,7 @@ export default class CodeSubmode extends Component<Signature> {
   #currentCard: CardDef | undefined;
 
   private deleteModal: DeleteModal | undefined;
+  private createFileModal: CreateFileModal | undefined;
   private cardResource = getCard(
     this,
     () => {
@@ -193,20 +201,8 @@ export default class CodeSubmode extends Component<Signature> {
     this.operatorModeStateService.updateFileView(view);
   }
 
-  get fileView() {
-    return this.operatorModeStateService.state.fileView;
-  }
-
-  get fileViewTitle() {
-    return this.isFileTreeShowing ? 'File Browser' : 'Inspector';
-  }
-
   private get realmURL() {
     return this.operatorModeStateService.realmURL;
-  }
-
-  private get isReady() {
-    return isReady(this.currentOpenFile);
   }
 
   private get isIncompatibleFile() {
@@ -222,12 +218,12 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get hasCardDefOrFieldDef() {
-    return this.declarations.some((d) => isCardOrFieldDeclaration(d));
+    return this.declarations.some(isCardOrFieldDeclaration);
   }
 
   private get isSelectedItemIncompatibleWithSchemaEditor() {
     if (!this.selectedDeclaration) {
-      return;
+      return undefined;
     }
     return !isCardOrFieldDeclaration(this.selectedDeclaration);
   }
@@ -239,15 +235,15 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
+  get fileView() {
+    return this.operatorModeStateService.state.fileView;
+  }
+
   private get isFileOpen() {
-    return this.codePath && this.currentOpenFile?.state !== 'not-found';
+    return !!(this.codePath && this.currentOpenFile?.state !== 'not-found');
   }
 
   private get fileIncompatibilityMessage() {
-    //this will prevent displaying message during a page refresh
-    if (this.moduleContentsResource.isLoading) {
-      return null;
-    }
     // If file is incompatible
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
@@ -255,6 +251,10 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If the module is incompatible
     if (this.isModule) {
+      //this will prevent displaying message during a page refresh
+      if (this.moduleContentsResource.isLoading) {
+        return null;
+      }
       if (!this.hasCardDefOrFieldDef) {
         return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
       } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
@@ -264,6 +264,10 @@ export default class CodeSubmode extends Component<Signature> {
 
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
+      // this will prevent displaying message during a page refresh
+      if (isCardDocumentString(this.readyFile.content)) {
+        return null;
+      }
       return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
     }
 
@@ -275,7 +279,23 @@ export default class CodeSubmode extends Component<Signature> {
       return `card preview error ${this.cardError.message}`;
     }
 
+    if (
+      !this.isModule &&
+      !this.readyFile.name.endsWith('.json') &&
+      !this.card //for case of creating new card instance
+    ) {
+      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
+    }
+
     return null;
+  }
+
+  private get currentOpenFile() {
+    return this.operatorModeStateService.openFile.current;
+  }
+
+  private get isReady() {
+    return isReady(this.currentOpenFile);
   }
 
   private get readyFile() {
@@ -299,10 +319,6 @@ export default class CodeSubmode extends Component<Signature> {
     this.userHasDismissedURLError = true;
   }
 
-  private get currentOpenFile() {
-    return this.operatorModeStateService.openFile.current;
-  }
-
   private onCardLoaded = (
     oldCard: CardDef | undefined,
     newCard: CardDef | undefined,
@@ -324,29 +340,15 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get declarations() {
-    return this.moduleContentsResource?.declarations || [];
+    return this.moduleContentsResource?.declarations;
   }
 
   private get _selectedDeclaration() {
+    let codeSelection = this.operatorModeStateService.state.codeSelection;
     return this.moduleContentsResource?.declarations.find((dec) => {
-      // when refreshing module,
-      // checks localName from serialized url
-      if (
-        this.operatorModeStateService.state.codeSelection.localName ===
-        dec.localName
-      ) {
-        return true;
-      }
-
-      // when opening new definition,
-      // checks codeRef from serialized url
-      let codeRef = this.operatorModeStateService.state.codeSelection?.codeRef;
-      if (isCardOrFieldDeclaration(dec) && codeRef) {
-        return (
-          dec.exportedAs === codeRef.name || dec.localName === codeRef.name
-        );
-      }
-      return false;
+      return codeSelection
+        ? dec.exportName === codeSelection || dec.localName === codeSelection
+        : false;
     });
   }
 
@@ -366,21 +368,24 @@ export default class CodeSubmode extends Component<Signature> {
     ) {
       return this.selectedDeclaration;
     }
-    return;
+    return undefined;
   }
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this.operatorModeStateService.updateLocalNameSelection(dec.localName);
-    this.updateCursorByDeclaration?.(dec);
+    this.openDefinition(undefined, dec.localName);
   }
 
   @action
-  openDefinition(moduleHref: string, codeRef: ResolvedCodeRef | undefined) {
-    if (codeRef) {
-      this.operatorModeStateService.updateCodeRefSelection(codeRef);
-    }
-    this.operatorModeStateService.updateCodePath(new URL(moduleHref));
+  openDefinition(
+    codeRef: ResolvedCodeRef | undefined,
+    localName: string | undefined,
+  ) {
+    this.operatorModeStateService.updateCodePathWithCodeSelection(
+      codeRef,
+      localName,
+      () => this.updateCursorByDeclaration?.(this.selectedDeclaration!),
+    );
   }
 
   private onCardChange = () => {
@@ -390,7 +395,7 @@ export default class CodeSubmode extends Component<Signature> {
   private initiateAutoSaveTask = restartableTask(async () => {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
-      await timeout(autoSaveDelayMs);
+      await timeout(this.environmentService.autoSaveDelayMs);
       await this.saveCard.perform(this.card);
       this.hasUnsavedCardChanges = false;
     }
@@ -431,8 +436,9 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get isFileTreeShowing() {
-    return this.fileView === 'browser' || !this.isFileOpen;
+  @action
+  private onSelectNewFileType(fileType: FileType) {
+    this.createFile.perform(fileType);
   }
 
   onStateChange(state: FileResource['state']) {
@@ -483,6 +489,32 @@ export default class CodeSubmode extends Component<Signature> {
     }
   });
 
+  // dropTask will ignore any subsequent create file requests until the one in progress is done
+  private createFile = dropTask(
+    async (
+      fileType: FileType,
+      definitionClass?: {
+        displayName: string;
+        ref: ResolvedCodeRef;
+      },
+    ) => {
+      if (!this.createFileModal) {
+        throw new Error(`bug: CreateFileModal not instantiated`);
+      }
+      this.isCreateModalOpen = true;
+      let url = await this.createFileModal.createNewFile(
+        fileType,
+        this.realmURL,
+        definitionClass,
+      );
+      this.isCreateModalOpen = false;
+      if (url) {
+        this.operatorModeStateService.updateCodePath(url);
+        this.setPreviewFormat('edit');
+      }
+    },
+  );
+
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
     try {
@@ -502,6 +534,10 @@ export default class CodeSubmode extends Component<Signature> {
     this.deleteModal = deleteModal;
   };
 
+  private setupCreateFileModal = (createFileModal: CreateFileModal) => {
+    this.createFileModal = createFileModal;
+  };
+
   private setupCodeEditor = (
     updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
   ) => {
@@ -517,9 +553,16 @@ export default class CodeSubmode extends Component<Signature> {
     this.previewFormat = format;
   }
 
-  @action private onNewFileSave(fileURL: URL) {
-    this.operatorModeStateService.updateCodePath(fileURL);
-    this.setPreviewFormat('edit');
+  @tracked private selectedAccordionItem: SelectedAccordionItem =
+    'schema-editor';
+
+  @action private selectAccordionItem(item: SelectedAccordionItem) {
+    if (this.selectedAccordionItem === item) {
+      this.selectedAccordionItem = null;
+      return;
+    }
+
+    this.selectedAccordionItem = item;
   }
 
   <template>
@@ -540,8 +583,8 @@ export default class CodeSubmode extends Component<Signature> {
         @realmURL={{this.realmURL}}
       />
       <NewFileButton
-        @realmURL={{this.realmURL}}
-        @onSave={{this.onNewFileSave}}
+        @onSelectNewFileType={{this.onSelectNewFileType}}
+        @isCreateModalShown={{bool this.isCreateModalOpen}}
       />
     </div>
     <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
@@ -574,85 +617,48 @@ export default class CodeSubmode extends Component<Signature> {
                   @defaultLengthFraction={{defaultPanelHeights.filePanel}}
                   @lengthPx={{this.panelHeights.filePanel}}
                 >
-
-                  {{! Move each container and styles to separate component }}
-                  <div
-                    class='inner-container file-view
-                      {{if this.isFileTreeShowing "file-browser"}}'
+                  <CodeSubmodeLeftPanelToggle
+                    @fileView={{this.fileView}}
+                    @setFileView={{this.setFileView}}
+                    @isFileOpen={{this.isFileOpen}}
+                    @selectedDeclaration={{this.selectedDeclaration}}
                   >
-                    <header
-                      class='file-view__header'
-                      aria-label={{this.fileViewTitle}}
-                      data-test-file-view-header
-                    >
-                      <Button
-                        @disabled={{not this.isFileOpen}}
-                        @kind={{if
-                          (not this.isFileTreeShowing)
-                          'primary-dark'
-                          'secondary'
-                        }}
-                        @size='extra-small'
-                        class={{cn
-                          'file-view__header-btn'
-                          active=(not this.isFileTreeShowing)
-                        }}
-                        {{on 'click' (fn this.setFileView 'inspector')}}
-                        data-test-inspector-toggle
-                      >
-                        Inspector</Button>
-                      <Button
-                        @kind={{if
-                          this.isFileTreeShowing
-                          'primary-dark'
-                          'secondary'
-                        }}
-                        @size='extra-small'
-                        class={{cn
-                          'file-view__header-btn'
-                          active=this.isFileTreeShowing
-                        }}
-                        {{on 'click' (fn this.setFileView 'browser')}}
-                        data-test-file-browser-toggle
-                      >
-                        File Tree</Button>
-                    </header>
-                    <section class='inner-container__content'>
-                      {{#if this.isFileTreeShowing}}
-                        <FileTree @realmURL={{this.realmURL}} />
-                      {{else}}
-                        {{#if this.isReady}}
-                          <DetailPanel
-                            @cardInstance={{this.card}}
-                            @readyFile={{this.readyFile}}
-                            @selectedDeclaration={{this.selectedDeclaration}}
-                            @declarations={{this.declarations}}
-                            @selectDeclaration={{this.selectDeclaration}}
-                            @delete={{perform this.delete}}
-                            @openDefinition={{this.openDefinition}}
-                            data-test-card-inspector-panel
-                          />
-                        {{/if}}
+                    <:inspector>
+                      {{#if this.isReady}}
+                        <DetailPanel
+                          @moduleContentsResource={{this.moduleContentsResource}}
+                          @cardInstance={{this.card}}
+                          @readyFile={{this.readyFile}}
+                          @selectedDeclaration={{this.selectedDeclaration}}
+                          @selectDeclaration={{this.selectDeclaration}}
+                          @delete={{perform this.delete}}
+                          @openDefinition={{this.openDefinition}}
+                          @createFile={{perform this.createFile}}
+                          data-test-card-inspector-panel
+                        />
                       {{/if}}
-                    </section>
-                  </div>
+                    </:inspector>
+                    <:browser>
+                      <FileTree @realmURL={{this.realmURL}} />
+                    </:browser>
+                  </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
                 <VerticallyResizablePanel
                   @defaultLengthFraction={{defaultPanelHeights.recentPanel}}
                   @lengthPx={{this.panelHeights.recentPanel}}
                   @minLengthPx={{100}}
                 >
-                  <aside class='inner-container recent-files'>
-                    <header
-                      class='inner-container__header'
-                      aria-label='Recent Files Header'
-                    >
+                  <InnerContainer
+                    class='recent-files'
+                    as |InnerContainerContent InnerContainerHeader|
+                  >
+                    <InnerContainerHeader aria-label='Recent Files Header'>
                       Recent Files
-                    </header>
-                    <section class='inner-container__content'>
+                    </InnerContainerHeader>
+                    <InnerContainerContent>
                       <RecentFiles />
-                    </section>
-                  </aside>
+                    </InnerContainerContent>
+                  </InnerContainer>
                 </VerticallyResizablePanel>
               </ResizablePanelGroup>
             </div>
@@ -663,7 +669,7 @@ export default class CodeSubmode extends Component<Signature> {
               @lengthPx={{this.panelWidths.codeEditorPanel}}
               @minLengthPx={{300}}
             >
-              <div class='inner-container'>
+              <InnerContainer>
                 {{#if this.isReady}}
                   <CodeEditor
                     @file={{this.currentOpenFile}}
@@ -692,13 +698,13 @@ export default class CodeSubmode extends Component<Signature> {
                     <CheckMark width='27' height='27' />
                   {{/if}}
                 </div>
-              </div>
+              </InnerContainer>
             </ResizablePanel>
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.rightPanel}}
               @lengthPx={{this.panelWidths.rightPanel}}
             >
-              <div class='inner-container'>
+              <InnerContainer>
                 {{#if this.isReady}}
                   {{#if this.fileIncompatibilityMessage}}
                     <div
@@ -716,35 +722,57 @@ export default class CodeSubmode extends Component<Signature> {
                       data-test-card-resource-loaded
                     />
                   {{else if this.selectedCardOrField}}
-                    <SchemaEditorColumn
-                      @file={{this.readyFile}}
-                      @card={{this.selectedCardOrField.cardOrField}}
-                      @cardTypeResource={{this.selectedCardOrField.cardType}}
-                      @openDefinition={{this.openDefinition}}
-                    />
+                    <Accordion as |A|>
+                      <SchemaEditor
+                        @file={{this.readyFile}}
+                        @moduleContentsResource={{this.moduleContentsResource}}
+                        @card={{this.selectedCardOrField.cardOrField}}
+                        @cardTypeResource={{this.selectedCardOrField.cardType}}
+                        @openDefinition={{this.openDefinition}}
+                        as |SchemaEditorTitle SchemaEditorPanel|
+                      >
+                        <A.Item
+                          class='accordion-item'
+                          @contentClass='accordion-item-content'
+                          @onClick={{fn
+                            this.selectAccordionItem
+                            'schema-editor'
+                          }}
+                          @isOpen={{eq
+                            this.selectedAccordionItem
+                            'schema-editor'
+                          }}
+                        >
+                          <:title>
+                            <SchemaEditorTitle />
+                          </:title>
+                          <:content>
+                            <SchemaEditorPanel class='accordion-content' />
+                          </:content>
+                        </A.Item>
+                      </SchemaEditor>
+                    </Accordion>
                   {{/if}}
                 {{/if}}
-              </div>
+              </InnerContainer>
             </ResizablePanel>
           {{else}}
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.emptyCodeModePanel}}
               @lengthPx={{this.panelWidths.emptyCodeModePanel}}
             >
-              <div
-                class='inner-container inner-container--empty'
-                data-test-empty-code-mode
-              >
+              <InnerContainer class='empty-container' data-test-empty-code-mode>
                 <File width='40' height='40' role='presentation' />
                 <h3 class='choose-file-prompt'>
                   Choose a file on the left to open it
                 </h3>
-              </div>
+              </InnerContainer>
             </ResizablePanel>
           {{/if}}
         </ResizablePanelGroup>
       </div>
       <DeleteModal @onCreate={{this.setupDeleteModal}} />
+      <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
     </SubmodeLayout>
 
     <style>
@@ -793,42 +821,7 @@ export default class CodeSubmode extends Component<Signature> {
         height: 100%;
       }
 
-      .inner-container {
-        height: 100%;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius-xl);
-        box-shadow: var(--boxel-deep-box-shadow);
-        overflow: hidden;
-      }
-
-      .inner-container.recent-files {
-        background-color: var(--boxel-200);
-      }
-
-      .inner-container__header {
-        padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
-        font: 700 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .inner-container__content {
-        position: relative;
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
-        overflow-y: auto;
-        height: 100%;
-      }
-      .inner-container--empty {
-        background-color: var(--boxel-light-100);
-        align-items: center;
-        justify-content: center;
-      }
-      .inner-container--empty > :deep(svg) {
-        --icon-color: var(--boxel-highlight);
-      }
-
-      .file-view {
+      .recent-files {
         background-color: var(--boxel-200);
       }
 
@@ -837,33 +830,6 @@ export default class CodeSubmode extends Component<Signature> {
         padding: var(--boxel-sp);
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
-      }
-
-      .file-view__header {
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs);
-        background-color: var(--boxel-200);
-      }
-      .file-view__header-btn {
-        --boxel-button-border: 1px solid var(--boxel-400);
-        --boxel-button-font: 700 var(--boxel-font-xs);
-        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
-        --boxel-button-min-width: 6rem;
-        --boxel-button-padding: 0;
-        border-radius: var(--boxel-border-radius);
-        flex: 1;
-      }
-      .file-view__header-btn:hover:not(:disabled) {
-        border-color: var(--boxel-dark);
-      }
-      .file-view__header-btn.active {
-        border-color: var(--boxel-dark);
-        --boxel-button-text-color: var(--boxel-highlight);
-      }
-
-      .file-view.file-browser .inner-container__content {
-        background: var(--boxel-light);
       }
 
       .code-mode-top-bar {
@@ -933,6 +899,23 @@ export default class CodeSubmode extends Component<Signature> {
         color: var(--boxel-450);
         font-weight: 500;
         padding: var(--boxel-sp-xl);
+      }
+      .empty-container {
+        background-color: var(--boxel-light-100);
+        align-items: center;
+        justify-content: center;
+      }
+      .empty-container > :deep(svg) {
+        --icon-color: var(--boxel-highlight);
+      }
+      .accordion-item :deep(.accordion-item-content) {
+        overflow-y: auto;
+      }
+      .accordion-item:last-child {
+        border-bottom: var(--boxel-border);
+      }
+      .accordion-content {
+        padding: var(--boxel-sp-sm);
       }
     </style>
   </template>

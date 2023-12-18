@@ -38,7 +38,7 @@ export class Person extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Person> {
     <template>
-      <GridContainer>
+      <GridContainer class='container'>
         <h2><@fields.title /></h2>
         <div>
           <div>Is Cool: <@fields.isCool /></div>
@@ -47,6 +47,11 @@ export class Person extends CardDef {
         {{#if @model.pet}}<@fields.pet />{{/if}}
         <@fields.trips />
       </GridContainer>
+      <style>
+        .container {
+          padding: var(--boxel-sp-xl);
+        }
+      </style>
     </template>
   };
 }

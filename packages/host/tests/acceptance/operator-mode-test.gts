@@ -6,7 +6,6 @@ import {
   waitFor,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
@@ -22,12 +21,14 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
+  percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
 } from '../helpers';
+import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -35,6 +36,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
+  setupMatrixServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');
@@ -375,6 +377,43 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
+  test('has a profile icon in the bottom left corner that opens profile info popover', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    assert.dom('[data-test-profile-icon]').hasText('T');
+    assert
+      .dom('[data-test-profile-icon]')
+      .hasAttribute('style', 'background: #5ead6b');
+
+    assert.dom('[data-test-profile-popover]').doesNotHaveClass('opened');
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-popover]').hasClass('opened');
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-popover]').doesNotHaveClass('opened'); // Clicking again closes the popover
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
+
+    await click('[data-test-signout-button]');
+
+    assert.dom('[data-test-login-form]').exists();
+  });
+
   test('visiting index card and entering operator mode', async function (assert) {
     await visit('/');
 
@@ -469,7 +508,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
       fileView: 'inspector',
       openDirs: {},
-      codeSelection: {},
     });
 
     // Toggle back to interactive mode
@@ -492,7 +530,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       codePath: `${testRealmURL}country-with-no-embedded-template.gts`,
       fileView: 'inspector',
       openDirs: {},
-      codeSelection: {},
     });
   });
 
@@ -548,7 +585,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         codePath: `${testRealmURL}Pet/mango.json`,
         fileView: 'inspector',
         openDirs: { [testRealmURL]: ['Pet/'] },
-        codeSelection: {},
       });
 
       // Toggle back to interactive mode
@@ -577,7 +613,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         submode: Submodes.Interact,
         fileView: 'inspector',
         openDirs: { [testRealmURL]: ['Pet/'] },
-        codeSelection: {},
       });
     });
   });
