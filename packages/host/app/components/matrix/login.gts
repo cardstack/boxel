@@ -39,6 +39,7 @@ export default class Login extends Component<Signature> {
         type='text'
         @value={{this.username}}
         @onInput={{this.setUsername}}
+        @onKeyPress={{this.handleEnter}}
       />
     </FieldContainer>
     <FieldContainer
@@ -52,6 +53,7 @@ export default class Login extends Component<Signature> {
         type='password'
         @value={{this.password}}
         @onInput={{this.setPassword}}
+        @onKeyPress={{this.handleEnter}}
       />
     </FieldContainer>
     <Button
@@ -80,6 +82,10 @@ export default class Login extends Component<Signature> {
     >Create a new Boxel account</Button>
 
     <style>
+      form {
+        display: flex;
+        flex-direction: column;
+      }
       .title {
         font: 700 var(--boxel-font-med);
         margin-bottom: var(--boxel-sp-sm);
@@ -134,6 +140,12 @@ export default class Login extends Component<Signature> {
     return (
       !this.username || !this.password || this.error || this.doLogin.isRunning
     );
+  }
+
+  @action handleEnter(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      !this.isLoginButtonDisabled && this.login();
+    }
   }
 
   @action
