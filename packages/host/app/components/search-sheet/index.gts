@@ -389,10 +389,12 @@ export default class SearchSheet extends Component<Signature> {
 
       .prompt {
         height: var(--search-sheet-prompt-height);
+        box-shadow: var(--boxel-deep-box-shadow);
       }
 
       .results {
         height: calc(100% - var(--stack-padding-top));
+        box-shadow: var(--boxel-deep-box-shadow);
       }
 
       .footer {
