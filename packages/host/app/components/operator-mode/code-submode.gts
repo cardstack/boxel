@@ -31,7 +31,7 @@ import {
   RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { isEquivalentBody } from '@cardstack/runtime-common//schema-analysis-plugin';
+import { isEquivalentBody } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
