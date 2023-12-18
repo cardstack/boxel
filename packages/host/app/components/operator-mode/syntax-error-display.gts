@@ -36,6 +36,10 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
         margin-left: calc(var(--boxel-sp) * -1);
         margin-top: calc(var(--boxel-sp-sm) + 1px);
       }
+
+      pre {
+        overflow: auto;
+      }
     </style>
 
     <div class='syntax-error-container' data-test-syntax-error>
