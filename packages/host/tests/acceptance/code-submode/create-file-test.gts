@@ -390,9 +390,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor('[data-test-card-catalog-modal]');
     await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
     await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
-
-    await percySnapshot(assert);
-
     await click('[data-test-card-catalog-go-button]');
     await waitFor(`[data-test-selected-type="Person"]`);
 
