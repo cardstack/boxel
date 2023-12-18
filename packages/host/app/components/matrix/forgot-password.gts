@@ -102,7 +102,7 @@ export default class ForgotPassword extends Component<Signature> {
         />
       </FieldContainer>
       <FieldContainer
-        @label='Re Enter New Password'
+        @label='Re-Enter New Password'
         @tag='label'
         @vertical={{true}}
         class='field'
