@@ -41,7 +41,7 @@ import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
-  type State,
+  type State as ModuleState,
   findDeclarationByName,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
@@ -325,7 +325,7 @@ export default class CodeSubmode extends Component<Signature> {
     this.userHasDismissedURLError = true;
   }
 
-  @action private onModuleEdit(state: State) {
+  @action private onModuleEdit(state: ModuleState) {
     let editedDeclaration = state.declarations.find(
       (newDeclaration: ModuleDeclaration) => {
         return this.selectedDeclaration
