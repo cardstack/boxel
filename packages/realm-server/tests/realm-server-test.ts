@@ -595,6 +595,120 @@ module('Realm Server', function (hooks) {
     );
   });
 
+  test('can serialize a card instance correctly after card definition is changed', async function (assert) {
+    // create a card def
+    {
+      let expected = [
+        {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}test-card.gts`],
+          clientRequestId: null,
+        },
+      ];
+
+      let response = await expectEvent({
+        assert,
+        expected,
+        callback: async () => {
+          return await request
+            .post('/test-card.gts')
+            .set('Accept', 'application/vnd.card+source').send(`
+            import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
+            import StringCard from 'https://cardstack.com/base/string';
+
+            export class TestCard extends CardDef {
+              @field field1 = contains(StringCard);
+              @field field2 = contains(StringCard);
+            }
+          `);
+        },
+      });
+      assert.strictEqual(response.status, 204, 'HTTP 204 status');
+    }
+
+    // make an instance of the card def
+    let id: string | undefined;
+    {
+      let response = await expectEvent({
+        assert,
+        expectedNumberOfEvents: 1,
+        callback: async () => {
+          return await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  field1: 'a',
+                  field2: 'b',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}test-card`,
+                    name: 'TestCard',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+        },
+      });
+      assert.strictEqual(response.status, 201, 'HTTP 201 status');
+      id = response.body.data.id;
+    }
+    if (!id) {
+      assert.ok(false, 'new card identifier was undefined');
+      return;
+    }
+
+    // modify field
+    {
+      let expected = [
+        {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}test-card.gts`, id],
+          clientRequestId: null,
+        },
+      ];
+
+      let response = await expectEvent({
+        assert,
+        expected,
+        callback: async () => {
+          return await request
+            .post('/test-card.gts')
+            .set('Accept', 'application/vnd.card+source').send(`
+            import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
+            import StringCard from 'https://cardstack.com/base/string';
+
+            export class TestCard extends CardDef {
+              @field field1 = contains(StringCard);
+              @field field2a = contains(StringCard); // rename field2 -> field2a
+            }
+          `);
+        },
+      });
+      assert.strictEqual(response.status, 204, 'HTTP 204 status');
+    }
+
+    // verify serialization matches new card def
+    {
+      let response = await request
+        .get(new URL(id).pathname)
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(json.data.attributes, {
+        field1: 'a',
+        field2a: null,
+        title: null,
+        description: null,
+        thumbnailURL: null,
+      });
+    }
+  });
+
   test('serves a module GET request', async function (assert) {
     let response = await request.get('/person');
 

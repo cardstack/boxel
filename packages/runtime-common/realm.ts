@@ -202,7 +202,9 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
-  #loader: Loader;
+  // This loader is not meant to be used operationally, rather it serves as a
+  // template that we clone for each indexing operation
+  loaderTemplate: Loader;
   #router: Router;
   #deferStartup: boolean;
   #useTestingDomain = false;
@@ -240,8 +242,8 @@ export class Realm {
     this.paths = new RealmPaths(url);
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
-    this.#loader = loader;
-    this.#loader.registerURLHandler(this.maybeHandle.bind(this));
+    this.loaderTemplate = loader;
+    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -462,7 +464,9 @@ export class Realm {
   }
 
   get loader() {
-    return this.#loader;
+    // the current loader used by the search index will contain the latest
+    // module updates as we obtain a new loader for each indexing run
+    return this.searchIndex.loader;
   }
 
   get searchIndex() {
