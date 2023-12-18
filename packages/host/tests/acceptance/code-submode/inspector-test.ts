@@ -438,6 +438,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             },
           },
         },
+        'readme.md': 'hello world',
         'not-json.json': 'I am not JSON.',
         'Person/1.json': {
           data: {
@@ -853,6 +854,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-action-button="Delete"]`);
     await click('[data-test-action-button="Delete"]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
+    assert
+      .dom('[data-test-delete-msg]')
+      .includesText('Delete the card Van Gogh?');
     await percySnapshot(assert);
     await this.expectEvents({
       assert,
@@ -976,6 +980,155 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
       'the deleted card has been removed from recent files',
     );
+  });
+
+  test<TestContextWithSSE>('can delete a card definition and fallback to recent file', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [
+            `${testRealmURL}pet.gts`,
+            `${testRealmURL}Pet/mango`,
+            `${testRealmURL}Pet/vangogh`,
+          ],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    })!;
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([
+        [testRealmURL, 'pet.gts'],
+        [testRealmURL, 'Pet/mango.json'],
+      ]),
+    );
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    assert.strictEqual(
+      window.localStorage.getItem('recent-files'),
+      JSON.stringify([
+        [testRealmURL, 'pet.gts'],
+        [testRealmURL, 'Pet/mango.json'],
+      ]),
+    );
+
+    await waitFor(`[data-test-delete-module-button]`);
+    await click('[data-test-delete-module-button]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}pet.gts"]`);
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => {
+        await click('[data-test-confirm-delete-button]');
+      },
+    });
+    await waitForCodeEditor();
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango.json`);
+
+    assert.deepEqual(
+      window.localStorage.getItem('recent-files'),
+      JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
+      'the deleted card has been removed from recent files',
+    );
+
+    let notFound = await adapter.openFile('pet.gts');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
+  });
+
+  test<TestContextWithSSE>('can delete a card definition with no recent files to fall back on', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [
+            `${testRealmURL}pet.gts`,
+            `${testRealmURL}Pet/mango`,
+            `${testRealmURL}Pet/vangogh`,
+          ],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    })!;
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([[testRealmURL, 'pet.gts']]),
+    );
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    assert.strictEqual(
+      window.localStorage.getItem('recent-files'),
+      JSON.stringify([[testRealmURL, 'pet.gts']]),
+    );
+
+    await waitFor(`[data-test-delete-module-button]`);
+    await click('[data-test-delete-module-button]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}pet.gts"]`);
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => {
+        await click('[data-test-confirm-delete-button]');
+      },
+    });
+    await waitFor('[data-test-empty-code-mode]');
+
+    assert.deepEqual(
+      window.localStorage.getItem('recent-files'),
+      '[]',
+      'the deleted card has been removed from recent files',
+    );
+
+    let notFound = await adapter.openFile('pet.gts');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
+  });
+
+  test('can delete a misc file', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}readme.md`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+
+    await waitFor(`[data-test-action-button="Delete"]`);
+    await click('[data-test-action-button="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}readme.md"]`);
+    assert
+      .dom('[data-test-delete-msg]')
+      .includesText('Delete the file readme.md?');
+    await click('[data-test-confirm-delete-button]');
+    await waitFor('[data-test-empty-code-mode]');
+
+    let notFound = await adapter.openFile('readme.md');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
   test('After opening inherited definition inside inheritance panel, "in-this-file" highlights selected definition', async function (assert) {
