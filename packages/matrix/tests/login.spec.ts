@@ -70,7 +70,7 @@ test.describe('Login', () => {
       '@user1:localhost',
     );
     await page.locator('[data-test-signout-button]').click();
-    await expect(page.locator('[data-test-login-form]')).toBeVisible();
+    await expect(page.locator('[data-test-login-btn]')).toBeVisible();
   });
 
   test('it shows an error when invalid credentials are provided', async ({

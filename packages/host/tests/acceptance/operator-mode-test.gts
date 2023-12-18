@@ -411,7 +411,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-signout-button]');
 
-    assert.dom('[data-test-login-form]').exists();
+    assert.dom('[data-test-login-btn]').exists();
   });
 
   test('visiting index card and entering operator mode', async function (assert) {
