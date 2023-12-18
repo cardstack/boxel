@@ -144,6 +144,7 @@ export class Active extends Component<ActiveSignature> {
         <Button
           data-test-action-button='{{actionButton.label}}'
           class='action-button'
+          @kind='text-only'
           {{on 'click' actionButton.handler}}
         >
           <actionButton.icon width='24px' height='24px' />
@@ -164,11 +165,8 @@ export class Active extends Component<ActiveSignature> {
         flex-direction: column;
       }
       .action-button {
-        --boxel-button-text-color: var(--boxel-highlight);
-        --boxel-button-padding: 0px;
+        --boxel-button-padding: var(--boxel-sp-xxxs);
         --icon-color: var(--boxel-highlight);
-        color: var(--boxel-highlight);
-        border: none;
         justify-content: flex-start;
         gap: var(--boxel-sp-xs);
         align-self: flex-start;
