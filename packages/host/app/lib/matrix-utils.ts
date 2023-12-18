@@ -23,3 +23,9 @@ export function isMatrixError(err: any): err is MatrixError {
     typeof err.errcode === 'string'
   );
 }
+
+export function isValidPassword(password: string): boolean {
+  return !/^(?=.*[0-9])(?=.*[!@#$%^&*])[a-zA-Z0-9!@#$%^&*]{8,}$/.test(
+    password,
+  );
+}

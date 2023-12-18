@@ -10,13 +10,14 @@ import perform from 'ember-concurrency/helpers/perform';
 import {
   Button,
   FieldContainer,
-  BoxelHeader,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
+import {
+  isMatrixError,
+  isValidPassword,
+} from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -29,158 +30,118 @@ interface Signature {
 
 export default class ForgotPassword extends Component<Signature> {
   <template>
-    <div class='forgot-password-form' data-test-forgot-password-form>
-      <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
-        <:icon>
-          <BoxelIcon />
-        </:icon>
-      </BoxelHeader>
-      <div class='content'>
-        {{#if (eq this.state.type 'initial')}}
-          <span class='title'>Forget your password?</span>
-          <p class='info'>Enter email to receive a reset password link.</p>
-          <FieldContainer
-            @label='Email Address'
-            @tag='label'
-            @vertical={{true}}
-            class='field'
-          >
-            <BoxelInput
-              data-test-email-field
-              type='text'
-              @errorMessage={{this.emailError}}
-              @state={{this.emailInputState}}
-              @value={{this.email}}
-              @onInput={{this.setEmail}}
-            />
-          </FieldContainer>
-          <Button
-            class='button'
-            data-test-reset-your-password-btn
-            @kind='primary'
-            @disabled={{this.isForgotPasswordBtnDisabled}}
-            {{on 'click' this.sendEmailValidation}}
-          >Reset Your Password</Button>
-        {{else if (eq this.state.type 'waitForEmailValidation')}}
-          <span class='title' data-test-email-validation>Please check your email
-            to reset your password</span>
-          <ul class='email-validation-instruction'>
-            {{! @glint-ignore Property 'email' should be exist on 'waitForEmailValidation' type }}
-            <li>We've sent an email to <b>{{this.state.email}}</b></li>
-            <li>Click on the link within the email to validate it's your email
-              address</li>
-            <li>Click "I have validated email" button to reset password</li>
-          </ul>
-          <div class='button-wrapper'>
-            <Button
-              class='button'
-              data-test-have-validated-btn
-              @kind='primary'
-              @disabled={{this.sendEmailValidationTask.isRunning}}
-              {{on 'click' this.continueToResetPassword}}
-            >I have validated email</Button>
-            <span class='or'>or</span>
-            <Button
-              class='button'
-              data-test-resend-validation-btn
-              @disabled={{this.sendEmailValidationTask.isRunning}}
-              {{on 'click' this.resendEmailValidation}}
-            >Resend Email</Button>
-          </div>
-        {{else if (eq this.state.type 'resetPassword')}}
-          <span class='title'>Reset your password</span>
-          <FieldContainer
-            @label='Enter New Password'
-            @tag='label'
-            @vertical={{true}}
-            class='field'
-          >
-            <BoxelInput
-              data-test-password-field
-              type='password'
-              @errorMessage={{this.passwordError}}
-              @state={{this.passwordInputState}}
-              @value={{this.password}}
-              @onInput={{this.setPassword}}
-              @onBlur={{this.checkPassword}}
-            />
-          </FieldContainer>
-          <FieldContainer
-            @label='Re Enter New Password'
-            @tag='label'
-            @vertical={{true}}
-            class='field'
-          >
-            <BoxelInput
-              data-test-confirm-password-field
-              type='password'
-              @errorMessage={{this.confirmPasswordError}}
-              @state={{this.confirmPasswordInputState}}
-              @value={{this.confirmPassword}}
-              @onInput={{this.setConfirmPassword}}
-              @onBlur={{this.checkConfirmPassword}}
-            />
-          </FieldContainer>
-          <Button
-            class='button'
-            data-test-reset-password-btn
-            @kind='primary'
-            @disabled={{this.isResetPasswordBtnDisabled}}
-            style='width: 100%'
-            {{on 'click' (perform this.resetPassword)}}
-          >Reset Password</Button>
-          {{#if this.error}}
-            <span
-              class='error'
-              data-test-reset-password-error
-            >{{this.error}}</span>
-          {{/if}}
-        {{else if (eq this.state.type 'resetPasswordSuccess')}}
-          <span class='title' data-test-reset-password-success>Your password is
-            now reset</span>
-          <p class='info'>Your password has been successfully reset. You can use
-            the link below to sign into your Boxel account with your new
-            password.</p>
-          <Button
-            class='button'
-            data-test-back-to-login-btn
-            @kind='primary'
-            @disabled={{this.isForgotPasswordBtnDisabled}}
-            style='width: 100%'
-            {{on 'click' @onLogin}}
-          >Sign In to Boxel</Button>
-        {{/if}}
+    {{#if (eq this.state.type 'initial')}}
+      <span class='title'>Forget your password?</span>
+      <p class='info'>Enter email to receive a reset password link.</p>
+      <FieldContainer
+        @label='Email Address'
+        @tag='label'
+        @vertical={{true}}
+        class='field'
+      >
+        <BoxelInput
+          data-test-email-field
+          type='text'
+          @errorMessage={{this.emailError}}
+          @state={{this.emailInputState}}
+          @value={{this.email}}
+          @onInput={{this.setEmail}}
+        />
+      </FieldContainer>
+      <Button
+        class='button'
+        data-test-reset-your-password-btn
+        @kind='primary'
+        @disabled={{this.isForgotPasswordBtnDisabled}}
+        {{on 'click' this.sendEmailValidation}}
+      >Reset Your Password</Button>
+    {{else if (eq this.state.type 'waitForEmailValidation')}}
+      <span class='title' data-test-email-validation>Please check your email to
+        reset your password</span>
+      <ul class='email-validation-instruction'>
+        {{! @glint-ignore Property 'email' should be exist on 'waitForEmailValidation' type }}
+        <li>We've sent an email to <b>{{this.state.email}}</b></li>
+        <li>Click on the link within the email to validate it's your email
+          address</li>
+        <li>Click "I have validated email" button to reset password</li>
+      </ul>
+      <div class='button-wrapper'>
+        <Button
+          class='button'
+          data-test-have-validated-btn
+          @kind='primary'
+          @disabled={{this.sendEmailValidationTask.isRunning}}
+          {{on 'click' this.continueToResetPassword}}
+        >I have validated email</Button>
+        <span class='or'>or</span>
+        <Button
+          class='button'
+          data-test-resend-validation-btn
+          @disabled={{this.sendEmailValidationTask.isRunning}}
+          {{on 'click' this.resendEmailValidation}}
+        >Resend Email</Button>
       </div>
-    </div>
+    {{else if (eq this.state.type 'resetPassword')}}
+      <span class='title'>Reset your password</span>
+      <FieldContainer
+        @label='Enter New Password'
+        @tag='label'
+        @vertical={{true}}
+        class='field'
+      >
+        <BoxelInput
+          data-test-password-field
+          type='password'
+          @errorMessage={{this.passwordError}}
+          @state={{this.passwordInputState}}
+          @value={{this.password}}
+          @onInput={{this.setPassword}}
+          @onBlur={{this.checkPassword}}
+        />
+      </FieldContainer>
+      <FieldContainer
+        @label='Re Enter New Password'
+        @tag='label'
+        @vertical={{true}}
+        class='field'
+      >
+        <BoxelInput
+          data-test-confirm-password-field
+          type='password'
+          @errorMessage={{this.confirmPasswordError}}
+          @state={{this.confirmPasswordInputState}}
+          @value={{this.confirmPassword}}
+          @onInput={{this.setConfirmPassword}}
+          @onBlur={{this.checkConfirmPassword}}
+        />
+      </FieldContainer>
+      <Button
+        class='button'
+        data-test-reset-password-btn
+        @kind='primary'
+        @disabled={{this.isResetPasswordBtnDisabled}}
+        style='width: 100%'
+        {{on 'click' (perform this.resetPassword)}}
+      >Reset Password</Button>
+      {{#if this.error}}
+        <span class='error' data-test-reset-password-error>{{this.error}}</span>
+      {{/if}}
+    {{else if (eq this.state.type 'resetPasswordSuccess')}}
+      <span class='title' data-test-reset-password-success>Your password is now
+        reset</span>
+      <p class='info'>Your password has been successfully reset. You can use the
+        link below to sign into your Boxel account with your new password.</p>
+      <Button
+        class='button'
+        data-test-back-to-login-btn
+        @kind='primary'
+        @disabled={{this.isForgotPasswordBtnDisabled}}
+        style='width: 100%'
+        {{on 'click' @onLogin}}
+      >Sign In to Boxel</Button>
+    {{/if}}
 
     <style>
-      .forgot-password-form {
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
-        letter-spacing: var(--boxel-lsp);
-        width: 550px;
-        position: relative;
-      }
-      .header {
-        --boxel-header-icon-width: var(--boxel-icon-med);
-        --boxel-header-icon-height: var(--boxel-icon-med);
-        --boxel-header-padding: var(--boxel-sp);
-        --boxel-header-text-size: var(--boxel-font);
-
-        background-color: var(--boxel-light);
-        text-transform: uppercase;
-        max-width: max-content;
-        min-width: 100%;
-        gap: var(--boxel-sp-xxs);
-        letter-spacing: var(--boxel-lsp-lg);
-      }
-      .content {
-        display: flex;
-        flex-direction: column;
-        padding: var(--boxel-sp) var(--boxel-sp-xl) calc(var(--boxel-sp) * 2)
-          var(--boxel-sp-xl);
-      }
       .title {
         font: 700 var(--boxel-font-med);
         margin-bottom: var(--boxel-sp);
@@ -329,11 +290,7 @@ export default class ForgotPassword extends Component<Signature> {
   private checkPassword() {
     if (!this.password) {
       this.passwordError = 'Password is missing';
-    } else if (
-      !/^(?=.*[0-9])(?=.*[!@#$%^&*])[a-zA-Z0-9!@#$%^&*]{8,}$/.test(
-        this.password,
-      )
-    ) {
+    } else if (isValidPassword(this.password)) {
       this.passwordError =
         'Password must be at least 8 characters long and include a number and a symbol';
     }

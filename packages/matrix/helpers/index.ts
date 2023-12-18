@@ -3,7 +3,6 @@ import {
   synapseStart,
   synapseStop,
   type SynapseInstance,
-  registerUser,
 } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
