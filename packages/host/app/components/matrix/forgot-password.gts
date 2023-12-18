@@ -7,20 +7,20 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import {
   Button,
   FieldContainer,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   isMatrixError,
   isValidPassword,
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-
-import { v4 as uuidv4 } from 'uuid';
 
 interface Signature {
   Args: {
@@ -30,7 +30,9 @@ interface Signature {
 
 export default class ForgotPassword extends Component<Signature> {
   <template>
-    {{#if (eq this.state.type 'initial')}}
+    {{#if
+      (or (eq this.state.type 'initial') (eq this.state.type 'validateEmail'))
+    }}
       <span class='title'>Forget your password?</span>
       <p class='info'>Enter email to receive a reset password link.</p>
       <FieldContainer
@@ -115,14 +117,15 @@ export default class ForgotPassword extends Component<Signature> {
           @onBlur={{this.checkConfirmPassword}}
         />
       </FieldContainer>
-      <Button
-        class='button'
-        data-test-reset-password-btn
-        @kind='primary'
-        @disabled={{this.isResetPasswordBtnDisabled}}
-        style='width: 100%'
-        {{on 'click' (perform this.resetPassword)}}
-      >Reset Password</Button>
+      <div class='button-wrapper'>
+        <Button
+          class='button'
+          data-test-reset-password-btn
+          @kind='primary'
+          @disabled={{this.isResetPasswordBtnDisabled}}
+          {{on 'click' (perform this.resetPassword)}}
+        >Reset Password</Button>
+      </div>
       {{#if this.error}}
         <span class='error' data-test-reset-password-error>{{this.error}}</span>
       {{/if}}
@@ -131,14 +134,15 @@ export default class ForgotPassword extends Component<Signature> {
         reset</span>
       <p class='info'>Your password has been successfully reset. You can use the
         link below to sign into your Boxel account with your new password.</p>
-      <Button
-        class='button'
-        data-test-back-to-login-btn
-        @kind='primary'
-        @disabled={{this.isForgotPasswordBtnDisabled}}
-        style='width: 100%'
-        {{on 'click' @onLogin}}
-      >Sign In to Boxel</Button>
+      <div class='button-wrapper'>
+        <Button
+          class='button'
+          data-test-back-to-login-btn
+          @kind='primary'
+          @disabled={{this.isForgotPasswordBtnDisabled}}
+          {{on 'click' @onLogin}}
+        >Sign In to Boxel</Button>
+      </div>
     {{/if}}
 
     <style>
@@ -184,6 +188,7 @@ export default class ForgotPassword extends Component<Signature> {
         flex-direction: column;
         justify-content: center;
         align-items: center;
+        margin-top: var(--boxel-sp-lg);
       }
       .button-wrapper button {
         margin: 0;

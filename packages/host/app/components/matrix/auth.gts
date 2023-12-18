@@ -1,7 +1,8 @@
-import { action } from '@ember/object';
 import { fn } from '@ember/helper';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+
 import { CardContainer, BoxelHeader } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
