@@ -84,7 +84,7 @@ export interface State {
 
 export class ModuleContentsResource extends Resource<Args> {
   @service declare operatorModeStateService: OperatorModeStateService;
-  private staleState: State | undefined = undefined;
+  private executableFile: Ready | undefined;
   @tracked private state: State | undefined = undefined;
   private onModuleEdit?: (state: State) => void;
 
@@ -97,10 +97,8 @@ export class ModuleContentsResource extends Resource<Args> {
   // when editing a file we don't want to introduce loading state, whereas when switching between definitions we do
   get isLoadingNewModule() {
     return (
-      this.load.isRunning &&
-      this.staleState &&
-      this.state &&
-      this.staleState.url !== this.state?.url
+      (this.load.isRunning && this.executableFile?.url !== this.state?.url) ??
+      false
     );
   }
 
@@ -110,13 +108,15 @@ export class ModuleContentsResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { executableFile, onModuleEdit } = named;
+    this.executableFile = executableFile;
     this.onModuleEdit = onModuleEdit;
-    if (executableFile) {
-      this.load.perform(executableFile);
-    }
+    this.load.perform(this.executableFile);
   }
 
-  private load = task({ restartable: true }, async (executableFile: Ready) => {
+  private load = task(async (executableFile: Ready | undefined) => {
+    if (executableFile === undefined) {
+      return;
+    }
     let moduleResource = importResource(this, () => executableFile.url);
     await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
     if (moduleResource.module === undefined) {
@@ -129,17 +129,19 @@ export class ModuleContentsResource extends Resource<Args> {
       executableFile.content,
       new URL(executableFile.url),
     );
-
-    this.updateState({
+    let newState = {
       declarations: this.buildDeclarations(moduleSyntax, exportedCardsOrFields),
       url: executableFile.url,
-    });
+    };
+
+    this.updateState(newState);
   });
 
-  private updateState(state: State): void {
-    this.onModuleEdit?.(state);
-    this.staleState = this.state;
-    this.state = state;
+  private updateState(newState: State): void {
+    if (newState.url === this.state?.url) {
+      this.onModuleEdit?.(newState);
+    }
+    this.state = newState;
   }
 
   private buildDeclarations(
