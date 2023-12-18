@@ -8,6 +8,9 @@ interface Signature {
 }
 
 export default class SyntaxErrorDisplay extends Component<Signature> {
+  removeSourceMappingURL(syntaxErrors: string): string {
+    return syntaxErrors.replace(/\/\/# sourceMappingURL=.*/g, '');
+  }
   <template>
     <style>
       .syntax-error-container {
@@ -42,7 +45,7 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
         </div>
 
         <hr />
-        <pre>{{this.args.syntaxErrors}}</pre>
+        <pre>{{this.removeSourceMappingURL this.args.syntaxErrors}}</pre>
       </div>
     </div>
   </template>
