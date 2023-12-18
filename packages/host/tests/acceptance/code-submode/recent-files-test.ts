@@ -1,17 +1,9 @@
-import {
-  visit,
-  click,
-  waitFor,
-  fillIn,
-  triggerKeyEvent,
-} from '@ember/test-helpers';
+import { click, waitFor, fillIn, triggerKeyEvent } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
-
-import stringify from 'safe-stable-stringify';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -22,6 +14,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
+  visitOperatorMode,
   waitForCodeEditor,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
@@ -296,7 +289,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       ]),
     );
 
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -309,13 +302,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       codePath: `${testRealmURL}Person/1.json`,
       fileView: 'browser',
       openDirs: {},
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
@@ -393,7 +381,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       JSON.stringify(recentFilesEntries),
     );
 
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -406,13 +394,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       codePath: `${testRealmURL}Person/1.json`,
       fileView: 'browser',
       openDirs: {},
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
@@ -439,17 +422,10 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   });
 
   test('recent files section does not list files not-found', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-module-definition]');
@@ -512,7 +488,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       ]),
     );
 
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -525,13 +501,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       codePath: `http://localhost:4201/base/code-ref.gts`,
       fileView: 'browser',
       openDirs: {},
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
