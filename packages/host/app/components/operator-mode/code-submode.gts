@@ -809,7 +809,6 @@ export default class CodeSubmode extends Component<Signature> {
         max-height: 100vh;
         left: 0;
         right: 0;
-        z-index: 1;
         padding: var(--code-mode-padding-top) var(--boxel-sp)
           var(--code-mode-padding-bottom);
         overflow: auto;
@@ -862,7 +861,6 @@ export default class CodeSubmode extends Component<Signature> {
         padding: var(--boxel-sp) var(--boxel-sp) 0
           var(--code-mode-top-bar-padding-left);
         display: flex;
-        z-index: 2;
       }
 
       .loading {
