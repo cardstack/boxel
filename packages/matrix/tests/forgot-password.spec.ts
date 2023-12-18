@@ -53,7 +53,7 @@ test.describe('Forgot password', () => {
     await smtpStop();
   });
 
-  test('It can forgot password', async ({ page }) => {
+  test('It can reset password', async ({ page }) => {
     await gotoForgotPassword(page);
 
     await expect(page.locator('[data-test-reset-your-password-btn]')).toBeDisabled();
