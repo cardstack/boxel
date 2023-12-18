@@ -364,6 +364,9 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get selectedDeclaration() {
+    if (!this.isModule || this.moduleContentsResource.moduleError) {
+      return undefined;
+    }
     if (this._selectedDeclaration) {
       return this._selectedDeclaration;
     } else {
