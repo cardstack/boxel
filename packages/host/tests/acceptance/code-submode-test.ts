@@ -1415,4 +1415,52 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-code-mode-card-preview-body]')
       .includesText('FadhlanXXX');
   });
+
+  test('card-catalog does not offer to "create new card" when editing linked fields in code mode', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/fadhlan.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-card-resource-loaded]');
+    assert
+      .dom(
+        `[data-test-code-mode-card-preview-header="${testRealmURL}Person/fadhlan"]`,
+      )
+      .exists();
+
+    await click('[data-test-preview-card-footer-button-edit]');
+
+    // linksTo field
+    await click('[data-test-links-to-editor="pet"] [data-test-remove-card]');
+    await waitFor('[data-test-links-to-editor="pet"] [data-test-add-new]');
+    await click('[data-test-links-to-editor="pet"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a Pet card');
+    assert
+      .dom('[data-test-card-catalog-create-new-button]')
+      .doesNotExist('can not create new card for linksTo field in code mode');
+
+    await click('[aria-label="close modal"]');
+    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+
+    // linksToMany field
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Select 1 or more Friend cards');
+    assert
+      .dom('[data-test-card-catalog-create-new-button]')
+      .doesNotExist(
+        'can not create new card for linksToMany field in code mode',
+      );
+  });
 });

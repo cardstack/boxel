@@ -395,15 +395,15 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom('[data-test-profile-icon]')
       .hasAttribute('style', 'background: #5ead6b');
 
-    assert.dom('[data-test-profile-popover]').doesNotHaveClass('opened');
+    assert.dom('[data-test-profile-popover]').doesNotExist();
 
     await click('[data-test-profile-icon-button]');
 
-    assert.dom('[data-test-profile-popover]').hasClass('opened');
+    assert.dom('[data-test-profile-popover]').exists();
 
     await click('[data-test-profile-icon-button]');
 
-    assert.dom('[data-test-profile-popover]').doesNotHaveClass('opened'); // Clicking again closes the popover
+    assert.dom('[data-test-profile-popover]').doesNotExist(); // Clicking again closes the popover
 
     await click('[data-test-profile-icon-button]');
 

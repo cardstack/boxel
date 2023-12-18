@@ -233,6 +233,25 @@ export default class CardService extends Service {
     return response;
   }
 
+  async deleteSource(url: URL, loader?: Loader) {
+    loader = loader ?? this.loaderService.loader;
+    let response = await loader.fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Could not delete file ${url}, status ${
+        response.status
+      }: ${response.statusText} - ${await response.text()}`;
+      console.error(errorMessage);
+      throw new Error(errorMessage);
+    }
+    return response;
+  }
+
   // we return undefined if the card changed locally while the save was in-flight
   async patchCard(
     card: CardDef,

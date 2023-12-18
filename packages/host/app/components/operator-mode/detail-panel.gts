@@ -1,5 +1,6 @@
 import { hash, array } from '@ember/helper';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
@@ -17,9 +18,16 @@ import {
   CardContainer,
   Header,
   LoadingIndicator,
+  IconButton,
 } from '@cardstack/boxel-ui/components';
 
-import { IconInherit, IconTrash, IconPlus } from '@cardstack/boxel-ui/icons';
+import {
+  IconInherit,
+  IconTrash,
+  IconPlus,
+  Copy,
+} from '@cardstack/boxel-ui/icons';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 
 import {
   hasExecutableExtension,
@@ -84,10 +92,9 @@ interface Signature {
         displayName: string;
         ref: ResolvedCodeRef;
       },
+      sourceInstance?: CardDef,
     ) => Promise<void>;
-    delete: (
-      card: CardDef | typeof CardDef | undefined,
-    ) => void | Promise<void>;
+    delete: (item: CardDef | URL | null | undefined) => void | Promise<void>;
   };
 }
 
@@ -109,6 +116,10 @@ export default class DetailPanel extends Component<Signature> {
 
   private get showInThisFilePanel() {
     return this.isModule && this.declarations.length > 0;
+  }
+
+  private get codePath() {
+    return this.operatorModeStateService.state.codePath;
   }
 
   private get showInheritancePanel() {
@@ -183,8 +194,21 @@ export default class DetailPanel extends Component<Signature> {
             },
           ]
         : []),
-      { label: 'Delete', icon: IconTrash, handler: this.args.delete },
     ];
+  }
+
+  @action private duplicateInstance() {
+    if (!this.args.cardInstance) {
+      throw new Error('must have a selected card instance');
+    }
+    let id: NewFileType = 'duplicate-instance';
+    let cardDef = Reflect.getPrototypeOf(this.args.cardInstance)!
+      .constructor as typeof CardDef;
+    this.args.createFile(
+      { id, displayName: capitalize(cardDef.displayName || 'Instance') },
+      undefined,
+      this.args.cardInstance,
+    );
   }
 
   @action private createInstance() {
@@ -319,7 +343,21 @@ export default class DetailPanel extends Component<Signature> {
                 @hasBackground={{true}}
                 class='header'
                 data-test-current-module-name={{@readyFile.name}}
-              />
+              >
+                <:actions>
+                  <IconButton
+                    data-test-delete-module-button
+                    @icon={{IconTrash}}
+                    aria-label='Delete'
+                    {{on 'click' (fn @delete this.codePath)}}
+                    style={{cssVar
+                      boxel-icon-button-width='24px'
+                      boxel-icon-button-height='24px'
+                      icon-color='var(--boxel-highlight)'
+                    }}
+                  />
+                </:actions>
+              </Header>
               <Selector
                 @class='in-this-file-menu'
                 @items={{this.buildSelectorItems}}
@@ -346,6 +384,9 @@ export default class DetailPanel extends Component<Signature> {
                 @fileExtension='.JSON'
                 @infoText={{this.lastModified.value}}
                 @actions={{array
+                  (hash
+                    label='Duplicate' handler=this.duplicateInstance icon=Copy
+                  )
                   (hash
                     label='Delete'
                     handler=(fn @delete @cardInstance)
@@ -442,7 +483,11 @@ export default class DetailPanel extends Component<Signature> {
               @fileExtension={{this.fileExtension}}
               @infoText={{this.lastModified.value}}
               @actions={{array
-                (hash label='Delete' handler=@delete icon=IconTrash)
+                (hash
+                  label='Delete'
+                  handler=(fn @delete this.codePath)
+                  icon=IconTrash
+                )
               }}
             />
           </div>

@@ -1,11 +1,13 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { next } from '@ember/runloop';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+import { modifier } from 'ember-modifier';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
@@ -22,9 +24,22 @@ interface Signature {
 export default class ProfileInfoPopover extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @tracked private isOpened = false;
+  @tracked private isRendered = false;
 
   @action setPopoverProfileOpen(open: boolean) {
     this.isOpened = open;
+
+    if (!open) {
+      this.setIsRendered(false);
+    }
+  }
+
+  @action setRenderedNext() {
+    next(this, this.setIsRendered, true);
+  }
+
+  @action setIsRendered(rendered: boolean) {
+    this.isRendered = rendered;
   }
 
   @action logout() {
@@ -48,12 +63,10 @@ export default class ProfileInfoPopover extends Component<Signature> {
         transition: all 0.1s ease-out;
         opacity: 0;
         display: flex;
-        pointer-events: none;
       }
 
-      .profile-popover.opened {
+      .profile-popover.rendered {
         opacity: 1;
-        pointer-events: auto;
       }
 
       .profile-popover-header {
@@ -109,36 +122,49 @@ export default class ProfileInfoPopover extends Component<Signature> {
       </button>
     </div>
 
-    <div
-      class='profile-popover {{if this.isOpened "opened"}}'
-      {{onClickOutside
-        (fn this.setPopoverProfileOpen false)
-        exceptSelector='.profile-icon-button'
-      }}
-      data-test-profile-popover
-    >
-      <div class='profile-popover-header'>
-        Signed in as
-      </div>
-
-      <div class='profile-popover-body' data-test-profile-icon-container>
-        <ProfileAvatarIcon
-          @userId={{this.matrixService.userId}}
-          class='profile-icon--big'
-        />
-
-        <div class='profile-handle' data-test-profile-icon-handle>
-          {{this.matrixService.userId}}
-        </div>
-      </div>
-
-      <BoxelButton
-        {{on 'click' this.logout}}
-        @kind='primary-dark'
-        data-test-signout-button
+    {{#if this.isOpened}}
+      <div
+        class='profile-popover {{if this.isRendered "rendered"}}'
+        {{insertedModifier this.setRenderedNext}}
+        {{onClickOutside
+          (fn this.setPopoverProfileOpen false)
+          exceptSelector='.profile-icon-button'
+        }}
+        data-test-profile-popover
       >
-        Sign out
-      </BoxelButton>
-    </div>
+        <div class='profile-popover-header'>
+          Signed in as
+        </div>
+
+        <div class='profile-popover-body' data-test-profile-icon-container>
+          <ProfileAvatarIcon
+            @userId={{this.matrixService.userId}}
+            class='profile-icon--big'
+          />
+
+          <div class='profile-handle' data-test-profile-icon-handle>
+            {{this.matrixService.userId}}
+          </div>
+        </div>
+
+        <BoxelButton
+          {{on 'click' this.logout}}
+          @kind='primary-dark'
+          data-test-signout-button
+        >
+          Sign out
+        </BoxelButton>
+      </div>
+    {{/if}}
   </template>
 }
+
+let insertedModifier = modifier(
+  (
+    element: HTMLElement,
+    [callback]: [(element: HTMLElement) => void],
+    _named: {},
+  ) => {
+    callback(element);
+  },
+);

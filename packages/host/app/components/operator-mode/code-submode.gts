@@ -28,6 +28,7 @@ import {
   Deferred,
   isCardDocumentString,
   hasExecutableExtension,
+  RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -41,8 +42,6 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type MessageService from '@cardstack/host/services/message-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -108,12 +107,11 @@ const defaultPanelHeights: PanelHeights = {
 const waiter = buildWaiter('code-submode:waiter');
 
 export default class CodeSubmode extends Component<Signature> {
-  @service declare cardService: CardService;
-  @service declare messageService: MessageService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare recentFilesService: RecentFilesService;
-  @service declare loaderService: LoaderService;
-  @service declare environmentService: EnvironmentService;
+  @service private declare cardService: CardService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare recentFilesService: RecentFilesService;
+  @service private declare environmentService: EnvironmentService;
+
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
@@ -463,34 +461,54 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(async (card: CardDef) => {
-    if (!card.id) {
-      // the card isn't actually saved yet, so do nothing
+  private delete = dropTask(async (item: CardDef | URL | null | undefined) => {
+    if (!item) {
       return;
     }
-    if (!this.card) {
-      throw new Error(`TODO: non-card instance deletes are not yet supported`);
-    }
-
     if (!this.deleteModal) {
       throw new Error(`bug: DeleteModal not instantiated`);
     }
+    if (!(item instanceof URL)) {
+      if (!item.id) {
+        // the card isn't actually saved yet, so do nothing
+        return;
+      }
+    }
+
     let deferred: Deferred<void>;
     let isDeleteConfirmed = await this.deleteModal.confirmDelete(
-      card,
+      item,
       (d) => (deferred = d),
     );
     if (!isDeleteConfirmed) {
       return;
     }
 
-    await this.withTestWaiters(async () => {
-      await this.operatorModeStateService.deleteCard(card);
-      deferred!.fulfill();
-    });
+    if (!(item instanceof URL)) {
+      let card = item;
+      await this.withTestWaiters(async () => {
+        await this.operatorModeStateService.deleteCard(card);
+        deferred!.fulfill();
+      });
+    } else {
+      let file = item;
+      await this.withTestWaiters(async () => {
+        // TODO: This is a side effect of the recent-file service making assumptions about
+        // what realm we are in. we should refactor that so that callers have to tell
+        // it the realm of the file in question
+        let realmURL = this.operatorModeStateService.realmURL;
+
+        if (realmURL) {
+          let realmPaths = new RealmPaths(realmURL);
+          let filePath = realmPaths.local(file);
+          this.recentFilesService.removeRecentFile(filePath);
+        }
+        await this.cardService.deleteSource(file);
+        deferred!.fulfill();
+      });
+    }
 
     let recentFile = this.recentFilesService.recentFiles[0];
-
     if (recentFile) {
       let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
 
@@ -508,6 +526,7 @@ export default class CodeSubmode extends Component<Signature> {
         displayName: string;
         ref: ResolvedCodeRef;
       },
+      sourceInstance?: CardDef,
     ) => {
       if (!this.createFileModal) {
         throw new Error(`bug: CreateFileModal not instantiated`);
@@ -517,6 +536,7 @@ export default class CodeSubmode extends Component<Signature> {
         fileType,
         this.realmURL,
         definitionClass,
+        sourceInstance,
       );
       this.isCreateModalOpen = false;
       if (url) {
