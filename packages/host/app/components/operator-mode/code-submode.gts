@@ -21,7 +21,7 @@ import {
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { and, not, bool, eq, or } from '@cardstack/boxel-ui/helpers';
+import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import {
