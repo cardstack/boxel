@@ -1,15 +1,18 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { next } from '@ember/runloop';
+
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
-import { modifier } from 'ember-modifier';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  BoxelButton,
+  BoxelInput,
+  FieldContainer,
+} from '@cardstack/boxel-ui/components';
 
 import { not } from '@cardstack/boxel-ui/helpers';
 
@@ -25,36 +28,38 @@ interface Signature {
 export default class ProfileInfoPopover extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @tracked private isOpened = false;
-  @tracked private isRendered = false;
-  @tracked private settingsIsOpenFIXME = false;
+  @tracked private profileSettingsOpened = false;
+  @tracked private displayName;
 
   @action setPopoverProfileOpen(open: boolean) {
     this.isOpened = open;
-
-    if (!open) {
-      this.setIsRendered(false);
-    }
-  }
-
-  @action setRenderedNext() {
-    next(this, this.setIsRendered, true);
-  }
-
-  @action setIsRendered(rendered: boolean) {
-    this.isRendered = rendered;
   }
 
   @action openSettings() {
     this.isOpened = false;
-    this.settingsIsOpenFIXME = true;
+    this.profileSettingsOpened = true;
   }
 
   @action closeSettings() {
-    this.settingsIsOpenFIXME = false;
+    this.profileSettingsOpened = false;
   }
 
   @action logout() {
     this.matrixService.logout();
+  }
+
+  @action setDisplayName(name: string) {
+    this.displayName = name;
+  }
+
+  @action save() {
+    // this.matrixService.setDisplayName(this.displayName);
+    // this.profileSettingsOpened = false;
+  }
+
+  constructor(owner: unknown, args: {}) {
+    super(owner, args);
+    this.displayName = this.matrixService.profile.displayName || '';
   }
 
   <template>
@@ -76,7 +81,7 @@ export default class ProfileInfoPopover extends Component<Signature> {
         display: flex;
       }
 
-      .profile-popover.rendered {
+      .profile-popover.opened {
         opacity: 1;
       }
 
@@ -120,8 +125,7 @@ export default class ProfileInfoPopover extends Component<Signature> {
 
     {{#if this.isOpened}}
       <div
-        class='profile-popover {{if this.isRendered "rendered"}}'
-        {{insertedModifier this.setRenderedNext}}
+        class='profile-popover {{if this.isOpened "opened"}}'
         {{onClickOutside
           (fn this.setPopoverProfileOpen false)
           exceptSelector='.profile-icon-button'
@@ -135,7 +139,7 @@ export default class ProfileInfoPopover extends Component<Signature> {
 
           <BoxelButton
             @kind='secondary-light'
-            @size='small'
+            @size='extra-small'
             {{on 'click' this.openSettings}}
             data-test-settings-button
           >
@@ -155,20 +159,32 @@ export default class ProfileInfoPopover extends Component<Signature> {
       </div>
     {{/if}}
 
-    {{#if this.settingsIsOpenFIXME}}
+    {{#if this.profileSettingsOpened}}
       <ModalContainer
         @onClose={{this.closeSettings}}
         @title='Settings'
         @size='large'
         @centered={{true}}
-        @isOpen={{this.settingsIsOpenFIXME}}
+        @isOpen={{this.profileSettingsOpened}}
         data-test-settings-modal
       >
         <:sidebar>
           <Profile />
         </:sidebar>
         <:content>
-          FIXME here is settings
+          <FieldContainer
+            @label='Name'
+            @tag='label'
+            class=''
+            @vertical={{false}}
+          >
+            <BoxelInput
+              data-test-token-field
+              @value={{this.matrixService.profile.displayName}}
+              @errorMessage=''
+              @onInput={{this.setDisplayName}}
+            />
+          </FieldContainer>
         </:content>
       </ModalContainer>
     {{/if}}
@@ -223,13 +239,3 @@ export class Profile extends Component<Signature> {
     </style>
   </template>
 }
-
-let insertedModifier = modifier(
-  (
-    element: HTMLElement,
-    [callback]: [(element: HTMLElement) => void],
-    _named: {},
-  ) => {
-    callback(element);
-  },
-);
