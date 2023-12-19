@@ -14,6 +14,8 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
+import stringify from 'safe-stable-stringify';
+
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';

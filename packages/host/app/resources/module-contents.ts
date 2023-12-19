@@ -72,6 +72,9 @@ interface Args {
 }
 
 export class ModuleContentsResource extends Resource<Args> {
+  @tracked moduleError:
+    | { type: 'runtime' | 'compile'; message: string }
+    | undefined = undefined;
   @tracked private _declarations: ModuleDeclaration[] = [];
   private _url: string | undefined;
   private executableFile: Ready | undefined;
@@ -96,6 +99,7 @@ export class ModuleContentsResource extends Resource<Args> {
   modify(_positional: never[], named: Args['named']) {
     let { executableFile } = named;
     this.executableFile = executableFile;
+    this.moduleError = undefined;
     if (this.executableFile) {
       this.load.perform(this.executableFile);
     }
@@ -105,6 +109,8 @@ export class ModuleContentsResource extends Resource<Args> {
     //==loading module
     let moduleResource = importResource(this, () => executableFile.url);
     await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
+
+    this.moduleError = moduleResource.error;
     if (moduleResource.module === undefined) {
       return;
     }
