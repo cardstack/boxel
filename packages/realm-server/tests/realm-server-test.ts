@@ -22,6 +22,7 @@ import {
   baseRealm,
   loadCard,
   Deferred,
+  RealmPaths,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
@@ -627,7 +628,7 @@ module('Realm Server', function (hooks) {
     }
 
     // make an instance of the card def
-    let id: string | undefined;
+    let maybeId: string | undefined;
     {
       let response = await expectEvent({
         assert,
@@ -654,12 +655,13 @@ module('Realm Server', function (hooks) {
         },
       });
       assert.strictEqual(response.status, 201, 'HTTP 201 status');
-      id = response.body.data.id;
+      maybeId = response.body.data.id;
     }
-    if (!id) {
+    if (!maybeId) {
       assert.ok(false, 'new card identifier was undefined');
       return;
     }
+    let id = maybeId;
 
     // modify field
     {
@@ -702,6 +704,104 @@ module('Realm Server', function (hooks) {
       assert.deepEqual(json.data.attributes, {
         field1: 'a',
         field2a: null,
+        title: null,
+        description: null,
+        thumbnailURL: null,
+      });
+    }
+
+    // set value on renamed field
+    {
+      let expected = [
+        {
+          type: 'incremental',
+          invalidations: [id],
+          clientRequestId: null,
+        },
+      ];
+      let response = await expectEvent({
+        assert,
+        expected,
+        callback: async () => {
+          return await request
+            .patch(new URL(id).pathname)
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  field2a: 'c',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}test-card`,
+                    name: 'TestCard',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+        },
+      });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.get('X-boxel-realm-url'),
+        testRealmURL.href,
+        'realm url header is correct',
+      );
+
+      let json = response.body;
+      assert.deepEqual(json.data.attributes, {
+        field1: 'a',
+        field2a: 'c',
+        title: null,
+        description: null,
+        thumbnailURL: null,
+      });
+    }
+
+    // verify file serialization is correct
+    {
+      let localPath = new RealmPaths(testRealmURL).local(id);
+      let jsonFile = `${join(dir.name, localPath)}.json`;
+      let doc = JSON.parse(
+        readFileSync(jsonFile, { encoding: 'utf8' }),
+      ) as LooseSingleCardDocument;
+      assert.deepEqual(
+        doc,
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              field1: 'a',
+              field2a: 'c',
+              title: null,
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: {
+                module: '/test-card',
+                name: 'TestCard',
+              },
+            },
+          },
+        },
+        'instance serialized to filesystem correctly',
+      );
+    }
+
+    // verify instance GET is correct
+    {
+      let response = await request
+        .get(new URL(id).pathname)
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(json.data.attributes, {
+        field1: 'a',
+        field2a: 'c',
         title: null,
         description: null,
         thumbnailURL: null,
