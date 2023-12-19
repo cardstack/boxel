@@ -1,4 +1,4 @@
-import { visit, click, waitFor, fillIn } from '@ember/test-helpers';
+import { click, waitFor, fillIn } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 
@@ -26,6 +26,7 @@ import {
   getMonacoContent,
   setMonacoContent,
   setupAcceptanceTestRealm,
+  visitOperatorMode,
   waitForSyntaxHighlighting,
   waitForCodeEditor,
   type TestContextWithSSE,
@@ -293,7 +294,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   });
 
   test('card instance JSON displayed in monaco editor', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -304,12 +305,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}Pet/mango.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitForCodeEditor();
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
@@ -331,7 +327,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   test<
     TestContextWithSave & TestContextWithSSE
   >('allows fixing broken cards', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -342,12 +338,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}Person/john-with-bad-pet-link.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitFor('[data-test-editor]');
 
     let editedCard: LooseSingleCardDocument = {
@@ -433,7 +424,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
       },
     };
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -444,12 +435,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}Pet/mango.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     assert
@@ -512,7 +498,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
       },
     };
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -523,12 +509,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}Pet/mango.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitForCodeEditor();
 
     this.onSave((url, json) => {
@@ -561,16 +542,10 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
   test<TestContextWithSave>('non-card instance change made in monaco editor is auto-saved', async function (assert) {
     assert.expect(2);
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}README.txt`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitForCodeEditor();
 
     this.onSave((url, content) => {
@@ -588,16 +563,10 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
   test<TestContextWithSave>('unsaved changes made in monaco editor are saved when switching out of code submode', async function (assert) {
     assert.expect(2);
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}README.txt`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitForCodeEditor();
 
     this.onSave((url, content) => {
@@ -619,16 +588,10 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     ) as EnvironmentService;
     environment.autoSaveDelayMs = 1000; // slowdown the auto save so it doesn't interfere with this test
     assert.expect(2);
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}README.txt`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitForCodeEditor();
     let deferred = new Deferred<void>();
     this.onSave((url, content) => {
@@ -655,7 +618,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     let numSaves = 0;
     assert.expect(2);
 
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -666,12 +629,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}Pet/mango.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitForCodeEditor();
 
     this.onSave((url, json) => {
@@ -695,7 +653,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
   test<TestContextWithSave>('invalid JSON card instance change made in monaco editor is NOT auto-saved', async function (assert) {
     assert.expect(1);
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -706,12 +664,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}Pet/mango.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitForCodeEditor();
 
     this.onSave(() => {
@@ -768,7 +721,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -779,12 +732,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitForCodeEditor();
 
     await this.expectEvents({

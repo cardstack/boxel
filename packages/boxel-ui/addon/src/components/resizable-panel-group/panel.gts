@@ -132,7 +132,6 @@ export default class Panel extends Component<Signature> {
         background-color: var(--boxel-panel-resize-handler-background-color);
 
         position: relative;
-        z-index: 2;
       }
 
       .resize-handler:hover {

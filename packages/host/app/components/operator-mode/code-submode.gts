@@ -42,8 +42,6 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type MessageService from '@cardstack/host/services/message-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -58,12 +56,13 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import SchemaEditor from './code-submode/schema-editor';
+import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
 interface Signature {
   Args: {
@@ -108,15 +107,12 @@ const defaultPanelHeights: PanelHeights = {
 const waiter = buildWaiter('code-submode:waiter');
 
 export default class CodeSubmode extends Component<Signature> {
-  @service declare cardService: CardService;
-  @service declare messageService: MessageService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare recentFilesService: RecentFilesService;
-  @service declare loaderService: LoaderService;
-  @service declare environmentService: EnvironmentService;
+  @service private declare cardService: CardService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare recentFilesService: RecentFilesService;
+  @service private declare environmentService: EnvironmentService;
 
   @tracked private loadFileError: string | null = null;
-  @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
   @tracked private previewFormat: Format = 'isolated';
@@ -218,6 +214,14 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
+  private get isCard() {
+    return (
+      this.isReady &&
+      this.readyFile.name.endsWith('.json') &&
+      isCardDocumentString(this.readyFile.content)
+    );
+  }
+
   private get hasCardDefOrFieldDef() {
     return this.declarations.some(isCardOrFieldDeclaration);
   }
@@ -245,7 +249,16 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
-    // If file is incompatible
+    if (this.isCard) {
+      if (this.cardResource.cardError) {
+        return `Card preview failed. Make sure both the card instance data and card definition files have no syntax errors and that their data schema matches. `;
+      }
+    }
+
+    if (this.moduleContentsResource.moduleError) {
+      return null; // Handled in code-submode schema editor
+    }
+
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
     }
@@ -270,14 +283,6 @@ export default class CodeSubmode extends Component<Signature> {
         return null;
       }
       return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
-    }
-
-    // TODO: handle card preview errors (when json is valid but card returns error)
-    // This code is never reached but is temporarily placed here to please linting
-    // - a card runtime error will crash entire app
-    // - a json error will be caught by incompatibleFile
-    if (this.cardError) {
-      return `card preview error ${this.cardError.message}`;
     }
 
     if (
@@ -354,6 +359,9 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get selectedDeclaration() {
+    if (!this.isModule || this.moduleContentsResource.moduleError) {
+      return undefined;
+    }
     if (this._selectedDeclaration) {
       return this._selectedDeclaration;
     } else {
@@ -518,6 +526,7 @@ export default class CodeSubmode extends Component<Signature> {
         displayName: string;
         ref: ResolvedCodeRef;
       },
+      sourceInstance?: CardDef,
     ) => {
       if (!this.createFileModal) {
         throw new Error(`bug: CreateFileModal not instantiated`);
@@ -527,6 +536,7 @@ export default class CodeSubmode extends Component<Signature> {
         fileType,
         this.realmURL,
         definitionClass,
+        sourceInstance,
       );
       this.isCreateModalOpen = false;
       if (url) {
@@ -734,15 +744,7 @@ export default class CodeSubmode extends Component<Signature> {
                     >
                       {{this.fileIncompatibilityMessage}}
                     </div>
-                  {{else if this.card}}
-                    <CardPreviewPanel
-                      @card={{this.loadedCard}}
-                      @realmURL={{this.realmURL}}
-                      @format={{this.previewFormat}}
-                      @setFormat={{this.setPreviewFormat}}
-                      data-test-card-resource-loaded
-                    />
-                  {{else if this.selectedCardOrField}}
+                  {{else if this.selectedCardOrField.cardOrField}}
                     <Accordion as |A|>
                       <SchemaEditor
                         @file={{this.readyFile}}
@@ -773,6 +775,35 @@ export default class CodeSubmode extends Component<Signature> {
                         </A.Item>
                       </SchemaEditor>
                     </Accordion>
+                  {{else if this.moduleContentsResource.moduleError}}
+                    <Accordion as |A|>
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'schema-editor'}}
+                        @isOpen={{eq
+                          this.selectedAccordionItem
+                          'schema-editor'
+                        }}
+                      >
+                        <:title>
+                          <SchemaEditorTitle @hasModuleError={{true}} />
+                        </:title>
+                        <:content>
+                          <SyntaxErrorDisplay
+                            @syntaxErrors={{this.moduleContentsResource.moduleError.message}}
+                          />
+                        </:content>
+                      </A.Item>
+                    </Accordion>
+                  {{else if this.card}}
+                    <CardPreviewPanel
+                      @card={{this.loadedCard}}
+                      @realmURL={{this.realmURL}}
+                      @format={{this.previewFormat}}
+                      @setFormat={{this.setPreviewFormat}}
+                      data-test-card-resource-loaded
+                    />
                   {{/if}}
                 {{/if}}
               </InnerContainer>
@@ -811,7 +842,6 @@ export default class CodeSubmode extends Component<Signature> {
         max-height: 100vh;
         left: 0;
         right: 0;
-        z-index: 1;
         padding: var(--code-mode-padding-top) var(--boxel-sp)
           var(--code-mode-padding-bottom);
         overflow: auto;
@@ -864,7 +894,6 @@ export default class CodeSubmode extends Component<Signature> {
         padding: var(--boxel-sp) var(--boxel-sp) 0
           var(--code-mode-top-bar-padding-left);
         display: flex;
-        z-index: 2;
       }
 
       .loading {

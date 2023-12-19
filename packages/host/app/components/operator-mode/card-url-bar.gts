@@ -175,6 +175,7 @@ export default class CardURLBar extends Component<Signature> {
         box-shadow: var(--boxel-deep-box-shadow);
         font: var(--boxel-font-sm);
         font-weight: 500;
+        z-index: 1;
       }
       .warning {
         display: flex;
