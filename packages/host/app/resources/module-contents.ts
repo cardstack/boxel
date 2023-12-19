@@ -84,6 +84,9 @@ export interface State {
 
 export class ModuleContentsResource extends Resource<Args> {
   @service declare operatorModeStateService: OperatorModeStateService;
+  @tracked moduleError:
+    | { type: 'runtime' | 'compile'; message: string }
+    | undefined = undefined;
   private executableFile: Ready | undefined;
   @tracked private state: State | undefined = undefined;
   private onModuleEdit?: (state: State) => void;
@@ -109,6 +112,7 @@ export class ModuleContentsResource extends Resource<Args> {
   modify(_positional: never[], named: Args['named']) {
     let { executableFile, onModuleEdit } = named;
     this.executableFile = executableFile;
+    this.moduleError = undefined;
     this.onModuleEdit = onModuleEdit;
     this.load.perform(this.executableFile);
   }
@@ -119,6 +123,8 @@ export class ModuleContentsResource extends Resource<Args> {
     }
     let moduleResource = importResource(this, () => executableFile.url);
     await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
+
+    this.moduleError = moduleResource.error;
     if (moduleResource.module === undefined) {
       return;
     }

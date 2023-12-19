@@ -1,5 +1,4 @@
 import {
-  visit,
   click,
   waitFor,
   fillIn,
@@ -11,8 +10,6 @@ import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
-
-import stringify from 'safe-stable-stringify';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -27,6 +24,7 @@ import {
   setupServerSentEvents,
   setupOnSave,
   getMonacoContent,
+  visitOperatorMode,
   waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
@@ -336,17 +334,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test('schema editor lists the inheritance chain', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
@@ -475,17 +466,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test('when selecting card definition from a card instance in code mode, the right hand panel changes from card preview to schema mode', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}Person/1.json`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-code-mode-card-preview-body]');
@@ -500,17 +484,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test('shows displayName of CardResource when field refers to itself', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}friend.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
@@ -526,17 +503,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test('card type and fields are clickable and navigate to the correct file', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor(
@@ -553,11 +523,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.dom('[data-test-current-module-name]').hasText('person.gts');
 
     // Go back so that we can test clicking on a field definition button
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    });
 
     await waitFor(
       '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
@@ -586,17 +555,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
@@ -699,17 +661,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
@@ -800,17 +755,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
   test<TestContextWithSave>('deleting a field from schema editor', async function (assert) {
     assert.expect(7);
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
@@ -872,17 +820,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
   test<TestContextWithSave>('editing a field from schema editor', async function (assert) {
     assert.expect(2);
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
@@ -925,17 +866,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test('tooltip is displayed when hovering over a pill', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}ambiguous-display-names.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor(`[data-test-boxel-selector-item-text="BlogPost"]`);
     await click(`[data-test-boxel-selector-item-text="BlogPost"]`);

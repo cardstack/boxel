@@ -5,6 +5,7 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
@@ -90,6 +91,7 @@ export default class CardCatalogModal extends Component<Signature> {
       <ModalContainer
         @title={{this.state.chooseCardTitle}}
         @onClose={{fn this.pick undefined}}
+        @zIndex={{this.zIndex}}
         {{focusTrap
           isActive=(not this.state.dismissModal)
           focusTrapOptions=(hash
@@ -216,6 +218,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   stateStack: State[] = new TrackedArray<State>();
   stateId = 0;
+  @tracked zIndex = 20;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -291,6 +294,7 @@ export default class CardCatalogModal extends Component<Signature> {
       createNewCard?: CreateNewCard;
     },
   ): Promise<undefined | T> {
+    this.zIndex++;
     return (await this._chooseCard.perform(
       {
         // default to title sort so that we can maintain stability in
