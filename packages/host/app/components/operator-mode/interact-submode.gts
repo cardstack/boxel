@@ -118,8 +118,13 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare recentFilesService: RecentFilesService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
-
-  private deleteModal: DeleteModal | undefined;
+  @tracked private deleteModal: DeleteModal | undefined;
+  @tracked private deleteRequest:
+    | {
+        card: CardDef;
+        opts?: { afterDelete: () => void };
+      }
+    | undefined = undefined;
 
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
@@ -206,7 +211,10 @@ export default class InteractSubmode extends Component<Signature> {
         here.save.perform(item, dismissItem);
       },
       deleteCard: (card: CardDef, opts?: { afterDelete: () => void }): void => {
-        here.delete.perform(card, opts);
+        here.deleteRequest = { card, opts };
+        if (here.deleteModal) {
+          here.delete.perform(card, opts);
+        }
       },
       doWithStableScroll: async (
         card: CardDef,
@@ -332,6 +340,8 @@ export default class InteractSubmode extends Component<Signature> {
         (d) => (deferred = d),
       );
       if (!isDeleteConfirmed) {
+        this.deleteRequest = undefined;
+        this.deleteModal = undefined;
         return;
       }
 
@@ -353,6 +363,9 @@ export default class InteractSubmode extends Component<Signature> {
         deferred!.fulfill();
       });
 
+      this.deleteRequest = undefined;
+      this.deleteModal = undefined;
+
       opts?.afterDelete();
     },
   );
@@ -373,6 +386,10 @@ export default class InteractSubmode extends Component<Signature> {
 
   private setupDeleteModal = (deleteModal: DeleteModal) => {
     this.deleteModal = deleteModal;
+    if (this.deleteRequest) {
+      let { card, opts } = this.deleteRequest;
+      this.delete.perform(card, opts);
+    }
   };
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
@@ -617,7 +634,9 @@ export default class InteractSubmode extends Component<Signature> {
             @onTrigger={{fn this.showSearchWithTrigger openSearch}}
           />
         {{/if}}
-        <DeleteModal @onCreate={{this.setupDeleteModal}} />
+        {{#if this.deleteRequest.card}}
+          <DeleteModal @onCreate={{this.setupDeleteModal}} />
+        {{/if}}
       </div>
     </SubmodeLayout>
 

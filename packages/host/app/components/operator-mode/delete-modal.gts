@@ -23,10 +23,11 @@ interface Signature {
 export default class DeleteModal extends Component<Signature> {
   <template>
     <Modal
+      data-test-delete-modal-container
       data-test-delete-modal={{this.id}}
       @layer='urgent'
       @size='x-small'
-      @isOpen={{this.showModal}}
+      @isOpen={{true}}
       @onClose={{fn this.choose false}}
       style={{cssVar boxel-modal-offset-top='40vh'}}
     >
@@ -151,10 +152,6 @@ export default class DeleteModal extends Component<Signature> {
     let deleteDeferred = new Deferred<void>();
     setDeferred(deleteDeferred);
     return await this.presentChoice.perform(item, deleteDeferred);
-  }
-
-  private get showModal() {
-    return !!this.currentConfirmation;
   }
 
   private presentChoice = enqueueTask(
