@@ -55,9 +55,9 @@ export type NewFileType =
   | 'field-definition';
 export const newFileTypes: NewFileType[] = [
   'duplicate-instance',
-  'card-instance',
   'card-definition',
   'field-definition',
+  'card-instance',
 ];
 const waiter = buildWaiter('create-file-modal:on-setup-waiter');
 

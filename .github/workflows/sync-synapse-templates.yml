@@ -1,0 +1,58 @@
+name: Sync Matrix Synapse Email Templates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/matrix/docker/synapse/templates/**"
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  sync:
+    name: sync
+    runs-on: ubuntu-latest
+    concurrency: sync-synapse-templates-${{ inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up env
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment || 'staging' }}
+        run: |
+          echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
+          if [ "$INPUT_ENVIRONMENT" = "production" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/github-synapse" >> $GITHUB_ENV
+            echo "AWS_S3_BUCKET=cardstack-matrix-synapse-production" >> $GITHUB_ENV
+            echo "AWS_ECS_CLUSTER=production" >> $GITHUB_ENV
+            echo "AWS_ECS_SERVICE=synapse-production" >> $GITHUB_ENV
+          elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github-synapse" >> $GITHUB_ENV
+            echo "AWS_S3_BUCKET=cardstack-matrix-synapse-staging" >> $GITHUB_ENV
+            echo "AWS_ECS_CLUSTER=staging" >> $GITHUB_ENV
+            echo "AWS_ECS_SERVICE=synapse-staging" >> $GITHUB_ENV
+          else
+            echo "unrecognized environment"
+            exit 1;
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: S3 Sync
+        run: |
+          aws s3 sync packages/matrix/docker/synapse/templates s3://${{ env.AWS_S3_BUCKET }}/templates
+
+      - name: Restart Synapse ECS Service
+        run: |
+          aws ecs update-service --cluster ${{ env.AWS_ECS_CLUSTER }} --service ${{ env.AWS_ECS_SERVICE }} --force-new-deployment
