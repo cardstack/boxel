@@ -12,8 +12,12 @@ export default class LoaderService extends Service {
   @tracked loader = this.makeInstance();
 
   reset() {
-    this.loader = Loader.cloneLoader(this.loader);
-    shimExternals(this.loader);
+    if (this.loader) {
+      this.loader = Loader.cloneLoader(this.loader);
+      shimExternals(this.loader);
+    } else {
+      this.loader = this.makeInstance();
+    }
   }
 
   private makeInstance() {

@@ -202,9 +202,6 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
-  // This loader is not meant to be used operationally, rather it serves as a
-  // template that we clone for each indexing operation
-  loaderTemplate: Loader;
   #router: Router;
   #deferStartup: boolean;
   #useTestingDomain = false;
@@ -216,6 +213,9 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #flushOperations: Promise<void> | undefined;
   #operationQueue: Operation[] = [];
+  // This loader is not meant to be used operationally, rather it serves as a
+  // template that we clone for each indexing operation
+  readonly loaderTemplate: Loader;
   readonly paths: RealmPaths;
 
   get url(): string {
@@ -465,8 +465,20 @@ export class Realm {
 
   get loader() {
     // the current loader used by the search index will contain the latest
-    // module updates as we obtain a new loader for each indexing run
-    return this.searchIndex.loader;
+    // module updates as we obtain a new loader for each indexing run.
+    if (isNode) {
+      return this.searchIndex.loader;
+    } else {
+      // when we are under test (via browser) we are using a loader that was
+      // pre-configured and handed to us which is shared between the host app
+      // and the realm. in order for cards to run correctly and instance data
+      // buckets not to be smeared across different loaders we need to continue
+      // to use the same loader that we were handed in the test setup. Right now
+      // we are using `isNode` as a heuristic to determine if we are running in
+      // a test. This might need to change in the future if we want the Realm to
+      // really run in teh browser in a non testing scenario.
+      return this.loaderTemplate;
+    }
   }
 
   get searchIndex() {
@@ -1166,6 +1178,7 @@ export class Realm {
       relativeTo,
       this.loader as unknown as LoaderType,
     )) as CardDef;
+    await api.flushLogs();
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
     delete data.included;
