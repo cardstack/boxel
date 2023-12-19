@@ -50,7 +50,7 @@ jobs:
 
       - name: S3 Sync
         run: |
-          aws s3 sync packages/matrix/docker/synapse/templates s3://${{ env.AWS_S3_BUCKET }}
+          aws s3 sync packages/matrix/docker/synapse/templates s3://${{ env.AWS_S3_BUCKET }}/templates
 
       - name: Restart Synapse ECS Service
         run: |
