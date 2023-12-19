@@ -29,6 +29,8 @@ import {
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
+  type Actions,
+  type CodeRef,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -126,7 +128,38 @@ export default class CodeSubmode extends Component<Signature> {
     | undefined;
   #currentCard: CardDef | undefined;
 
-  private deleteModal: DeleteModal | undefined;
+  @tracked private deleteModal: DeleteModal | undefined;
+  @tracked private itemToDelete: CardDef | URL | null | undefined;
+
+  private publicAPI(here: CodeSubmode): Actions {
+    return {
+      createCard: async (
+        _ref: CodeRef,
+        _relativeTo: URL | undefined,
+      ): Promise<CardDef | undefined> => {
+        // TODO
+        throw new Error('not implemented');
+      },
+      viewCard: async (
+        _card: CardDef,
+        _format: Format = 'isolated',
+      ): Promise<void> => {},
+      editCard(_card: CardDef): void {},
+      saveCard(_card: CardDef): void {},
+      delete: (item: CardDef | URL | null | undefined): void => {
+        here.itemToDelete = item;
+        if (here.deleteModal) {
+          here.delete.perform(item);
+        }
+      },
+      doWithStableScroll: async (
+        _card: CardDef,
+        _changeSizeCallback: () => Promise<void>,
+      ): Promise<void> => {},
+      changeSubmode: (): void => {},
+    };
+  }
+
   private createFileModal: CreateFileModal | undefined;
   private cardResource = getCard(
     this,
@@ -470,6 +503,7 @@ export default class CodeSubmode extends Component<Signature> {
     }
     if (!(item instanceof URL)) {
       if (!item.id) {
+        this.itemToDelete = undefined;
         // the card isn't actually saved yet, so do nothing
         return;
       }
@@ -481,6 +515,7 @@ export default class CodeSubmode extends Component<Signature> {
       (d) => (deferred = d),
     );
     if (!isDeleteConfirmed) {
+      this.itemToDelete = undefined;
       return;
     }
 
@@ -516,6 +551,8 @@ export default class CodeSubmode extends Component<Signature> {
     } else {
       this.operatorModeStateService.updateCodePath(null);
     }
+
+    this.itemToDelete = undefined;
   });
 
   // dropTask will ignore any subsequent create file requests until the one in progress is done
@@ -563,6 +600,9 @@ export default class CodeSubmode extends Component<Signature> {
 
   private setupDeleteModal = (deleteModal: DeleteModal) => {
     this.deleteModal = deleteModal;
+    if (this.itemToDelete) {
+      this.delete.perform(this.itemToDelete);
+    }
   };
 
   private setupCreateFileModal = (createFileModal: CreateFileModal) => {
@@ -662,7 +702,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @readyFile={{this.readyFile}}
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @selectDeclaration={{this.selectDeclaration}}
-                          @delete={{perform this.delete}}
+                          @publicAPI={{this.publicAPI this}}
                           @openDefinition={{this.openDefinition}}
                           @createFile={{perform this.createFile}}
                           data-test-card-inspector-panel
@@ -823,7 +863,9 @@ export default class CodeSubmode extends Component<Signature> {
           {{/if}}
         </ResizablePanelGroup>
       </div>
-      <DeleteModal @onCreate={{this.setupDeleteModal}} />
+      {{#if this.itemToDelete}}
+        <DeleteModal @onCreate={{this.setupDeleteModal}} />
+      {{/if}}
       <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
     </SubmodeLayout>
 

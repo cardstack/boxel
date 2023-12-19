@@ -119,12 +119,7 @@ export default class InteractSubmode extends Component<Signature> {
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private deleteModal: DeleteModal | undefined;
-  @tracked private deleteRequest:
-    | {
-        card: CardDef;
-        opts?: { afterDelete: () => void };
-      }
-    | undefined = undefined;
+  @tracked private itemToDelete: CardDef | undefined = undefined;
 
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
@@ -210,10 +205,13 @@ export default class InteractSubmode extends Component<Signature> {
         let item = here.findCardInStack(card, stackIndex);
         here.save.perform(item, dismissItem);
       },
-      deleteCard: (card: CardDef, opts?: { afterDelete: () => void }): void => {
-        here.deleteRequest = { card, opts };
+      delete: (card: CardDef | URL | null | undefined): void => {
+        if (card == null || card instanceof URL) {
+          throw new Error(`bug: delete called with invalid card "${card}"`);
+        }
+        here.itemToDelete = card;
         if (here.deleteModal) {
-          here.delete.perform(card, opts);
+          here.delete.perform(card);
         }
       },
       doWithStableScroll: async (
@@ -324,51 +322,45 @@ export default class InteractSubmode extends Component<Signature> {
   });
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(
-    async (card: CardDef, opts?: { afterDelete: () => void }) => {
-      if (!card.id) {
-        // the card isn't actually saved yet, so do nothing
-        return;
-      }
+  private delete = dropTask(async (card: CardDef) => {
+    if (!card.id) {
+      // the card isn't actually saved yet, so do nothing
+      return;
+    }
 
-      if (!this.deleteModal) {
-        throw new Error(`bug: DeleteModal not instantiated`);
-      }
-      let deferred: Deferred<void>;
-      let isDeleteConfirmed = await this.deleteModal.confirmDelete(
-        card,
-        (d) => (deferred = d),
-      );
-      if (!isDeleteConfirmed) {
-        this.deleteRequest = undefined;
-        this.deleteModal = undefined;
-        return;
-      }
+    if (!this.deleteModal) {
+      throw new Error(`bug: DeleteModal not instantiated`);
+    }
+    let deferred: Deferred<void>;
+    let isDeleteConfirmed = await this.deleteModal.confirmDelete(
+      card,
+      (d) => (deferred = d),
+    );
+    if (!isDeleteConfirmed) {
+      this.itemToDelete = undefined;
+      return;
+    }
 
-      for (let stack of this.stacks) {
-        // remove all selections for the deleted card
-        for (let item of stack) {
-          let selections = cardSelections.get(item);
-          if (!selections) {
-            continue;
-          }
-          let removedCard = [...selections].find((c) => c.id === card.id);
-          if (removedCard) {
-            selections.delete(removedCard);
-          }
+    for (let stack of this.stacks) {
+      // remove all selections for the deleted card
+      for (let item of stack) {
+        let selections = cardSelections.get(item);
+        if (!selections) {
+          continue;
+        }
+        let removedCard = [...selections].find((c) => c.id === card.id);
+        if (removedCard) {
+          selections.delete(removedCard);
         }
       }
-      await this.withTestWaiters(async () => {
-        await this.operatorModeStateService.deleteCard(card);
-        deferred!.fulfill();
-      });
+    }
+    await this.withTestWaiters(async () => {
+      await this.operatorModeStateService.deleteCard(card);
+      deferred!.fulfill();
+    });
 
-      this.deleteRequest = undefined;
-      this.deleteModal = undefined;
-
-      opts?.afterDelete();
-    },
-  );
+    this.itemToDelete = undefined;
+  });
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
     try {
@@ -386,9 +378,8 @@ export default class InteractSubmode extends Component<Signature> {
 
   private setupDeleteModal = (deleteModal: DeleteModal) => {
     this.deleteModal = deleteModal;
-    if (this.deleteRequest) {
-      let { card, opts } = this.deleteRequest;
-      this.delete.perform(card, opts);
+    if (this.itemToDelete) {
+      this.delete.perform(this.itemToDelete);
     }
   };
 
@@ -634,7 +625,7 @@ export default class InteractSubmode extends Component<Signature> {
             @onTrigger={{fn this.showSearchWithTrigger openSearch}}
           />
         {{/if}}
-        {{#if this.deleteRequest.card}}
+        {{#if this.itemToDelete}}
           <DeleteModal @onCreate={{this.setupDeleteModal}} />
         {{/if}}
       </div>

@@ -33,15 +33,12 @@ import {
   hasExecutableExtension,
   getPlural,
   isCardDocumentString,
-} from '@cardstack/runtime-common';
-
-import {
   isCardDef,
   isFieldDef,
   isBaseDef,
-} from '@cardstack/runtime-common/code-ref';
-
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+  type Actions,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
@@ -94,7 +91,7 @@ interface Signature {
       },
       sourceInstance?: CardDef,
     ) => Promise<void>;
-    delete: (item: CardDef | URL | null | undefined) => void | Promise<void>;
+    publicAPI: Actions;
   };
 }
 
@@ -349,7 +346,10 @@ export default class DetailPanel extends Component<Signature> {
                     data-test-delete-module-button
                     @icon={{IconTrash}}
                     aria-label='Delete'
-                    {{on 'click' (fn @delete this.codePath)}}
+                    {{on
+                      'click'
+                      (fn @publicAPI.delete this.codePath undefined)
+                    }}
                     style={{cssVar
                       boxel-icon-button-width='24px'
                       boxel-icon-button-height='24px'
@@ -389,7 +389,7 @@ export default class DetailPanel extends Component<Signature> {
                   )
                   (hash
                     label='Delete'
-                    handler=(fn @delete @cardInstance)
+                    handler=(fn @publicAPI.delete @cardInstance)
                     icon=IconTrash
                   )
                 }}
@@ -485,7 +485,7 @@ export default class DetailPanel extends Component<Signature> {
               @actions={{array
                 (hash
                   label='Delete'
-                  handler=(fn @delete this.codePath)
+                  handler=(fn @publicAPI.delete this.codePath)
                   icon=IconTrash
                 )
               }}
