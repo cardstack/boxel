@@ -31,6 +31,7 @@ import {
   RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
@@ -40,6 +41,8 @@ import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
+  type State as ModuleState,
+  findDeclarationByName,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
@@ -121,9 +124,7 @@ export default class CodeSubmode extends Component<Signature> {
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
-  private updateCursorByDeclaration:
-    | ((declaration: ModuleDeclaration) => void)
-    | undefined;
+  private updateCursorByName: ((name: string) => void) | undefined;
   #currentCard: CardDef | undefined;
 
   private deleteModal: DeleteModal | undefined;
@@ -143,9 +144,13 @@ export default class CodeSubmode extends Component<Signature> {
       onCardInstanceChange: () => this.onCardLoaded,
     },
   );
-  private moduleContentsResource = moduleContentsResource(this, () => {
-    return this.isModule ? this.readyFile : undefined;
-  });
+  private moduleContentsResource = moduleContentsResource(
+    this,
+    () => {
+      return this.isModule ? this.readyFile : undefined;
+    },
+    this.onModuleEdit,
+  );
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -325,6 +330,23 @@ export default class CodeSubmode extends Component<Signature> {
     this.userHasDismissedURLError = true;
   }
 
+  @action private onModuleEdit(state: ModuleState) {
+    let editedDeclaration = state.declarations.find(
+      (newDeclaration: ModuleDeclaration) => {
+        return this.selectedDeclaration
+          ? this.selectedDeclaration.localName !== newDeclaration.localName &&
+              isEquivalentBodyPosition(
+                this.selectedDeclaration.path,
+                newDeclaration.path,
+              )
+          : false;
+      },
+    );
+    if (editedDeclaration) {
+      this.goToDefinition(undefined, editedDeclaration.localName);
+    }
+  }
+
   private onCardLoaded = (
     oldCard: CardDef | undefined,
     newCard: CardDef | undefined,
@@ -351,11 +373,8 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get _selectedDeclaration() {
     let codeSelection = this.operatorModeStateService.state.codeSelection;
-    return this.moduleContentsResource?.declarations.find((dec) => {
-      return codeSelection
-        ? dec.exportName === codeSelection || dec.localName === codeSelection
-        : false;
-    });
+    if (codeSelection === undefined) return;
+    return findDeclarationByName(codeSelection, this.declarations);
   }
 
   private get selectedDeclaration() {
@@ -382,18 +401,18 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this.openDefinition(undefined, dec.localName);
+    this.goToDefinition(undefined, dec.localName);
   }
 
   @action
-  openDefinition(
+  goToDefinition(
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) {
     this.operatorModeStateService.updateCodePathWithCodeSelection(
       codeRef,
       localName,
-      () => this.updateCursorByDeclaration?.(this.selectedDeclaration!),
+      this.updateCursorByName,
     );
   }
 
@@ -569,10 +588,8 @@ export default class CodeSubmode extends Component<Signature> {
     this.createFileModal = createFileModal;
   };
 
-  private setupCodeEditor = (
-    updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
-  ) => {
-    this.updateCursorByDeclaration = updateCursorByDeclaration;
+  private setupCodeEditor = (updateCursorByName: (name: string) => void) => {
+    this.updateCursorByName = updateCursorByName;
   };
 
   @action private openSearchResultInEditor(card: CardDef) {
@@ -663,7 +680,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @selectDeclaration={{this.selectDeclaration}}
                           @delete={{perform this.delete}}
-                          @openDefinition={{this.openDefinition}}
+                          @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
                           data-test-card-inspector-panel
                         />
@@ -751,7 +768,7 @@ export default class CodeSubmode extends Component<Signature> {
                         @moduleContentsResource={{this.moduleContentsResource}}
                         @card={{this.selectedCardOrField.cardOrField}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
-                        @openDefinition={{this.openDefinition}}
+                        @goToDefinition={{this.goToDefinition}}
                         as |SchemaEditorTitle SchemaEditorPanel|
                       >
                         <A.Item
