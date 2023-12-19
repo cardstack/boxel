@@ -1,11 +1,11 @@
 import {
   fillIn,
   find,
-  visit,
   click,
   settled,
   waitFor,
   currentURL,
+  visit,
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -24,6 +24,8 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
+import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
   TestRealmAdapter,
@@ -35,11 +37,34 @@ import {
   setupAcceptanceTestRealm,
   setupServerSentEvents,
   setupOnSave,
+  visitOperatorMode,
   waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+
+const testRealmURL2 = 'http://test-realm/test2/';
+const realmAFiles: Record<string, any> = {
+  '.realm.json': {
+    name: 'Test Workspace A',
+    backgroundURL:
+      'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+    iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+  },
+  'index.json': {
+    data: {
+      type: 'card',
+      attributes: {},
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/cards-grid',
+          name: 'CardsGrid',
+        },
+      },
+    },
+  },
+};
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -392,6 +417,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
+    await setupAcceptanceTestRealm({
+      loader,
+      contents: realmAFiles,
+      realmURL: testRealmURL2,
+    });
     ({ realm, adapter } = await setupAcceptanceTestRealm({
       loader,
       contents: {
@@ -511,13 +541,20 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       },
     }));
 
+    let realmService = this.owner.lookup(
+      'service:realm-info-service',
+    ) as RealmInfoService;
+
+    await realmService.fetchRealmInfo({
+      realmURL: new URL(testRealmURL2),
+    });
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;
   });
 
   test('inspector will show json instance definition and module definition in card inheritance panel', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -528,13 +565,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}Person/1.json`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
 
     await waitFor('[data-test-card-inspector-panel]');
@@ -583,17 +615,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('inspector will show module definition in card inheritance panel', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-card-module-definition]');
@@ -629,17 +656,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('inspector displays elements "in-this-file" panel and can select', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
@@ -741,17 +762,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('inspector persists scroll position but choosing another element overrides it', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
@@ -803,6 +818,120 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     }
   });
 
+  test<TestContextWithSave>('can duplicate an instance in same realm', async function (assert) {
+    assert.expect(10);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/vangogh.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor(`[data-test-action-button="Duplicate"]`);
+    await click('[data-test-action-button="Duplicate"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+    await percySnapshot(assert);
+
+    let deferred = new Deferred<void>();
+    let id: string | undefined;
+    this.onSave((url, json) => {
+      if (typeof json === 'string') {
+        throw new Error(`expected json save data`);
+      }
+      id = url.href;
+      assert.strictEqual(
+        json.data.attributes?.name,
+        'Van Gogh',
+        'the name field is correct',
+      );
+      assert.deepEqual(json.data.meta.adoptsFrom, {
+        module: '../pet',
+        name: 'Pet',
+      });
+      assert.strictEqual(json.data.meta.realmURL, testRealmURL);
+      deferred.fulfill();
+    });
+    await click('[data-test-duplicate-card-instance]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    await waitForCodeEditor();
+    await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
+    assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
+    assert
+      .dom(`[data-test-code-mode-card-preview-header="${id}"] .icon`)
+      .hasAttribute('alt', 'Icon for realm Test Workspace B');
+    assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
+    assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
+  });
+
+  test<TestContextWithSave>('can duplicate an instance in different realm', async function (assert) {
+    assert.expect(11);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/vangogh.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitForCodeEditor();
+    await waitFor(`[data-test-action-button="Duplicate"]`);
+    await click('[data-test-action-button="Duplicate"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    // realm selection
+    await click(`[data-test-realm-dropdown-trigger]`);
+    await waitFor(
+      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
+    );
+    await click('[data-test-boxel-menu-item-text="Test Workspace A"]');
+    await waitFor(`[data-test-realm-name="Test Workspace A"]`);
+    assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
+
+    let deferred = new Deferred<void>();
+    let id: string | undefined;
+    this.onSave((url, json) => {
+      if (typeof json === 'string') {
+        throw new Error(`expected json save data`);
+      }
+      id = url.href;
+      assert.strictEqual(
+        json.data.attributes?.name,
+        'Van Gogh',
+        'the name field is correct',
+      );
+      assert.deepEqual(json.data.meta.adoptsFrom, {
+        module: `${testRealmURL}pet`,
+        name: 'Pet',
+      });
+      assert.strictEqual(json.data.meta.realmURL, testRealmURL2);
+      deferred.fulfill();
+    });
+    await click('[data-test-duplicate-card-instance]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+
+    await waitForCodeEditor();
+    await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
+    assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
+    assert
+      .dom(`[data-test-code-mode-card-preview-header="${id}"] .icon`)
+      .hasAttribute('alt', 'Icon for realm Test Workspace A');
+    assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
+    assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
+  });
+
   test<TestContextWithSSE>('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
     let expectedEvents = [
       {
@@ -813,7 +942,15 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
+    window.localStorage.setItem(
+      'recent-cards',
+      JSON.stringify([`${testRealmURL}Pet/vangogh`, `${testRealmURL}Person/1`]),
+    );
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([[testRealmURL, 'Pet/vangogh.json']]),
+    );
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -826,20 +963,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           },
         ],
       ],
-    })!;
-    window.localStorage.setItem(
-      'recent-cards',
-      JSON.stringify([`${testRealmURL}Pet/vangogh`, `${testRealmURL}Person/1`]),
-    );
-    window.localStorage.setItem(
-      'recent-files',
-      JSON.stringify([[testRealmURL, 'Pet/vangogh.json']]),
-    );
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"`).exists();
     assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`).exists();
 
@@ -901,7 +1025,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([
+        [testRealmURL, 'Pet/vangogh.json'],
+        [testRealmURL, 'Pet/mango.json'],
+      ]),
+    );
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -914,19 +1045,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           },
         ],
       ],
-    })!;
-    window.localStorage.setItem(
-      'recent-files',
-      JSON.stringify([
-        [testRealmURL, 'Pet/vangogh.json'],
-        [testRealmURL, 'Pet/mango.json'],
-      ]),
-    );
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"`).exists();
     assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`).exists();
 
@@ -996,11 +1115,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
-      submode: 'code',
-      codePath: `${testRealmURL}pet.gts`,
-    })!;
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
@@ -1008,11 +1122,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         [testRealmURL, 'Pet/mango.json'],
       ]),
     );
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
     await waitForCodeEditor();
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
@@ -1062,19 +1175,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
-    })!;
+    });
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([[testRealmURL, 'pet.gts']]),
-    );
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
     );
     await waitForCodeEditor();
     assert.strictEqual(
@@ -1106,16 +1214,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('can delete a misc file', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}readme.md`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitForCodeEditor();
 
     await waitFor(`[data-test-action-button="Delete"]`);
@@ -1132,17 +1235,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('After opening inherited definition inside inheritance panel, "in-this-file" highlights selected definition', async function (assert) {
-    let operatorModeStateParam = stringify({
+    let operatorModeState = {
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}imports.gts`,
-    })!;
+    } as SerializedState;
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
+
     await waitForCodeEditor();
 
     // clicking on normal card
@@ -1164,11 +1264,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
     //clicking on default card
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
 
     elementName = 'ChildCard2';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -1188,11 +1284,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
     //clicking on card which is renamed during export
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
+
     elementName = 'ChildCard3';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -1211,11 +1304,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
     //clicking on card which is renamed during import
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
+
     elementName = 'ChildCard4';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -1233,11 +1323,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
     //clicking on card which is defined locally
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
     await waitForCodeEditor();
 
     elementName = 'ChildCard5';
@@ -1258,11 +1344,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
     //clicking on field
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
     await waitForCodeEditor();
 
     elementName = 'ChildField1';
@@ -1283,25 +1365,17 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('After opening definition from card type and fields on RHS, "in-this-file" highlights selected definition', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    let operatorModeState = {
       submode: Submodes.Code,
       codePath: `${testRealmURL}imports.gts`,
-    })!;
+    };
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
+
     await waitForCodeEditor();
 
     //click card type
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
     await waitForCodeEditor();
     let elementName = 'AncestorCard2';
     await waitFor(
@@ -1325,11 +1399,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} card`);
 
     //click normal field
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
     await waitForCodeEditor();
     elementName = 'AncestorField1';
     await waitFor(
@@ -1352,11 +1422,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} field`);
 
     //click linksTo card
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
     await waitForCodeEditor();
 
     elementName = 'AncestorCard2';
@@ -1380,11 +1446,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-boxel-selector-item-selected]')
       .hasText(`${elementName} card`);
     //click linksTo card in the same file
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
     await waitForCodeEditor();
 
     elementName = 'ChildCard2';
@@ -1408,11 +1470,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} card`);
 
     //click linksTo many card
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode(operatorModeState);
     await waitForCodeEditor();
 
     elementName = 'AncestorCard2';
@@ -1438,17 +1496,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('in-this-file panel displays re-exports', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}re-export.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
@@ -1525,17 +1577,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('in-this-file displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}local-inherit.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
@@ -1650,17 +1696,12 @@ export class TestCard extends ExportedCard {
   }
   */
 }`.trim();
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
@@ -1729,17 +1770,12 @@ export class TestCard extends ExportedCard {
 
   test<TestContextWithSave>('can inherit from an exported field def declaration', async function (assert) {
     assert.expect(2);
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedField"]');
 
@@ -1796,17 +1832,12 @@ export class TestField extends ExportedField {
 
   test<TestContextWithSave>('inherit modal state is cleared when modal is cancelled', async function (assert) {
     assert.expect(3);
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
@@ -1868,17 +1899,11 @@ export class ExportedCard extends ExportedCardParent {
   }
   */
 }`.trim();
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
@@ -1920,17 +1945,12 @@ export class ExportedCard extends ExportedCardParent {
   });
 
   test('field error message displays if you try to inherit using a filename that already exists', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
@@ -1966,17 +1986,12 @@ export class ExportedCard extends ExportedCardParent {
   });
 
   test('Inherit action item is not displayed when definition is not exported', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="LocalCard"]');
 
@@ -1989,17 +2004,12 @@ export class ExportedCard extends ExportedCardParent {
 
   test<TestContextWithSave>('can create an instance from an exported card definition', async function (assert) {
     assert.expect(8);
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
@@ -2062,17 +2072,12 @@ export class ExportedCard extends ExportedCardParent {
   });
 
   test('Create instance action is not displayed for non-exported Card definition', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="LocalCard"]');
 
@@ -2087,17 +2092,12 @@ export class ExportedCard extends ExportedCardParent {
   });
 
   test('Create instance action is not displayed for field definition', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedField"]');
 
