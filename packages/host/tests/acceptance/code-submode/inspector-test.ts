@@ -5,6 +5,7 @@ import {
   settled,
   waitFor,
   currentURL,
+  visit,
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -21,9 +22,8 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
-
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
   TestRealmAdapter,
@@ -818,7 +818,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   test<TestContextWithSave>('can duplicate an instance in same realm', async function (assert) {
     assert.expect(10);
-    let operatorModeStateParam = stringify({
+    let operatorModeStateParam = JSON.stringify({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}Pet/vangogh.json`,
@@ -838,7 +838,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     let deferred = new Deferred<void>();
     let id: string | undefined;
-    this.onSave((url, json) => {
+    this.onSave((url: URL, json: any) => {
       if (typeof json === 'string') {
         throw new Error(`expected json save data`);
       }
@@ -871,7 +871,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   test<TestContextWithSave>('can duplicate an instance in different realm', async function (assert) {
     assert.expect(11);
-    let operatorModeStateParam = stringify({
+    let operatorModeStateParam = JSON.stringify({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}Pet/vangogh.json`,
@@ -899,7 +899,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     let deferred = new Deferred<void>();
     let id: string | undefined;
-    this.onSave((url, json) => {
+    this.onSave((url: URL, json: any) => {
       if (typeof json === 'string') {
         throw new Error(`expected json save data`);
       }
@@ -1722,7 +1722,7 @@ export class TestCard extends ExportedCard {
     assert.dom('[data-test-create-definition]').isEnabled();
 
     let deferred = new Deferred<void>();
-    this.onSave((_, content) => {
+    this.onSave((_: any, content: any) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -1793,7 +1793,7 @@ export class TestCard extends ExportedCard {
     await fillIn('[data-test-file-name-field]', '/test-field');
 
     let deferred = new Deferred<void>();
-    this.onSave((_, content) => {
+    this.onSave((_: any, content: any) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -1917,7 +1917,7 @@ export class ExportedCard extends ExportedCardParent {
     await fillIn('[data-test-file-name-field]', '/test-card');
 
     let deferred = new Deferred<void>();
-    this.onSave((_, content) => {
+    this.onSave((_: any, content: any) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
@@ -2026,7 +2026,7 @@ export class ExportedCard extends ExportedCardParent {
 
     let deferred = new Deferred<void>();
     let id: string | undefined;
-    this.onSave((url, json) => {
+    this.onSave((url: URL, json: any) => {
       if (typeof json === 'string') {
         throw new Error(`expected JSON save data`);
       }
