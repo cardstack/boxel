@@ -31,7 +31,7 @@ import {
   RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { isEquivalentBody } from '@cardstack/runtime-common/schema-analysis-plugin';
+import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
@@ -335,7 +335,7 @@ export default class CodeSubmode extends Component<Signature> {
       (newDeclaration: ModuleDeclaration) => {
         return this.selectedDeclaration
           ? this.selectedDeclaration.localName !== newDeclaration.localName &&
-              isEquivalentBody(
+              isEquivalentBodyPosition(
                 this.selectedDeclaration.path,
                 newDeclaration.path,
               )

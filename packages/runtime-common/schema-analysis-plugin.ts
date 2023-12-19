@@ -546,7 +546,7 @@ function insertOrReplace(item: Declaration, arr: Declaration[]) {
   return arr;
 }
 
-export function isEquivalentBody(
+export function isEquivalentBodyPosition(
   path: NodePath | undefined,
   newPath: NodePath | undefined,
 ) {
