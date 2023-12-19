@@ -781,7 +781,10 @@ export default class CodeSubmode extends Component<Signature> {
                         class='accordion-item'
                         @contentClass='accordion-item-content'
                         @onClick={{fn this.selectAccordionItem 'schema-editor'}}
-                        @isOpen={{true}}
+                        @isOpen={{eq
+                          this.selectedAccordionItem
+                          'schema-editor'
+                        }}
                       >
                         <:title>
                           <SchemaEditorTitle @hasModuleError={{true}} />
