@@ -3,7 +3,8 @@ name: Sync Matrix Synapse Email Templates
 on:
   push:
     branches: [main]
-  pull_request:
+    paths:
+      - "packages/matrix/docker/synapse/templates/**"
   workflow_call:
     inputs:
       environment:
@@ -18,7 +19,7 @@ jobs:
   sync:
     name: sync
     runs-on: ubuntu-latest
-    concurrency: sync-synapse-templates-${{ inputs.environment }}
+    concurrency: sync-synapse-templates-${{ inputs.environment || 'staging' }}
     steps:
       - uses: actions/checkout@v3
 
