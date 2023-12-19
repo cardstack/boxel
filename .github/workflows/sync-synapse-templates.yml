@@ -3,6 +3,7 @@ name: Sync Matrix Synapse Email Templates
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_call:
     inputs:
       environment:
