@@ -5,6 +5,7 @@ import {
   settled,
   waitFor,
   currentURL,
+  visit,
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -12,6 +13,8 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
+
+import stringify from 'safe-stable-stringify';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
@@ -21,9 +24,8 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
-
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
   TestRealmAdapter,
