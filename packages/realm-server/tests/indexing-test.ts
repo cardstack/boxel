@@ -501,6 +501,7 @@ module('indexing', function (hooks) {
             status: 404,
             title: 'Not Found',
             deps: ['http://test-realm/post'],
+            responseText: undefined,
           },
         }),
         'card instance is an error document',

@@ -361,6 +361,8 @@ const txtSource = `
   Hello, world!
 `;
 
+const brokenSource = 'some text to make the code broken' + friendCardSource;
+
 module('Acceptance | code submode tests', function (hooks) {
   let realm: Realm;
   let monacoService: MonacoService;
@@ -400,6 +402,7 @@ module('Acceptance | code submode tests', function (hooks) {
         'address.gts': addressFieldSource,
         'country.gts': countryCardSource,
         'trips.gts': tripsFieldSource,
+        'broken.gts': brokenSource,
         'person-entry.json': {
           data: {
             type: 'card',
@@ -638,6 +641,26 @@ module('Acceptance | code submode tests', function (hooks) {
       .hasText(
         'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
       );
+  });
+
+  test('showing module with a syntax error will display the error', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}broken.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-syntax-error]');
+
+    assert
+      .dom('[data-test-syntax-error]')
+      .includesText('/broken.gts: Missing semicolon. (1:4)');
   });
 
   test('empty state displays default realm info', async function (assert) {

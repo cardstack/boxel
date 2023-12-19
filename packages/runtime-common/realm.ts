@@ -754,6 +754,7 @@ export class Realm {
         [makeEmberTemplatePlugin, templateOptions],
         loaderPlugin,
       ],
+      highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly
     })?.code;
     if (!src) {
       throw new Error('bug: should never get here');
@@ -966,6 +967,7 @@ export class Realm {
     }
     if (maybeError.type === 'error') {
       return systemError(
+        this.url,
         `cannot return card from index: ${maybeError.error.title} - ${maybeError.error.detail}`,
         CardError.fromSerializableError(maybeError.error),
       );

@@ -3,6 +3,7 @@ import { createResponse } from './create-response';
 export interface ErrorDetails {
   status?: number;
   title?: string;
+  responseText?: string;
   source?: {
     pointer?: string;
     header?: string;
@@ -26,15 +27,20 @@ export class CardError extends Error implements SerializedError {
   status: number;
   title?: string;
   source?: ErrorDetails['source'];
+  responseText?: string;
   isCardError: true = true;
   additionalErrors: (CardError | Error)[] | null = null;
   deps?: string[];
 
-  constructor(detail: string, { status, title, source }: ErrorDetails = {}) {
+  constructor(
+    detail: string,
+    { status, title, source, responseText }: ErrorDetails = {},
+  ) {
     super(detail);
     this.detail = detail;
     this.status = status || 500;
     this.title = title || getReasonPhrase(this.status);
+    this.responseText = responseText;
     this.source = source;
   }
   toJSON() {
@@ -91,6 +97,7 @@ export class CardError extends Error implements SerializedError {
         {
           title: response.statusText,
           status: response.status,
+          responseText: text,
         },
       );
     }
