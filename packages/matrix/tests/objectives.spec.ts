@@ -64,7 +64,7 @@ test.describe('Room objectives', () => {
       'Objective: Make sure that all room members greet each other by saying "Hello"',
     );
     await assertMessages(page, [
-      { from: 'user1', message: 'user1 has set the room objectives' },
+      { from: 'user1', message: 'Objective has been set by @user1:localhost' },
     ]);
     await expect(
       page.locator(`[data-test-set-objective-btn]`),
