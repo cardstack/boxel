@@ -94,12 +94,19 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
 function getResponse(history: IRoomEvent[], aiBotUsername: string) {
   let messages = getModifyPrompt(history, aiBotUsername);
   let functions = getFunctions(history, aiBotUsername);
-  return openai.beta.chat.completions.stream({
-    model: 'gpt-4-1106-preview',
-    messages: messages,
-    functions: functions,
-    function_call: 'auto',
-  });
+  if (functions.length === 0) {
+    return openai.beta.chat.completions.stream({
+      model: 'gpt-4-1106-preview',
+      messages: messages,
+    });
+  } else {
+    return openai.beta.chat.completions.stream({
+      model: 'gpt-4-1106-preview',
+      messages: messages,
+      functions: functions,
+      function_call: 'auto',
+    });
+  }
 }
 
 (async () => {
