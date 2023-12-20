@@ -108,7 +108,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   <template>
-    <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
+    <div class='operator-mode-with-chat {{this.chatVisibilityClass}}'>
       <SubmodeSwitcher
         @submode={{this.operatorModeStateService.state.submode}}
         @onSubmodeSelect={{this.updateSubmode}}
@@ -146,12 +146,16 @@ export default class SubmodeLayout extends Component<Signature> {
     />
 
     <style>
-      .operator-mode__with-chat {
+      .operator-mode-with-chat {
         display: grid;
         grid-template-rows: 1fr;
         grid-template-columns: 1.5fr 0.5fr;
         gap: 0px;
         height: 100%;
+      }
+
+      .operator-mode-with-chat > * {
+        z-index: 1;
       }
 
       .chat-open {
@@ -177,7 +181,6 @@ export default class SubmodeLayout extends Component<Signature> {
         border: none;
         box-shadow: var(--boxel-deep-box-shadow);
         transition: background-color var(--boxel-transition);
-        z-index: 1;
       }
       .chat-btn:hover {
         --icon-color: var(--boxel-dark);
@@ -188,14 +191,12 @@ export default class SubmodeLayout extends Component<Signature> {
         position: absolute;
         top: 0;
         left: 0;
-        z-index: 2;
         padding: var(--boxel-sp);
       }
 
       .container__chat-sidebar {
         height: 100vh;
         grid-column: 2;
-        z-index: 1;
       }
     </style>
   </template>

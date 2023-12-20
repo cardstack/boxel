@@ -1,5 +1,4 @@
 import {
-  visit,
   click,
   waitFor,
   fillIn,
@@ -13,8 +12,6 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
-
-import stringify from 'safe-stable-stringify';
 
 import {
   baseRealm,
@@ -34,6 +31,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupServerSentEvents,
+  visitOperatorMode,
   waitForCodeEditor,
   type TestContextWithSSE,
 } from '../helpers';
@@ -542,7 +540,7 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('defaults to inheritance view and can toggle to file view', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -553,13 +551,8 @@ module('Acceptance | code submode tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}Person/1.json`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-file-view-header]');
 
@@ -589,7 +582,7 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -600,13 +593,7 @@ module('Acceptance | code submode tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}z01.json`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-file-definition]');
@@ -625,7 +612,7 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -636,13 +623,7 @@ module('Acceptance | code submode tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}not-json.json`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-file-definition]');
@@ -660,17 +641,9 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('empty state displays default realm info', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
-      codePath: null,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitFor('[data-test-file]');
 
@@ -694,17 +667,10 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('not-found state displays default realm info', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}perso`, // purposely misspelled
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitFor('[data-test-file]');
 
@@ -726,17 +692,10 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('code submode handles binary files', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `http://localhost:4202/test/mango.png`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitFor('[data-test-binary-info]');
     await waitFor('[data-test-definition-file-extension]');
@@ -762,7 +721,7 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('can handle error when user puts unidentified domain in card URL bar', async function (assert) {
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -775,13 +734,8 @@ module('Acceptance | code submode tests', function (hooks) {
       fileView: 'browser',
       codePath: `${testRealmURL}Person/1.json`,
       openDirs: { [testRealmURL]: ['Person/'] },
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
 
     await fillIn(
@@ -800,7 +754,7 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('card preview will show in the 3rd column when submode is set to code', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -811,12 +765,7 @@ module('Acceptance | code submode tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}Person/fadhlan.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-resource-loaded]');
@@ -865,17 +814,11 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('displays clear message when a schema-editor incompatible item is selected within a valid file type', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
@@ -908,34 +851,20 @@ module('Acceptance | code submode tests', function (hooks) {
         'No tools are available for the selected item: class "Isolated". Select a card or field definition in the inspector.',
       );
 
-    operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
-      codePath: `${testRealmURL}noop.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+      codePath: `${testRealmURL}employee.gts`,
+    });
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
     assert.dom('[data-test-file-incompatibility-message]').exists();
   });
 
   test('displays clear message on schema-editor when file is completely unsupported', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}hello.txt`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitFor('[data-test-file-incompatibility-message]');
     assert
@@ -949,17 +878,11 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('Clicking card in search panel opens card JSON in editor', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
 
     assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
@@ -1000,17 +923,10 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('changes cursor position when selected module declaration is changed', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
@@ -1053,17 +969,11 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('changes selected module declaration when cursor position is changed', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}in-this-file.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
@@ -1122,17 +1032,11 @@ module('Acceptance | code submode tests', function (hooks) {
     ];
 
     try {
-      let operatorModeStateParam = stringify({
-        stacks: [[]],
+      await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}in-this-file.gts`,
       })!;
 
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
       await waitForCodeEditor();
 
       let originalPosition: MonacoSDK.Position | undefined | null;
@@ -1166,17 +1070,11 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('cursor is placed at the correct declaration when user opens definition', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
 
     await waitFor(`[data-boxel-selector-item-text="Employee"]`);
@@ -1198,17 +1096,11 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('cursor must not be in editor if user focuses on other elements', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
 
     await waitFor(`[data-boxel-selector-item-text="Employee"]`);
@@ -1233,17 +1125,11 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('scroll position persists when changing card preview format', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}Pet/mango.json`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-code-mode-card-preview-body]');
 
@@ -1270,16 +1156,10 @@ module('Acceptance | code submode tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
-      stacks: [[]],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}Person/fadhlan.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitForCodeEditor();
     await waitFor('[data-test-code-mode-card-preview-body]');
 
@@ -1340,7 +1220,7 @@ module('Acceptance | code submode tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -1351,12 +1231,7 @@ module('Acceptance | code submode tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}Person/fadhlan.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     await waitFor('[data-test-card-resource-loaded]');
     await this.expectEvents({
       assert,
@@ -1391,5 +1266,47 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-code-mode-card-preview-body]')
       .includesText('FadhlanXXX');
+  });
+
+  test('card-catalog does not offer to "create new card" when editing linked fields in code mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}Person/fadhlan.json`,
+    })!;
+    await waitFor('[data-test-card-resource-loaded]');
+    assert
+      .dom(
+        `[data-test-code-mode-card-preview-header="${testRealmURL}Person/fadhlan"]`,
+      )
+      .exists();
+
+    await click('[data-test-preview-card-footer-button-edit]');
+
+    // linksTo field
+    await click('[data-test-links-to-editor="pet"] [data-test-remove-card]');
+    await waitFor('[data-test-links-to-editor="pet"] [data-test-add-new]');
+    await click('[data-test-links-to-editor="pet"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a Pet card');
+    assert
+      .dom('[data-test-card-catalog-create-new-button]')
+      .doesNotExist('can not create new card for linksTo field in code mode');
+
+    await click('[aria-label="close modal"]');
+    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+
+    // linksToMany field
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Select 1 or more Friend cards');
+    assert
+      .dom('[data-test-card-catalog-create-new-button]')
+      .doesNotExist(
+        'can not create new card for linksToMany field in code mode',
+      );
   });
 });

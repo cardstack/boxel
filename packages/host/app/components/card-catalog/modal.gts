@@ -39,6 +39,7 @@ import {
 } from '../../utils/text-suggestion';
 
 import ModalContainer from '../modal-container';
+import { Submodes } from '../submode-switcher';
 
 import CardCatalogFilters from './filters';
 
@@ -46,6 +47,7 @@ import CardCatalog from './index';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 interface Signature {
   Args: {
@@ -141,24 +143,28 @@ export default class CardCatalogModal extends Component<Signature> {
           <div class='footer'>
             <div class='footer__actions-left'>
               {{#if this.state.request.opts.offerToCreate}}
-                <Button
-                  @kind='secondary-light'
-                  @size='tall'
-                  class='create-new-button'
-                  {{on
-                    'click'
-                    (fn
-                      this.createNew
-                      this.state.request.opts.offerToCreate.ref
-                      this.state.request.opts.offerToCreate.relativeTo
-                    )
-                  }}
-                  data-test-card-catalog-create-new-button
-                >
-                  <IconPlus width='20' height='20' role='presentation' />
-                  Create New
-                  {{this.cardRefName}}
-                </Button>
+                {{#unless
+                  (eq this.operatorModeStateService.state.submode Submodes.Code)
+                }}
+                  <Button
+                    @kind='secondary-light'
+                    @size='tall'
+                    class='create-new-button'
+                    {{on
+                      'click'
+                      (fn
+                        this.createNew
+                        this.state.request.opts.offerToCreate.ref
+                        this.state.request.opts.offerToCreate.relativeTo
+                      )
+                    }}
+                    data-test-card-catalog-create-new-button
+                  >
+                    <IconPlus width='20' height='20' role='presentation' />
+                    Create New
+                    {{this.cardRefName}}
+                  </Button>
+                {{/unless}}
               {{/if}}
             </div>
             <div>
@@ -215,6 +221,7 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked zIndex = 20;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);

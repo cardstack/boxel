@@ -11,7 +11,6 @@ import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
-import stringify from 'safe-stable-stringify';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -27,6 +26,7 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  visitOperatorMode,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
@@ -378,32 +378,25 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test('has a profile icon in the bottom left corner that opens profile info popover', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     assert.dom('[data-test-profile-icon]').hasText('T');
     assert
       .dom('[data-test-profile-icon]')
       .hasAttribute('style', 'background: #5ead6b');
 
-    assert.dom('[data-test-profile-popover]').doesNotHaveClass('opened');
+    assert.dom('[data-test-profile-popover]').doesNotExist();
 
     await click('[data-test-profile-icon-button]');
 
-    assert.dom('[data-test-profile-popover]').hasClass('opened');
+    assert.dom('[data-test-profile-popover]').exists();
 
     await click('[data-test-profile-icon-button]');
 
-    assert.dom('[data-test-profile-popover]').doesNotHaveClass('opened'); // Clicking again closes the popover
+    assert.dom('[data-test-profile-popover]').doesNotExist(); // Clicking again closes the popover
 
     await click('[data-test-profile-icon-button]');
 
@@ -460,7 +453,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -469,13 +462,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           },
         ],
       ],
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitFor(
       '[data-test-stack-card="http://test-realm/test/Person/fadhlan"]',
@@ -535,7 +522,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   module('2 stacks', function () {
     test('Toggling submode will open code submode and toggling back will restore the stack', async function (assert) {
-      let operatorModeStateParam = stringify({
+      await visitOperatorMode({
         stacks: [
           [
             {
@@ -550,13 +537,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           ],
         ],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      });
 
       // Toggle from interact (default) to code submode
       await click('[data-test-submode-switcher] button');
