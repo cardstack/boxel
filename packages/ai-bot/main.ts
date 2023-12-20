@@ -10,11 +10,9 @@ import {
   IRoomEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import { ChatCompletionChunk } from 'openai/resources/chat';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
   constructHistory,
-  processStream,
   getModifyPrompt,
   cleanContent,
   getFunctions,
