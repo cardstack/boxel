@@ -21,13 +21,13 @@ import {
   type MatrixCardError,
   sanitizeHtml,
 } from '@cardstack/runtime-common';
-
-import { Submode } from '@cardstack/host/components/submode-switcher';
-import ENV from '@cardstack/host/config/environment';
 import {
   basicMappings,
   generatePatchCallSpecification,
 } from '@cardstack/runtime-common/helpers/ai';
+
+import { Submode } from '@cardstack/host/components/submode-switcher';
+import ENV from '@cardstack/host/config/environment';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';

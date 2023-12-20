@@ -40,7 +40,7 @@ interface Signature {
 }
 
 export default class SubmodeLayout extends Component<Signature> {
-  @tracked private isChatVisible = true;
+  @tracked private isChatVisible = false;
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
 
   @service private declare operatorModeStateService: OperatorModeStateService;
