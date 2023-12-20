@@ -15,7 +15,6 @@ import { BoxelMessage } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
-import marked from 'marked';
 import {
   Loader,
   getCard,
