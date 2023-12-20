@@ -92,8 +92,8 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
 }
 
 function getResponse(history: IRoomEvent[], aiBotUsername: string) {
-  let messages = getModifyPrompt(history, aiBotUsername);
   let functions = getFunctions(history, aiBotUsername);
+  let messages = getModifyPrompt(history, aiBotUsername, functions);
   if (functions.length === 0) {
     return openai.beta.chat.completions.stream({
       model: 'gpt-4-1106-preview',

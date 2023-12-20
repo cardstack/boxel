@@ -5,7 +5,10 @@ const MODIFY_SYSTEM_MESSAGE =
 The user is using an application called Boxel, where they are working on editing "Cards" which are data models representable as JSON. \
 The user may be non-technical and should not need to understand the inner workings of Boxel. \
 The user may be asking questions about the contents of the cards rather than help editing them. Use your world knowledge to help them. \
-If the user wants the data they see edited, you MUST use the "patchCard" function to make the change. \
+If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change. \
+If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you \
+If you do not call patchCard, the user will not see the change. \
+You can ONLY modify cards shared with you, if there is no patchCard function or tool then the user hasn\'t given you access \
 NEVER tell the user to use patchCard, you should always do it for them. \
 If the user request is unclear, you may ask clarifying questions. \
 You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
@@ -137,7 +140,11 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
   }
 }
 
-export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {
+export function getModifyPrompt(
+  history: IRoomEvent[],
+  aiBotUserId: string,
+  functions: any[] = [],
+) {
   // Need to make sure the passed in username is a full id
   if (
     aiBotUserId.indexOf(':') === -1 ||
@@ -170,6 +177,10 @@ export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {
   Cards:\n`;
   for (let card of getRelevantCards(history, aiBotUserId)) {
     systemMessage += `Full data: ${JSON.stringify(card)}`;
+  }
+  if (functions.length == 0) {
+    systemMessage +=
+      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and tick "Allow access to the cards you can see at the top of your stacks" ';
   }
 
   let messages: OpenAIPromptMessage[] = [
