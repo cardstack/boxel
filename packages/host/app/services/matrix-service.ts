@@ -272,22 +272,22 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
-    console.log(context);
+
     if (context?.submode === 'interact') {
+      // Serialize the top of all cards on all stacks
       let serializedCards = await Promise.all(
         context!.openCards.map(async (card) => {
           return await this.cardService.serializeCard(card);
         }),
       );
-      // Let's get the thing and log
       let mappings = await basicMappings(this.loaderService.loader);
+
+      // Limiting support to modifying the top of just one stack
       let patchSpec = generatePatchCallSpecification(
         context!.openCards[0].constructor,
         this.cardAPI,
         mappings,
       );
-      console.log(patchSpec);
-      //
       await this.client.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.message',
         body,
