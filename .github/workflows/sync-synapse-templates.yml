@@ -5,11 +5,12 @@ on:
     branches: [main]
     paths:
       - "packages/matrix/docker/synapse/templates/**"
-  workflow_call:
+  workflow_dispatch:
     inputs:
       environment:
         required: true
-        type: string
+        description: Target environment
+        default: staging
 
 permissions:
   contents: read
