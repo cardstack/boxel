@@ -2,7 +2,12 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
+import {
+  didCancel,
+  enqueueTask,
+  dropTask,
+  restartableTask,
+} from 'ember-concurrency';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
@@ -115,6 +120,7 @@ export default class CardPrerender extends Component {
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
     let { reader, entrySetter } = this.getRunnerParams();
+    await this.resetLoaderInFastboot.perform();
     let current = await CurrentRun.fromScratch(
       new CurrentRun({
         realmURL,
@@ -136,6 +142,7 @@ export default class CardPrerender extends Component {
       onInvalidation?: (invalidatedURLs: URL[]) => void,
     ) => {
       let { reader, entrySetter } = this.getRunnerParams();
+      await this.resetLoaderInFastboot.perform();
       let current = await CurrentRun.incremental({
         url,
         operation,
@@ -150,6 +157,14 @@ export default class CardPrerender extends Component {
       return current;
     },
   );
+
+  // perform this in EC task to prevent rerender cycles
+  private resetLoaderInFastboot = restartableTask(async () => {
+    if (this.fastboot.isFastBoot) {
+      await Promise.resolve();
+      this.loaderService.reset();
+    }
+  });
 
   private getRunnerParams(): {
     reader: Reader;

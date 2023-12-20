@@ -31,6 +31,7 @@ import {
   RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
@@ -40,6 +41,8 @@ import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
+  type State as ModuleState,
+  findDeclarationByName,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
@@ -56,12 +59,13 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import SchemaEditor from './code-submode/schema-editor';
+import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
 interface Signature {
   Args: {
@@ -112,7 +116,6 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare environmentService: EnvironmentService;
 
   @tracked private loadFileError: string | null = null;
-  @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
   @tracked private previewFormat: Format = 'isolated';
@@ -121,9 +124,7 @@ export default class CodeSubmode extends Component<Signature> {
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
-  private updateCursorByDeclaration:
-    | ((declaration: ModuleDeclaration) => void)
-    | undefined;
+  private updateCursorByName: ((name: string) => void) | undefined;
   #currentCard: CardDef | undefined;
 
   private deleteModal: DeleteModal | undefined;
@@ -143,9 +144,13 @@ export default class CodeSubmode extends Component<Signature> {
       onCardInstanceChange: () => this.onCardLoaded,
     },
   );
-  private moduleContentsResource = moduleContentsResource(this, () => {
-    return this.isModule ? this.readyFile : undefined;
-  });
+  private moduleContentsResource = moduleContentsResource(
+    this,
+    () => {
+      return this.isModule ? this.readyFile : undefined;
+    },
+    this.onModuleEdit,
+  );
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -214,6 +219,14 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
+  private get isCard() {
+    return (
+      this.isReady &&
+      this.readyFile.name.endsWith('.json') &&
+      isCardDocumentString(this.readyFile.content)
+    );
+  }
+
   private get hasCardDefOrFieldDef() {
     return this.declarations.some(isCardOrFieldDeclaration);
   }
@@ -241,7 +254,16 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
-    // If file is incompatible
+    if (this.isCard) {
+      if (this.cardResource.cardError) {
+        return `Card preview failed. Make sure both the card instance data and card definition files have no syntax errors and that their data schema matches. `;
+      }
+    }
+
+    if (this.moduleContentsResource.moduleError) {
+      return null; // Handled in code-submode schema editor
+    }
+
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
     }
@@ -266,14 +288,6 @@ export default class CodeSubmode extends Component<Signature> {
         return null;
       }
       return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
-    }
-
-    // TODO: handle card preview errors (when json is valid but card returns error)
-    // This code is never reached but is temporarily placed here to please linting
-    // - a card runtime error will crash entire app
-    // - a json error will be caught by incompatibleFile
-    if (this.cardError) {
-      return `card preview error ${this.cardError.message}`;
     }
 
     if (
@@ -316,6 +330,23 @@ export default class CodeSubmode extends Component<Signature> {
     this.userHasDismissedURLError = true;
   }
 
+  @action private onModuleEdit(state: ModuleState) {
+    let editedDeclaration = state.declarations.find(
+      (newDeclaration: ModuleDeclaration) => {
+        return this.selectedDeclaration
+          ? this.selectedDeclaration.localName !== newDeclaration.localName &&
+              isEquivalentBodyPosition(
+                this.selectedDeclaration.path,
+                newDeclaration.path,
+              )
+          : false;
+      },
+    );
+    if (editedDeclaration) {
+      this.goToDefinition(undefined, editedDeclaration.localName);
+    }
+  }
+
   private onCardLoaded = (
     oldCard: CardDef | undefined,
     newCard: CardDef | undefined,
@@ -342,14 +373,14 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get _selectedDeclaration() {
     let codeSelection = this.operatorModeStateService.state.codeSelection;
-    return this.moduleContentsResource?.declarations.find((dec) => {
-      return codeSelection
-        ? dec.exportName === codeSelection || dec.localName === codeSelection
-        : false;
-    });
+    if (codeSelection === undefined) return;
+    return findDeclarationByName(codeSelection, this.declarations);
   }
 
   private get selectedDeclaration() {
+    if (!this.isModule || this.moduleContentsResource.moduleError) {
+      return undefined;
+    }
     if (this._selectedDeclaration) {
       return this._selectedDeclaration;
     } else {
@@ -370,18 +401,18 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this.openDefinition(undefined, dec.localName);
+    this.goToDefinition(undefined, dec.localName);
   }
 
   @action
-  openDefinition(
+  goToDefinition(
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) {
     this.operatorModeStateService.updateCodePathWithCodeSelection(
       codeRef,
       localName,
-      () => this.updateCursorByDeclaration?.(this.selectedDeclaration!),
+      this.updateCursorByName,
     );
   }
 
@@ -557,10 +588,8 @@ export default class CodeSubmode extends Component<Signature> {
     this.createFileModal = createFileModal;
   };
 
-  private setupCodeEditor = (
-    updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
-  ) => {
-    this.updateCursorByDeclaration = updateCursorByDeclaration;
+  private setupCodeEditor = (updateCursorByName: (name: string) => void) => {
+    this.updateCursorByName = updateCursorByName;
   };
 
   @action private openSearchResultInEditor(card: CardDef) {
@@ -651,7 +680,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @selectDeclaration={{this.selectDeclaration}}
                           @delete={{perform this.delete}}
-                          @openDefinition={{this.openDefinition}}
+                          @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
                           data-test-card-inspector-panel
                         />
@@ -732,22 +761,14 @@ export default class CodeSubmode extends Component<Signature> {
                     >
                       {{this.fileIncompatibilityMessage}}
                     </div>
-                  {{else if this.card}}
-                    <CardPreviewPanel
-                      @card={{this.loadedCard}}
-                      @realmURL={{this.realmURL}}
-                      @format={{this.previewFormat}}
-                      @setFormat={{this.setPreviewFormat}}
-                      data-test-card-resource-loaded
-                    />
-                  {{else if this.selectedCardOrField}}
+                  {{else if this.selectedCardOrField.cardOrField}}
                     <Accordion as |A|>
                       <SchemaEditor
                         @file={{this.readyFile}}
                         @moduleContentsResource={{this.moduleContentsResource}}
                         @card={{this.selectedCardOrField.cardOrField}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
-                        @openDefinition={{this.openDefinition}}
+                        @goToDefinition={{this.goToDefinition}}
                         as |SchemaEditorTitle SchemaEditorPanel|
                       >
                         <A.Item
@@ -771,6 +792,35 @@ export default class CodeSubmode extends Component<Signature> {
                         </A.Item>
                       </SchemaEditor>
                     </Accordion>
+                  {{else if this.moduleContentsResource.moduleError}}
+                    <Accordion as |A|>
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'schema-editor'}}
+                        @isOpen={{eq
+                          this.selectedAccordionItem
+                          'schema-editor'
+                        }}
+                      >
+                        <:title>
+                          <SchemaEditorTitle @hasModuleError={{true}} />
+                        </:title>
+                        <:content>
+                          <SyntaxErrorDisplay
+                            @syntaxErrors={{this.moduleContentsResource.moduleError.message}}
+                          />
+                        </:content>
+                      </A.Item>
+                    </Accordion>
+                  {{else if this.card}}
+                    <CardPreviewPanel
+                      @card={{this.loadedCard}}
+                      @realmURL={{this.realmURL}}
+                      @format={{this.previewFormat}}
+                      @setFormat={{this.setPreviewFormat}}
+                      data-test-card-resource-loaded
+                    />
                   {{/if}}
                 {{/if}}
               </InnerContainer>

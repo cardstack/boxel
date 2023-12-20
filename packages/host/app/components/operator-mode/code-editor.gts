@@ -18,7 +18,10 @@ import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
-import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
+import {
+  type ModuleDeclaration,
+  findDeclarationByName,
+} from '@cardstack/host/resources/module-contents';
 
 import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
@@ -39,9 +42,7 @@ interface Signature {
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
-    onSetup: (
-      updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
-    ) => void;
+    onSetup: (updateCursorByName: (name: string) => void) => void;
   };
 }
 
@@ -81,7 +82,7 @@ export default class CodeEditor extends Component<Signature> {
 
     this.loadMonaco.perform();
 
-    this.args.onSetup(this.updateMonacoCursorPositionByDeclaration);
+    this.args.onSetup(this.updateMonacoCursorPositionByName);
   }
 
   private get isReady() {
@@ -132,6 +133,13 @@ export default class CodeEditor extends Component<Signature> {
       return new Position(start.line, start.column);
     }
     return undefined;
+  }
+
+  @action
+  private updateMonacoCursorPositionByName(name: string) {
+    let declaration = findDeclarationByName(name, this.declarations);
+    if (declaration === undefined) return;
+    return this.updateMonacoCursorPositionByDeclaration(declaration);
   }
 
   @action

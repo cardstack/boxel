@@ -181,6 +181,33 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
   });
 
+  test('new file button has options to create card def, field def, and card instance files', async function (assert) {
+    await waitFor('[data-test-code-mode][data-test-save-idle]');
+    await waitFor('[data-test-new-file-button]');
+    await click('[data-test-new-file-button]');
+
+    assert
+      .dom(
+        '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text]',
+      )
+      .exists({ count: 3 });
+    assert
+      .dom(
+        '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Definition"]',
+      )
+      .exists();
+    assert
+      .dom(
+        '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Field Definition"]',
+      )
+      .exists();
+    assert
+      .dom(
+        '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Instance"]',
+      )
+      .exists();
+  });
+
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
     const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
     assert.expect(13);
