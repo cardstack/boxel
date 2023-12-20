@@ -204,6 +204,12 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 
+    const numStubFiles = 100;
+    let stubFiles: Record<string, string> = {};
+    for (let i = 0; i < numStubFiles; i++) {
+      stubFiles[`z${String(i).padStart(2, '0')}.json`] = '{}';
+    }
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
@@ -262,26 +268,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
             },
           },
         },
-        'z00.json': '{}',
-        'z01.json': '{}',
-        'z02.json': '{}',
-        'z03.json': '{}',
-        'z04.json': '{}',
-        'z05.json': '{}',
-        'z06.json': '{}',
-        'z07.json': '{}',
-        'z08.json': '{}',
-        'z09.json': '{}',
-        'z10.json': '{}',
-        'z11.json': '{}',
-        'z12.json': '{}',
-        'z13.json': '{}',
-        'z14.json': '{}',
-        'z15.json': '{}',
-        'z16.json': '{}',
-        'z17.json': '{}',
-        'z18.json': '{}',
-        'z19.json': '{}',
+        ...stubFiles,
         'zzz/zzz/file.json': '{}',
         '.realm.json': realmInfo,
       },
@@ -623,13 +610,26 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     endDirectoryElement = find(endDirectorySelector);
 
-    if (!endDirectoryElement) {
-      assert.ok(endDirectoryElement, 'end directory should exist');
-    } else {
-      assert.ok(
-        await elementIsVisible(endDirectoryElement),
-        'expected end directory to be within view after returning to the file tree',
-      );
+    // in this test we are trying to assert the scroll position of a nested
+    // element, however the scroll position of the testing window itself can
+    // interfere with this test. In order to properly test we need to scroll the
+    // testing window itself such that the file tree is visible.
+    let testingContainer = document.getElementById('ember-testing-container')!;
+    let fileTreeHeight = document
+      .querySelector('.inner-container.file-browser')!
+      .getBoundingClientRect().height;
+    try {
+      testingContainer.scrollTop = fileTreeHeight;
+      if (!endDirectoryElement) {
+        assert.ok(endDirectoryElement, 'end directory should exist');
+      } else {
+        assert.ok(
+          await elementIsVisible(endDirectoryElement),
+          'expected end directory to be within view after returning to the file tree',
+        );
+      }
+    } finally {
+      testingContainer.scrollTop = 0;
     }
 
     // Change to another file and back, persisted scroll position should be forgotten
