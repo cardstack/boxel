@@ -7,7 +7,6 @@
     "@types/stream-json": "^1.7.3",
     "matrix-js-sdk": "^25.0.0",
     "openai": "4.19.0",
-    "promptfoo": "^0.24.2",
     "qunit": "^2.18.0",
     "stream-chain": "^2.2.5",
     "stream-json": "^1.8.0",
@@ -15,7 +14,6 @@
     "typescript": "^5.1.6"
   },
   "devDependencies": {
-    "promptfoo": "^0.24.2",
     "qunit": "^2.18.0"
   },
   "scripts": {
