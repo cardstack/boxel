@@ -153,8 +153,8 @@ export default class RoomsManager extends Component {
         </div>
       {{/if}}
       <div class='room-list' data-test-rooms-list>
-        <h3>Existing chats</h3>
-        {{#each this.sortedJoinedRooms as |joined|}}
+        <h3>Existing AI chats</h3>
+        {{#each this.sortedJoinedAiChatRooms as |joined|}}
           <div class='room' data-test-joined-room={{joined.room.name}}>
             <span class='room-item'>
               <button
@@ -261,8 +261,16 @@ export default class RoomsManager extends Component {
   @cached
   private get myRooms() {
     let rooms: {
-      invited: { room: RoomField; member: RoomMemberField }[];
-      joined: { room: RoomField; member: RoomMemberField }[];
+      invited: {
+        room: RoomField;
+        member: RoomMemberField;
+        hasAiBot: boolean;
+      }[];
+      joined: {
+        room: RoomField;
+        member: RoomMemberField;
+        hasAiBot: boolean;
+      }[];
     } = {
       invited: [],
       joined: [],
@@ -275,17 +283,35 @@ export default class RoomsManager extends Component {
         (m) => this.matrixService.userId === m.userId,
       );
       if (joinedMember) {
-        rooms.joined.push({ room: resource.room, member: joinedMember });
+        rooms.joined.push({
+          room: resource.room,
+          member: joinedMember,
+          hasAiBot: this.hasAiBot(resource.room),
+        });
         continue;
       }
       let invitedMember = resource.room.invitedMembers.find(
         (m) => this.matrixService.userId === m.userId,
       );
       if (invitedMember) {
-        rooms.invited.push({ room: resource.room, member: invitedMember });
+        rooms.invited.push({
+          room: resource.room,
+          member: invitedMember,
+          hasAiBot: this.hasAiBot(resource.room),
+        });
       }
     }
     return rooms;
+  }
+
+  hasAiBot(room: RoomField) {
+    let members = room.roomMembers;
+    debugger;
+
+    let aiMember = members.find(
+      (m) => m.userId.split(':')[0].substring(1) === aiBotUsername,
+    );
+    return Boolean(aiMember);
   }
 
   @cached
@@ -295,6 +321,11 @@ export default class RoomsManager extends Component {
         a.member.membershipDateTime.getTime() -
         b.member.membershipDateTime.getTime(),
     );
+  }
+
+  private get sortedJoinedAiChatRooms() {
+    debugger;
+    return this.sortedJoinedRooms.filter((r) => r.hasAiBot);
   }
 
   @cached
