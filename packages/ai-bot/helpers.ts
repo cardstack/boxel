@@ -85,12 +85,15 @@ export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
       } else if (content.msgtype === 'org.boxel.message') {
         // If a user has switched to sharing their current context
         // and they have open cards then use those
+        // We only want to keep the most recent versions of these
         if (content.context.openCards.length > 0) {
           cards = content.context.openCards.map(
             (card: { data: any }) => card.data,
           );
         }
       } else {
+        // The user hasn't shared any cards in this message so we shouldn't use any.
+        // This can happen if the user turns off sharing their current open cards.
         cards = [];
       }
     }
@@ -99,42 +102,39 @@ export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
 }
 
 export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
-  let functions: { name: string; description: string; parameters: any }[] = [];
-  for (let event of history) {
-    if (event.sender !== aiBotUserId) {
-      let content = event.content;
-      if (content.msgtype === 'org.boxel.message') {
-        // If a user has switched to sharing their current context
-        // and they have open cards then use those
-        if (content.context.cardSpec) {
-          functions = [
-            {
-              name: 'patchCard',
-              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-              parameters: {
-                type: 'object',
-                properties: {
-                  description: {
-                    type: 'string',
-                  },
-                  card_id: {
-                    type: 'string',
-                  },
-                  attributes: content.context.cardSpec,
-                },
-                required: ['card_id', 'attributes', 'description'],
-              },
-            },
-          ];
-          console.log('Set functions', functions);
-        }
-      } else {
-        console.log('Blanking out functions');
-        functions = [];
-      }
-    }
+  // Just get the users messages
+  const userMessages = history.filter((event) => event.sender !== aiBotUserId);
+  // Get the last message
+  if (userMessages.length === 0) {
+    // If the user has sent no messages, there are no open cards so we shouldn't use any functions.
+    return [];
   }
-  return functions;
+  const lastMessage = userMessages[userMessages.length - 1];
+  const content = lastMessage.content;
+  if (content.msgtype === 'org.boxel.message' && content.context.cardSpec) {
+    return [
+      {
+        name: 'patchCard',
+        description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+        parameters: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+            },
+            card_id: {
+              type: 'string',
+            },
+            attributes: content.context.cardSpec,
+          },
+          required: ['card_id', 'attributes', 'description'],
+        },
+      },
+    ];
+  } else {
+    // There are no open cards in this message so we shouldn't use any functions.
+    return [];
+  }
 }
 
 export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {

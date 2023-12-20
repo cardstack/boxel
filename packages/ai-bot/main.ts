@@ -95,7 +95,6 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
 
 function getResponse(history: IRoomEvent[], aiBotUsername: string) {
   let messages = getModifyPrompt(history, aiBotUsername);
-<<<<<<< HEAD
   let functions = getFunctions(history, aiBotUsername);
   return openai.beta.chat.completions.stream({
     model: 'gpt-4-1106-preview',
@@ -103,20 +102,6 @@ function getResponse(history: IRoomEvent[], aiBotUsername: string) {
     functions: functions,
     function_call: 'auto',
   });
-=======
-  return await openai.chat.completions.create(
-    {
-      model: 'gpt-4-1106-preview',
-      messages: messages,
-      stream: true,
-    },
-    {
-      // Retry with exponential backoff,
-      // Let OpenAI library handle approved logic
-      maxRetries: 5,
-    },
-  );
->>>>>>> main
 }
 
 (async () => {
@@ -242,8 +227,6 @@ Common issues are:
       }
 
       let unsent = 0;
-      let tokenCount = 0;
-      let fcSent = false;
       const runner = await getResponse(history, userId)
         .on('content', async (_delta, snapshot) => {
           unsent += 1;
@@ -256,29 +239,11 @@ Common issues are:
               initialMessage.event_id,
             );
           }
-        }) /*
-        .on('chunk', async (chunk: ChatCompletionChunk) => {
-          let delta = chunk.choices[0].delta;
-          if (delta.function_call) {
-            let args = delta.function_call.arguments;
-            log.info('Function call', delta.function_call);
-            if (args) {
-              tokenCount += args.length;
-            }
-            if (!fcSent) {
-              await sendMessage(
-                client,
-                room,
-                `Generating (${tokenCount})`,
-                initialMessage.event_id,
-              );
-            }
-          }
-        })*/
+        })
         .on('functionCall', async (functionCall) => {
+          console.log('Function call', functionCall);
           let args = JSON.parse(functionCall.arguments);
           if (functionCall.name === 'patchCard') {
-            fcSent = true;
             await sendMessage(
               client,
               room,
