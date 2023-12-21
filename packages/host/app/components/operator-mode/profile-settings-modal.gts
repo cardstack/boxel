@@ -36,10 +36,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
   @tracked private displayName: string | undefined = undefined;
   @tracked private saveSuccessIndicatorShown = false;
   @tracked private error: Error | undefined = undefined;
-  @tracked showDisplayNameValidation = false; // We don't want to show validation error until the user has interacted with the field
+  @tracked showDisplayNameValidation = false;
 
   @action setDisplayName(name: string) {
-    this.showDisplayNameValidation = true;
+    this.showDisplayNameValidation = true; // We don't want to show validation error until the user has interacted with the field, i.e. when display name is blank and user opens settings modal
     this.displayName = name;
   }
 
@@ -59,13 +59,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
       this.error = new Error('Failed to save profile. Please try again.');
     }
 
-    try {
-      this.matrixService.reloadProfile(); // To get the updated display name in templates
-    } catch (e) {
-      this.error = new Error(
-        'Failed to refresh the profile after saving. Please reload the page.',
-      );
-    }
+    this.matrixService.reloadProfile(); // To get the updated display name in templates
     this.afterSaveTask.perform();
   });
 
@@ -130,7 +124,6 @@ export default class ProfileSettingsModal extends Component<Signature> {
       class='profile-settings-modal'
       data-test-settings-modal
     >
-
       <:sidebar>
         <ProfileInfo />
       </:sidebar>
@@ -162,7 +155,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
         </form>
 
         {{#if this.error}}
-          <div class='error-message'>
+          <div class='error-message' data-test-profile-save-error>
             {{this.error.message}}
           </div>
         {{/if}}

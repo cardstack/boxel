@@ -30,7 +30,10 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
 } from '../helpers';
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import {
+  MockMatrixService,
+  setupMatrixServiceMock,
+} from '../helpers/mock-matrix-service';
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -455,7 +458,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-login-form]').exists();
   });
 
-  test('can access settings via profile info popover', async function (assert) {
+  test('can access and save settings via profile info popover', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -466,6 +469,10 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
       ],
     })!;
+
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
 
     await click('[data-test-profile-icon-button]');
     await click('[data-test-settings-button]');
@@ -480,8 +487,32 @@ module('Acceptance | operator mode tests', function (hooks) {
       .hasAttribute('style', 'background: #5ead6b');
     assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
 
+    await fillIn('[data-test-display-name-field]', '');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .hasText('Name is required');
+
     await fillIn('[data-test-display-name-field]', 'John');
+
+    assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
+
+    let setDisplayNameOriginal = matrixService.setDisplayName;
+
+    matrixService.setDisplayName = async function () {
+      throw new Error('Boom!');
+    };
+
     await click('[data-test-profile-settings-save-button]');
+
+    assert
+      .dom('[data-test-profile-save-error]')
+      .hasText('Failed to save profile. Please try again.');
+
+    matrixService.setDisplayName = setDisplayNameOriginal;
+
+    await click('[data-test-profile-settings-save-button]');
+
+    assert.dom('[data-test-profile-save-error]').doesNotExist();
 
     await waitUntil(
       () =>
