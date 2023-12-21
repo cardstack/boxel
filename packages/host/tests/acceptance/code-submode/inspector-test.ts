@@ -41,6 +41,7 @@ import {
   waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
+  setMonacoContent,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
@@ -655,7 +656,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-instance-definition]').doesNotExist();
   });
 
-  test('inspector displays elements "in-this-file" panel and can select', async function (assert) {
+  test('"in-this-file" panel displays all elements and re-highlights upon selection', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
@@ -1576,7 +1577,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       );
   });
 
-  test('in-this-file displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {
+  test('"in-this-file" panel displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
@@ -1668,6 +1669,117 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom(`[data-test-total-fields]`).containsText('0 Fields');
     assert.true(monacoService.getLineCursorOn()?.includes('Hobby'));
     assert.true(monacoService.getLineCursorOn()?.includes('Activity'));
+  });
+
+  test<TestContextWithSSE>('"in-this-file" panel maintains selection after editing name of declaration', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    //default is the 1st index
+    let elementName = 'AClassWithExportName (LocalClass) class';
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(elementName);
+    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
+    // elements must be ordered by the way they appear in the source code
+    const expectedElementNames = [
+      'AClassWithExportName (LocalClass) class',
+      'ExportedClass class',
+      'ExportedClassInheritLocalClass class',
+      'exportedFunction function',
+      'LocalCard card',
+      'ExportedCard card',
+      'ExportedCardInheritLocalCard card',
+      'LocalField field',
+      'ExportedField field',
+      'ExportedFieldInheritLocalField field',
+      'default (DefaultClass) class',
+    ];
+    expectedElementNames.forEach(async (elementName, index) => {
+      await waitFor(
+        `[data-test-boxel-selector-item]:nth-of-type(${index + 1})`,
+      );
+      assert
+        .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
+        .hasText(elementName);
+    });
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 11 });
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+
+    // select exported function and edit its name
+    elementName = 'exportedFunction';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} function`);
+    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+    assert.dom('[data-test-card-module-definition]').doesNotExist();
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
+      );
+    assert.true(monacoService.getLineCursorOn()?.includes(elementName));
+
+    let renamedElementName = 'exportedFunc';
+    let editedInThisFileSource = inThisFileSource.replace(
+      'exportedFunction',
+      renamedElementName,
+    );
+
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}in-this-file.gts`],
+        },
+      },
+    ];
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => {
+        setMonacoContent(editedInThisFileSource);
+        await waitFor(`[data-test-boxel-selector-item]:nth-of-type(4)`);
+      },
+    });
+    await waitFor('[data-test-code-mode][data-test-save-idle]');
+    await waitFor(`[data-test-boxel-selector-item]:nth-of-type(4)`);
+    assert
+      .dom(`[data-test-boxel-selector-item]:nth-of-type(4)`)
+      .hasText(`${renamedElementName} function`);
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 11 });
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${renamedElementName} function`);
+    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${renamedElementName} function`);
+    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+    assert.dom('[data-test-card-module-definition]').doesNotExist();
+    assert
+      .dom('[data-test-file-incompatibility-message]')
+      .hasText(
+        `No tools are available for the selected item: function "${renamedElementName}". Select a card or field definition in the inspector.`,
+      );
   });
 
   test<TestContextWithSave>('can inherit from an exported card def declaration', async function (assert) {

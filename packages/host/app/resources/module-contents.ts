@@ -1,6 +1,7 @@
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 
 import { Resource } from 'ember-resources';
 
@@ -24,6 +25,8 @@ import {
 import { type Ready } from '@cardstack/host/resources/file';
 
 import { importResource } from '@cardstack/host/resources/import';
+
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -68,16 +71,25 @@ function hasCardOrFieldProperties(declaration: ModuleDeclaration) {
 }
 
 interface Args {
-  named: { executableFile: Ready | undefined };
+  named: {
+    executableFile: Ready | undefined;
+    onModuleEdit: (state: State) => void;
+  };
+}
+
+export interface State {
+  url?: string;
+  declarations: ModuleDeclaration[];
 }
 
 export class ModuleContentsResource extends Resource<Args> {
+  @service declare operatorModeStateService: OperatorModeStateService;
   @tracked moduleError:
     | { type: 'runtime' | 'compile'; message: string }
     | undefined = undefined;
-  @tracked private _declarations: ModuleDeclaration[] = [];
-  private _url: string | undefined;
   private executableFile: Ready | undefined;
+  @tracked private state: State | undefined = undefined;
+  private onModuleEdit?: (state: State) => void;
 
   get isLoading() {
     return this.load.isRunning;
@@ -88,25 +100,27 @@ export class ModuleContentsResource extends Resource<Args> {
   // when editing a file we don't want to introduce loading state, whereas when switching between definitions we do
   get isLoadingNewModule() {
     return (
-      this.load.isRunning && this._url && this._url !== this.executableFile?.url
+      (this.load.isRunning && this.executableFile?.url !== this.state?.url) ??
+      false
     );
   }
 
   get declarations() {
-    return this._declarations;
+    return this.state?.declarations || [];
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { executableFile } = named;
+    let { executableFile, onModuleEdit } = named;
     this.executableFile = executableFile;
     this.moduleError = undefined;
-    if (this.executableFile) {
-      this.load.perform(this.executableFile);
-    }
+    this.onModuleEdit = onModuleEdit;
+    this.load.perform(this.executableFile);
   }
 
-  private load = restartableTask(async (executableFile: Ready) => {
-    //==loading module
+  private load = task(async (executableFile: Ready | undefined) => {
+    if (executableFile === undefined) {
+      return;
+    }
     let moduleResource = importResource(this, () => executableFile.url);
     await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
 
@@ -117,28 +131,41 @@ export class ModuleContentsResource extends Resource<Args> {
     let exportedCardsOrFields: Map<string, typeof BaseDef> =
       getExportedCardsOrFields(moduleResource.module);
 
-    //==building declaration structure
-    // This loop
-    // - adds card type (not necessarily loaded)
-    // - includes card/field, either
-    //   - an exported card/field
-    //   - a card/field that was local but related to another card/field which was exported, e.g. inherited OR a field of the exported card/field
     let moduleSyntax = new ModuleSyntax(
       executableFile.content,
       new URL(executableFile.url),
     );
+    let newState = {
+      declarations: this.buildDeclarations(moduleSyntax, exportedCardsOrFields),
+      url: executableFile.url,
+    };
+
+    this.updateState(newState);
+  });
+
+  private updateState(newState: State): void {
+    if (newState.url === this.state?.url) {
+      this.onModuleEdit?.(newState);
+    }
+    this.state = newState;
+  }
+
+  private buildDeclarations(
+    moduleSyntax: ModuleSyntax,
+    exportedCardsOrFields: Map<string, typeof BaseDef>,
+  ): ModuleDeclaration[] {
     let localCardsOrFields = collectLocalCardsOrFields(
       moduleSyntax,
       exportedCardsOrFields,
     );
-    this._declarations = [];
+    let declarations: ModuleDeclaration[] = [];
     moduleSyntax.declarations.forEach((value: Declaration) => {
       if (value.type === 'possibleCardOrField') {
         let cardOrField = value.exportName
           ? exportedCardsOrFields.get(value.exportName)
           : localCardsOrFields.get(value);
         if (cardOrField !== undefined) {
-          this._declarations.push({
+          declarations.push({
             ...value,
             cardOrField,
             cardType: getCardType(this, () => cardOrField as typeof BaseDef),
@@ -147,7 +174,7 @@ export class ModuleContentsResource extends Resource<Args> {
         }
         // case where things statically look like cards or fields but are not
         if (value.exportName !== undefined) {
-          this._declarations.push({
+          declarations.push({
             localName: value.localName,
             exportName: value.exportName,
             path: value.path,
@@ -162,7 +189,7 @@ export class ModuleContentsResource extends Resource<Args> {
             cardOrField = foundCardOrField;
           }
           if (cardOrField !== undefined) {
-            this._declarations.push({
+            declarations.push({
               ...value,
               cardOrField,
               cardType: getCardType(this, () => cardOrField as typeof BaseDef),
@@ -171,21 +198,23 @@ export class ModuleContentsResource extends Resource<Args> {
         }
       } else if (value.type === 'class' || value.type === 'function') {
         if (value.exportName !== undefined) {
-          this.declarations.push(value as ModuleDeclaration);
+          declarations.push(value as ModuleDeclaration);
         }
       }
     });
-    this._url = executableFile.url;
-  });
+    return declarations;
+  }
 }
 
 export function moduleContentsResource(
   parent: object,
   executableFile: () => Ready | undefined,
+  onModuleEdit: (state: State) => void,
 ): ModuleContentsResource {
   return ModuleContentsResource.from(parent, () => ({
     named: {
       executableFile: executableFile(),
+      onModuleEdit: onModuleEdit,
     },
   })) as unknown as ModuleContentsResource;
 }
@@ -287,4 +316,13 @@ function findLocalField(
       }
     }
   }
+}
+
+export function findDeclarationByName(
+  name: string,
+  declarations: ModuleDeclaration[],
+) {
+  return declarations.find((dec) => {
+    return dec.exportName === name || dec.localName === name;
+  });
 }
