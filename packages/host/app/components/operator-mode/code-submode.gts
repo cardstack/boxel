@@ -30,7 +30,6 @@ import {
   hasExecutableExtension,
   RealmPaths,
   type Actions,
-  type CodeRef,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -131,33 +130,14 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private deleteModal: DeleteModal | undefined;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
 
-  private publicAPI(here: CodeSubmode): Actions {
-    return {
-      createCard: async (
-        _ref: CodeRef,
-        _relativeTo: URL | undefined,
-      ): Promise<CardDef | undefined> => {
-        // TODO
-        throw new Error('not implemented');
-      },
-      viewCard: async (
-        _card: CardDef,
-        _format: Format = 'isolated',
-      ): Promise<void> => {},
-      editCard(_card: CardDef): void {},
-      saveCard(_card: CardDef): void {},
-      delete: (item: CardDef | URL | null | undefined): void => {
-        here.itemToDelete = item;
-        if (here.deleteModal) {
-          here.delete.perform(item);
-        }
-      },
-      doWithStableScroll: async (
-        _card: CardDef,
-        _changeSizeCallback: () => Promise<void>,
-      ): Promise<void> => {},
-      changeSubmode: (): void => {},
+  private deleteFileAction(): Actions['delete'] {
+    let fn = (item: CardDef | URL | null | undefined): void => {
+      this.itemToDelete = item;
+      if (this.deleteModal) {
+        this.delete.perform(item);
+      }
     };
+    return fn;
   }
 
   private createFileModal: CreateFileModal | undefined;
@@ -702,7 +682,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @readyFile={{this.readyFile}}
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @selectDeclaration={{this.selectDeclaration}}
-                          @publicAPI={{this.publicAPI this}}
+                          @delete={{this.deleteFileAction}}
                           @openDefinition={{this.openDefinition}}
                           @createFile={{perform this.createFile}}
                           data-test-card-inspector-panel
