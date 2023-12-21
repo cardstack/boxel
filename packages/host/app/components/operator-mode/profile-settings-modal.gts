@@ -15,6 +15,8 @@ import {
   FieldContainer,
 } from '@cardstack/boxel-ui/components';
 
+import { not, or, and } from '@cardstack/boxel-ui/helpers';
+
 import ModalContainer from '@cardstack/host/components/modal-container';
 
 import { ProfileInfo } from '@cardstack/host/components/operator-mode/profile-info-popover';
@@ -33,21 +35,37 @@ export default class ProfileSettingsModal extends Component<Signature> {
 
   @tracked private displayName: string | undefined = undefined;
   @tracked private saveSuccessIndicatorShown = false;
+  @tracked private error: Error | undefined = undefined;
+  @tracked showDisplayNameValidation = false; // We don't want to show validation error until the user has interacted with the field
 
   @action setDisplayName(name: string) {
+    this.showDisplayNameValidation = true;
     this.displayName = name;
   }
 
   private saveTask = restartableTask(async () => {
     await this.matrixService.profile.loaded; // Prevent saving before profile is loaded
-    let delayMs = config.environment === 'test' ? 1 : 1000;
 
-    await Promise.all([
-      this.matrixService.setDisplayName(this.displayName || ''),
-      new Promise((resolve) => setTimeout(resolve, delayMs)),
-    ]); // Add a bit of artificial delay if needed, to make the save button feel more responsive
+    this.error = undefined;
 
-    this.matrixService.reloadProfile(); // To get the updated display name in templates
+    try {
+      await Promise.all([
+        this.matrixService.setDisplayName(this.displayName || ''),
+        new Promise((resolve) =>
+          setTimeout(resolve, config.minSaveTaskDurationMs),
+        ),
+      ]); // Add a bit of artificial delay if needed, to make the save button feel more responsive
+    } catch (e) {
+      this.error = new Error('Failed to save profile. Please try again.');
+    }
+
+    try {
+      this.matrixService.reloadProfile(); // To get the updated display name in templates
+    } catch (e) {
+      this.error = new Error(
+        'Failed to refresh the profile after saving. Please reload the page.',
+      );
+    }
     this.afterSaveTask.perform();
   });
 
@@ -72,6 +90,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
     return this.saveTask.isRunning ? 'Saving…' : 'Save';
   }
 
+  get isDisplayNameValid() {
+    return this.displayName !== undefined && this.displayName.length > 0;
+  }
+
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.setInitialValues.perform();
@@ -79,15 +101,23 @@ export default class ProfileSettingsModal extends Component<Signature> {
 
   <template>
     <style>
-      .save-button {
+      .buttons {
         margin-left: auto;
         margin-top: auto;
         margin-bottom: auto;
-        margin-right: var(--boxel-sp-xxl);
+      }
+
+      .buttons > :not(:first-child) {
+        margin-left: var(--boxel-sp-xs);
       }
 
       .profile-settings-modal {
         height: 70vh;
+      }
+
+      .error-message {
+        color: var(--boxel-error-100);
+        margin-top: var(--boxel-sp-lg);
       }
     </style>
 
@@ -116,20 +146,52 @@ export default class ProfileSettingsModal extends Component<Signature> {
               data-test-display-name-field
               @value={{this.matrixService.profile.displayName}}
               @onInput={{this.setDisplayName}}
+              @valid={{this.isDisplayNameValid}}
+              @errorMessage={{if
+                (not this.isDisplayNameValid)
+                'Name is required'
+              }}
+              @state={{if
+                (and
+                  this.showDisplayNameValidation (not this.isDisplayNameValid)
+                )
+                'invalid'
+              }}
             />
           </FieldContainer>
         </form>
+
+        {{#if this.error}}
+          <div class='error-message'>
+            {{this.error.message}}
+          </div>
+        {{/if}}
       </:content>
       <:footer>
-        <BoxelButton
-          @kind='primary'
-          @disabled={{this.saveTask.isRunning}}
-          class='save-button'
-          {{on 'click' (perform this.saveTask)}}
-          data-test-profile-settings-save-button
-        >
-          {{this.saveButtonText}}
-        </BoxelButton>
+        <div class='buttons'>
+          <BoxelButton
+            data-test-confirm-cancel-button
+            @size='tall'
+            @kind='secondary-light'
+            {{on 'click' @toggleProfileSettings}}
+          >
+            Cancel
+          </BoxelButton>
+
+          <BoxelButton
+            @kind='primary'
+            @size='tall'
+            @disabled={{or
+              this.saveTask.isRunning
+              (not this.isDisplayNameValid)
+            }}
+            class='save-button'
+            {{on 'click' (perform this.saveTask)}}
+            data-test-profile-settings-save-button
+          >
+            {{this.saveButtonText}}
+          </BoxelButton>
+        </div>
       </:footer>
     </ModalContainer>
   </template>
