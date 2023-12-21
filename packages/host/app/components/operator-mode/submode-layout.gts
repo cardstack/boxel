@@ -21,9 +21,11 @@ import SearchSheet, {
   SearchSheetModes,
 } from '../search-sheet';
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
-
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile-settings-modal';
+import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 
 const { APP } = ENV;
 
@@ -42,7 +44,8 @@ interface Signature {
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private isChatVisible = false;
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
-
+  @tracked private profileSettingsOpened = false;
+  @tracked private profileSummaryOpened = false;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
 
@@ -107,6 +110,16 @@ export default class SubmodeLayout extends Component<Signature> {
     this.closeSearchSheet();
   }
 
+  @action toggleProfileSettings() {
+    this.profileSettingsOpened = !this.profileSettingsOpened;
+
+    this.profileSummaryOpened = false;
+  }
+
+  @action toggleProfileSummary() {
+    this.profileSummaryOpened = !this.profileSummaryOpened;
+  }
+
   <template>
     <div class='operator-mode-with-chat {{this.chatVisibilityClass}}'>
       <SubmodeSwitcher
@@ -134,7 +147,31 @@ export default class SubmodeLayout extends Component<Signature> {
       {{/if}}
     </div>
 
-    <ProfileInfoPopover />
+    <div class='profile-icon-container'>
+      <button
+        class='profile-icon-button'
+        {{on 'click' this.toggleProfileSummary}}
+        data-test-profile-icon-button
+      >
+        <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
+      </button>
+    </div>
+
+    {{#if this.profileSummaryOpened}}
+      <ProfileInfoPopover
+        {{onClickOutside
+          this.toggleProfileSummary
+          exceptSelector='.profile-icon-button'
+        }}
+        @toggleProfileSettings={{this.toggleProfileSettings}}
+      />
+    {{/if}}
+
+    {{#if this.profileSettingsOpened}}
+      <ProfileSettingsModal
+        @toggleProfileSettings={{this.toggleProfileSettings}}
+      />
+    {{/if}}
 
     <SearchSheet
       @mode={{this.searchSheetMode}}
@@ -197,6 +234,22 @@ export default class SubmodeLayout extends Component<Signature> {
       .container__chat-sidebar {
         height: 100vh;
         grid-column: 2;
+      }
+
+      .profile-icon-container {
+        bottom: 0;
+        position: absolute;
+        width: var(--search-sheet-closed-height);
+        height: var(--search-sheet-closed-height);
+        border-radius: 50px;
+        margin-left: var(--boxel-sp);
+        z-index: 1;
+      }
+
+      .profile-icon-button {
+        border: 0;
+        padding: 0;
+        background: transparent;
       }
     </style>
   </template>

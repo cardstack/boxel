@@ -7,7 +7,7 @@ import { Resource } from 'ember-resources';
 import type MatrixService from '../services/matrix-service';
 
 export class MatrixProfileResource extends Resource<{}> {
-  @tracked loading: Promise<void> | undefined;
+  @tracked loaded: Promise<void> | undefined;
 
   @tracked avatarUrl: string | undefined;
   @tracked displayName: string | undefined;
@@ -15,15 +15,10 @@ export class MatrixProfileResource extends Resource<{}> {
   @service private declare matrixService: MatrixService;
 
   modify(_positional: never[], _named: never) {
-    this.loading = this.load.perform();
+    this.loaded = this.load.perform();
   }
 
-  setDisplayName(newName: string) {
-    // FIXME is this a weird interface?
-    this.displayName = newName;
-  }
-
-  private load = restartableTask(async () => {
+  load = restartableTask(async () => {
     if (this.matrixService.userId) {
       let rawProfile = await this.matrixService.client.getProfileInfo(
         this.matrixService.userId,
@@ -38,6 +33,5 @@ export class MatrixProfileResource extends Resource<{}> {
 }
 
 export function getMatrixProfile(parent: object) {
-  console.log('get matrix profile');
   return MatrixProfileResource.from(parent, () => {});
 }

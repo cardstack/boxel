@@ -1,65 +1,31 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
-import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 
-import {
-  BoxelButton,
-  BoxelInput,
-  FieldContainer,
-} from '@cardstack/boxel-ui/components';
-
-import { not } from '@cardstack/boxel-ui/helpers';
-
-import ModalContainer from '@cardstack/host/components/modal-container';
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
-interface Signature {
+interface ProfileInfoPopoverSignature {
+  Args: {
+    toggleProfileSettings: () => void;
+  };
+  Element: HTMLElement;
+}
+
+interface ProfileInfoSignature {
   Args: {};
   Element: HTMLElement;
 }
 
-export default class ProfileInfoPopover extends Component<Signature> {
+export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSignature> {
   @service declare matrixService: MatrixService;
-  @tracked private isOpened = false;
-  @tracked private profileSettingsOpened = false;
-  @tracked private displayName;
-
-  @action setPopoverProfileOpen(open: boolean) {
-    this.isOpened = open;
-  }
-
-  @action openSettings() {
-    this.isOpened = false;
-    this.profileSettingsOpened = true;
-  }
-
-  @action closeSettings() {
-    this.profileSettingsOpened = false;
-  }
 
   @action logout() {
     this.matrixService.logout();
-  }
-
-  @action setDisplayName(name: string) {
-    this.displayName = name;
-  }
-
-  @action save() {
-    // this.matrixService.setDisplayName(this.displayName);
-    // this.profileSettingsOpened = false;
-  }
-
-  constructor(owner: unknown, args: {}) {
-    super(owner, args);
-    this.displayName = this.matrixService.profile.displayName || '';
   }
 
   <template>
@@ -76,13 +42,7 @@ export default class ProfileInfoPopover extends Component<Signature> {
         flex-direction: column;
         border-radius: var(--boxel-border-radius);
         box-shadow: var(--boxel-deep-box-shadow);
-        transition: all 0.1s ease-out;
-        opacity: 0;
         display: flex;
-      }
-
-      .profile-popover.opened {
-        opacity: 1;
       }
 
       .header {
@@ -95,103 +55,38 @@ export default class ProfileInfoPopover extends Component<Signature> {
         color: var(--boxel-dark);
         text-transform: uppercase;
       }
-
-      .profile-icon-container {
-        bottom: 0;
-        position: absolute;
-        width: var(--search-sheet-closed-height);
-        height: var(--search-sheet-closed-height);
-        border-radius: 50px;
-        margin-left: var(--boxel-sp);
-        z-index: 1;
-      }
-
-      .profile-icon-button {
-        border: 0;
-        padding: 0;
-        background: transparent;
-      }
     </style>
 
-    <div class='profile-icon-container'>
-      <button
-        class='profile-icon-button'
-        {{on 'click' (fn this.setPopoverProfileOpen (not this.isOpened))}}
-        data-test-profile-icon-button
-      >
-        <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
-      </button>
-    </div>
-
-    {{#if this.isOpened}}
-      <div
-        class='profile-popover {{if this.isOpened "opened"}}'
-        {{onClickOutside
-          (fn this.setPopoverProfileOpen false)
-          exceptSelector='.profile-icon-button'
-        }}
-        data-test-profile-popover
-      >
-        <header class='header'>
-          <div class='label'>
-            Signed in as
-          </div>
-
-          <BoxelButton
-            @kind='secondary-light'
-            @size='extra-small'
-            {{on 'click' this.openSettings}}
-            data-test-settings-button
-          >
-            Settings
-          </BoxelButton>
-        </header>
-
-        <Profile />
+    <div class='profile-popover' data-test-profile-popover ...attributes>
+      <header class='header'>
+        <div class='label'>
+          Signed in as
+        </div>
 
         <BoxelButton
-          {{on 'click' this.logout}}
-          @kind='primary-dark'
-          data-test-signout-button
+          @kind='secondary-light'
+          @size='extra-small'
+          {{on 'click' @toggleProfileSettings}}
+          data-test-settings-button
         >
-          Sign out
+          Settings
         </BoxelButton>
-      </div>
-    {{/if}}
+      </header>
 
-    {{#if this.profileSettingsOpened}}
-      <ModalContainer
-        @onClose={{this.closeSettings}}
-        @title='Settings'
-        @size='large'
-        @centered={{true}}
-        @isOpen={{this.profileSettingsOpened}}
-        data-test-settings-modal
+      <ProfileInfo />
+
+      <BoxelButton
+        {{on 'click' this.logout}}
+        @kind='primary-dark'
+        data-test-signout-button
       >
-        <:sidebar>
-          <Profile />
-        </:sidebar>
-        <:content>
-          <FieldContainer
-            @label='Name'
-            @tag='label'
-            class=''
-            @vertical={{false}}
-          >
-            <BoxelInput
-              data-test-token-field
-              @value={{this.matrixService.profile.displayName}}
-              @errorMessage=''
-              @onInput={{this.setDisplayName}}
-            />
-          </FieldContainer>
-        </:content>
-      </ModalContainer>
-    {{/if}}
+        Sign out
+      </BoxelButton>
+    </div>
   </template>
 }
 
-export class Profile extends Component<Signature> {
+export class ProfileInfo extends Component<ProfileInfoSignature> {
   @service declare matrixService: MatrixService;
 
   <template>

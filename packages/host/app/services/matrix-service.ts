@@ -54,28 +54,6 @@ export type OperatorModeContext = {
   openCards: CardDef[];
 };
 
-function onNameChange(service: MatrixService) {
-  return (event: MatrixEvent, member: RoomMember) => {
-    console.log('event', event, member);
-    // FIXME isn’t this a questionable place for this?
-
-    console.log(
-      `membership event, type ${event?.event.type}, userid ${
-        member.userId
-      } === ${service.client.getUserId()} ? ${
-        member.userId === service.client.getUserId()
-      }`,
-    );
-    if (
-      event.event.type === 'm.room.member' &&
-      member.userId === service.client.getUserId()
-    ) {
-      console.log('changing to ' + member.name);
-      service.profile.setDisplayName(member.name);
-    }
-  };
-}
-
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
@@ -125,7 +103,6 @@ export default class MatrixService extends Service {
         this.matrixSDK.RoomMemberEvent.Membership,
         Membership.onMembership(this),
       ],
-      [this.matrixSDK.RoomMemberEvent.Name, onNameChange(this)],
       [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
     ];
   });
@@ -182,7 +159,15 @@ export default class MatrixService extends Service {
 
   async startAndSetDisplayName(auth: IAuthData, displayName: string) {
     this.start(auth);
-    this.client.setDisplayName(displayName);
+    this.setDisplayName(displayName);
+  }
+
+  async setDisplayName(displayName: string) {
+    await this.client.setDisplayName(displayName);
+  }
+
+  async reloadProfile() {
+    await this.profile.load.perform();
   }
 
   async start(auth?: IAuthData) {

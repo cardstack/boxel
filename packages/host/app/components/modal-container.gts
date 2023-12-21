@@ -157,6 +157,7 @@ export default class ModalContainer extends Component<Signature> {
         border-top: 1px solid var(--boxel-300);
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
+        display: flex;
       }
     </style>
   </template>
