@@ -346,7 +346,7 @@ export default class DetailPanel extends Component<Signature> {
                     data-test-delete-module-button
                     @icon={{IconTrash}}
                     aria-label='Delete'
-                    {{on 'click' (fn @delete this.codePath undefined)}}
+                    {{on 'click' (fn @delete this.codePath)}}
                     style={{cssVar
                       boxel-icon-button-width='24px'
                       boxel-icon-button-height='24px'

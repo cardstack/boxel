@@ -131,11 +131,11 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private deleteModal: DeleteModal | undefined;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
 
-  private deleteFileAction(): Actions['delete'] {
-    let fn = (item: CardDef | URL | null | undefined): void => {
-      this.itemToDelete = item;
-      if (this.deleteModal) {
-        this.delete.perform(item);
+  private deleteAction(here: this): Actions['delete'] {
+    let fn = (item: CardDef | URL | null | undefined) => {
+      here.itemToDelete = item;
+      if (here.deleteModal) {
+        here.delete.perform(item);
       }
     };
     return fn;
@@ -699,7 +699,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @readyFile={{this.readyFile}}
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @selectDeclaration={{this.selectDeclaration}}
-                          @delete={{this.deleteFileAction}}
+                          @delete={{this.deleteAction this}}
                           @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
                           data-test-card-inspector-panel
