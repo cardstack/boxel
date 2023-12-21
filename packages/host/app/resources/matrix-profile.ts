@@ -4,24 +4,33 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
-import type MatrixService from '../services/matrix-service';
+import MatrixService from '@cardstack/host/services/matrix-service';
 
-export class MatrixProfileResource extends Resource<{}> {
+interface Args {
+  named: {
+    userId?: string | null;
+  };
+}
+
+export class MatrixProfileResource extends Resource<Args> {
+  @tracked userId: string | undefined | null;
   @tracked loaded: Promise<void> | undefined;
-
   @tracked avatarUrl: string | undefined;
   @tracked displayName: string | undefined;
 
   @service private declare matrixService: MatrixService;
 
-  modify(_positional: never[], _named: never) {
+  modify(_positional: never[], named: Args['named']) {
+    let { userId } = named;
+    this.userId = userId;
+
     this.loaded = this.load.perform();
   }
 
   load = restartableTask(async () => {
-    if (this.matrixService.userId) {
+    if (this.userId) {
       let rawProfile = await this.matrixService.client.getProfileInfo(
-        this.matrixService.userId,
+        this.userId,
       );
 
       if (rawProfile) {
@@ -32,6 +41,13 @@ export class MatrixProfileResource extends Resource<{}> {
   });
 }
 
-export function getMatrixProfile(parent: object) {
-  return MatrixProfileResource.from(parent, () => {});
+export function getMatrixProfile(
+  parent: object,
+  userId: () => string | undefined | null,
+) {
+  return MatrixProfileResource.from(parent, () => ({
+    named: {
+      userId: userId(),
+    },
+  }));
 }

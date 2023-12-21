@@ -19,17 +19,20 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 class MockClient {
   lastSentEvent: any;
-  userId: string | undefined;
+  userId?: string;
+  displayname?: string;
 
-  constructor(userId: string | undefined) {
+  constructor(userId?: string, displayname?: string) {
     this.userId = userId;
+    this.displayname = displayname;
   }
 
-  public getProfileInfo(userId: string | null) {
+  public getProfileInfo(_userId: string | null) {
     return Promise.resolve({
-      displayname: userId,
+      displayname: this.displayname,
     });
   }
+
   public getThreePids() {
     return Promise.resolve({
       threepids: [
@@ -41,6 +44,7 @@ class MockClient {
       ],
     });
   }
+
   public getUserId() {
     return this.userId;
   }
@@ -50,11 +54,11 @@ export class MockMatrixService extends Service {
   @service declare loaderService: LoaderService;
   lastMessageSent: any;
   // @ts-ignore
-  @tracked client: MockClient = new MockClient('@testuser:staging');
+  @tracked client: MockClient = new MockClient('@testuser:staging', 'Testie');
   // @ts-ignore
   cardAPI!: typeof cardApi;
 
-  profile = getMatrixProfile(this);
+  profile = getMatrixProfile(this, () => this.userId);
 
   // These will be empty in the tests, but we need to define them to satisfy the interface
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
@@ -93,6 +97,15 @@ export class MockMatrixService extends Service {
 
   async logout() {
     this.client = new MockClient(undefined);
+  }
+
+  async setDisplayName(displayName: string) {
+    this.client.displayname = displayName;
+    return Promise.resolve();
+  }
+
+  async reloadProfile() {
+    await this.profile.load.perform();
   }
 
   public createAndJoinRoom(roomId: string) {

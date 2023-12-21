@@ -59,7 +59,7 @@ export default class MatrixService extends Service {
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
 
-  profile = getMatrixProfile(this);
+  profile = getMatrixProfile(this, () => this.client.getUserId());
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =

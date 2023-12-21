@@ -18,6 +18,7 @@ import {
 import ModalContainer from '@cardstack/host/components/modal-container';
 
 import { ProfileInfo } from '@cardstack/host/components/operator-mode/profile-info-popover';
+import config from '@cardstack/host/config/environment';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
 interface Signature {
@@ -39,11 +40,12 @@ export default class ProfileSettingsModal extends Component<Signature> {
 
   private saveTask = restartableTask(async () => {
     await this.matrixService.profile.loaded; // Prevent saving before profile is loaded
+    let delayMs = config.environment === 'test' ? 1 : 1000;
 
     await Promise.all([
       this.matrixService.setDisplayName(this.displayName || ''),
-      new Promise((resolve) => setTimeout(resolve, 1000)),
-    ]); // Add a bit of artificial delay to make the save button feel more responsive
+      new Promise((resolve) => setTimeout(resolve, delayMs)),
+    ]); // Add a bit of artificial delay if needed, to make the save button feel more responsive
 
     this.matrixService.reloadProfile(); // To get the updated display name in templates
     this.afterSaveTask.perform();
@@ -111,7 +113,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
             @vertical={{false}}
           >
             <BoxelInput
-              data-test-token-field
+              data-test-display-name-field
               @value={{this.matrixService.profile.displayName}}
               @onInput={{this.setDisplayName}}
             />
@@ -124,7 +126,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
           @disabled={{this.saveTask.isRunning}}
           class='save-button'
           {{on 'click' (perform this.saveTask)}}
-          data-test-save-button
+          data-test-profile-settings-save-button
         >
           {{this.saveButtonText}}
         </BoxelButton>
