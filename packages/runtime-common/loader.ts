@@ -114,7 +114,9 @@ type EvaluatableDep =
 
 export type RequestHandler = (req: Request) => Promise<Response | null>;
 
+let nonce = 0;
 export class Loader {
+  nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');
   private modules = new Map<string, Module>();
   private urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
