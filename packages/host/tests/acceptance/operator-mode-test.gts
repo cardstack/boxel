@@ -4,6 +4,8 @@ import {
   click,
   triggerEvent,
   waitFor,
+  fillIn,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -377,37 +379,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  test('has a profile icon in the bottom left corner that opens profile info popover', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}employee.gts`,
-    });
-
-    assert.dom('[data-test-profile-icon]').hasText('T');
-    assert
-      .dom('[data-test-profile-icon]')
-      .hasAttribute('style', 'background: #5ead6b');
-
-    assert.dom('[data-test-profile-popover]').doesNotExist();
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-popover]').exists();
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-popover]').doesNotExist(); // Clicking again closes the popover
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-display-name]').hasText('@testuser:staging');
-    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
-
-    await click('[data-test-signout-button]');
-
-    assert.dom('[data-test-login-form]').exists();
-  });
-
   test('visiting index card and entering operator mode', async function (assert) {
     await visit('/');
 
@@ -453,8 +424,39 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  test('can view and change settings via profile info popover', async function (assert) {
-    let operatorModeStateParam = stringify({
+  test('can logout via profile info popover', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    });
+
+    assert.dom('[data-test-profile-icon]').hasText('T');
+    assert
+      .dom('[data-test-profile-icon]')
+      .hasAttribute('style', 'background: #5ead6b');
+
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-popover]').exists();
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-popover]').doesNotExist(); // Clicking again closes the popover
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-display-name]').hasText('Testie');
+    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
+
+    await click('[data-test-signout-button]');
+
+    assert.dom('[data-test-login-form]').exists();
+  });
+
+  test('can access settings via profile info popover', async function (assert) {
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -465,24 +467,29 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
     })!;
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
-
     await click('[data-test-profile-icon-button]');
     await click('[data-test-settings-button]');
 
     assert.dom('[data-test-profile-popover]').doesNotExist();
     assert.dom('[data-test-settings-modal]').exists();
     assert.dom('[data-test-profile-icon]').hasText('T');
-    assert.dom('[data-test-profile-display-name]').hasText('@testuser:staging');
+    assert.dom('[data-test-profile-display-name]').hasText('Testie');
 
     assert
       .dom('[data-test-profile-icon]')
       .hasAttribute('style', 'background: #5ead6b');
     assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
+
+    await fillIn('[data-test-display-name-field]', 'John');
+    await click('[data-test-profile-settings-save-button]');
+
+    await waitUntil(
+      () =>
+        // @ts-ignore
+        document
+          .querySelector('[data-test-profile-display-name]')
+          .textContent.trim() === 'John',
+    );
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {
