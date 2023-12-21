@@ -442,6 +442,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
     await waitFor('[data-test-file]');
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
     let fileElement = find(`[data-test-file="${openFilename}"]`)!;
     assert.ok(
       await elementIsVisible(fileElement),
@@ -484,6 +485,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
     await waitFor(`[data-test-file="${openFilename}"]`);
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
     let fileElement = find(`[data-test-file="${openFilename}"]`)!;
 
     if (!fileElement) {
@@ -524,6 +526,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
     await waitFor('[data-test-file]');
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
     let openFileSelector = `[data-test-file="${openFilename}"]`;
     let openFileElement = find(openFileSelector)!;
     assert.ok(
@@ -551,6 +554,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await click(fileToOpenElement);
     await waitFor(openFileSelector);
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
     openFileElement = find(openFileSelector)!;
     fileToOpenElement = find(fileToOpenSelector)!;
@@ -584,6 +588,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     let endDirectorySelector = `[data-test-directory="zzz/"]`;
 
     await waitFor(endDirectorySelector);
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
     let endDirectoryElement = find(endDirectorySelector);
 
     if (!endDirectoryElement) {
@@ -607,6 +612,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await click('[data-test-file-browser-toggle]');
     await waitFor(endDirectorySelector);
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
     endDirectoryElement = find(endDirectorySelector);
 
@@ -642,6 +648,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await click('[data-test-file-browser-toggle]');
     await waitFor(endDirectorySelector);
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
     endDirectoryElement = find(endDirectorySelector);
 
@@ -685,6 +692,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       'Enter',
     );
     await waitFor('[data-test-realm-name="Test Workspace B"]');
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
     endDirectoryElement = find(endDirectorySelector);
 
