@@ -54,7 +54,7 @@ export class MockMatrixService extends Service {
   @service declare loaderService: LoaderService;
   lastMessageSent: any;
   // @ts-ignore
-  @tracked client: MockClient = new MockClient('@testuser:staging', 'Testie');
+  @tracked client: MockClient = new MockClient('@testuser:staging', '');
   // @ts-ignore
   cardAPI!: typeof cardApi;
 

@@ -1,9 +1,11 @@
+import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { stringToColor } from '@cardstack/host/lib/utils';
+import MatrixService from '@cardstack/host/services/matrix-service';
 
 interface Signature {
   Args: {
@@ -13,9 +15,16 @@ interface Signature {
 }
 
 export default class ProfileAvatarIcon extends Component<Signature> {
-  get userInitials() {
-    // Transform @user:localhost into U, for example
-    return this.args.userId?.split(':')[0].slice(1, 2).toUpperCase();
+  @service declare matrixService: MatrixService;
+
+  get profileInitials() {
+    let displayName = this.matrixService.profile?.displayName;
+
+    if (displayName) {
+      return displayName.slice(0, 1).toUpperCase();
+    } else {
+      return this.args.userId?.split(':')[0].slice(1, 2).toUpperCase(); // Transform @user:localhost into U, for example
+    }
   }
 
   <template>
@@ -53,7 +62,9 @@ export default class ProfileAvatarIcon extends Component<Signature> {
       ...attributes
     >
       <span>
-        {{this.userInitials}}
+        {{#if this.matrixService.profile.loaded}}
+          {{this.profileInitials}}
+        {{/if}}
       </span>
     </div>
   </template>

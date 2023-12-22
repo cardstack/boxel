@@ -450,7 +450,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-profile-icon-button]');
 
-    assert.dom('[data-test-profile-display-name]').hasText('Testie');
     assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
 
     await click('[data-test-signout-button]');
@@ -479,8 +478,9 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     assert.dom('[data-test-profile-popover]').doesNotExist();
     assert.dom('[data-test-settings-modal]').exists();
-    assert.dom('[data-test-profile-icon]').hasText('T');
-    assert.dom('[data-test-profile-display-name]').hasText('Testie');
+
+    assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:staging
+    assert.dom('[data-test-profile-display-name]').hasText(''); // No display name set yet
 
     assert
       .dom('[data-test-profile-icon]')
@@ -521,6 +521,8 @@ module('Acceptance | operator mode tests', function (hooks) {
           .querySelector('[data-test-profile-display-name]')
           .textContent.trim() === 'John',
     );
+
+    assert.dom('[data-test-profile-icon]').hasText('J'); // From display name "John"
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {
