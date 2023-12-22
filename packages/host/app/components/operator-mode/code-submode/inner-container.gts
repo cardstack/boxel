@@ -52,7 +52,7 @@ class InnerContainerContent extends Component<ContentSignature> {
     super(owner, args);
     if (this.args.withMask) {
       this.setVisible();
-      this.args.whenVisible(this.setVisible);
+      this.args.whenVisible?.(this.setVisible);
     }
   }
 
