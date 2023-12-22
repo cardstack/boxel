@@ -11,8 +11,8 @@ interface ContentSignature {
     default: [];
   };
   Args: {
-    withMask: boolean;
-    whenVisible: (setVisible: () => void) => void;
+    withMask?: boolean;
+    whenVisible?: (setVisible: () => void) => void;
   };
 }
 
