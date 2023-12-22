@@ -36,7 +36,6 @@ import {
   isCardDef,
   isFieldDef,
   isBaseDef,
-  type Actions,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -91,7 +90,7 @@ interface Signature {
       },
       sourceInstance?: CardDef,
     ) => Promise<void>;
-    delete: Actions['delete'];
+    delete: (item: CardDef | URL | null | undefined) => void;
   };
 }
 

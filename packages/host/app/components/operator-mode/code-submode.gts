@@ -25,11 +25,9 @@ import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import {
-  Deferred,
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
-  type Actions,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
@@ -121,25 +119,13 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private sourceFileIsSaving = false;
   @tracked private previewFormat: Format = 'isolated';
   @tracked private isCreateModalOpen = false;
+  @tracked private itemToDelete: CardDef | URL | null | undefined;
 
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
   private updateCursorByName: ((name: string) => void) | undefined;
   #currentCard: CardDef | undefined;
-
-  @tracked private deleteModal: DeleteModal | undefined;
-  @tracked private itemToDelete: CardDef | URL | null | undefined;
-
-  private deleteAction(here: this): Actions['delete'] {
-    let fn = (item: CardDef | URL | null | undefined) => {
-      here.itemToDelete = item;
-      if (here.deleteModal) {
-        here.delete.perform(item);
-      }
-    };
-    return fn;
-  }
 
   private createFileModal: CreateFileModal | undefined;
   private cardResource = getCard(
@@ -492,13 +478,22 @@ export default class CodeSubmode extends Component<Signature> {
     }
   }
 
+  @action private setItemToDelete(item: CardDef | URL | null | undefined) {
+    this.itemToDelete = item;
+  }
+
+  @action private onConfirmDelete(item: CardDef | URL): void {
+    this.delete.perform(item);
+  }
+
+  @action private onCancelDelete() {
+    this.itemToDelete = undefined;
+  }
+
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(async (item: CardDef | URL | null | undefined) => {
+  private delete = dropTask(async (item: CardDef | URL) => {
     if (!item) {
       return;
-    }
-    if (!this.deleteModal) {
-      throw new Error(`bug: DeleteModal not instantiated`);
     }
     if (!(item instanceof URL)) {
       if (!item.id) {
@@ -508,21 +503,10 @@ export default class CodeSubmode extends Component<Signature> {
       }
     }
 
-    let deferred: Deferred<void>;
-    let isDeleteConfirmed = await this.deleteModal.confirmDelete(
-      item,
-      (d) => (deferred = d),
-    );
-    if (!isDeleteConfirmed) {
-      this.itemToDelete = undefined;
-      return;
-    }
-
     if (!(item instanceof URL)) {
       let card = item;
       await this.withTestWaiters(async () => {
         await this.operatorModeStateService.deleteCard(card);
-        deferred!.fulfill();
       });
     } else {
       let file = item;
@@ -538,9 +522,9 @@ export default class CodeSubmode extends Component<Signature> {
           this.recentFilesService.removeRecentFile(filePath);
         }
         await this.cardService.deleteSource(file);
-        deferred!.fulfill();
       });
     }
+    await timeout(500); // task running message can be displayed long enough for the user to read it
 
     let recentFile = this.recentFilesService.recentFiles[0];
     if (recentFile) {
@@ -596,13 +580,6 @@ export default class CodeSubmode extends Component<Signature> {
       waiter.endAsync(token);
     }
   }
-
-  private setupDeleteModal = (deleteModal: DeleteModal) => {
-    this.deleteModal = deleteModal;
-    if (this.itemToDelete) {
-      this.delete.perform(this.itemToDelete);
-    }
-  };
 
   private setupCreateFileModal = (createFileModal: CreateFileModal) => {
     this.createFileModal = createFileModal;
@@ -699,7 +676,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @readyFile={{this.readyFile}}
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @selectDeclaration={{this.selectDeclaration}}
-                          @delete={{this.deleteAction this}}
+                          @delete={{this.setItemToDelete}}
                           @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
                           data-test-card-inspector-panel
@@ -861,7 +838,12 @@ export default class CodeSubmode extends Component<Signature> {
         </ResizablePanelGroup>
       </div>
       {{#if this.itemToDelete}}
-        <DeleteModal @onCreate={{this.setupDeleteModal}} />
+        <DeleteModal
+          @itemToDelete={{this.itemToDelete}}
+          @onConfirm={{this.onConfirmDelete}}
+          @onCancel={{this.onCancelDelete}}
+          @isDeleteRunning={{this.delete.isRunning}}
+        />
       {{/if}}
       <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
     </SubmodeLayout>

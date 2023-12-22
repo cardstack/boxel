@@ -12,7 +12,7 @@ import { tracked } from '@glimmer/tracking';
 import get from 'lodash/get';
 import { isEqual } from 'lodash';
 
-import { dropTask, restartableTask, task } from 'ember-concurrency';
+import { dropTask, restartableTask, task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
@@ -118,7 +118,6 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare recentFilesService: RecentFilesService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
-  @tracked private deleteModal: DeleteModal | undefined;
   @tracked private itemToDelete: CardDef | undefined = undefined;
 
   get stacks() {
@@ -206,13 +205,14 @@ export default class InteractSubmode extends Component<Signature> {
         here.save.perform(item, dismissItem);
       },
       delete: (card: CardDef | URL | null | undefined): void => {
-        if (card == null || card instanceof URL) {
+        if (!card || card instanceof URL) {
           throw new Error(`bug: delete called with invalid card "${card}"`);
         }
-        here.itemToDelete = card;
-        if (here.deleteModal) {
-          here.delete.perform(card);
+        if (!here.itemToDelete) {
+          here.itemToDelete = card;
+          return;
         }
+        here.delete.perform(card);
       },
       doWithStableScroll: async (
         card: CardDef,
@@ -321,23 +321,14 @@ export default class InteractSubmode extends Component<Signature> {
     }
   });
 
+  @action private onCancelDelete() {
+    this.itemToDelete = undefined;
+  }
+
   // dropTask will ignore any subsequent delete requests until the one in progress is done
   private delete = dropTask(async (card: CardDef) => {
-    if (!card.id) {
+    if (!card?.id) {
       // the card isn't actually saved yet, so do nothing
-      return;
-    }
-
-    if (!this.deleteModal) {
-      throw new Error(`bug: DeleteModal not instantiated`);
-    }
-    let deferred: Deferred<void>;
-    let isDeleteConfirmed = await this.deleteModal.confirmDelete(
-      card,
-      (d) => (deferred = d),
-    );
-    if (!isDeleteConfirmed) {
-      this.itemToDelete = undefined;
       return;
     }
 
@@ -356,11 +347,12 @@ export default class InteractSubmode extends Component<Signature> {
     }
     await this.withTestWaiters(async () => {
       await this.operatorModeStateService.deleteCard(card);
-      deferred!.fulfill();
+      await timeout(500); // task running message can be displayed long enough for the user to read it
     });
 
     this.itemToDelete = undefined;
   });
+
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
     try {
@@ -375,13 +367,6 @@ export default class InteractSubmode extends Component<Signature> {
       waiter.endAsync(token);
     }
   }
-
-  private setupDeleteModal = (deleteModal: DeleteModal) => {
-    this.deleteModal = deleteModal;
-    if (this.itemToDelete) {
-      this.delete.perform(this.itemToDelete);
-    }
-  };
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
@@ -626,7 +611,12 @@ export default class InteractSubmode extends Component<Signature> {
           />
         {{/if}}
         {{#if this.itemToDelete}}
-          <DeleteModal @onCreate={{this.setupDeleteModal}} />
+          <DeleteModal
+            @itemToDelete={{this.itemToDelete}}
+            @onConfirm={{get (this.publicAPI this 0) 'delete'}}
+            @onCancel={{this.onCancelDelete}}
+            @isDeleteRunning={{this.delete.isRunning}}
+          />
         {{/if}}
       </div>
     </SubmodeLayout>
