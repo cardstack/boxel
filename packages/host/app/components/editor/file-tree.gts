@@ -82,7 +82,7 @@ export default class FileTree extends Component<Signature> {
 
   private hideMask = restartableTask(async () => {
     // fine tuned to coincide with debounce in RestoreScrollPosition modifier
-    await timeout(200);
+    await timeout(300);
     this.showMask = false;
   });
 }
