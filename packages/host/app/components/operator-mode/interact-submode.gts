@@ -204,7 +204,7 @@ export default class InteractSubmode extends Component<Signature> {
         let item = here.findCardInStack(card, stackIndex);
         here.save.perform(item, dismissItem);
       },
-      delete: (card: CardDef | URL | null | undefined): void => {
+      delete: (card: CardDef | URL): void => {
         if (!card || card instanceof URL) {
           throw new Error(`bug: delete called with invalid card "${card}"`);
         }

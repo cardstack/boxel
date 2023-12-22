@@ -482,10 +482,6 @@ export default class CodeSubmode extends Component<Signature> {
     this.itemToDelete = item;
   }
 
-  @action private onConfirmDelete(item: CardDef | URL): void {
-    this.delete.perform(item);
-  }
-
   @action private onCancelDelete() {
     this.itemToDelete = undefined;
   }
@@ -524,7 +520,6 @@ export default class CodeSubmode extends Component<Signature> {
         await this.cardService.deleteSource(file);
       });
     }
-    await timeout(500); // task running message can be displayed long enough for the user to read it
 
     let recentFile = this.recentFilesService.recentFiles[0];
     if (recentFile) {
@@ -535,6 +530,7 @@ export default class CodeSubmode extends Component<Signature> {
       this.operatorModeStateService.updateCodePath(null);
     }
 
+    await timeout(500); // task running message can be displayed long enough for the user to read it
     this.itemToDelete = undefined;
   });
 
@@ -840,7 +836,7 @@ export default class CodeSubmode extends Component<Signature> {
       {{#if this.itemToDelete}}
         <DeleteModal
           @itemToDelete={{this.itemToDelete}}
-          @onConfirm={{this.onConfirmDelete}}
+          @onConfirm={{perform this.delete}}
           @onCancel={{this.onCancelDelete}}
           @isDeleteRunning={{this.delete.isRunning}}
         />
