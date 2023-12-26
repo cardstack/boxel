@@ -33,15 +33,11 @@ import {
   hasExecutableExtension,
   getPlural,
   isCardDocumentString,
-} from '@cardstack/runtime-common';
-
-import {
   isCardDef,
   isFieldDef,
   isBaseDef,
-} from '@cardstack/runtime-common/code-ref';
-
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
@@ -94,7 +90,7 @@ interface Signature {
       },
       sourceInstance?: CardDef,
     ) => Promise<void>;
-    delete: (item: CardDef | URL | null | undefined) => void | Promise<void>;
+    delete: (item: CardDef | URL | null | undefined) => void;
   };
 }
 

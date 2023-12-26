@@ -448,7 +448,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         )
                         (menuItem
                           'Delete'
-                          (fn @publicAPI.deleteCard this.card)
+                          (fn @publicAPI.delete this.card)
                           icon=IconTrash
                           dangerous=true
                           disabled=(not this.card.id)

@@ -975,6 +975,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       window.localStorage.getItem('recent-files'),
       JSON.stringify([[testRealmURL, 'Pet/vangogh.json']]),
     );
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
 
     await waitFor(`[data-test-action-button="Delete"]`);
     await click('[data-test-action-button="Delete"]');
@@ -1014,6 +1015,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     let notFound = await adapter.openFile('Pet/vangogh.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
   test<TestContextWithSSE>('Can delete a card instance from code submode and fall back to recent file', async function (assert) {
@@ -1135,6 +1137,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         [testRealmURL, 'Pet/mango.json'],
       ]),
     );
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
 
     await waitFor(`[data-test-delete-module-button]`);
     await click('[data-test-delete-module-button]');
@@ -1160,6 +1163,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     let notFound = await adapter.openFile('pet.gts');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
   test<TestContextWithSSE>('can delete a card definition with no recent files to fall back on', async function (assert) {
@@ -1221,6 +1225,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}readme.md`,
     });
     await waitForCodeEditor();
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
 
     await waitFor(`[data-test-action-button="Delete"]`);
     await click('[data-test-action-button="Delete"]');
@@ -1233,6 +1238,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     let notFound = await adapter.openFile('readme.md');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
   test('After opening inherited definition inside inheritance panel, "in-this-file" highlights selected definition', async function (assert) {
