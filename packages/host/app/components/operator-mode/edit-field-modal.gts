@@ -294,6 +294,7 @@ export default class EditFieldModal extends Component<Signature> {
       .footer-buttons {
         display: flex;
         height: 100%;
+        margin-left: auto;
       }
       .footer-buttons > div {
         margin-top: auto;
