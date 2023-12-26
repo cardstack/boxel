@@ -104,13 +104,8 @@ export default class MatrixService extends Service {
         Membership.onMembership(this),
       ],
       [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
-      [this.matrixSDK.UserEvent.DisplayName, this.onDisplayNameChange],
     ];
   });
-
-  onDisplayNameChange() {
-    this.reloadProfile();
-  }
 
   get isLoggedIn() {
     return this.client.isLoggedIn();

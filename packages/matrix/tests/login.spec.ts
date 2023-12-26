@@ -1,9 +1,5 @@
 import { expect } from '@playwright/test';
-import {
-  Credentials,
-  registerUser,
-  updateDisplayName,
-} from '../docker/synapse';
+import { registerUser } from '../docker/synapse';
 import {
   assertLoggedIn,
   assertLoggedOut,
@@ -16,11 +12,9 @@ import {
   test,
 } from '../helpers';
 
-let registeredUser: Credentials | undefined;
-
 test.describe('Login', () => {
   test.beforeEach(async ({ synapse }) => {
-    registeredUser = await registerUser(synapse, 'user1', 'pass');
+    await registerUser(synapse, 'user1', 'pass');
   });
 
   test('it can login', async ({ page }) => {
@@ -77,31 +71,6 @@ test.describe('Login', () => {
     );
     await page.locator('[data-test-signout-button]').click();
     await expect(page.locator('[data-test-login-form]')).toBeVisible();
-  });
-
-  // TODO: figure out why this test why updateDisplayName is not triggering the event in matrix-service
-  test.skip('the profile reflects display name changes', async ({
-    page,
-    synapse,
-  }) => {
-    page.on('console', (msg) => console.log(msg.text()));
-    await login(page, 'user1', 'pass');
-
-    await page.locator('[data-test-profile-icon-button]').click();
-    await expect(page.locator('[data-test-profile-display-name]')).toHaveText(
-      'user1',
-    );
-
-    await updateDisplayName(
-      synapse,
-      registeredUser!.userId,
-      registeredUser!.accessToken,
-      'newname',
-    );
-
-    await expect(page.locator('[data-test-profile-display-name]')).toHaveText(
-      'newname',
-    );
   });
 
   test('it shows an error when invalid credentials are provided', async ({
