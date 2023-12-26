@@ -15,7 +15,7 @@ import {
   FieldContainer,
 } from '@cardstack/boxel-ui/components';
 
-import { not, or, and } from '@cardstack/boxel-ui/helpers';
+import { not, and } from '@cardstack/boxel-ui/helpers';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 
@@ -31,14 +31,14 @@ interface Signature {
 }
 
 export default class ProfileSettingsModal extends Component<Signature> {
-  @service declare matrixService: MatrixService;
+  @service private declare matrixService: MatrixService;
 
   @tracked private displayName: string | undefined = undefined;
   @tracked private saveSuccessIndicatorShown = false;
   @tracked private error: Error | undefined = undefined;
-  @tracked showDisplayNameValidation = false;
+  @tracked private showDisplayNameValidation = false;
 
-  @action setDisplayName(name: string) {
+  @action private setDisplayName(name: string) {
     this.showDisplayNameValidation = true; // We don't want to show validation error until the user has interacted with the field, i.e. when display name is blank and user opens settings modal
     this.displayName = name;
   }
@@ -74,18 +74,26 @@ export default class ProfileSettingsModal extends Component<Signature> {
     this.displayName = this.matrixService.profile.displayName;
   });
 
-  @action onSubmit(event: Event) {
+  @action private onSubmit(event: Event) {
     event.preventDefault();
     this.saveTask.perform();
   }
 
-  get saveButtonText() {
+  private get saveButtonText() {
     if (this.saveSuccessIndicatorShown) return 'Saved!';
     return this.saveTask.isRunning ? 'Saving…' : 'Save';
   }
 
-  get isDisplayNameValid() {
+  private get isDisplayNameValid() {
     return this.displayName !== undefined && this.displayName.length > 0;
+  }
+
+  private get isSaveButtonDisabled() {
+    return (
+      this.saveTask.isRunning ||
+      !this.isDisplayNameValid ||
+      this.displayName === this.matrixService.profile.displayName
+    );
   }
 
   constructor(owner: unknown, args: any) {
@@ -174,10 +182,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
           <BoxelButton
             @kind='primary'
             @size='tall'
-            @disabled={{or
-              this.saveTask.isRunning
-              (not this.isDisplayNameValid)
-            }}
+            @disabled={{this.isSaveButtonDisabled}}
             class='save-button'
             {{on 'click' (perform this.saveTask)}}
             data-test-profile-settings-save-button

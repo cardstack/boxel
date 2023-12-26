@@ -14,10 +14,19 @@ test.describe('Profile', () => {
     await expect(
       page.locator('[data-test-profile-display-name]'),
     ).toContainText('');
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeDisabled();
     await page.locator('[data-test-display-name-field]').fill('John');
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeEnabled();
     await page.locator('[data-test-profile-settings-save-button]').click();
     await expect(
       page.locator('[data-test-profile-display-name]'),
     ).toContainText('John'); // This is read from the profile in matrix service that gets fetched from the matrix server on save
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeDisabled();
   });
 });
