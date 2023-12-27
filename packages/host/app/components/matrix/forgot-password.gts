@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -13,6 +14,7 @@ import {
   Button,
   FieldContainer,
   BoxelInput,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
@@ -50,39 +52,37 @@ export default class ForgotPassword extends Component<Signature> {
           @onInput={{this.setEmail}}
         />
       </FieldContainer>
-      <Button
-        class='button'
-        data-test-reset-your-password-btn
-        @kind='primary'
-        @disabled={{this.isForgotPasswordBtnDisabled}}
-        {{on 'click' this.sendEmailValidation}}
-      >Reset Your Password</Button>
+      <div class='button-wrapper'>
+        <Button
+          class='button'
+          data-test-reset-your-password-btn
+          @kind='primary'
+          @disabled={{this.isForgotPasswordBtnDisabled}}
+          {{on 'click' this.sendEmailValidation}}
+        >{{#if this.sendEmailValidationTask.isRunning}}
+            <LoadingIndicator />
+          {{else}}Reset Your Password{{/if}}</Button>
+        <span class='or'>or</span>
+        <Button class='button' data-test-cancel-btn {{on 'click' @onLogin}}>Back
+          to login</Button>
+      </div>
     {{else if (eq this.state.type 'waitForEmailValidation')}}
       <span class='title' data-test-email-validation>Please check your email to
         reset your password</span>
       <ul class='email-validation-instruction'>
         {{! @glint-ignore Property 'email' should be exist on 'waitForEmailValidation' type }}
         <li>We've sent an email to <b>{{this.state.email}}</b></li>
-        <li>Click on the link within the email to validate it's your email
-          address</li>
-        <li>Click "I have validated email" button to reset password</li>
+        <li>Click on the link within the email to reset your password</li>
       </ul>
-      <div class='button-wrapper'>
-        <Button
-          class='button'
-          data-test-have-validated-btn
-          @kind='primary'
-          @disabled={{this.sendEmailValidationTask.isRunning}}
-          {{on 'click' this.continueToResetPassword}}
-        >I have validated email</Button>
-        <span class='or'>or</span>
-        <Button
-          class='button'
-          data-test-resend-validation-btn
-          @disabled={{this.sendEmailValidationTask.isRunning}}
-          {{on 'click' this.resendEmailValidation}}
-        >Resend Email</Button>
-      </div>
+      <Button
+        class='button'
+        data-test-resend-validation-btn
+        @kind='primary'
+        @disabled={{this.sendEmailValidationTask.isRunning}}
+        {{on 'click' this.resendEmailValidation}}
+      >{{#if this.sendEmailValidationTask.isRunning}}
+          <LoadingIndicator />
+        {{else}}Resend Email{{/if}}</Button>
     {{else if (eq this.state.type 'resetPassword')}}
       <span class='title'>Reset your password</span>
       <FieldContainer
@@ -124,7 +124,9 @@ export default class ForgotPassword extends Component<Signature> {
           @kind='primary'
           @disabled={{this.isResetPasswordBtnDisabled}}
           {{on 'click' (perform this.resetPassword)}}
-        >Reset Password</Button>
+        >{{#if this.resetPassword.isRunning}}
+            <LoadingIndicator />
+          {{else}}Reset Password{{/if}}</Button>
       </div>
       {{#if this.error}}
         <span class='error' data-test-reset-password-error>{{this.error}}</span>
@@ -139,7 +141,6 @@ export default class ForgotPassword extends Component<Signature> {
           class='button'
           data-test-back-to-login-btn
           @kind='primary'
-          @disabled={{this.isForgotPasswordBtnDisabled}}
           {{on 'click' @onLogin}}
         >Sign In to Boxel</Button>
       </div>
@@ -199,9 +200,9 @@ export default class ForgotPassword extends Component<Signature> {
         font: 500 var(--boxel-font-sm);
       }
       .button {
-        --boxel-button-padding: var(--boxel-sp-sm);
+        --boxel-button-padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
         width: fit-content;
-        margin-top: var(--boxel-sp-lg);
+        min-width: 148px;
       }
       .button :deep(.boxel-loading-indicator) {
         display: flex;
@@ -245,8 +246,6 @@ export default class ForgotPassword extends Component<Signature> {
       }
     | {
         type: 'resetPassword';
-        email: string;
-        sendAttempt: number;
         clientSecret: string;
         sid: string;
       }
@@ -254,6 +253,21 @@ export default class ForgotPassword extends Component<Signature> {
     type: 'initial',
   };
   @service private declare matrixService: MatrixService;
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+
+    if (
+      this.matrixService.authState.sid &&
+      this.matrixService.authState.clientSecret
+    ) {
+      this.state = {
+        type: 'resetPassword',
+        sid: this.matrixService.authState.sid,
+        clientSecret: this.matrixService.authState.clientSecret,
+      };
+    }
+  }
 
   private get isForgotPasswordBtnDisabled() {
     return (
@@ -295,7 +309,7 @@ export default class ForgotPassword extends Component<Signature> {
   private checkPassword() {
     if (!this.password) {
       this.passwordError = 'Password is missing';
-    } else if (isValidPassword(this.password)) {
+    } else if (!isValidPassword(this.password)) {
       this.passwordError =
         'Password must be at least 8 characters long and include a number and a symbol';
     }
@@ -368,6 +382,8 @@ export default class ForgotPassword extends Component<Signature> {
         this.state.email,
         clientSecret,
         this.state.sendAttempt,
+        window.location.href +
+          `&authMode=forgot-password&clientSecret=${clientSecret}`,
       );
       this.state = {
         ...this.state,
@@ -388,20 +404,6 @@ export default class ForgotPassword extends Component<Signature> {
       throw e;
     }
   });
-
-  @action
-  private continueToResetPassword() {
-    if (this.state.type !== 'waitForEmailValidation') {
-      throw new Error(
-        `invalid state: cannot continueToResetPassword() in state ${this.state.type}`,
-      );
-    }
-
-    this.state = {
-      ...this.state,
-      type: 'resetPassword',
-    };
-  }
 
   private resetPassword = restartableTask(async () => {
     if (this.state.type !== 'resetPassword') {
@@ -424,6 +426,7 @@ export default class ForgotPassword extends Component<Signature> {
           type: 'm.login.email.identity',
         },
         this.password,
+        true,
       );
       this.state = {
         ...this.state,
@@ -438,10 +441,4 @@ export default class ForgotPassword extends Component<Signature> {
       throw e;
     }
   });
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface ForgotPassword {
-    'Matrix::ForgotPassword': typeof ForgotPassword;
-  }
 }

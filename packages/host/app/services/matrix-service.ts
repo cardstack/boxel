@@ -1,3 +1,4 @@
+import { action } from '@ember/object';
 import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
@@ -13,7 +14,7 @@ import {
   type IEvent,
   type MatrixClient,
 } from 'matrix-js-sdk';
-import { TrackedMap } from 'tracked-built-ins';
+import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import {
   type LooseSingleCardDocument,
@@ -52,10 +53,21 @@ export type OperatorModeContext = {
   openCards: CardDef[];
 };
 
+export type AuthMode = 'login' | 'register' | 'forgot-password';
+
+type AuthState = {
+  mode: AuthMode;
+  sid?: string;
+  clientSecret?: string;
+};
+
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
+  @tracked authState: AuthState = new TrackedObject({
+    mode: 'login',
+  });
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
@@ -487,6 +499,21 @@ export default class MatrixService extends Service {
     for (let [event, handler] of this.#eventBindings) {
       this.client.off(event, handler);
     }
+  }
+
+  @action
+  setAuthMode(authMode: AuthMode) {
+    this.authState.mode = authMode;
+  }
+
+  @action
+  setSid(sid: string | undefined) {
+    this.authState.sid = sid;
+  }
+
+  @action
+  setClientSecret(clientSecret: string | undefined) {
+    this.authState.clientSecret = clientSecret;
   }
 }
 

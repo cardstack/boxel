@@ -5,6 +5,9 @@ import { service } from '@ember/service';
 import ENV from '@cardstack/host/config/environment';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
+import MatrixService, {
+  AuthMode,
+} from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -29,16 +32,29 @@ export default class RenderCard extends Route<Model | null> {
     operatorModeEnabled: {
       refreshModel: true,
     },
+    authMode: {
+      refreshModel: true,
+    },
+    sid: {
+      refreshModel: true,
+    },
+    clientSecret: {
+      refreshModel: true,
+    },
   };
 
   @service declare cardService: CardService;
   @service declare router: RouterService;
+  @service declare matrixService: MatrixService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
   async model(params: {
     path: string;
     operatorModeState: string;
     operatorModeEnabled: boolean;
+    authMode?: AuthMode;
+    sid?: string;
+    clientSecret?: string;
   }): Promise<Model> {
     let { path, operatorModeState, operatorModeEnabled } = params;
     path = path || '';
@@ -55,6 +71,12 @@ export default class RenderCard extends Route<Model | null> {
       }
 
       if (operatorModeEnabled) {
+        if (params.authMode) {
+          this.matrixService.setAuthMode(params.authMode);
+          this.matrixService.setSid(params.sid);
+          this.matrixService.setClientSecret(params.clientSecret);
+        }
+
         let operatorModeStateObject = JSON.parse(operatorModeState);
 
         if (this.operatorModeStateService.serialize() === operatorModeState) {

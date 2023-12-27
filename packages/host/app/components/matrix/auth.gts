@@ -1,17 +1,16 @@
 import { fn } from '@ember/helper';
-import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { CardContainer, BoxelHeader } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
+import type MatrixService from '@cardstack/host/services/matrix-service';
+
 import ForgotPassword from './forgot-password';
 import Login from './login';
 import RegisterUser from './register-user';
-
-type Mode = 'login' | 'register' | 'forgot-password';
 
 export default class Auth extends Component {
   <template>
@@ -25,13 +24,20 @@ export default class Auth extends Component {
           </BoxelHeader>
           <div class='content'>
             {{#if (eq this.mode 'register')}}
-              <RegisterUser @onCancel={{fn this.setMode 'login'}} />
+              <RegisterUser
+                @onCancel={{fn this.matrixService.setAuthMode 'login'}}
+              />
             {{else if (eq this.mode 'forgot-password')}}
-              <ForgotPassword @onLogin={{fn this.setMode 'login'}} />
+              <ForgotPassword
+                @onLogin={{fn this.matrixService.setAuthMode 'login'}}
+              />
             {{else}}
               <Login
-                @onRegistration={{fn this.setMode 'register'}}
-                @onForgotPassword={{fn this.setMode 'forgot-password'}}
+                @onRegistration={{fn this.matrixService.setAuthMode 'register'}}
+                @onForgotPassword={{fn
+                  this.matrixService.setAuthMode
+                  'forgot-password'
+                }}
               />
             {{/if}}
           </div>
@@ -84,11 +90,10 @@ export default class Auth extends Component {
     </style>
   </template>
 
-  @tracked mode: Mode = 'login';
+  @service private declare matrixService: MatrixService;
 
-  @action
-  setMode(mode: Mode) {
-    this.mode = mode;
+  private get mode() {
+    return this.matrixService.authState.mode;
   }
 }
 
