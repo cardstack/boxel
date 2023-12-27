@@ -5,10 +5,7 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { IconButton } from '@cardstack/boxel-ui/components';
 import { and, not } from '@cardstack/boxel-ui/helpers';
-
-import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
 
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';

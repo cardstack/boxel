@@ -6,6 +6,7 @@ interface Signature {
 
 export default class AiAssistantButton extends Component<Signature> {
   <template>
+    {{! template-lint-disable no-inline-styles }}
     <button
       class='ai-assistant-button'
       data-test-open-chat
