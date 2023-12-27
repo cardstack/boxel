@@ -628,7 +628,10 @@ export default class CodeSubmode extends Component<Signature> {
         @isCreateModalShown={{bool this.isCreateModalOpen}}
       />
     </div>
-    <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
+    <SubmodeLayout
+      @onCardSelectFromSearch={{this.openSearchResultInEditor}}
+      @hideAiAssistant={{true}}
+    >
       <div
         class='code-mode'
         data-test-code-mode

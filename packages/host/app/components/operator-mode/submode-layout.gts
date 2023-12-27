@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { IconButton } from '@cardstack/boxel-ui/components';
+import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
 
@@ -33,6 +34,7 @@ const { APP } = ENV;
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    hideAiAssistant?: boolean;
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
     onCardSelectFromSearch: (card: CardDef) => void;
@@ -130,7 +132,7 @@ export default class SubmodeLayout extends Component<Signature> {
       />
       {{yield this.openSearchSheetToPrompt}}
 
-      {{#if APP.experimentalAIEnabled}}
+      {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
         {{#if this.isChatVisible}}
           <div class='container__chat-sidebar'>
             <ChatSidebar @onClose={{this.toggleChat}} />
