@@ -623,7 +623,7 @@ export class Realm {
                   return;
                 }
 
-                let { data: { querySelector, querySelectorAll, click, fillInput } } = event;
+                let { data: { querySelector, querySelectorAll, click, fillInput, uuid } } = event;
                 let response;
                 if (querySelector) {
                   let element = document.querySelector(querySelector);
@@ -651,6 +651,9 @@ export class Realm {
                     response =
                       "Element not found when calling 'fillInput(" + target + ")'.";
                   }
+                } else if (uuid) {
+                  // this can be ignored
+                  response = null
                 } else {
                   response = 'Do not know how to handle event data: ' + JSON.stringify(event.data);
                 }

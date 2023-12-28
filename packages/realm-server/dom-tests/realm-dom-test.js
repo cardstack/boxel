@@ -18,11 +18,12 @@ class Messenger {
 
   handleEvent = (event) => {
     if (this.#request === undefined) {
-      throw new Error(
+      console.warn(
         `received response from iframe without corresponding request ${JSON.stringify(
           event.data,
         )}`,
       );
+      return;
     }
     this.#request.deferred(event.data);
   };
@@ -131,7 +132,12 @@ async function boot(url, waitForSelector, isLoginRequired) {
   let messenger = new Messenger(iframe);
   try {
     if (isLoginRequired) {
-      await waitFor('[data-test-login-btn]', messenger);
+      try {
+        await waitFor('[data-test-login-btn]', messenger);
+      } catch (err) {
+        // already logged in
+        await logout(messenger);
+      }
       await login(username, password, messenger);
     }
 
@@ -142,11 +148,7 @@ async function boot(url, waitForSelector, isLoginRequired) {
   return messenger;
 }
 
-async function bootToCodeModeFile(
-  pathToFile,
-  waitForSelector,
-  isLoginRequired,
-) {
+async function bootToCodeModeFile(pathToFile, waitForSelector) {
   let codeModeStateParam = JSON.stringify({
     stacks: [[]],
     submode: 'code',
@@ -158,11 +160,7 @@ async function bootToCodeModeFile(
     codeModeStateParam,
   )}`;
 
-  return await boot(
-    `${testRealmURL}/${path}`,
-    waitForSelector,
-    isLoginRequired,
-  );
+  return await boot(`${testRealmURL}/${path}`, waitForSelector, true);
 }
 
 async function login(username, password, messenger) {
@@ -187,18 +185,21 @@ async function login(username, password, messenger) {
 }
 
 async function logout(messenger) {
-  let openChatBtn = await querySelector('[data-test-open-chat]', messenger);
-  if (!openChatBtn) {
+  let openAccountBtn = await querySelector(
+    '[data-test-profile-icon-button]',
+    messenger,
+  );
+  if (!openAccountBtn) {
     return;
   }
   let err = await messenger.send({
-    click: '[data-test-open-chat]',
+    click: '[data-test-profile-icon-button]',
   });
   if (err) {
     assert.ok(false, `encountered error: ${err}`);
   }
   err = await messenger.send({
-    click: '[data-test-logout-btn]',
+    click: '[data-test-signout-button]',
   });
   if (err) {
     assert.ok(false, `encountered error: ${err}`);
@@ -243,7 +244,6 @@ QUnit.module(
       messenger = await bootToCodeModeFile(
         'person-1.json',
         '[data-test-directory-level]',
-        true,
       );
 
       let nav = await querySelector('nav', messenger);
@@ -271,7 +271,6 @@ QUnit.module(
       messenger = await bootToCodeModeFile(
         'person.gts',
         '[data-test-card-schema="Person"]',
-        true,
       );
       let location = await messenger.send('location');
       assert.strictEqual(
@@ -306,11 +305,7 @@ QUnit.module(
     });
 
     test('renders card instance', async function (assert) {
-      messenger = await bootToCodeModeFile(
-        'person-2.json',
-        '[data-test-card]',
-        true,
-      );
+      messenger = await bootToCodeModeFile('person-2.json', '[data-test-card]');
 
       let card = await querySelector('[data-test-card]', messenger);
       assert.strictEqual(
@@ -324,7 +319,6 @@ QUnit.module(
       messenger = await bootToCodeModeFile(
         'person.gts',
         '[data-test-directory-level]',
-        true,
       );
       let error = await messenger.send({
         click: '[data-test-file="person-1.json"]',
