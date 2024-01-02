@@ -13,7 +13,6 @@ import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import ChatSidebar from '../matrix/chat-sidebar';
 import SearchSheet, {
   SearchSheetMode,
   SearchSheetModes,
@@ -25,6 +24,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile-settings-modal';
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import AiAssistantButton from '@cardstack/host/components/operator-mode/ai-assistant-button';
+import AiAssistantPanel from '@cardstack/host/components/operator-mode/ai-assistant-panel';
 
 const { APP } = ENV;
 
@@ -42,15 +42,17 @@ interface Signature {
 }
 
 export default class SubmodeLayout extends Component<Signature> {
-  @tracked private isChatVisible = false;
+  @tracked private isAiAssistantVisible = false;
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
 
-  private get chatVisibilityClass() {
-    return this.isChatVisible ? 'chat-open' : 'chat-closed';
+  private get aiAssistantVisibilityClass() {
+    return this.isAiAssistantVisible
+      ? 'ai-assistant-open'
+      : 'ai-assistant-closed';
   }
 
   private get allStackItems() {
@@ -85,7 +87,7 @@ export default class SubmodeLayout extends Component<Signature> {
 
   @action
   private toggleChat() {
-    this.isChatVisible = !this.isChatVisible;
+    this.isAiAssistantVisible = !this.isAiAssistantVisible;
   }
 
   @action private closeSearchSheet() {
@@ -121,7 +123,10 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   <template>
-    <div class='operator-mode-with-chat {{this.chatVisibilityClass}}'>
+    <div
+      class='operator-mode-with-ai-assistant
+        {{this.aiAssistantVisibilityClass}}'
+    >
       <SubmodeSwitcher
         @submode={{this.operatorModeStateService.state.submode}}
         @onSubmodeSelect={{this.updateSubmode}}
@@ -130,10 +135,11 @@ export default class SubmodeLayout extends Component<Signature> {
       {{yield this.openSearchSheetToPrompt}}
 
       {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
-        {{#if this.isChatVisible}}
-          <div class='container__chat-sidebar'>
-            <ChatSidebar @onClose={{this.toggleChat}} />
-          </div>
+        {{#if this.isAiAssistantVisible}}
+          <AiAssistantPanel
+            @onClose={{this.toggleChat}}
+            class='ai-assistant-panel'
+          />
         {{else}}
           <AiAssistantButton class='chat-btn' {{on 'click' this.toggleChat}} />
         {{/if}}
@@ -176,24 +182,17 @@ export default class SubmodeLayout extends Component<Signature> {
     />
 
     <style>
-      .operator-mode-with-chat {
-        display: grid;
-        grid-template-rows: 1fr;
-        grid-template-columns: 1.5fr 0.5fr;
-        gap: 0px;
+      .operator-mode-with-ai-assistant {
+        display: flex;
         height: 100%;
       }
 
-      .operator-mode-with-chat > * {
+      .operator-mode-with-ai-assistant > * {
         z-index: 1;
       }
 
-      .chat-open {
+      .ai-assistant-open {
         grid-template-columns: 1.5fr 0.5fr;
-      }
-
-      .chat-closed {
-        grid-template-columns: 1fr;
       }
 
       .chat-btn {
@@ -205,16 +204,17 @@ export default class SubmodeLayout extends Component<Signature> {
         box-shadow: var(--boxel-deep-box-shadow);
       }
 
+      .ai-assistant-panel {
+        flex: 0;
+        flex-basis: 371px;
+        height: 100%;
+      }
+
       .submode-switcher {
         position: absolute;
         top: 0;
         left: 0;
         padding: var(--boxel-sp);
-      }
-
-      .container__chat-sidebar {
-        height: 100vh;
-        grid-column: 2;
       }
 
       .profile-icon-container {
