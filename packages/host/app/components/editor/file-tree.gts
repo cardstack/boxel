@@ -1,19 +1,22 @@
 import type RouterService from '@ember/routing/router-service';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import { restartableTask, timeout } from 'ember-concurrency';
 
 import Directory from './directory';
 
-interface Args {
+interface Signature {
   Args: {
     realmURL: URL;
   };
 }
 
-export default class FileTree extends Component<Args> {
+export default class FileTree extends Component<Signature> {
   <template>
     <div class='realm-info'>
       <RealmInfoProvider @realmURL={{@realmURL}}>
@@ -30,9 +33,23 @@ export default class FileTree extends Component<Args> {
     </div>
     <nav>
       <Directory @relativePath='' @realmURL={{@realmURL}} />
+      {{#if this.showMask}}
+        <div class='mask' data-test-file-tree-mask></div>
+      {{/if}}
     </nav>
 
     <style>
+      .mask {
+        position: absolute;
+        top: 0;
+        left: 0;
+        background-color: white;
+        height: 100%;
+        width: 100%;
+      }
+      nav {
+        position: relative;
+      }
       .realm-info {
         position: sticky;
         top: calc(var(--boxel-sp-xxs) * -1);
@@ -56,5 +73,16 @@ export default class FileTree extends Component<Args> {
     </style>
   </template>
 
-  @service declare router: RouterService;
+  @service private declare router: RouterService;
+  @tracked private showMask = true;
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    this.hideMask.perform();
+  }
+
+  private hideMask = restartableTask(async () => {
+    // fine tuned to coincide with debounce in RestoreScrollPosition modifier
+    await timeout(300);
+    this.showMask = false;
+  });
 }

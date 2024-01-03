@@ -254,6 +254,32 @@ export async function loginUser(
   };
 }
 
+export async function updateDisplayName(
+  synapse: SynapseInstance,
+  userId: string,
+  accessToken: string,
+  newDisplayName: string,
+): Promise<void> {
+  let response = await fetch(
+    `http://127.0.0.1:${synapse.mappedPort}/_matrix/client/v3/profile/${userId}/displayname`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ displayname: newDisplayName }),
+    },
+  );
+
+  console.log(
+    `Received: ${response.status}, ${response.statusText}, ${JSON.stringify(
+      await response.json(),
+    )}`,
+  );
+
+  return;
+}
+
 export async function createRegistrationToken(
   synapse: SynapseInstance,
   adminAccessToken: string,

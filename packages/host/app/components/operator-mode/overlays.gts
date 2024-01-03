@@ -126,7 +126,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
                   @items={{array
                     (menuItem
                       'Delete'
-                      (fn @publicAPI.deleteCard card)
+                      (fn @publicAPI.delete card)
                       icon=IconTrash
                       dangerous=true
                     )

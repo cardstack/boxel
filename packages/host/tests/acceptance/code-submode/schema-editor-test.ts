@@ -754,7 +754,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test<TestContextWithSave>('deleting a field from schema editor', async function (assert) {
-    assert.expect(7);
+    assert.expect(9);
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
@@ -784,6 +784,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         'firstName field removed from saved module',
       );
     });
+    assert.dom('[data-test-remove-field-modal]').doesNotExist();
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
     await click('[data-test-boxel-menu-item-text="Remove Field"]');
 
     assert.dom('[data-test-remove-field-modal]').exists();

@@ -252,7 +252,7 @@ export default class CreateFileModal extends Component<Signature> {
       }
       .footer-buttons {
         display: flex;
-        justify-content: flex-end;
+        margin-left: auto;
         gap: var(--boxel-sp-xxs);
       }
       .gts-extension {

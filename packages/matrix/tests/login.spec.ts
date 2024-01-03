@@ -57,7 +57,7 @@ test.describe('Login', () => {
     await assertLoggedOut(page);
   });
 
-  test('it can logout using the profile menu', async ({ page }) => {
+  test('it can logout using the profile popover', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
     await expect(

@@ -69,6 +69,7 @@ interface Signature {
 
 export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
+  private notifyFileBrowserIsVisible: (() => void) | undefined;
 
   private get isFileTreeShowing() {
     return this.args.fileView === 'browser' || !this.args.isFileOpen;
@@ -94,6 +95,17 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
     }
   }
 
+  private setFileView = (view: FileView) => {
+    this.args.setFileView(view);
+    if (view === 'browser') {
+      this.notifyFileBrowserIsVisible?.();
+    }
+  };
+
+  private whenFileBrowserVisible = (setVisible: () => void) => {
+    this.notifyFileBrowserIsVisible = setVisible;
+  };
+
   <template>
     <InnerContainer
       class={{cn 'left-panel' file-browser=this.isFileTreeShowing}}
@@ -108,14 +120,14 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         <ToggleButton
           @disabled={{not @isFileOpen}}
           @isActive={{not this.isFileTreeShowing}}
-          {{on 'click' (fn @setFileView 'inspector')}}
+          {{on 'click' (fn this.setFileView 'inspector')}}
           data-test-inspector-toggle
         >
           Inspector
         </ToggleButton>
         <ToggleButton
           @isActive={{this.isFileTreeShowing}}
-          {{on 'click' (fn @setFileView 'browser')}}
+          {{on 'click' (fn this.setFileView 'browser')}}
           data-test-file-browser-toggle
         >
           File Tree
@@ -124,6 +136,8 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
       <InnerContainerContent
         class='content'
         data-test-togglable-left-panel
+        @withMask={{this.isFileTreeShowing}}
+        @whenVisible={{this.whenFileBrowserVisible}}
         {{RestoreScrollPosition
           container=this.scrollPositionContainer
           key=this.scrollPositionKey
