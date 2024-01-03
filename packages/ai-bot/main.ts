@@ -17,15 +17,9 @@ import {
   cleanContent,
   getFunctions,
 } from './helpers';
+import { OpenAIError } from 'openai/error';
 
 let log = logger('ai-bot');
-
-/***
- * TODO:
- * When constructing the historical cards, also get the card ones so we have that context
- * Which model to use & system prompts
- * interactions?
- */
 
 const openai = new OpenAI();
 
@@ -76,7 +70,6 @@ async function sendOption(client: MatrixClient, room: Room, patch: any) {
     },
   };
   log.info(JSON.stringify(messageObject, null, 2));
-  log.info('Sending', messageObject);
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
@@ -106,6 +99,31 @@ function getResponse(history: IRoomEvent[], aiBotUsername: string) {
       functions: functions,
       function_call: 'auto',
     });
+  }
+}
+
+async function sendError(
+  client: MatrixClient,
+  room: Room,
+  error: any,
+  eventToUpdate: string | undefined,
+) {
+  if (error instanceof OpenAIError) {
+    log.error(`OpenAI error: ${error.name} - ${error.message}`);
+  } else {
+    log.error(`Unknown error: ${error}`);
+  }
+  try {
+    await sendMessage(
+      client,
+      room,
+      'There was an error processing your request, please try again later',
+      eventToUpdate,
+    );
+  } catch (e) {
+    // We've had a problem sending the error message back to the user
+    // Log and continue
+    log.error(`Error sending error message back to user: ${e}`);
   }
 }
 
@@ -247,7 +265,17 @@ Common issues are:
         })
         .on('functionCall', async (functionCall) => {
           console.log('Function call', functionCall);
-          let args = JSON.parse(functionCall.arguments);
+          let args;
+          try {
+            args = JSON.parse(functionCall.arguments);
+          } catch (error) {
+            return await sendError(
+              client,
+              room,
+              error,
+              initialMessage.event_id,
+            );
+          }
           if (functionCall.name === 'patchCard') {
             await sendMessage(
               client,
@@ -258,9 +286,15 @@ Common issues are:
             return await sendOption(client, room, args);
           }
           return;
+        })
+        .on('error', async (error: OpenAIError) => {
+          return await sendError(client, room, error, initialMessage.event_id);
         });
 
-      let finalContent = await runner.finalContent();
+      // We also need to catch the error when getting the final content
+      let finalContent = await runner.finalContent().catch(async (error) => {
+        return await sendError(client, room, error, initialMessage.event_id);
+      });
       if (finalContent) {
         finalContent = cleanContent(finalContent);
       }
