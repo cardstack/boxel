@@ -170,6 +170,18 @@ export default class CardPrerender extends Component {
     reader: Reader;
     entrySetter: EntrySetter;
   } {
+    let self = this;
+    function readFileAsText(
+      path: LocalPath,
+      opts?: { withFallbacks?: true },
+    ): Promise<{ content: string; lastModified: number } | undefined> {
+      return _readFileAsText(
+        path,
+        self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
+        opts,
+      );
+    }
+
     if (this.fastboot.isFastBoot) {
       let optsId = (globalThis as any).runnerOptsId;
       if (optsId == null) {
@@ -180,17 +192,6 @@ export default class CardPrerender extends Component {
         entrySetter: getRunnerOpts(optsId).entrySetter,
       };
     } else {
-      let self = this;
-      function readFileAsText(
-        path: LocalPath,
-        opts?: { withFallbacks?: true },
-      ): Promise<{ content: string; lastModified: number } | undefined> {
-        return _readFileAsText(
-          path,
-          self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
-          opts,
-        );
-      }
       return {
         reader: {
           readdir: this.localIndexer.adapter.readdir.bind(

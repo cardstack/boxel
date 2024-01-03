@@ -5,11 +5,14 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { IconButton } from '@cardstack/boxel-ui/components';
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
-import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
+import { and, not } from '@cardstack/boxel-ui/helpers';
 
+import AiAssistantButton from '@cardstack/host/components/operator-mode/ai-assistant-button';
+import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
+import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile-settings-modal';
 import ENV from '@cardstack/host/config/environment';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
@@ -21,17 +24,16 @@ import SearchSheet, {
   SearchSheetModes,
 } from '../search-sheet';
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
-import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile-settings-modal';
-import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 
 const { APP } = ENV;
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    hideAiAssistant?: boolean;
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
     onCardSelectFromSearch: (card: CardDef) => void;
@@ -71,10 +73,11 @@ export default class SubmodeLayout extends Component<Signature> {
         this.operatorModeStateService.updateCodePath(null);
         break;
       case Submodes.Code:
-        let codePath = this.lastCardInRightMostStack
-          ? new URL(this.lastCardInRightMostStack.id + '.json')
-          : null;
-        this.operatorModeStateService.updateCodePath(codePath);
+        this.operatorModeStateService.updateCodePath(
+          this.lastCardInRightMostStack
+            ? new URL(this.lastCardInRightMostStack.id + '.json')
+            : null,
+        );
         break;
       default:
         throw assertNever(submode);
@@ -129,20 +132,13 @@ export default class SubmodeLayout extends Component<Signature> {
       />
       {{yield this.openSearchSheetToPrompt}}
 
-      {{#if APP.experimentalAIEnabled}}
+      {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
         {{#if this.isChatVisible}}
           <div class='container__chat-sidebar'>
             <ChatSidebar @onClose={{this.toggleChat}} />
           </div>
         {{else}}
-          <IconButton
-            data-test-open-chat
-            class='chat-btn'
-            @icon={{SparkleIcon}}
-            @width='25'
-            @height='25'
-            {{on 'click' this.toggleChat}}
-          />
+          <AiAssistantButton class='chat-btn' {{on 'click' this.toggleChat}} />
         {{/if}}
       {{/if}}
     </div>
@@ -204,24 +200,12 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .chat-btn {
-        --boxel-icon-button-width: var(--container-button-size);
-        --boxel-icon-button-height: var(--container-button-size);
-        --icon-color: var(--boxel-highlight-hover);
-
         position: absolute;
         bottom: var(--boxel-sp);
         right: var(--boxel-sp);
         margin-right: 0;
-        padding: var(--boxel-sp-xxxs);
-        border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-dark);
-        border: none;
+        background-color: var(--boxel-ai-purple);
         box-shadow: var(--boxel-deep-box-shadow);
-        transition: background-color var(--boxel-transition);
-      }
-      .chat-btn:hover {
-        --icon-color: var(--boxel-dark);
-        background-color: var(--boxel-highlight-hover);
       }
 
       .submode-switcher {

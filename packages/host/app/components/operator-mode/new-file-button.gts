@@ -1,10 +1,13 @@
-import Component from '@glimmer/component';
 import { capitalize } from '@ember/string';
+import Component from '@glimmer/component';
+
+import flatMap from 'lodash/flatMap';
 import startCase from 'lodash/startCase';
+
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
-import flatMap from 'lodash/flatMap';
+
 import { type FileType, newFileTypes } from './create-file-modal';
 
 interface Signature {

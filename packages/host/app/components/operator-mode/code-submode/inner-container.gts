@@ -1,6 +1,7 @@
-import Component from '@glimmer/component';
 import type Owner from '@ember/owner';
+import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import type { ComponentLike } from '@glint/template';

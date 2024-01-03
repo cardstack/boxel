@@ -30,7 +30,7 @@ export default class BinaryFileInfo extends Component<Signature> {
         'MMM d, yyyy H:mm:ss a',
       );
     }
-    return;
+    return undefined;
   }
 
   <template>

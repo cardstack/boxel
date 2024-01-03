@@ -853,6 +853,7 @@ module('Integration | card-copy', function (hooks) {
         },
       });
       assert.strictEqual(json.included?.length, 1);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
       let included = json.included?.[0]!;
       assert.strictEqual(included.id, `${testRealmURL}Pet/mango`);
       assert.deepEqual(included.meta.adoptsFrom, {
@@ -970,6 +971,7 @@ module('Integration | card-copy', function (hooks) {
         },
       });
       assert.strictEqual(json.included?.length, 1);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
       let included = json.included?.[0]!;
       assert.strictEqual(included.id, `${testRealm2URL}Pet/paper`);
       assert.deepEqual(included.meta.adoptsFrom, {
