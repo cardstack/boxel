@@ -33,7 +33,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     </div>
     <style>
       .ai-assistant-panel {
-        background-color: var(--boxel-ai-purple);
+        background-color: #290857;
         border: none;
       }
       .close-ai-panel {

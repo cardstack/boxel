@@ -1,8 +1,7 @@
+import { concat } from '@ember/helper';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-
-import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { stringToColor } from '@cardstack/host/lib/utils';
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -10,8 +9,9 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 interface Signature {
   Args: {
     userId: string | null;
+    cssVariables?: Record<string, string>;
   };
-  Element: HTMLElement;
+  Element: HTMLDivElement;
 }
 
 export default class ProfileAvatarIcon extends Component<Signature> {
@@ -27,43 +27,61 @@ export default class ProfileAvatarIcon extends Component<Signature> {
     }
   }
 
+  get style() {
+    let cssVariables = this.args.cssVariables || {};
+    cssVariables['profile-avatar-icon-background'] =
+      cssVariables['profile-avatar-icon-background'] ||
+      stringToColor(this.args.userId);
+    let style = '';
+
+    for (let [key, value] of Object.entries(cssVariables)) {
+      style += `--${key}: ${value};`;
+    }
+
+    return htmlSafe(style);
+  }
+
+  <template>
+    <ProfileAvatarIconVisual
+      @isReady={{this.matrixService.profile.loaded}}
+      @profileInitials={{this.profileInitials}}
+      style={{this.style}}
+      ...attributes
+    />
+  </template>
+}
+
+interface ProfileAvatarIconVisualSignature {
+  Args: {
+    isReady: boolean;
+    profileInitials: string;
+  };
+  Element: HTMLDivElement;
+}
+
+export class ProfileAvatarIconVisual extends Component<ProfileAvatarIconVisualSignature> {
   <template>
     <style>
       .profile-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 50px;
-        border: 2px solid white;
+        background: var(--profile-avatar-icon-background);
+        border-radius: var(--profile-avatar-icon-size, 40px);
+        border: var(--profile-avatar-icon-border, 2px solid white);
         display: flex;
-      }
-
-      .profile-icon--big {
-        width: 80px;
-        height: 80px;
-        border: 0;
+        height: var(--profile-avatar-icon-size, 40px);
+        width: var(--profile-avatar-icon-size, 40px);
       }
 
       .profile-icon > span {
         color: white;
         margin: auto;
-
-        font-size: var(--boxel-font-size-lg);
-      }
-
-      .profile-icon--big > span {
-        font-size: var(--boxel-font-size-xxl);
+        font-size: calc(var(--profile-avatar-icon-size, 40px) * 0.55);
       }
     </style>
 
-    <div
-      class='profile-icon'
-      style={{htmlSafe (cn 'background:' (stringToColor @userId))}}
-      data-test-profile-icon
-      ...attributes
-    >
+    <div class='profile-icon' data-test-profile-icon ...attributes>
       <span>
-        {{#if this.matrixService.profile.loaded}}
-          {{this.profileInitials}}
+        {{#if @isReady}}
+          {{@profileInitials}}
         {{/if}}
       </span>
     </div>

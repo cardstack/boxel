@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { hash } from '@ember/helper';
 
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -93,7 +94,10 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
     <div class='profile-popover-body' data-test-profile-icon-container>
       <ProfileAvatarIcon
         @userId={{this.matrixService.userId}}
-        class='profile-icon--big'
+        @cssVariables={{hash
+          profile-avatar-icon-size='70px'
+          profile-avatar-icon-border='0'
+        }}
       />
 
       <div class='display-name' data-test-profile-display-name>
@@ -113,12 +117,6 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
 
       .profile-popover-body > * {
         margin: auto;
-      }
-
-      .profile-popover-body > .profile-icon {
-        width: 70px;
-        height: 70px;
-        font-size: var(--boxel-font-size-xxl);
       }
 
       .display-name {
