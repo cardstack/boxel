@@ -424,6 +424,11 @@ export class CurrentRun {
           `bug: could not derive search doc for instance ${instanceURL.href}`,
         );
       }
+      if (cardType.displayName === 'Card') {
+        searchData.cardTypeName = cardType.name;
+      } else {
+        searchData.cardTypeName = cardType.displayName;
+      }
     } catch (err: any) {
       uncaughtError = err;
     }

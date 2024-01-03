@@ -3625,6 +3625,30 @@ posts/ignore-me.json
       );
     });
 
+    test('can sort by card display name (card type shown in the interface)', async function (assert) {
+      let { data: matching } = await indexer.search({
+        sort: [
+          {
+            on: baseCardRef,
+            by: 'cardTypeName',
+          },
+        ],
+      });
+
+      assert.deepEqual(
+        matching.slice(0, 7).map((m) => m.id), // first 7 should be enough to test sorting by card type (name)
+        [
+          `${paths.url}card-1`, // article
+          `${paths.url}cards/2`, // article
+          `${paths.url}card-2`, // book
+          `${paths.url}books/1`, // book
+          `${paths.url}books/2`, // book
+          `${paths.url}books/3`, // book
+          `${paths.url}booking1`, // booking
+        ],
+      );
+    });
+
     test('can sort by multiple string field conditions in given directions', async function (assert) {
       let { data: matching } = await indexer.search({
         sort: [
