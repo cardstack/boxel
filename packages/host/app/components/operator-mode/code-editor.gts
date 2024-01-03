@@ -165,7 +165,7 @@ export default class CodeEditor extends Component<Signature> {
       }
     } else if (
       declaration.path?.node &&
-      'loc' in declaration.path?.node &&
+      'loc' in (declaration.path?.node || {}) &&
       declaration.path.node.loc
     ) {
       //This is a fallback path if we cannot find declaration / code for element

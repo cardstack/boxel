@@ -13,6 +13,12 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 
+import {
+  IconPencil,
+  IconTurnDownRight,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
+
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import CardService from '@cardstack/host/services/card-service';
@@ -22,12 +28,8 @@ import type {
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
+
 import { type RenderedCardForOverlayActions } from './stack-item';
-import {
-  IconPencil,
-  IconTurnDownRight,
-  ThreeDotsHorizontal,
-} from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   item: RenderedCardForOverlayActions;

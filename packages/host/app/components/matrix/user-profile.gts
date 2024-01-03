@@ -16,6 +16,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { not } from '@cardstack/boxel-ui/helpers';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 export default class UserProfile extends Component {

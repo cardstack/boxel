@@ -42,8 +42,8 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
-import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 import { getRoom } from '../../resources/room';
 
@@ -344,7 +344,7 @@ export default class Room extends Component<RoomArgs> {
     if (isMatrixCardError(this.objective)) {
       return this.objective;
     }
-    return;
+    return undefined;
   }
 
   private patchCard = (cardId: string, attributes: any) => {
@@ -352,6 +352,7 @@ export default class Room extends Component<RoomArgs> {
   };
 
   private subscribeToRoomChanges = task(async () => {
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this.room && this.subscribedRoom !== this.room) {
         if (this.subscribedRoom) {
@@ -408,7 +409,7 @@ export default class Room extends Component<RoomArgs> {
         'embedded',
       );
     }
-    return;
+    return undefined;
   }
 
   private get messageCardComponents() {
@@ -428,7 +429,7 @@ export default class Room extends Component<RoomArgs> {
   @cached
   private get memberNames() {
     if (!this.room) {
-      return;
+      return undefined;
     }
     return [
       ...this.room.joinedMembers.map((m) => m.displayName),
@@ -455,7 +456,7 @@ export default class Room extends Component<RoomArgs> {
         'embedded',
       );
     }
-    return;
+    return undefined;
   }
 
   private get membersToInviteFormatted() {

@@ -28,10 +28,12 @@ import {
 
 import type { Query, Filter } from '@cardstack/runtime-common/query';
 
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 
-import { getSearchResults, Search } from '../../resources/search';
 import { getCard } from '../../resources/card-resource';
+import { getSearchResults, Search } from '../../resources/search';
 
 import {
   suggestCardChooserTitle,
@@ -47,7 +49,6 @@ import CardCatalog from './index';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 interface Signature {
   Args: {
@@ -248,6 +249,7 @@ export default class CardCatalogModal extends Component<Signature> {
     // realm filters and search key filter these groups of cards
     // filters dropdown menu will always display all available realms
     if (this.state.request.search.instancesByRealm.length) {
+      // eslint-disable-next-line ember/no-side-effects
       this.state.searchResults = this.state.request.search.instancesByRealm;
     }
     return this.state.request.search.instancesByRealm ?? [];

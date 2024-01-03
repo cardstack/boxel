@@ -3,6 +3,7 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { all, task, timeout } from 'ember-concurrency';
@@ -18,7 +19,6 @@ import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import config from '@cardstack/host/config/environment';
 import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
-import { isTesting } from '@embroider/macros';
 
 import {
   getLiveSearchResults,
@@ -147,11 +147,10 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   private loadMatrix = task(async () => {
     await all([
-      new Promise<void>(async (resolve) => {
+      await (async () => {
         await this.matrixService.ready;
         await this.matrixService.start();
-        resolve();
-      }),
+      })(),
       timeout(loginMessageTimeoutMs),
     ]);
   });

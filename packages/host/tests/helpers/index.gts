@@ -61,6 +61,7 @@ type CardAPI = typeof import('https://cardstack.com/base/card-api');
 export function cleanWhiteSpace(text: string) {
   // this also normalizes non-breaking space characters which seem
   // to be appearing in date/time serialization in some envs
+  // eslint-disable-next-line no-irregular-whitespace
   return text.replace(/[\s ]+/g, ' ').trim();
 }
 

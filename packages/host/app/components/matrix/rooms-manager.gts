@@ -21,9 +21,9 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
-import { aiBotUsername } from '@cardstack/runtime-common';
-
 import { not, eq } from '@cardstack/boxel-ui/helpers';
+
+import { aiBotUsername } from '@cardstack/runtime-common';
 
 import {
   isMatrixError,

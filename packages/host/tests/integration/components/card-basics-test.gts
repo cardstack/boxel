@@ -22,7 +22,6 @@ import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
-import { mango } from '../../helpers/image-fixture';
 
 import {
   BaseDef,
@@ -39,6 +38,7 @@ import {
   setupCardLogs,
   saveCard,
 } from '../../helpers';
+import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');

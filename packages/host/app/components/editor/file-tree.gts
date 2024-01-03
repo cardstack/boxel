@@ -1,12 +1,13 @@
-import type RouterService from '@ember/routing/router-service';
 import type Owner from '@ember/owner';
+import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { restartableTask, timeout } from 'ember-concurrency';
+
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import { restartableTask, timeout } from 'ember-concurrency';
 
 import Directory from './directory';
 

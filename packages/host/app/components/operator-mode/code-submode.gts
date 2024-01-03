@@ -7,8 +7,7 @@ import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
-//@ts-expect-error cached type not available yet
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 
@@ -34,6 +33,7 @@ import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analy
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
@@ -64,7 +64,6 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
-import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
 interface Signature {
   Args: {
@@ -372,7 +371,7 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get _selectedDeclaration() {
     let codeSelection = this.operatorModeStateService.state.codeSelection;
-    if (codeSelection === undefined) return;
+    if (codeSelection === undefined) return undefined;
     return findDeclarationByName(codeSelection, this.declarations);
   }
 
