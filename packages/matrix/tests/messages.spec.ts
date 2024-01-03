@@ -10,7 +10,7 @@ import {
   sendMessage,
   joinRoom,
   testHost,
-  reloadAndOpenChat,
+  reloadAndOpenAiAssistant,
   test,
   isInRoom,
 } from '../helpers';
@@ -40,7 +40,7 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-no-messages]')).toHaveCount(0);
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
-    await reloadAndOpenChat(page);
+    await reloadAndOpenAiAssistant(page);
     await openRoom(page, 'Room 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
@@ -79,7 +79,7 @@ test.describe('Room messages', () => {
       { from: 'user2', message: 'second message' },
     ]);
 
-    await reloadAndOpenChat(page);
+    await reloadAndOpenAiAssistant(page);
     await openRoom(page, 'Room 1');
     await assertMessages(page, [
       { from: 'user1', message: 'first message' },
@@ -271,7 +271,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    await reloadAndOpenChat(page);
+    await reloadAndOpenAiAssistant(page);
     await openRoom(page, 'Room 1');
     await assertMessages(page, [
       {

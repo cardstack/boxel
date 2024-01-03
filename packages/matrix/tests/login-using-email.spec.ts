@@ -14,7 +14,7 @@ import {
   logout,
   test,
   setupMatrixOverride,
-  openChat,
+  openAiAssistant,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -62,7 +62,9 @@ test.describe('Login using email', () => {
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
     await page.locator('[data-test-password-field]').fill('mypassword1!');
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword1!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('mypassword1!');
     await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
     await page.locator('[data-test-register-btn]').click();
 
@@ -77,12 +79,15 @@ test.describe('Login using email', () => {
     await page.locator('[data-test-next-btn]').click();
 
     await validateEmail(page, 'user1@example.com');
-    
-    await openChat(page);
-    await assertLoggedIn(page, { email: 'user1@example.com', displayName: 'Test User' });
+
+    await openAiAssistant(page);
+    await assertLoggedIn(page, {
+      email: 'user1@example.com',
+      displayName: 'Test User',
+    });
     await logout(page);
     await assertLoggedOut(page);
-    
+
     //Login using email
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1@example.com');
@@ -90,8 +95,11 @@ test.describe('Login using email', () => {
     await page.locator('[data-test-password-field]').fill('mypassword1!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openChat(page);
+    await openAiAssistant(page);
 
-    await assertLoggedIn(page, { email: 'user1@example.com', displayName: 'Test User' });
+    await assertLoggedIn(page, {
+      email: 'user1@example.com',
+      displayName: 'Test User',
+    });
   });
 });
