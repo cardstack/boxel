@@ -18,7 +18,7 @@
     "lint:fix": "concurrently \"npm:lint:*:fix\" --names \"fix:\"",
     "lint:hbs": "ember-template-lint .",
     "lint:hbs:fix": "ember-template-lint . --fix",
-    "lint:js": "eslint . --cache --ext ts,js",
+    "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
     "start": "NODE_OPTIONS='--max-old-space-size=8192' FASTBOOT_DISABLED=true OWN_REALM_URL=http://localhost:4201/drafts/ OTHER_REALM_URLS=http://localhost:4201/published/ ember serve",

@@ -17,7 +17,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   moduleFrom,
-  codeRefWithAbsoluteURL
+  codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common/code-ref';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -65,9 +65,9 @@ export default class CreateCardModal extends Component {
   async create<T extends CardDef>(
     ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: { 
+    opts?: {
       realmURL?: URL;
-      doc?: LooseSingleCardDocument
+      doc?: LooseSingleCardDocument;
     },
   ): Promise<undefined | T> {
     this.zIndex++;
@@ -85,24 +85,27 @@ export default class CreateCardModal extends Component {
     ) => {
       let cardModule = new URL(moduleFrom(ref), relativeTo);
       // we make the code ref use an absolute URL for safety in
-      // the case it's being created in a different realm than where the card 
+      // the case it's being created in a different realm than where the card
       // definition comes from
-      if (opts?.realmURL && !(new RealmPaths(opts.realmURL).inRealm(cardModule))) {
-        ref = codeRefWithAbsoluteURL(ref, relativeTo)
+      if (
+        opts?.realmURL &&
+        !new RealmPaths(opts.realmURL).inRealm(cardModule)
+      ) {
+        ref = codeRefWithAbsoluteURL(ref, relativeTo);
       }
       let doc: LooseSingleCardDocument = opts?.doc ?? {
         data: {
           meta: {
             adoptsFrom: ref,
-            ...(opts?.realmURL ? { realmURL: opts.realmURL.href} : {})
-          }
+            ...(opts?.realmURL ? { realmURL: opts.realmURL.href } : {}),
+          },
         },
       };
       this.currentRequest = {
         card: await this.cardService.createFromSerialized(
           doc.data,
           doc,
-          relativeTo
+          relativeTo,
         ),
         deferred: new Deferred(),
       };

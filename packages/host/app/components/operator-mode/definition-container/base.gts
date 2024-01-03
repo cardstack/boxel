@@ -8,9 +8,10 @@ import {
   Label,
 } from '@cardstack/boxel-ui/components';
 
+import type { Icon } from '@cardstack/boxel-ui/icons';
+
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import type { Icon } from '@cardstack/boxel-ui/icons';
 
 interface Action {
   label: string;

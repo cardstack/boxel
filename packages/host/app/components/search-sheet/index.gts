@@ -32,9 +32,9 @@ import RecentCards from '@cardstack/host/services/recent-cards-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import SearchResult from './search-result';
-
 import { getCard } from '../../resources/card-resource';
+
+import SearchResult from './search-result';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
@@ -120,6 +120,7 @@ export default class SearchSheet extends Component<Signature> {
       case SearchSheetModes.SearchResults:
         return 'results';
     }
+    return undefined;
   }
 
   get isGoDisabled() {

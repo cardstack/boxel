@@ -3,10 +3,10 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { capitalize } from '@ember/string';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { capitalize } from '@ember/string';
 
 import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -36,17 +36,19 @@ import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 import ModalContainer from '../modal-container';
 
 import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
-import RealmInfoProvider from './realm-info-provider';
+
 import RealmIcon from './realm-icon';
-import type LoaderService from '../../services/loader-service';
+import RealmInfoProvider from './realm-info-provider';
+
 import type CardService from '../../services/card-service';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type LoaderService from '../../services/loader-service';
 
 export type NewFileType =
   | 'duplicate-instance'
@@ -504,7 +506,7 @@ export default class CreateFileModal extends Component<Signature> {
     let realmPath = new RealmPaths(this.selectedRealmURL);
     // assert that filename is a GTS file and is a LocalPath
     let fileName: LocalPath = `${this.fileName.replace(
-      /\.[^\.].+$/,
+      /\.[^.].+$/,
       '',
     )}.gts`.replace(/^\//, '');
     let url = realmPath.fileURL(fileName);
@@ -548,7 +550,7 @@ export class ${className} extends ${exportName}Parent {
         module
           .split('/')
           .pop()!
-          .replace(/\.[^\.]+$/, ''),
+          .replace(/\.[^.]+$/, ''),
       );
       // check for parent/className declaration collision
       parent = parent === className ? `${parent}Parent` : parent;

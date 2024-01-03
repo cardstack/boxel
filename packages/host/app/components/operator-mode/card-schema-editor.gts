@@ -37,9 +37,10 @@ import {
   isOwnField,
   calculateTotalOwnFields,
 } from '@cardstack/host/utils/schema-editor';
-import ContextMenuButton from './context-menu-button';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
+
+import ContextMenuButton from './context-menu-button';
 
 interface Signature {
   Args: {

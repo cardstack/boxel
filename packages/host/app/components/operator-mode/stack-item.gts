@@ -36,6 +36,14 @@ import {
 import { cn, eq, menuItem, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import {
+  IconPencil,
+  IconX,
+  IconTrash,
+  IconLink,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
+
+import {
   type Actions,
   cardTypeDisplayName,
   Deferred,
@@ -44,6 +52,10 @@ import {
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
 import config from '@cardstack/host/config/environment';
+
+import { type StackItem } from '@cardstack/host/lib/stack-item';
+
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type {
   CardDef,
@@ -54,19 +66,9 @@ import type {
 import ElementTracker from '../../resources/element-tracker';
 import Preview from '../preview';
 
-import { type StackItem } from '@cardstack/host/lib/stack-item';
-
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
-import type EnvironmentService from '@cardstack/host/services/environment-service';
-import {
-  IconPencil,
-  IconX,
-  IconTrash,
-  IconLink,
-  ThreeDotsHorizontal,
-} from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {
