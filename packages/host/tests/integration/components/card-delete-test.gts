@@ -186,7 +186,7 @@ module('Integration | card-delete', function (hooks) {
   });
 
   test<TestContextWithSSE>('can delete a card from the index card stack item', async function (assert) {
-    assert.expect(4);
+    assert.expect(6);
     let expectedEvents = [
       {
         type: 'index',
@@ -210,6 +210,8 @@ module('Integration | card-delete', function (hooks) {
     await waitFor(
       `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
     );
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
+
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
     );
@@ -236,6 +238,7 @@ module('Integration | card-delete', function (hooks) {
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
   test('can cancel delete', async function (assert) {
@@ -270,6 +273,7 @@ module('Integration | card-delete', function (hooks) {
     );
     fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
   test<TestContextWithSSE>('can delete a card stack item in non-edit mode', async function (assert) {

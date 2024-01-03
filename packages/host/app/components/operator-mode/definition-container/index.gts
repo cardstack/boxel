@@ -90,7 +90,7 @@ interface ClickableModuleSignature {
 export class ClickableModuleDefinitionContainer extends Component<ClickableModuleSignature> {
   <template>
     <Clickable
-      @openDefinition={{@openDefinition}}
+      @goToDefinition={{@goToDefinition}}
       @codeRef={{@codeRef}}
       @localName={{@localName}}
       data-test-clickable-definition-container

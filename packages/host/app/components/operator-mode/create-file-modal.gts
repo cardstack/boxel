@@ -55,9 +55,9 @@ export type NewFileType =
   | 'field-definition';
 export const newFileTypes: NewFileType[] = [
   'duplicate-instance',
-  'card-instance',
   'card-definition',
   'field-definition',
+  'card-instance',
 ];
 const waiter = buildWaiter('create-file-modal:on-setup-waiter');
 
@@ -252,7 +252,7 @@ export default class CreateFileModal extends Component<Signature> {
       }
       .footer-buttons {
         display: flex;
-        justify-content: flex-end;
+        margin-left: auto;
         gap: var(--boxel-sp-xxs);
       }
       .gts-extension {

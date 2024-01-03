@@ -33,15 +33,11 @@ import {
   hasExecutableExtension,
   getPlural,
   isCardDocumentString,
-} from '@cardstack/runtime-common';
-
-import {
   isCardDef,
   isFieldDef,
   isBaseDef,
-} from '@cardstack/runtime-common/code-ref';
-
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
@@ -82,7 +78,7 @@ interface Signature {
     cardInstance: CardDef | undefined;
     selectedDeclaration?: ModuleDeclaration;
     selectDeclaration: (dec: ModuleDeclaration) => void;
-    openDefinition: (
+    goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
     ) => void;
@@ -94,7 +90,7 @@ interface Signature {
       },
       sourceInstance?: CardDef,
     ) => Promise<void>;
-    delete: (item: CardDef | URL | null | undefined) => void | Promise<void>;
+    delete: (item: CardDef | URL | null | undefined) => void;
   };
 }
 
@@ -410,7 +406,7 @@ export default class DetailPanel extends Component<Signature> {
                     @fileURL={{this.cardInstanceType.type.module}}
                     @name={{this.cardInstanceType.type.displayName}}
                     @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
-                    @openDefinition={{@openDefinition}}
+                    @goToDefinition={{@goToDefinition}}
                     @codeRef={{codeRef}}
                   />
                 {{/let}}
@@ -448,7 +444,7 @@ export default class DetailPanel extends Component<Signature> {
                         @fileURL={{this.cardType.type.super.module}}
                         @name={{this.cardType.type.super.displayName}}
                         @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                        @openDefinition={{@openDefinition}}
+                        @goToDefinition={{@goToDefinition}}
                         @codeRef={{codeRef}}
                         @localName={{this.cardType.type.super.localName}}
                       />
@@ -462,7 +458,7 @@ export default class DetailPanel extends Component<Signature> {
                         @fileURL={{this.cardType.type.module}}
                         @name={{this.cardType.type.displayName}}
                         @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                        @openDefinition={{@openDefinition}}
+                        @goToDefinition={{@goToDefinition}}
                         @codeRef={{codeRef}}
                         @localName={{this.cardType.type.localName}}
                       />

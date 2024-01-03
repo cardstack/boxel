@@ -25,6 +25,8 @@ import {
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
+import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
+
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
@@ -56,6 +58,8 @@ export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
+
+  profile = getMatrixProfile(this, () => this.client.getUserId());
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
@@ -155,7 +159,15 @@ export default class MatrixService extends Service {
 
   async startAndSetDisplayName(auth: IAuthData, displayName: string) {
     this.start(auth);
-    this.client.setDisplayName(displayName);
+    this.setDisplayName(displayName);
+  }
+
+  async setDisplayName(displayName: string) {
+    await this.client.setDisplayName(displayName);
+  }
+
+  async reloadProfile() {
+    await this.profile.load.perform();
   }
 
   async start(auth?: IAuthData) {

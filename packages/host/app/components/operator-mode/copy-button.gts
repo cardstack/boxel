@@ -29,7 +29,7 @@ interface Signature {
 const LEFT = 0;
 const RIGHT = 1;
 
-export default class OperatorModeContainer extends Component<Signature> {
+export default class CopyButton extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;

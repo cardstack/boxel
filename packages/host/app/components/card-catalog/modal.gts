@@ -197,6 +197,7 @@ export default class CardCatalogModal extends Component<Signature> {
         display: flex;
         justify-content: space-between;
         gap: var(--boxel-sp);
+        margin-left: auto;
       }
       .footer__actions-left {
         display: flex;
