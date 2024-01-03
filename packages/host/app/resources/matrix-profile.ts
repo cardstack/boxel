@@ -15,6 +15,7 @@ interface Args {
 export class MatrixProfileResource extends Resource<Args> {
   @tracked userId: string | undefined | null;
   @tracked email: string | undefined;
+  @tracked threePids: string[] = [];
   @tracked loaded: Promise<void> | undefined;
   @tracked avatarUrl: string | undefined;
   @tracked displayName: string | undefined;
@@ -41,6 +42,9 @@ export class MatrixProfileResource extends Resource<Args> {
       }
       let { threepids } = threePid;
       this.email = threepids.find((t) => t.medium === 'email')?.address;
+      this.threePids = threepids
+        .filter((t) => t.medium === 'email')
+        .map((t) => t.address);
     }
   });
 }

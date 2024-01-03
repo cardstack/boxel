@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { fn } from '@ember/helper';
 
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -11,7 +12,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import { type IAuthData } from 'matrix-js-sdk';
 
-import { restartableTask, timeout } from 'ember-concurrency';
+import { restartableTask, timeout, all } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 import { v4 as uuidv4 } from 'uuid';
@@ -23,18 +24,102 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { not, and, bool, eq } from '@cardstack/boxel-ui/helpers';
-import {
-  isMatrixError,
-  isInteractiveAuth,
-  nextUncompletedStage,
-  type InteractiveAuth,
-} from '@cardstack/host/lib/matrix-utils';
-
 import ModalContainer from '@cardstack/host/components/modal-container';
 
 import { ProfileInfo } from '@cardstack/host/components/operator-mode/profile-info-popover';
 import config from '@cardstack/host/config/environment';
 import MatrixService from '@cardstack/host/services/matrix-service';
+
+interface PasswordModalSignature {
+  Args: {
+    confirmPassword: (password: string) => void;
+    clearPasswordError: () => void;
+    togglePasswordModal: () => void;
+    passwordError: string | undefined;
+  };
+  Element: HTMLElement;
+}
+
+class PasswordModal extends Component<PasswordModalSignature> {
+  @tracked private password: string = '';
+
+  private get passwordInputState() {
+    return this.args.passwordError ? 'invalid' : 'initial';
+  }
+
+  @action private setPassword(password: string) {
+    this.args.clearPasswordError();
+    this.password = password;
+  }
+
+  <template>
+    <ModalContainer
+      @onClose={{@togglePasswordModal}}
+      @title='Confirm Identity'
+      @size='small'
+      @centered={{true}}
+      @isOpen={{true}}
+      class='password-modal'
+      data-test-password-modal
+    >
+      <:content>
+        <div class='instructions'>
+          Confirm your identity by entering your password below.
+        </div>
+        <FieldContainer @tag='label' @vertical={{true}}>
+          <BoxelInput
+            data-test-password-field
+            @type='password'
+            @value={{this.password}}
+            @state={{this.passwordInputState}}
+            @errorMessage={{this.args.passwordError}}
+            @onInput={{this.setPassword}}
+          />
+        </FieldContainer>
+      </:content>
+      <:footer>
+        <div class='buttons'>
+          <BoxelButton
+            data-test-confirm-cancel-button
+            @size='tall'
+            @kind='secondary-light'
+            {{on 'click' @togglePasswordModal}}
+          >
+            Cancel
+          </BoxelButton>
+
+          <BoxelButton
+            @kind='primary'
+            @size='tall'
+            @disabled={{not this.password}}
+            class='confirm-button'
+            {{on 'click' (fn @confirmPassword this.password)}}
+            data-test-confirm-password-button
+          >
+            Confirm
+          </BoxelButton>
+        </div>
+      </:footer>
+    </ModalContainer>
+    <style>
+      .password-modal :deep(.boxel-modal__inner) {
+        height: 21rem;
+        margin-top: calc((100% - 21rem) / 2);
+      }
+      .password-modal :deep(.invalid) {
+        box-shadow: none;
+      }
+      .buttons {
+        margin-left: auto;
+        margin-top: auto;
+        margin-bottom: auto;
+      }
+      .buttons > :not(:first-child) {
+        margin-left: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+}
 
 interface Signature {
   Args: {
@@ -45,27 +130,6 @@ interface Signature {
 
 export default class ProfileSettingsModal extends Component<Signature> {
   <template>
-    <style>
-      .buttons {
-        margin-left: auto;
-        margin-top: auto;
-        margin-bottom: auto;
-      }
-
-      .buttons > :not(:first-child) {
-        margin-left: var(--boxel-sp-xs);
-      }
-
-      .profile-settings-modal {
-        height: 70vh;
-      }
-
-      .error-message {
-        color: var(--boxel-error-100);
-        margin-top: var(--boxel-sp-lg);
-      }
-    </style>
-
     <ModalContainer
       @onClose={{@toggleProfileSettings}}
       @title='Settings'
@@ -161,7 +225,9 @@ export default class ProfileSettingsModal extends Component<Signature> {
                       <BoxelButton
                         @kind='text-only'
                         @size='extra-small'
+                        @loading={{this.isResending}}
                         data-test-resend-button
+                        {{on 'click' this.resendEmailVerification}}
                       >Resend</BoxelButton>
                       <BoxelButton
                         @kind='secondary-light'
@@ -271,7 +337,35 @@ export default class ProfileSettingsModal extends Component<Signature> {
         </div>
       </:footer>
     </ModalContainer>
+
+    {{#if this.showPasswordModal}}
+      <PasswordModal
+        @confirmPassword={{this.confirmPasswordForEmailChange}}
+        @clearPasswordError={{this.clearPasswordError}}
+        @togglePasswordModal={{this.cancelEmailChange}}
+        @passwordError={{this.passwordError}}
+      />
+    {{/if}}
+
     <style>
+      .buttons {
+        margin-left: auto;
+        margin-top: auto;
+        margin-bottom: auto;
+      }
+      .buttons > :not(:first-child) {
+        margin-left: var(--boxel-sp-xs);
+      }
+      .profile-settings-modal {
+        height: 70vh;
+      }
+      .error-message {
+        color: var(--boxel-error-100);
+        margin-top: var(--boxel-sp-lg);
+      }
+      .profile-field :deep(.invalid) {
+        box-shadow: none;
+      }
       .profile-field + .profile-field {
         margin-top: var(--boxel-sp-xl);
       }
@@ -378,27 +472,16 @@ export default class ProfileSettingsModal extends Component<Signature> {
     | { type: 'initial' }
     | { type: 'validateEmail'; email: string }
     | {
+        type: 'askForPassword';
+        email: string;
+        passwordError?: string;
+      }
+    | {
         type: 'requestEmailValidation';
         email: string;
         clientSecret: string;
         sendAttempt: number;
-      }
-    | {
-        type: 'waitForValidation';
-        email: string;
-        clientSecret: string;
-        sid: string;
-        sendAttempt: number;
-        session?: string;
-      }
-    | {
-        type: 'askForPassword';
-        email: string;
-        clientSecret: string;
-        sid: string;
-        sendAttempt: number;
-        session: string;
-        password?: string;
+        password: string;
       }
     | {
         type: 'sendPassword';
@@ -406,7 +489,14 @@ export default class ProfileSettingsModal extends Component<Signature> {
         clientSecret: string;
         sid: string;
         sendAttempt: number;
-        session: string;
+        password: string;
+      }
+    | {
+        type: 'waitForValidation';
+        email: string;
+        clientSecret: string;
+        sid: string;
+        sendAttempt: number;
         password: string;
       } = { type: 'initial' };
 
@@ -448,19 +538,48 @@ export default class ProfileSettingsModal extends Component<Signature> {
 
   private get hasPendingEmailChange() {
     return [
-      'requestEmailValidation',
-      'waitForValidation',
       'askForPassword',
+      'requestEmailValidation',
       'sendPassword',
+      'waitForValidation',
     ].includes(this.emailState.type);
   }
 
   private get emailHasBeenValidated() {
-    return ['askForPassword', 'sendPassword'].includes(this.emailState.type);
+    return ['initial', 'validateEmail'].includes(this.emailState.type);
+  }
+
+  private get showPasswordModal() {
+    return (
+      this.emailState.type === 'askForPassword' ||
+      // we only ask for password the first time we make a request for email
+      // validation--the subsequent times we use the password already provided
+      (this.emailState.type === 'sendPassword' &&
+        this.emailState.sendAttempt === 1) ||
+      (this.emailState.type === 'requestEmailValidation' &&
+        this.emailState.sendAttempt === 1)
+    );
+  }
+
+  private get passwordError() {
+    if (this.emailState.type === 'askForPassword') {
+      return this.emailState.passwordError;
+    }
+    return;
+  }
+
+  private get isResending() {
+    return (
+      (this.emailState.type === 'requestEmailValidation' ||
+        this.emailState.type === 'sendPassword') &&
+      this.emailState.sendAttempt > 1
+    );
   }
 
   @action private setDisplayName(name: string) {
-    this.showDisplayNameValidation = true; // We don't want to show validation error until the user has interacted with the field, i.e. when display name is blank and user opens settings modal
+    // We don't want to show validation error until the user has interacted with the field,
+    // i.e. when display name is blank and user opens settings modal
+    this.showDisplayNameValidation = true;
     this.displayName = name;
   }
 
@@ -476,34 +595,27 @@ export default class ProfileSettingsModal extends Component<Signature> {
     this.emailState = { type: 'initial' };
   }
 
-  @action private setPasswordForEmailChange(password: string) {
+  @action private clearPasswordError() {
     if (this.emailState.type !== 'askForPassword') {
       throw new Error(
-        `invalid state: cannot perform setPasswordForEmailChange in state ${this.emailState.type}`,
+        `invalid state: cannot perform clearPasswordError in state ${this.emailState.type}`,
       );
     }
-    this.emailState = {
-      ...this.emailState,
-      password,
-    };
+    this.emailState.passwordError = undefined;
   }
 
-  @action private confirmPasswordForEmailChange() {
+  @action private confirmPasswordForEmailChange(password: string) {
     if (this.emailState.type !== 'askForPassword') {
       throw new Error(
         `invalid state: cannot perform confirmPasswordForEmailChange in state ${this.emailState.type}`,
       );
     }
-    if (!this.emailState.password) {
-      throw new Error(
-        `cannot confirmPasswordForEmailChange, password is not set`,
-      );
-    }
-    this;
     this.emailState = {
       ...this.emailState,
-      password: this.emailState.password,
-      type: 'sendPassword',
+      password,
+      clientSecret: uuidv4(),
+      sendAttempt: 1,
+      type: 'requestEmailValidation',
     };
     this.doEmailFlow.perform();
   }
@@ -513,203 +625,155 @@ export default class ProfileSettingsModal extends Component<Signature> {
     this.saveTask.perform();
   }
 
+  @action private resendEmailVerification() {
+    if (
+      this.emailState.type !== 'waitForValidation' &&
+      this.emailState.type !== 'sendPassword'
+    ) {
+      throw new Error(
+        `invalid state: cannot perform resendEmailVerification in state ${this.emailState.type}`,
+      );
+    }
+    this.emailState = {
+      ...this.emailState,
+      clientSecret: uuidv4(),
+      sendAttempt: this.emailState.sendAttempt + 1,
+      type: 'requestEmailValidation',
+    };
+    this.doEmailFlow.perform();
+  }
+
   private saveTask = restartableTask(async () => {
     await this.matrixService.profile.loaded; // Prevent saving before profile is loaded
 
-    this.displayNameError = undefined;
-
-    // try {
-    // TODO only perform updates of changed items
-    // TODO include email update here too
-    // TODO handle email already exists error
     if (this.emailState.type === 'validateEmail') {
       this.emailState = {
-        type: 'requestEmailValidation',
+        type: 'askForPassword',
         email: this.emailState.email,
-        clientSecret: uuidv4(),
-        sendAttempt: 1,
       };
-    } else if (
-      this.emailState.type === 'requestEmailValidation' ||
-      this.emailState.type === 'waitForValidation'
-    ) {
-      this.emailState.sendAttempt++;
-    }
-    // we use Promise.allSettled because the rejection of on promise
-    // should not effect the other promises
-    let [maybeDisplayNameResponse, maybeEmailResponse] =
-      await Promise.allSettled([
-        this.displayName !== this.matrixService.profile.displayName
-          ? this.matrixService.setDisplayName(this.displayName || '')
-          : undefined,
-        this.emailState.type === 'requestEmailValidation'
-          ? this.matrixService.requestChangeEmailToken(
-              this.emailState.email,
-              this.emailState.clientSecret,
-              this.emailState.sendAttempt,
-            )
-          : undefined,
-        ,
-        new Promise((resolve) =>
-          setTimeout(resolve, config.minSaveTaskDurationMs),
-        ),
-      ]); // Add a bit of artificial delay if needed, to make the save button feel more responsive
-    // } catch (e) {
-    //   this.error = new Error('Failed to save profile. Please try again.');
-    // }
-    if (maybeDisplayNameResponse?.status === 'rejected') {
-      this.displayNameError = new Error(
-        'Failed to save profile. Please try again.',
-      );
-    }
-    if (
-      (maybeEmailResponse?.status === 'fulfilled' &&
-        this.emailState.type === 'requestEmailValidation') ||
-      this.emailState.type === 'waitForValidation'
-    ) {
-      this.emailState = {
-        type: 'waitForValidation',
-        email: this.emailState.email,
-        clientSecret: this.emailState.clientSecret,
-        sendAttempt: this.emailState.sendAttempt,
-        sid: (maybeEmailResponse as PromiseFulfilledResult<{ sid: string }>)
-          .value.sid,
-      };
-      this.doEmailFlow.perform();
-    } else if (maybeEmailResponse.status === 'rejected') {
-      // handle responses:
-      // {"errcode":"M_THREEPID_IN_USE","error":"Email is already in use"}
-      // {"errcode":"M_BAD_JSON","error":"1 validation error for EmailRequestTokenBody\nemail\n  Unable to parse email address (type=value_error)"}
-
-      throw new Error(`TODO: email change request error handling`);
-      // } else if (isMatrixError(e) && e.errcode === 'M_USER_IN_USE') {
-      //   if (this.state.type === 'login') {
-      //     throw new Error(
-      //       `invalid state: cannot doRegistrationFlow() with errcode '${e.errcode}' in state ${this.state.type}`,
-      //     );
-      //   }
-      //   this.usernameError = 'User Name is already taken';
-      //   this.state = { type: 'initial' };
-      // }
     }
 
-    this.matrixService.reloadProfile(); // To get the updated display name in templates
-    this.afterSaveTask.perform();
+    this.displayNameError = undefined;
+    if (this.displayName !== this.matrixService.profile.displayName) {
+      try {
+        await all([
+          this.matrixService.setDisplayName(this.displayName || ''),
+          timeout(config.minSaveTaskDurationMs),
+        ]);
+      } catch (e) {
+        this.displayNameError = new Error(
+          'Failed to save profile. Please try again.',
+        );
+      }
+      this.matrixService.reloadProfile(); // To get the updated display name in templates
+      this.afterSaveTask.perform();
+    }
   });
 
   private doEmailFlow = restartableTask(async () => {
     if (
       this.emailState.type === 'initial' ||
       this.emailState.type === 'validateEmail' ||
-      this.emailState.type === 'requestEmailValidation'
+      this.emailState.type === 'askForPassword'
     ) {
       throw new Error(
         `invalid state: cannot perform doEmailFlow in state ${this.emailState.type}`,
       );
     }
-    let response: any;
-    let auth: (IAuthData & { type: string }) | undefined;
-    if (this.emailState.type === 'sendPassword') {
-      auth = {
-        type: 'm.login.password',
-        session: this.emailState.session,
-        password: this.emailState.password,
-        identifier: {
-          type: 'm.id.user',
-          user: this.matrixService.userId,
-        },
-      } as IAuthData & { type: string };
-    } else {
-      // we need to send in some kind of auth property in order to get a properly
-      // formatted auth flow back, so we just send our email auth (which TBH should
-      // prevent the need from asking for the user's password)
-      auth = {
-        type: 'm.login.email.identity',
-        session: this.emailState.session,
-        threepid_creds: {
-          sid: this.emailState.sid,
-          client_secret: this.emailState.clientSecret,
-        },
-      } as IAuthData & { type: string };
+    if (this.emailState.type === 'requestEmailValidation') {
+      try {
+        let response = await this.matrixService.requestChangeEmailToken(
+          this.emailState.email,
+          this.emailState.clientSecret,
+          this.emailState.sendAttempt,
+        );
+        let { sid } = response;
+        this.emailState.type;
+        this.emailState = {
+          ...this.emailState,
+          type: 'sendPassword',
+          sid,
+        };
+      } catch (e: any) {
+        if ('errcode' in e.data) {
+          switch (e.data.errcode) {
+            case 'M_THREEPID_IN_USE':
+              this.emailError = 'Email address is already in use';
+              break;
+            case 'M_BAD_JSON':
+              this.emailError = 'Email address is formatted incorrectly';
+              break;
+            default:
+              this.emailError = e.data.error;
+          }
+          this.emailState = {
+            ...this.emailState,
+            type: 'validateEmail',
+          };
+          return;
+        }
+        throw e;
+      }
     }
+
+    let auth = {
+      type: 'm.login.password',
+      user: this.matrixService.userId,
+      password: this.emailState.password,
+      identifier: {
+        type: 'm.id.user',
+        user: this.matrixService.userId,
+      },
+    } as IAuthData & { type: string };
 
     let emailAdded = false;
     try {
-      response = await this.matrixService.client.addThreePidOnly({
+      await this.matrixService.client.addThreePidOnly({
         auth,
         client_secret: this.emailState.clientSecret,
         sid: this.emailState.sid,
       });
       emailAdded = true;
     } catch (e: any) {
-      let maybeAuthFlow = e.data;
-      if (isInteractiveAuth(maybeAuthFlow) && maybeAuthFlow.flows.length > 0) {
-        let nextStage = nextUncompletedStage(maybeAuthFlow);
-        await this.nextEmailStateFromResponse(nextStage, maybeAuthFlow);
-      } else {
-        throw e;
+      if ('errcode' in e.data) {
+        switch (e.data.errcode) {
+          case 'M_THREEPID_AUTH_FAILED':
+            // If current type is already 'waitForValidation',
+            // it means we are polling the validation.
+            if (this.emailState.type === 'waitForValidation') {
+              await timeout(1000);
+            }
+            this.emailState = {
+              ...this.emailState,
+              type: 'waitForValidation',
+            };
+            this.doEmailFlow.perform();
+            return;
+          case 'M_FORBIDDEN':
+            this.emailState = {
+              ...this.emailState,
+              type: 'askForPassword',
+              passwordError: 'Invalid password',
+            };
+            return;
+        }
       }
+      throw e;
     }
 
     if (emailAdded && this.matrixService.profile.email) {
       // finally we remove the old email from the account
-      await this.matrixService.client.deleteThreePid(
-        'email',
-        this.matrixService.profile.email,
+      let oldEmails = this.matrixService.profile.threePids;
+      await Promise.all(
+        oldEmails.map((email) =>
+          this.matrixService.client.deleteThreePid('email', email),
+        ),
       );
+      this.emailState = { type: 'initial' };
       this.matrixService.reloadProfile();
       this.afterSaveTask.perform();
     }
   });
-
-  private async nextEmailStateFromResponse(
-    nextStage: string,
-    authflow: InteractiveAuth,
-  ) {
-    if (
-      this.emailState.type === 'initial' ||
-      this.emailState.type === 'validateEmail' ||
-      this.emailState.type === 'requestEmailValidation'
-    ) {
-      throw new Error(
-        `invalid state: cannot perform nextEmailStateFromResponse in state ${this.emailState.type}`,
-      );
-    }
-    let completed = authflow.completed ?? [];
-    let { session } = authflow;
-    // annoyingly this will not show up in the flows until _after_ it is
-    //  completed. seems like a matrix bug to me...
-    if (!completed.find((s) => s === 'm.login.email.identity')) {
-      // If current type is already 'waitForValidation',
-      // it means we are polling the validation.
-      if (this.emailState.type === 'waitForValidation') {
-        await timeout(1000);
-      }
-      this.emailState = {
-        ...this.emailState,
-        type: 'waitForValidation',
-        session,
-      };
-      this.doEmailFlow.perform();
-      return;
-    }
-
-    if (nextStage === 'm.login.password') {
-      this.emailState = {
-        ...this.emailState,
-        type: 'askForPassword',
-        session,
-      };
-    } else {
-      throw new Error(
-        `Don't know to to handle auth stage '${nextStage}' from auth flow: ${JSON.stringify(
-          authflow,
-          null,
-          2,
-        )}`,
-      );
-    }
-  }
 
   private afterSaveTask = restartableTask(async () => {
     this.saveSuccessIndicatorShown = true;
