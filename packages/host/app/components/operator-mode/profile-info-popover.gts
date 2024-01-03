@@ -1,6 +1,6 @@
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { hash } from '@ember/helper';
 
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';

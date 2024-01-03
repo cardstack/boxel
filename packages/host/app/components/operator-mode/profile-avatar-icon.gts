@@ -1,7 +1,8 @@
-import { concat } from '@ember/helper';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+
+import { bool } from '@cardstack/boxel-ui/helpers';
 
 import { stringToColor } from '@cardstack/host/lib/utils';
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -43,7 +44,7 @@ export default class ProfileAvatarIcon extends Component<Signature> {
 
   <template>
     <ProfileAvatarIconVisual
-      @isReady={{this.matrixService.profile.loaded}}
+      @isReady={{bool this.matrixService.profile.loaded}}
       @profileInitials={{this.profileInitials}}
       style={{this.style}}
       ...attributes
@@ -54,7 +55,7 @@ export default class ProfileAvatarIcon extends Component<Signature> {
 interface ProfileAvatarIconVisualSignature {
   Args: {
     isReady: boolean;
-    profileInitials: string;
+    profileInitials?: string;
   };
   Element: HTMLDivElement;
 }

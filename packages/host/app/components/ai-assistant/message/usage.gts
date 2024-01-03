@@ -16,7 +16,7 @@ export default class AiAssistantMessageUsage extends Component {
   @tracked isFromAssistant = false;
   @tracked userId = 'johndoe:boxel.ai';
 
-  @action setDateTimeFromString(val) {
+  @action setDateTimeFromString(val: string) {
     let sinceEpoch = Date.parse(val);
     if (!isNaN(sinceEpoch)) {
       this.datetime = new Date(sinceEpoch);
@@ -43,7 +43,7 @@ export default class AiAssistantMessageUsage extends Component {
         <div class='example-container'>
           <AiAssistantConversation>
             <AiAssistantMessage
-              @formattedMessage={{this.formattedMessage}}
+              @formattedMessage={{htmlSafe this.formattedMessage}}
               @datetime={{this.datetime}}
               @isFromAssistant={{this.isFromAssistant}}
               @profileAvatar={{component

@@ -1,15 +1,19 @@
+import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
-import { format as formatDate } from 'date-fns';
+import { format as formatDate, formatISO } from 'date-fns';
 
 import { cn } from '@cardstack/boxel-ui/helpers';
 
+import type { ComponentLike } from '@glint/template';
+
 interface Signature {
+  Element: HTMLDivElement;
   Args: {
-    formattedMessage: string;
+    formattedMessage: SafeString;
     datetime: Date;
     isFromAssistant: boolean;
-    profileAvatar: ComponentLike;
+    profileAvatar?: ComponentLike;
   };
 }
 
@@ -22,19 +26,20 @@ export default class AiAssistantMessage extends Component<Signature> {
     >
       <div class={{'meta'}}>
         {{#if @isFromAssistant}}
+          {{! template-lint-disable no-inline-styles }}
           <div
             class='ai-avatar'
             style="background-image: image-set(url('/images/ai-assist-icon.webp') 1x, url('/images/ai-assist-icon@2x.webp') 2x, url('/images/ai-assist-icon@3x.webp') 3x)"
           ></div>
-        {{else}}
+        {{else if @profileAvatar}}
           <@profileAvatar />
         {{/if}}
-        <time datetime={{@datetime}} class='time'>
+        <time datetime={{formatISO @datetime}} class='time'>
           {{formatDate @datetime 'iiii MMM d, yyyy, h:mm aa'}}
         </time>
       </div>
       <div class='content'>
-        {{{@formattedMessage}}}
+        {{@formattedMessage}}
       </div>
     </div>
     <style>
@@ -102,7 +107,15 @@ export default class AiAssistantMessage extends Component<Signature> {
   </template>
 }
 
-export class AiAssistantConversation extends Component {
+interface AiAssistantConversationSignature {
+  Element: HTMLDivElement;
+  Args: {};
+  Blocks: {
+    default: [];
+  };
+}
+
+export class AiAssistantConversation extends Component<AiAssistantConversationSignature> {
   <template>
     <div class='ai-assistant-conversation'>
       {{yield}}
