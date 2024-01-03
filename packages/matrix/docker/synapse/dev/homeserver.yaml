@@ -90,5 +90,5 @@ email:
   validation_token_lifetime: "1h"
   subjects:
     email_validation: "%(app)s Email Validation"
-# templates:
-#   custom_template_directory: "/custom/templates/"
+templates:
+  custom_template_directory: "/custom/templates/"
