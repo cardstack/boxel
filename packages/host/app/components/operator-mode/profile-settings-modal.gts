@@ -1,20 +1,15 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { fn } from '@ember/helper';
-
 import { inject as service } from '@ember/service';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import {
-  CheckMark,
-  IconX,
-  Warning as WarningIcon,
-} from '@cardstack/boxel-ui/icons';
-import { type IAuthData } from 'matrix-js-sdk';
 
 import { restartableTask, timeout, all } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import { type IAuthData } from 'matrix-js-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -24,6 +19,11 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { not, and, bool, eq } from '@cardstack/boxel-ui/helpers';
+import {
+  CheckMark,
+  IconX,
+  Warning as WarningIcon,
+} from '@cardstack/boxel-ui/icons';
 import ModalContainer from '@cardstack/host/components/modal-container';
 
 import { ProfileInfo } from '@cardstack/host/components/operator-mode/profile-info-popover';
@@ -41,7 +41,7 @@ interface PasswordModalSignature {
 }
 
 class PasswordModal extends Component<PasswordModalSignature> {
-  @tracked private password: string = '';
+  @tracked private password = '';
 
   private get passwordInputState() {
     return this.args.passwordError ? 'invalid' : 'initial';
@@ -72,7 +72,7 @@ class PasswordModal extends Component<PasswordModalSignature> {
             @type='password'
             @value={{this.password}}
             @state={{this.passwordInputState}}
-            @errorMessage={{this.args.passwordError}}
+            @errorMessage={{@passwordError}}
             @onInput={{this.setPassword}}
           />
         </FieldContainer>
@@ -104,7 +104,7 @@ class PasswordModal extends Component<PasswordModalSignature> {
     <style>
       .password-modal :deep(.boxel-modal__inner) {
         height: 21rem;
-        margin-top: calc((100% - 21rem) / 2);
+        margin-top: calc((100vh - 21rem) / 2);
       }
       .password-modal :deep(.invalid) {
         box-shadow: none;
@@ -507,7 +507,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
 
   private get email() {
     if (this.emailState.type === 'initial') {
-      return;
+      return undefined;
     }
     return this.emailState.email;
   }
@@ -517,7 +517,9 @@ export default class ProfileSettingsModal extends Component<Signature> {
   }
 
   private get saveButtonText() {
-    if (this.saveSuccessIndicatorShown) return 'Saved!';
+    if (this.saveSuccessIndicatorShown) {
+      return 'Saved!';
+    }
     return this.saveTask.isRunning ? 'Saving…' : 'Save';
   }
 
@@ -565,7 +567,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
     if (this.emailState.type === 'askForPassword') {
       return this.emailState.passwordError;
     }
-    return;
+    return undefined;
   }
 
   private get isResending() {
