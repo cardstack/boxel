@@ -379,27 +379,28 @@ export default class MatrixService extends Service {
     return messages;
   }
 
-  // the matrix SDK is using an old version of this API that is not compatible
-  // with our current version matrix, so we use the API directly
-  async requestRegisterEmailToken(
+  private async requestEmailToken(
+    type: 'registration' | 'threepid',
     email: string,
     clientSecret: string,
     sendAttempt: number,
   ) {
-    let response = await fetch(
-      `${matrixURL}/_matrix/client/v3/register/email/requestToken`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          client_secret: clientSecret,
-          send_attempt: sendAttempt,
-        }),
+    let url =
+      type === 'registration'
+        ? `${matrixURL}/_matrix/client/v3/register/email/requestToken`
+        : `${matrixURL}/_matrix/client/v3/account/3pid/email/requestToken`;
+
+    let response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        email,
+        client_secret: clientSecret,
+        send_attempt: sendAttempt,
+      }),
+    });
     if (response.ok) {
       return (await response.json()) as MatrixSDK.IRequestTokenResponse;
     } else {
@@ -411,35 +412,30 @@ export default class MatrixService extends Service {
     }
   }
 
-  // TODO this is almost exactly the same as the method above
+  async requestRegisterEmailToken(
+    email: string,
+    clientSecret: string,
+    sendAttempt: number,
+  ) {
+    return await this.requestEmailToken(
+      'registration',
+      email,
+      clientSecret,
+      sendAttempt,
+    );
+  }
+
   async requestChangeEmailToken(
     email: string,
     clientSecret: string,
     sendAttempt: number,
   ) {
-    let response = await fetch(
-      `${matrixURL}/_matrix/client/v3/account/3pid/email/requestToken`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          client_secret: clientSecret,
-          send_attempt: sendAttempt,
-        }),
-      },
+    return await this.requestEmailToken(
+      'threepid',
+      email,
+      clientSecret,
+      sendAttempt,
     );
-    if (response.ok) {
-      return (await response.json()) as MatrixSDK.IRequestTokenResponse;
-    } else {
-      let data = (await response.json()) as { errcode: string; error: string };
-      let error = new Error(data.error) as any;
-      error.data = data;
-      error.status = response.status;
-      throw error;
-    }
   }
 
   async getPowerLevels(roomId: string): Promise<{ [userId: string]: number }> {
