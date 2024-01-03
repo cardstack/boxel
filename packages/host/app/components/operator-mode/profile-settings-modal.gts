@@ -25,6 +25,7 @@ import {
   IconX,
   Warning as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
+
 import ModalContainer from '@cardstack/host/components/modal-container';
 
 import { ProfileInfo } from '@cardstack/host/components/operator-mode/profile-info-popover';
