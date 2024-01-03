@@ -1,7 +1,9 @@
+import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+
 import { IconButton } from '@cardstack/boxel-ui/components';
 import { IconX } from '@cardstack/boxel-ui/icons';
-import { on } from '@ember/modifier';
+
 import RoomsManager from '../matrix/rooms-manager';
 import UserProfile from '../matrix/user-profile';
 
