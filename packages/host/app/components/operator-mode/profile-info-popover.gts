@@ -5,7 +5,6 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
-import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -92,13 +91,7 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
 
   <template>
     <div class='profile-popover-body' data-test-profile-icon-container>
-      <ProfileAvatarIcon
-        @userId={{this.matrixService.userId}}
-        {{setCssVar
-          profile-avatar-icon-size='70px'
-          profile-avatar-icon-border='0'
-        }}
-      />
+      <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
 
       <div class='display-name' data-test-profile-display-name>
         {{this.matrixService.profile.displayName}}
@@ -113,6 +106,8 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
         margin: auto;
         display: flex;
         flex-direction: column;
+        --profile-avatar-icon-size: 70px;
+        --profile-avatar-icon-border: 0;
       }
 
       .profile-popover-body > * {
