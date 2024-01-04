@@ -3647,7 +3647,7 @@ posts/ignore-me.json
       });
 
       assert.deepEqual(
-        matching.slice(0, 7).map((m) => m.id), // first 7 should be enough to test sorting by card type (name)
+        matching.map((m) => m.id),
         [
           `${paths.url}card-1`, // article
           `${paths.url}cards/2`, // article
@@ -3656,6 +3656,17 @@ posts/ignore-me.json
           `${paths.url}books/2`, // book
           `${paths.url}books/3`, // book
           `${paths.url}booking1`, // booking
+          `${paths.url}booking2`, // booking
+          `${paths.url}catalog-entry-1`, // catalog entry
+          `${paths.url}catalog-entry-2`, // catalog entry
+          `${paths.url}mango`, // dog
+          `${paths.url}ringo`, // dog
+          `${paths.url}vangogh`, // dog
+          `${paths.url}friend2`, // friend
+          `${paths.url}friend1`, // friend
+          `${paths.url}person-card1`, // person
+          `${paths.url}person-card2`, // person
+          `${paths.url}cards/1`, // person
         ],
       );
     });
