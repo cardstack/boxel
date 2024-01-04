@@ -6,13 +6,7 @@ interface Signature {
 
 export default class AiAssistantButton extends Component<Signature> {
   <template>
-    {{! template-lint-disable no-inline-styles }}
-    <button
-      class='ai-assistant-button'
-      data-test-open-chat
-      style="background-image: image-set(url('/images/ai-assist-icon.webp') 1x, url('/images/ai-assist-icon@2x.webp') 2x, url('/images/ai-assist-icon@3x.webp') 3x)"
-      ...attributes
-    />
+    <button class='ai-assistant-button' data-test-open-chat ...attributes />
     <style>
       .ai-assistant-button {
         width: var(--container-button-size);
@@ -27,6 +21,12 @@ export default class AiAssistantButton extends Component<Signature> {
         background-size: 26px 26px;
         background-position: center;
         background-repeat: no-repeat;
+
+        background-image: image-set(
+          url('/images/ai-assist-icon.webp') 1x,
+          url('/images/ai-assist-icon@2x.webp') 2x,
+          url('/images/ai-assist-icon@3x.webp') 3x
+        );
       }
       .ai-assistant-button:hover {
         cursor: pointer;
