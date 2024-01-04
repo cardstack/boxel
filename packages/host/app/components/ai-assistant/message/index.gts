@@ -24,7 +24,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       data-test-ai-assistant-message
       ...attributes
     >
-      <div class={{'meta'}}>
+      <div class='meta'>
         {{#if @isFromAssistant}}
           {{! template-lint-disable no-inline-styles }}
           <div
