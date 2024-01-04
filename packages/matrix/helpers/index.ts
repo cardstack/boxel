@@ -92,12 +92,17 @@ export async function validateEmail(
     onValidationPage?: (page: Page) => Promise<void>;
     sendAttempts?: number;
     isLoggedInWhenValidated?: true;
+    onAppTrigger?: (page: Page) => Promise<void>;
   },
 ) {
   let sendAttempts = opts?.sendAttempts ?? 1;
-  await expect(appPage.locator('[data-test-email-validation]')).toContainText(
-    'Please check your email to complete registration.',
-  );
+  if (opts?.onAppTrigger) {
+    await opts.onAppTrigger(appPage);
+  } else {
+    await expect(appPage.locator('[data-test-email-validation]')).toContainText(
+      'Please check your email to complete registration.',
+    );
+  }
 
   for (let i = 0; i < sendAttempts - 1; i++) {
     await appPage.waitForTimeout(500);
@@ -118,9 +123,9 @@ export async function validateEmail(
   await expect(
     emailPage.frameLocator('.messageview iframe').locator('body'),
   ).toContainText('Verify Email');
-  await expect(emailPage.locator('.messageview .messageviewheader')).toContainText(
-    `To:${email}`,
-  );
+  await expect(
+    emailPage.locator('.messageview .messageviewheader'),
+  ).toContainText(`To:${email}`);
 
   if (opts?.onEmailPage) {
     await opts.onEmailPage(emailPage);
@@ -128,8 +133,8 @@ export async function validateEmail(
 
   const validationPagePromise = context.waitForEvent('page');
   let textBtn = emailPage
-      .frameLocator('.messageview iframe')
-      .getByText('Verify Email');
+    .frameLocator('.messageview iframe')
+    .getByText('Verify Email');
   // We have to delay before going to validation window
   // to avoid the validation window won't open
   await emailPage.waitForTimeout(500);

@@ -197,47 +197,26 @@ export default class ProfileSettingsModal extends Component<Signature> {
                     data-test-new-email
                   >{{this.email}}</div>
                   <div class='verification-status'>
-                    {{#if this.emailHasBeenValidated}}
-                      <div class='indicator'>
-                        <CheckMark class='checked' />
-                        <span
-                          class='verification'
-                          data-test-new-email-verified
-                        >Verified</span>
-                      </div>
-                      <BoxelButton
-                        @kind='secondary-light'
-                        @size='extra-small'
-                        data-test-cancel-email-change
-                        {{on 'click' this.cancelEmailChange}}
-                      >Cancel</BoxelButton>
-                      <BoxelButton
-                        @kind='primary'
-                        @size='extra-small'
-                        data-test-email-confirm-identity
-                      >Confirm Identity</BoxelButton>
-                    {{else}}
-                      <div class='indicator'>
-                        <IconX class='cross-out' />
-                        <span
-                          class='verification'
-                          data-test-new-email-not-verified
-                        >Not Verified</span>
-                      </div>
-                      <BoxelButton
-                        @kind='text-only'
-                        @size='extra-small'
-                        @loading={{this.isResending}}
-                        data-test-resend-button
-                        {{on 'click' this.resendEmailVerification}}
-                      >Resend</BoxelButton>
-                      <BoxelButton
-                        @kind='secondary-light'
-                        @size='extra-small'
-                        data-test-cancel-email-change
-                        {{on 'click' this.cancelEmailChange}}
-                      >Cancel</BoxelButton>
-                    {{/if}}
+                    <div class='indicator'>
+                      <IconX class='cross-out' />
+                      <span
+                        class='verification'
+                        data-test-new-email-not-verified
+                      >Not Verified</span>
+                    </div>
+                    <BoxelButton
+                      @kind='text-only'
+                      @size='extra-small'
+                      @loading={{this.isResending}}
+                      data-test-resend-validation
+                      {{on 'click' this.resendEmailVerification}}
+                    >Resend</BoxelButton>
+                    <BoxelButton
+                      @kind='secondary-light'
+                      @size='extra-small'
+                      data-test-cancel-email-change
+                      {{on 'click' this.cancelEmailChange}}
+                    >Cancel</BoxelButton>
                   </div>
                 </div>
               </div>
