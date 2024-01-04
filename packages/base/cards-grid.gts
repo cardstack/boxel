@@ -196,7 +196,7 @@ class Isolated extends Component<typeof CardsGrid> {
               module: `${baseRealm.url}card-api`,
               name: 'CardDef',
             },
-            by: 'cardTypeName',
+            by: 'cardType',
           },
           {
             on: {
