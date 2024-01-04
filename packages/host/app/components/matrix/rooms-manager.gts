@@ -21,9 +21,9 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
-import { aiBotUsername } from '@cardstack/runtime-common';
-
 import { not, eq } from '@cardstack/boxel-ui/helpers';
+
+import { aiBotUsername } from '@cardstack/runtime-common';
 
 import {
   isMatrixError,
@@ -183,6 +183,7 @@ export default class RoomsManager extends Component {
       .room-list {
         padding: 0 var(--boxel-sp);
         margin: var(--boxel-sp) 0;
+        background: white;
       }
 
       .room {
@@ -213,12 +214,14 @@ export default class RoomsManager extends Component {
 
       .create-room {
         padding: 0 var(--boxel-sp);
+        background: white;
       }
 
       .create-button-wrapper {
         display: flex;
         justify-content: flex-end;
         padding: var(--boxel-sp) var(--boxel-sp) 0;
+        background: white;
       }
 
       .create-button-wrapper button {

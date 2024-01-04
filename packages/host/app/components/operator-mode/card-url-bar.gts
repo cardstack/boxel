@@ -6,16 +6,17 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import URLBarResource, {
-  urlBarResource,
-} from '@cardstack/host/resources/url-bar';
 import {
   IconCircle,
   IconGlobe,
   Warning as IconWarning,
 } from '@cardstack/boxel-ui/icons';
+
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import URLBarResource, {
+  urlBarResource,
+} from '@cardstack/host/resources/url-bar';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -175,6 +176,7 @@ export default class CardURLBar extends Component<Signature> {
         box-shadow: var(--boxel-deep-box-shadow);
         font: var(--boxel-font-sm);
         font-weight: 500;
+        z-index: 1;
       }
       .warning {
         display: flex;

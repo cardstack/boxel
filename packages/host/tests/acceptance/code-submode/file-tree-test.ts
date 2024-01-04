@@ -1,5 +1,4 @@
 import {
-  visit,
   click,
   waitFor,
   find,
@@ -13,8 +12,6 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
-import stringify from 'safe-stable-stringify';
-
 import { baseRealm } from '@cardstack/runtime-common';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -24,6 +21,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
+  visitOperatorMode,
   waitForCodeEditor,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
@@ -206,6 +204,12 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 
+    const numStubFiles = 100;
+    let stubFiles: Record<string, string> = {};
+    for (let i = 0; i < numStubFiles; i++) {
+      stubFiles[`z${String(i).padStart(2, '0')}.json`] = '{}';
+    }
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
@@ -264,26 +268,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
             },
           },
         },
-        'z00.json': '{}',
-        'z01.json': '{}',
-        'z02.json': '{}',
-        'z03.json': '{}',
-        'z04.json': '{}',
-        'z05.json': '{}',
-        'z06.json': '{}',
-        'z07.json': '{}',
-        'z08.json': '{}',
-        'z09.json': '{}',
-        'z10.json': '{}',
-        'z11.json': '{}',
-        'z12.json': '{}',
-        'z13.json': '{}',
-        'z14.json': '{}',
-        'z15.json': '{}',
-        'z16.json': '{}',
-        'z17.json': '{}',
-        'z18.json': '{}',
-        'z19.json': '{}',
+        ...stubFiles,
         'zzz/zzz/file.json': '{}',
         '.realm.json': realmInfo,
       },
@@ -291,7 +276,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('can navigate file tree, file view mode is persisted in query parameter', async function (assert) {
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -303,13 +288,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       submode: 'code',
       fileView: 'browser',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
@@ -340,7 +319,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('can open files', async function (assert) {
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -352,13 +331,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       submode: 'code',
       fileView: 'browser',
       codePath: `${testRealmURL}Person/1.json`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
@@ -378,7 +352,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('navigating to a file in a different realm causes it to become active in the file tree', async function (assert) {
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -391,13 +365,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       fileView: 'browser',
       codePath: `${testRealmURL}Person/1.json`,
       openDirs: { [testRealmURL]: ['Person/'] },
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
@@ -425,7 +394,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('open directories are persisted', async function (assert) {
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -438,13 +407,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       fileView: 'browser',
       codePath: `${testRealmURL}Person/1.json`,
       openDirs: { [testRealmURL]: ['Person/'] },
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
@@ -457,7 +421,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   test('open file is within view when the file browser renders', async function (assert) {
     let openFilename = 'z19.json';
 
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -470,19 +434,15 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       codePath: `http://test-realm/test/${openFilename}`,
       fileView: 'browser',
       openDirs: { [testRealmURL]: ['Person/'] },
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
     await waitFor('[data-test-file]');
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
     let fileElement = find(`[data-test-file="${openFilename}"]`)!;
     assert.ok(
       await elementIsVisible(fileElement),
@@ -493,7 +453,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   test('open file is within view even when its parent directory is not stored as open', async function (assert) {
     let openFilename = 'zzz/zzz/file.json';
 
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -505,13 +465,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       submode: 'code',
       codePath: `http://test-realm/test/index`,
       openDirs: { [testRealmURL]: ['Person/'] },
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
 
     await fillIn(
@@ -530,6 +485,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
     await waitFor(`[data-test-file="${openFilename}"]`);
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
     let fileElement = find(`[data-test-file="${openFilename}"]`)!;
 
     if (!fileElement) {
@@ -549,7 +505,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     let openFilename = 'person.gts';
     let filenameToOpen = 'z19.json';
 
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -562,19 +518,15 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       codePath: `http://test-realm/test/${openFilename}`,
       fileView: 'browser',
       openDirs: { [testRealmURL]: ['Person/'] },
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
     await waitFor('[data-test-file]');
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
     let openFileSelector = `[data-test-file="${openFilename}"]`;
     let openFileElement = find(openFileSelector)!;
     assert.ok(
@@ -602,6 +554,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await click(fileToOpenElement);
     await waitFor(openFileSelector);
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
     openFileElement = find(openFileSelector)!;
     fileToOpenElement = find(fileToOpenSelector)!;
@@ -617,7 +570,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('scroll position is restored when returning to file view but only for one file per realm', async function (assert) {
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -630,17 +583,12 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       fileView: 'browser',
       codePath: `${testRealmURL}Person/1.json`,
       openDirs: { [testRealmURL]: ['Person/'] },
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
+    });
 
     let endDirectorySelector = `[data-test-directory="zzz/"]`;
 
     await waitFor(endDirectorySelector);
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
     let endDirectoryElement = find(endDirectorySelector);
 
     if (!endDirectoryElement) {
@@ -664,16 +612,30 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await click('[data-test-file-browser-toggle]');
     await waitFor(endDirectorySelector);
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
     endDirectoryElement = find(endDirectorySelector);
 
-    if (!endDirectoryElement) {
-      assert.ok(endDirectoryElement, 'end directory should exist');
-    } else {
-      assert.ok(
-        await elementIsVisible(endDirectoryElement),
-        'expected end directory to be within view after returning to the file tree',
-      );
+    // in this test we are trying to assert the scroll position of a nested
+    // element, however the scroll position of the testing window itself can
+    // interfere with this test. In order to properly test we need to scroll the
+    // testing window itself such that the file tree is visible.
+    let testingContainer = document.getElementById('ember-testing-container')!;
+    let fileTreeHeight = document
+      .querySelector('.inner-container.file-browser')!
+      .getBoundingClientRect().height;
+    try {
+      testingContainer.scrollTop = fileTreeHeight;
+      if (!endDirectoryElement) {
+        assert.ok(endDirectoryElement, 'end directory should exist');
+      } else {
+        assert.ok(
+          await elementIsVisible(endDirectoryElement),
+          'expected end directory to be within view after returning to the file tree',
+        );
+      }
+    } finally {
+      testingContainer.scrollTop = 0;
     }
 
     // Change to another file and back, persisted scroll position should be forgotten
@@ -686,6 +648,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await click('[data-test-file-browser-toggle]');
     await waitFor(endDirectorySelector);
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
     endDirectoryElement = find(endDirectorySelector);
 
@@ -729,6 +692,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       'Enter',
     );
     await waitFor('[data-test-realm-name="Test Workspace B"]');
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
     endDirectoryElement = find(endDirectorySelector);
 
@@ -743,7 +707,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('scroll position does not change when switching to another file within view', async function (assert) {
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -755,13 +719,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       submode: 'code',
       fileView: 'browser',
       codePath: `${testRealmURL}person-entry.json`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitFor('[data-test-file="person.gts"]');
 
     let scrollablePanel = find('[data-test-togglable-left-panel]');
@@ -786,7 +745,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       }),
     );
 
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -799,13 +758,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       fileView: 'browser',
       codePath: `${testRealmURL}Person/1.json`,
       openDirs: { [testRealmURL]: ['Person/'] },
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
+    });
 
     await waitFor('[data-test-togglable-left-panel]');
     await settled();
@@ -816,7 +769,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('can open files in base realm', async function (assert) {
-    let codeModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -828,13 +781,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       submode: 'code',
       fileView: 'browser',
       codePath: `http://localhost:4201/base/cards-grid.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor('[data-test-file="cards-grid.gts"]');
 

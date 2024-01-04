@@ -5,17 +5,20 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { IconButton } from '@cardstack/boxel-ui/components';
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
-import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
+import { and, not } from '@cardstack/boxel-ui/helpers';
 
+import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
+import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
+import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
+import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile-settings-modal';
 import ENV from '@cardstack/host/config/environment';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import ChatSidebar from '../matrix/chat-sidebar';
 import SearchSheet, {
   SearchSheetMode,
   SearchSheetModes,
@@ -30,6 +33,7 @@ const { APP } = ENV;
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    hideAiAssistant?: boolean;
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
     onCardSelectFromSearch: (card: CardDef) => void;
@@ -40,14 +44,17 @@ interface Signature {
 }
 
 export default class SubmodeLayout extends Component<Signature> {
-  @tracked private isChatVisible = false;
+  @tracked private isAiAssistantVisible = false;
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
-
+  @tracked private profileSettingsOpened = false;
+  @tracked private profileSummaryOpened = false;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
 
-  private get chatVisibilityClass() {
-    return this.isChatVisible ? 'chat-open' : 'chat-closed';
+  private get aiAssistantVisibilityClass() {
+    return this.isAiAssistantVisible
+      ? 'ai-assistant-open'
+      : 'ai-assistant-closed';
   }
 
   private get allStackItems() {
@@ -68,10 +75,11 @@ export default class SubmodeLayout extends Component<Signature> {
         this.operatorModeStateService.updateCodePath(null);
         break;
       case Submodes.Code:
-        let codePath = this.lastCardInRightMostStack
-          ? new URL(this.lastCardInRightMostStack.id + '.json')
-          : null;
-        this.operatorModeStateService.updateCodePath(codePath);
+        this.operatorModeStateService.updateCodePath(
+          this.lastCardInRightMostStack
+            ? new URL(this.lastCardInRightMostStack.id + '.json')
+            : null,
+        );
         break;
       default:
         throw assertNever(submode);
@@ -82,7 +90,7 @@ export default class SubmodeLayout extends Component<Signature> {
 
   @action
   private toggleChat() {
-    this.isChatVisible = !this.isChatVisible;
+    this.isAiAssistantVisible = !this.isAiAssistantVisible;
   }
 
   @action private closeSearchSheet() {
@@ -107,8 +115,21 @@ export default class SubmodeLayout extends Component<Signature> {
     this.closeSearchSheet();
   }
 
+  @action toggleProfileSettings() {
+    this.profileSettingsOpened = !this.profileSettingsOpened;
+
+    this.profileSummaryOpened = false;
+  }
+
+  @action toggleProfileSummary() {
+    this.profileSummaryOpened = !this.profileSummaryOpened;
+  }
+
   <template>
-    <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
+    <div
+      class='operator-mode-with-ai-assistant
+        {{this.aiAssistantVisibilityClass}}'
+    >
       <SubmodeSwitcher
         @submode={{this.operatorModeStateService.state.submode}}
         @onSubmodeSelect={{this.updateSubmode}}
@@ -116,25 +137,43 @@ export default class SubmodeLayout extends Component<Signature> {
       />
       {{yield this.openSearchSheetToPrompt}}
 
-      {{#if APP.experimentalAIEnabled}}
-        {{#if this.isChatVisible}}
-          <div class='container__chat-sidebar'>
-            <ChatSidebar @onClose={{this.toggleChat}} />
-          </div>
-        {{else}}
-          <IconButton
-            data-test-open-chat
-            class='chat-btn'
-            @icon={{SparkleIcon}}
-            @width='25'
-            @height='25'
-            {{on 'click' this.toggleChat}}
+      {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
+        {{#if this.isAiAssistantVisible}}
+          <AiAssistantPanel
+            @onClose={{this.toggleChat}}
+            class='ai-assistant-panel'
           />
+        {{else}}
+          <AiAssistantButton class='chat-btn' {{on 'click' this.toggleChat}} />
         {{/if}}
       {{/if}}
     </div>
 
-    <ProfileInfoPopover />
+    <div class='profile-icon-container'>
+      <button
+        class='profile-icon-button'
+        {{on 'click' this.toggleProfileSummary}}
+        data-test-profile-icon-button
+      >
+        <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
+      </button>
+    </div>
+
+    {{#if this.profileSummaryOpened}}
+      <ProfileInfoPopover
+        {{onClickOutside
+          this.toggleProfileSummary
+          exceptSelector='.profile-icon-button'
+        }}
+        @toggleProfileSettings={{this.toggleProfileSettings}}
+      />
+    {{/if}}
+
+    {{#if this.profileSettingsOpened}}
+      <ProfileSettingsModal
+        @toggleProfileSettings={{this.toggleProfileSettings}}
+      />
+    {{/if}}
 
     <SearchSheet
       @mode={{this.searchSheetMode}}
@@ -146,56 +185,55 @@ export default class SubmodeLayout extends Component<Signature> {
     />
 
     <style>
-      .operator-mode__with-chat {
-        display: grid;
-        grid-template-rows: 1fr;
-        grid-template-columns: 1.5fr 0.5fr;
-        gap: 0px;
+      .operator-mode-with-ai-assistant {
+        display: flex;
         height: 100%;
       }
 
-      .chat-open {
+      .operator-mode-with-ai-assistant > * {
+        z-index: 1;
+      }
+
+      .ai-assistant-open {
         grid-template-columns: 1.5fr 0.5fr;
       }
 
-      .chat-closed {
-        grid-template-columns: 1fr;
-      }
-
       .chat-btn {
-        --boxel-icon-button-width: var(--container-button-size);
-        --boxel-icon-button-height: var(--container-button-size);
-        --icon-color: var(--boxel-highlight-hover);
-
         position: absolute;
         bottom: var(--boxel-sp);
         right: var(--boxel-sp);
         margin-right: 0;
-        padding: var(--boxel-sp-xxxs);
-        border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-dark);
-        border: none;
+        background-color: var(--boxel-ai-purple);
         box-shadow: var(--boxel-deep-box-shadow);
-        transition: background-color var(--boxel-transition);
-        z-index: 1;
       }
-      .chat-btn:hover {
-        --icon-color: var(--boxel-dark);
-        background-color: var(--boxel-highlight-hover);
+
+      .ai-assistant-panel {
+        flex: 0;
+        flex-basis: 371px;
+        height: 100%;
       }
 
       .submode-switcher {
         position: absolute;
         top: 0;
         left: 0;
-        z-index: 2;
         padding: var(--boxel-sp);
       }
 
-      .container__chat-sidebar {
-        height: 100vh;
-        grid-column: 2;
+      .profile-icon-container {
+        bottom: 0;
+        position: absolute;
+        width: var(--search-sheet-closed-height);
+        height: var(--search-sheet-closed-height);
+        border-radius: 50px;
+        margin-left: var(--boxel-sp);
         z-index: 1;
+      }
+
+      .profile-icon-button {
+        border: 0;
+        padding: 0;
+        background: transparent;
       }
     </style>
   </template>

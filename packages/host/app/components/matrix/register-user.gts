@@ -17,8 +17,9 @@ import {
   BoxelInputGroup,
   Button,
   FieldContainer,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq, or } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -44,7 +45,7 @@ interface Signature {
 
 export default class RegisterUser extends Component<Signature> {
   <template>
-    {{#if (eq this.state.type 'waitForEmailValidation')}}
+    {{#if (eq this.currentPage 'waiting-page')}}
       <span class='title' data-test-email-validation>Please check your email to
         complete registration.</span>
       <ul class='email-validation-instruction'>
@@ -57,8 +58,10 @@ export default class RegisterUser extends Component<Signature> {
         class='resend-email'
         @kind='primary'
         @disabled={{this.validateEmail.isRunning}}
-      >Resend Email</Button>
-    {{else if (eq this.state.type 'askForToken')}}
+      >{{#if this.validateEmail.isRunning}}
+          <LoadingIndicator />
+        {{else}}Resend Email{{/if}}</Button>
+    {{else if (eq this.currentPage 'token-form')}}
       <FieldContainer
         @label='Registration Token'
         @tag='label'
@@ -80,11 +83,11 @@ export default class RegisterUser extends Component<Signature> {
           @kind='primary'
           @disabled={{this.isNextButtonDisabled}}
           {{on 'click' this.sendToken}}
-        >Next</Button>
+        >{{#if this.doRegistrationFlow.isRunning}}
+            <LoadingIndicator />
+          {{else}}Next{{/if}}</Button>
       </div>
-    {{else if
-      (or (eq this.state.type 'initial') (eq this.state.type 'validateEmail'))
-    }}
+    {{else if (eq this.currentPage 'registration-form')}}
       <span class='title'>Create a Boxel Account</span>
       <FieldContainer
         @label='Your Name'
@@ -177,7 +180,9 @@ export default class RegisterUser extends Component<Signature> {
           @kind='primary'
           @disabled={{this.isRegisterButtonDisabled}}
           {{on 'click' this.register}}
-        >Create Account</Button>
+        >{{#if this.doRegistrationFlow.isRunning}}
+            <LoadingIndicator />
+          {{else}}Create Account{{/if}}</Button>
         <span class='or'>or</span>
         <Button
           data-test-cancel-btn
@@ -186,7 +191,6 @@ export default class RegisterUser extends Component<Signature> {
         >Login with an existing account</Button>
       </div>
     {{/if}}
-
     <style>
       .title {
         font: 700 var(--boxel-font-med);
@@ -257,6 +261,7 @@ export default class RegisterUser extends Component<Signature> {
         --boxel-button-font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
         width: fit-content;
+        min-width: 148px;
       }
     </style>
   </template>
@@ -341,6 +346,16 @@ export default class RegisterUser extends Component<Signature> {
       } = { type: 'initial' };
 
   @service private declare matrixService: MatrixService;
+
+  private get currentPage() {
+    if (['initial', 'validateEmail', 'register'].includes(this.state.type)) {
+      return 'registration-form';
+    } else if (['askForToken', 'sendToken'].includes(this.state.type)) {
+      return 'token-form';
+    } else {
+      return 'waiting-page';
+    }
+  }
 
   private get isRegisterButtonDisabled() {
     return (

@@ -7,8 +7,7 @@ import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
-//@ts-expect-error cached type not available yet
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 
@@ -25,25 +24,26 @@ import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import {
-  Deferred,
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
+  type State as ModuleState,
+  findDeclarationByName,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type MessageService from '@cardstack/host/services/message-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -58,7 +58,7 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import SchemaEditor from './code-submode/schema-editor';
+import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
@@ -108,29 +108,24 @@ const defaultPanelHeights: PanelHeights = {
 const waiter = buildWaiter('code-submode:waiter');
 
 export default class CodeSubmode extends Component<Signature> {
-  @service declare cardService: CardService;
-  @service declare messageService: MessageService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare recentFilesService: RecentFilesService;
-  @service declare loaderService: LoaderService;
-  @service declare environmentService: EnvironmentService;
+  @service private declare cardService: CardService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare recentFilesService: RecentFilesService;
+  @service private declare environmentService: EnvironmentService;
 
   @tracked private loadFileError: string | null = null;
-  @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
   @tracked private previewFormat: Format = 'isolated';
   @tracked private isCreateModalOpen = false;
+  @tracked private itemToDelete: CardDef | URL | null | undefined;
 
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
-  private updateCursorByDeclaration:
-    | ((declaration: ModuleDeclaration) => void)
-    | undefined;
+  private updateCursorByName: ((name: string) => void) | undefined;
   #currentCard: CardDef | undefined;
 
-  private deleteModal: DeleteModal | undefined;
   private createFileModal: CreateFileModal | undefined;
   private cardResource = getCard(
     this,
@@ -147,9 +142,13 @@ export default class CodeSubmode extends Component<Signature> {
       onCardInstanceChange: () => this.onCardLoaded,
     },
   );
-  private moduleContentsResource = moduleContentsResource(this, () => {
-    return this.isModule ? this.readyFile : undefined;
-  });
+  private moduleContentsResource = moduleContentsResource(
+    this,
+    () => {
+      return this.isModule ? this.readyFile : undefined;
+    },
+    this.onModuleEdit,
+  );
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -218,6 +217,14 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
+  private get isCard() {
+    return (
+      this.isReady &&
+      this.readyFile.name.endsWith('.json') &&
+      isCardDocumentString(this.readyFile.content)
+    );
+  }
+
   private get hasCardDefOrFieldDef() {
     return this.declarations.some(isCardOrFieldDeclaration);
   }
@@ -245,7 +252,16 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get fileIncompatibilityMessage() {
-    // If file is incompatible
+    if (this.isCard) {
+      if (this.cardResource.cardError) {
+        return `Card preview failed. Make sure both the card instance data and card definition files have no syntax errors and that their data schema matches. `;
+      }
+    }
+
+    if (this.moduleContentsResource.moduleError) {
+      return null; // Handled in code-submode schema editor
+    }
+
     if (this.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
     }
@@ -270,14 +286,6 @@ export default class CodeSubmode extends Component<Signature> {
         return null;
       }
       return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
-    }
-
-    // TODO: handle card preview errors (when json is valid but card returns error)
-    // This code is never reached but is temporarily placed here to please linting
-    // - a card runtime error will crash entire app
-    // - a json error will be caught by incompatibleFile
-    if (this.cardError) {
-      return `card preview error ${this.cardError.message}`;
     }
 
     if (
@@ -320,6 +328,23 @@ export default class CodeSubmode extends Component<Signature> {
     this.userHasDismissedURLError = true;
   }
 
+  @action private onModuleEdit(state: ModuleState) {
+    let editedDeclaration = state.declarations.find(
+      (newDeclaration: ModuleDeclaration) => {
+        return this.selectedDeclaration
+          ? this.selectedDeclaration.localName !== newDeclaration.localName &&
+              isEquivalentBodyPosition(
+                this.selectedDeclaration.path,
+                newDeclaration.path,
+              )
+          : false;
+      },
+    );
+    if (editedDeclaration) {
+      this.goToDefinition(undefined, editedDeclaration.localName);
+    }
+  }
+
   private onCardLoaded = (
     oldCard: CardDef | undefined,
     newCard: CardDef | undefined,
@@ -346,14 +371,14 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get _selectedDeclaration() {
     let codeSelection = this.operatorModeStateService.state.codeSelection;
-    return this.moduleContentsResource?.declarations.find((dec) => {
-      return codeSelection
-        ? dec.exportName === codeSelection || dec.localName === codeSelection
-        : false;
-    });
+    if (codeSelection === undefined) return undefined;
+    return findDeclarationByName(codeSelection, this.declarations);
   }
 
   private get selectedDeclaration() {
+    if (!this.isModule || this.moduleContentsResource.moduleError) {
+      return undefined;
+    }
     if (this._selectedDeclaration) {
       return this._selectedDeclaration;
     } else {
@@ -374,18 +399,18 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this.openDefinition(undefined, dec.localName);
+    this.goToDefinition(undefined, dec.localName);
   }
 
   @action
-  openDefinition(
+  goToDefinition(
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) {
     this.operatorModeStateService.updateCodePathWithCodeSelection(
       codeRef,
       localName,
-      () => this.updateCursorByDeclaration?.(this.selectedDeclaration!),
+      this.updateCursorByName,
     );
   }
 
@@ -452,35 +477,31 @@ export default class CodeSubmode extends Component<Signature> {
     }
   }
 
+  @action private setItemToDelete(item: CardDef | URL | null | undefined) {
+    this.itemToDelete = item;
+  }
+
+  @action private onCancelDelete() {
+    this.itemToDelete = undefined;
+  }
+
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(async (item: CardDef | URL | null | undefined) => {
+  private delete = dropTask(async (item: CardDef | URL) => {
     if (!item) {
       return;
     }
-    if (!this.deleteModal) {
-      throw new Error(`bug: DeleteModal not instantiated`);
-    }
     if (!(item instanceof URL)) {
       if (!item.id) {
+        this.itemToDelete = undefined;
         // the card isn't actually saved yet, so do nothing
         return;
       }
-    }
-
-    let deferred: Deferred<void>;
-    let isDeleteConfirmed = await this.deleteModal.confirmDelete(
-      item,
-      (d) => (deferred = d),
-    );
-    if (!isDeleteConfirmed) {
-      return;
     }
 
     if (!(item instanceof URL)) {
       let card = item;
       await this.withTestWaiters(async () => {
         await this.operatorModeStateService.deleteCard(card);
-        deferred!.fulfill();
       });
     } else {
       let file = item;
@@ -496,7 +517,6 @@ export default class CodeSubmode extends Component<Signature> {
           this.recentFilesService.removeRecentFile(filePath);
         }
         await this.cardService.deleteSource(file);
-        deferred!.fulfill();
       });
     }
 
@@ -508,6 +528,9 @@ export default class CodeSubmode extends Component<Signature> {
     } else {
       this.operatorModeStateService.updateCodePath(null);
     }
+
+    await timeout(500); // task running message can be displayed long enough for the user to read it
+    this.itemToDelete = undefined;
   });
 
   // dropTask will ignore any subsequent create file requests until the one in progress is done
@@ -518,6 +541,7 @@ export default class CodeSubmode extends Component<Signature> {
         displayName: string;
         ref: ResolvedCodeRef;
       },
+      sourceInstance?: CardDef,
     ) => {
       if (!this.createFileModal) {
         throw new Error(`bug: CreateFileModal not instantiated`);
@@ -527,6 +551,7 @@ export default class CodeSubmode extends Component<Signature> {
         fileType,
         this.realmURL,
         definitionClass,
+        sourceInstance,
       );
       this.isCreateModalOpen = false;
       if (url) {
@@ -551,18 +576,12 @@ export default class CodeSubmode extends Component<Signature> {
     }
   }
 
-  private setupDeleteModal = (deleteModal: DeleteModal) => {
-    this.deleteModal = deleteModal;
-  };
-
   private setupCreateFileModal = (createFileModal: CreateFileModal) => {
     this.createFileModal = createFileModal;
   };
 
-  private setupCodeEditor = (
-    updateCursorByDeclaration: (declaration: ModuleDeclaration) => void,
-  ) => {
-    this.updateCursorByDeclaration = updateCursorByDeclaration;
+  private setupCodeEditor = (updateCursorByName: (name: string) => void) => {
+    this.updateCursorByName = updateCursorByName;
   };
 
   @action private openSearchResultInEditor(card: CardDef) {
@@ -608,7 +627,10 @@ export default class CodeSubmode extends Component<Signature> {
         @isCreateModalShown={{bool this.isCreateModalOpen}}
       />
     </div>
-    <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
+    <SubmodeLayout
+      @onCardSelectFromSearch={{this.openSearchResultInEditor}}
+      @hideAiAssistant={{true}}
+    >
       <div
         class='code-mode'
         data-test-code-mode
@@ -652,8 +674,8 @@ export default class CodeSubmode extends Component<Signature> {
                           @readyFile={{this.readyFile}}
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @selectDeclaration={{this.selectDeclaration}}
-                          @delete={{perform this.delete}}
-                          @openDefinition={{this.openDefinition}}
+                          @delete={{this.setItemToDelete}}
+                          @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
                           data-test-card-inspector-panel
                         />
@@ -734,22 +756,14 @@ export default class CodeSubmode extends Component<Signature> {
                     >
                       {{this.fileIncompatibilityMessage}}
                     </div>
-                  {{else if this.card}}
-                    <CardPreviewPanel
-                      @card={{this.loadedCard}}
-                      @realmURL={{this.realmURL}}
-                      @format={{this.previewFormat}}
-                      @setFormat={{this.setPreviewFormat}}
-                      data-test-card-resource-loaded
-                    />
-                  {{else if this.selectedCardOrField}}
+                  {{else if this.selectedCardOrField.cardOrField}}
                     <Accordion as |A|>
                       <SchemaEditor
                         @file={{this.readyFile}}
                         @moduleContentsResource={{this.moduleContentsResource}}
                         @card={{this.selectedCardOrField.cardOrField}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
-                        @openDefinition={{this.openDefinition}}
+                        @goToDefinition={{this.goToDefinition}}
                         as |SchemaEditorTitle SchemaEditorPanel|
                       >
                         <A.Item
@@ -773,6 +787,35 @@ export default class CodeSubmode extends Component<Signature> {
                         </A.Item>
                       </SchemaEditor>
                     </Accordion>
+                  {{else if this.moduleContentsResource.moduleError}}
+                    <Accordion as |A|>
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'schema-editor'}}
+                        @isOpen={{eq
+                          this.selectedAccordionItem
+                          'schema-editor'
+                        }}
+                      >
+                        <:title>
+                          <SchemaEditorTitle @hasModuleError={{true}} />
+                        </:title>
+                        <:content>
+                          <SyntaxErrorDisplay
+                            @syntaxErrors={{this.moduleContentsResource.moduleError.message}}
+                          />
+                        </:content>
+                      </A.Item>
+                    </Accordion>
+                  {{else if this.card}}
+                    <CardPreviewPanel
+                      @card={{this.loadedCard}}
+                      @realmURL={{this.realmURL}}
+                      @format={{this.previewFormat}}
+                      @setFormat={{this.setPreviewFormat}}
+                      data-test-card-resource-loaded
+                    />
                   {{/if}}
                 {{/if}}
               </InnerContainer>
@@ -792,7 +835,14 @@ export default class CodeSubmode extends Component<Signature> {
           {{/if}}
         </ResizablePanelGroup>
       </div>
-      <DeleteModal @onCreate={{this.setupDeleteModal}} />
+      {{#if this.itemToDelete}}
+        <DeleteModal
+          @itemToDelete={{this.itemToDelete}}
+          @onConfirm={{perform this.delete}}
+          @onCancel={{this.onCancelDelete}}
+          @isDeleteRunning={{this.delete.isRunning}}
+        />
+      {{/if}}
       <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
     </SubmodeLayout>
 
@@ -811,10 +861,10 @@ export default class CodeSubmode extends Component<Signature> {
         max-height: 100vh;
         left: 0;
         right: 0;
-        z-index: 1;
         padding: var(--code-mode-padding-top) var(--boxel-sp)
           var(--code-mode-padding-bottom);
         overflow: auto;
+        flex: 1;
       }
 
       .code-mode-background {
@@ -864,7 +914,6 @@ export default class CodeSubmode extends Component<Signature> {
         padding: var(--boxel-sp) var(--boxel-sp) 0
           var(--code-mode-top-bar-padding-left);
         display: flex;
-        z-index: 2;
       }
 
       .loading {

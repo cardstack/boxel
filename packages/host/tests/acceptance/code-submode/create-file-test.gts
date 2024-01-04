@@ -1,16 +1,13 @@
-import { visit, click, fillIn, waitFor } from '@ember/test-helpers';
+import { click, fillIn, waitFor } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
-import stringify from 'safe-stable-stringify';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
-import type { Submode } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
@@ -22,6 +19,7 @@ import {
   setupServerSentEvents,
   waitForCodeEditor,
   getMonacoContent,
+  visitOperatorMode,
   TestRealmAdapter,
   type TestContextWithSave,
 } from '../../helpers';
@@ -177,16 +175,37 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       realmURL: new URL(testRealmURL2),
     });
 
-    let state: Partial<OperatorModeState> = {
-      stacks: [],
-      submode: 'code' as Submode,
-      codePath: new URL(`${testRealmURL}index.json`),
-    };
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        stringify(state),
-      )}`,
-    );
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}index.json`,
+    });
+  });
+
+  test('new file button has options to create card def, field def, and card instance files', async function (assert) {
+    await waitFor('[data-test-code-mode][data-test-save-idle]');
+    await waitFor('[data-test-new-file-button]');
+    await click('[data-test-new-file-button]');
+
+    assert
+      .dom(
+        '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text]',
+      )
+      .exists({ count: 3 });
+    assert
+      .dom(
+        '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Definition"]',
+      )
+      .exists();
+    assert
+      .dom(
+        '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Field Definition"]',
+      )
+      .exists();
+    assert
+      .dom(
+        '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Instance"]',
+      )
+      .exists();
   });
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {

@@ -16,6 +16,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { not } from '@cardstack/boxel-ui/helpers';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 export default class UserProfile extends Component {
@@ -86,6 +87,7 @@ export default class UserProfile extends Component {
       .wrapper {
         padding: 0 var(--boxel-sp);
         margin: var(--boxel-sp) 0;
+        background: white;
       }
 
       .wrapper label {
@@ -96,6 +98,7 @@ export default class UserProfile extends Component {
         display: flex;
         justify-content: flex-end;
         padding: 0 var(--boxel-sp) var(--boxel-sp);
+        background: white;
       }
       .user-button {
         margin-left: var(--boxel-sp-xs);

@@ -2,7 +2,12 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
+import {
+  didCancel,
+  enqueueTask,
+  dropTask,
+  restartableTask,
+} from 'ember-concurrency';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
@@ -115,6 +120,7 @@ export default class CardPrerender extends Component {
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
     let { reader, entrySetter } = this.getRunnerParams();
+    await this.resetLoaderInFastboot.perform();
     let current = await CurrentRun.fromScratch(
       new CurrentRun({
         realmURL,
@@ -136,6 +142,7 @@ export default class CardPrerender extends Component {
       onInvalidation?: (invalidatedURLs: URL[]) => void,
     ) => {
       let { reader, entrySetter } = this.getRunnerParams();
+      await this.resetLoaderInFastboot.perform();
       let current = await CurrentRun.incremental({
         url,
         operation,
@@ -151,10 +158,30 @@ export default class CardPrerender extends Component {
     },
   );
 
+  // perform this in EC task to prevent rerender cycles
+  private resetLoaderInFastboot = restartableTask(async () => {
+    if (this.fastboot.isFastBoot) {
+      await Promise.resolve();
+      this.loaderService.reset();
+    }
+  });
+
   private getRunnerParams(): {
     reader: Reader;
     entrySetter: EntrySetter;
   } {
+    let self = this;
+    function readFileAsText(
+      path: LocalPath,
+      opts?: { withFallbacks?: true },
+    ): Promise<{ content: string; lastModified: number } | undefined> {
+      return _readFileAsText(
+        path,
+        self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
+        opts,
+      );
+    }
+
     if (this.fastboot.isFastBoot) {
       let optsId = (globalThis as any).runnerOptsId;
       if (optsId == null) {
@@ -165,17 +192,6 @@ export default class CardPrerender extends Component {
         entrySetter: getRunnerOpts(optsId).entrySetter,
       };
     } else {
-      let self = this;
-      function readFileAsText(
-        path: LocalPath,
-        opts?: { withFallbacks?: true },
-      ): Promise<{ content: string; lastModified: number } | undefined> {
-        return _readFileAsText(
-          path,
-          self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
-          opts,
-        );
-      }
       return {
         reader: {
           readdir: this.localIndexer.adapter.readdir.bind(

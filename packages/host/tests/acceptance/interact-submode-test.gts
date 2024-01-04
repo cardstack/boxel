@@ -1,5 +1,4 @@
 import {
-  visit,
   currentURL,
   click,
   fillIn,
@@ -38,6 +37,7 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
   setupAcceptanceTestRealm,
+  visitOperatorMode,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
@@ -235,15 +235,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
   module('0 stacks', function () {
     test('Clicking card in search panel opens card on a new stack', async function (assert) {
-      let operatorModeStateParam = stringify({
-        stacks: [],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      await visitOperatorMode({});
 
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
@@ -282,11 +274,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('Can add a card by URL using the add button', async function (assert) {
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({ stacks: [] })!,
-        )}`,
-      );
+      await visitOperatorMode({});
 
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
 
@@ -312,11 +300,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test('Can add an index card by URL (without "index" in path) using the add button', async function (assert) {
       const wrongURL = 'https://cardstack.com/bas';
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({ stacks: [] })!,
-        )}`,
-      );
+      await visitOperatorMode({});
 
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
 
@@ -363,13 +347,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('Can open a recent card in empty stack', async function (assert) {
-      let operatorModeStateParam = stringify({ stacks: [] })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      await visitOperatorMode({});
 
       await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
@@ -426,13 +404,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('Handles a URL with no results', async function (assert) {
-      let operatorModeStateParam = stringify({ stacks: [] })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      await visitOperatorMode({});
 
       await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
@@ -451,7 +423,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
   module('1 stack', function () {
     test('restoring the stack from query param', async function (assert) {
-      let operatorModeStateParam = stringify({
+      await visitOperatorMode({
         stacks: [
           [
             {
@@ -464,13 +436,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      });
 
       await percySnapshot(assert);
 
@@ -556,7 +522,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('restoring the stack from query param when card is in edit format', async function (assert) {
-      let operatorModeStateParam = stringify({
+      await visitOperatorMode({
         stacks: [
           [
             {
@@ -565,13 +531,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      });
 
       await percySnapshot(assert);
 
@@ -579,7 +539,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('click left or right add card button will open the search panel and then click on a recent card will open a new stack on the left or right', async function (assert) {
-      let operatorModeStateParam = stringify({
+      await visitOperatorMode({
         stacks: [
           [
             {
@@ -592,13 +552,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      });
 
       let operatorModeStateService = this.owner.lookup(
         'service:operator-mode-state-service',
@@ -687,7 +641,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('Clicking search panel (without left and right buttons activated) replaces open card on existing stack', async function (assert) {
-      let operatorModeStateParam = stringify({
+      await visitOperatorMode({
         stacks: [
           [
             {
@@ -700,13 +654,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      });
 
       let operatorModeStateService = this.owner.lookup(
         'service:operator-mode-state-service',
@@ -749,15 +697,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('search can be dismissed with escape', async function (assert) {
-      let operatorModeStateParam = stringify({
-        stacks: [],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      await visitOperatorMode({});
       await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
@@ -773,7 +713,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
       assert.expect(4);
-      let operatorModeStateParam = stringify({
+      await visitOperatorMode({
         stacks: [
           [
             {
@@ -782,13 +722,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-      })!;
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
-
+      });
       let deferred = new Deferred<void>();
       this.onSave((_, json) => {
         if (typeof json === 'string') {
@@ -815,7 +749,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
   module('2 stacks', function () {
     test('restoring the stacks from query param', async function (assert) {
-      let operatorModeStateParam = stringify({
+      await visitOperatorMode({
         stacks: [
           [
             {
@@ -830,13 +764,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      });
 
       await percySnapshot(assert); // 2 stacks from the same realm share the same background
 
@@ -878,7 +806,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
-      let operatorModeStateParam = stringify({
+      await visitOperatorMode({
         stacks: [
           [
             {
@@ -893,13 +821,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      });
 
       await percySnapshot(assert); // 2 stacks from the different realms have different backgrounds
 
@@ -913,7 +835,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       );
 
-      let operatorModeStateParam = stringify({
+      await visitOperatorMode({
         stacks: [
           [
             {
@@ -932,13 +854,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      });
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
 
@@ -986,7 +902,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -995,12 +911,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           },
         ],
       ],
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     assert
       .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
       .hasText('Fadhlan');

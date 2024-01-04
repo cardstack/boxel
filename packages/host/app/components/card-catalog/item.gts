@@ -94,7 +94,7 @@ export default class CardCatalogItem extends Component<Signature> {
   get thumbnailURL() {
     let path = this.args.thumbnailURL;
     if (!path) {
-      return;
+      return undefined;
     }
     let realmPath = new RealmPaths(this.cardService.defaultURL.href);
 

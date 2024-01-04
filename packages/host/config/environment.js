@@ -30,6 +30,7 @@ module.exports = function (environment) {
     monacoCursorDebounceMs: 200,
     serverEchoDebounceMs: 5000,
     loginMessageTimeoutMs: 1000,
+    minSaveTaskDurationMs: 1000,
 
     // the fields below may be rewritten by the realm server
     ownRealmURL:
@@ -75,6 +76,7 @@ module.exports = function (environment) {
     ENV.monacoCursorDebounceMs = 0;
     ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
+    ENV.minSaveTaskDurationMs = 0;
   }
 
   if (environment === 'production') {

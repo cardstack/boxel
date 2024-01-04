@@ -1,10 +1,11 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
+
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 export interface ClickableArgs {
-  openDefinition: (
+  goToDefinition: (
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) => void;
@@ -23,7 +24,7 @@ interface ClickableSignature {
 export class Clickable extends Component<ClickableSignature> {
   @action
   handleClick() {
-    this.args.openDefinition(this.args.codeRef, this.args.localName);
+    this.args.goToDefinition(this.args.codeRef, this.args.localName);
   }
   <template>
     <button

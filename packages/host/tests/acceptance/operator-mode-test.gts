@@ -4,6 +4,8 @@ import {
   click,
   triggerEvent,
   waitFor,
+  fillIn,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -11,7 +13,6 @@ import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
-import stringify from 'safe-stable-stringify';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -27,8 +28,12 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  visitOperatorMode,
 } from '../helpers';
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import {
+  MockMatrixService,
+  setupMatrixServiceMock,
+} from '../helpers/mock-matrix-service';
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -377,43 +382,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  test('has a profile icon in the bottom left corner that opens profile info popover', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}employee.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
-
-    assert.dom('[data-test-profile-icon]').hasText('T');
-    assert
-      .dom('[data-test-profile-icon]')
-      .hasAttribute('style', 'background: #5ead6b');
-
-    assert.dom('[data-test-profile-popover]').doesNotExist();
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-popover]').exists();
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-popover]').doesNotExist(); // Clicking again closes the popover
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
-
-    await click('[data-test-signout-button]');
-
-    assert.dom('[data-test-login-btn]').exists();
-  });
-
   test('visiting index card and entering operator mode', async function (assert) {
     await visit('/');
 
@@ -459,8 +427,38 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  test('can open code submode when card or field has no embedded template', async function (assert) {
-    let operatorModeStateParam = stringify({
+  test('can logout via profile info popover', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    });
+
+    assert.dom('[data-test-profile-icon]').hasText('T');
+    assert
+      .dom('[data-test-profile-icon]')
+      .hasAttribute('style', 'background: #5ead6b');
+
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-popover]').exists();
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-popover]').doesNotExist(); // Clicking again closes the popover
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
+
+    await click('[data-test-signout-button]');
+
+    assert.dom('[data-test-login-form]').exists();
+  });
+
+  test('can access and save settings via profile info popover', async function (assert) {
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -471,11 +469,73 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
     })!;
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+
+    await click('[data-test-profile-icon-button]');
+    await click('[data-test-settings-button]');
+
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+    assert.dom('[data-test-settings-modal]').exists();
+
+    assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:staging
+    assert.dom('[data-test-profile-display-name]').hasText(''); // No display name set yet
+
+    assert
+      .dom('[data-test-profile-icon]')
+      .hasAttribute('style', 'background: #5ead6b');
+    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
+
+    await fillIn('[data-test-display-name-field]', '');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .hasText('Name is required');
+
+    await fillIn('[data-test-display-name-field]', 'John');
+
+    assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
+
+    let setDisplayNameOriginal = matrixService.setDisplayName;
+
+    matrixService.setDisplayName = async function () {
+      throw new Error('Boom!');
+    };
+
+    await click('[data-test-profile-settings-save-button]');
+
+    assert
+      .dom('[data-test-profile-save-error]')
+      .hasText('Failed to save profile. Please try again.');
+
+    matrixService.setDisplayName = setDisplayNameOriginal;
+
+    await click('[data-test-profile-settings-save-button]');
+
+    assert.dom('[data-test-profile-save-error]').doesNotExist();
+
+    await waitUntil(
+      () =>
+        // @ts-ignore
+        document
+          .querySelector('[data-test-profile-display-name]')
+          .textContent.trim() === 'John',
     );
+
+    assert.dom('[data-test-profile-icon]').hasText('J'); // From display name "John"
+  });
+
+  test('can open code submode when card or field has no embedded template', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
 
     await waitFor(
       '[data-test-stack-card="http://test-realm/test/Person/fadhlan"]',
@@ -535,7 +595,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   module('2 stacks', function () {
     test('Toggling submode will open code submode and toggling back will restore the stack', async function (assert) {
-      let operatorModeStateParam = stringify({
+      await visitOperatorMode({
         stacks: [
           [
             {
@@ -550,13 +610,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           ],
         ],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
+      });
 
       // Toggle from interact (default) to code submode
       await click('[data-test-submode-switcher] button');

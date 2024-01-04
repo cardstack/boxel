@@ -7,9 +7,6 @@ import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 
-// @ts-expect-error cached doesn't have type yet
-import { tracked, cached } from '@glimmer/tracking';
-
 import { use, resource } from 'ember-resources';
 
 import startCase from 'lodash/startCase';
@@ -20,22 +17,24 @@ import {
   LoadingIndicator,
   IconButton,
 } from '@cardstack/boxel-ui/components';
+
 import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { IconInherit, IconTrash, IconPlus } from '@cardstack/boxel-ui/icons';
+import {
+  IconInherit,
+  IconTrash,
+  IconPlus,
+  Copy,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   hasExecutableExtension,
   getPlural,
   isCardDocumentString,
-} from '@cardstack/runtime-common';
-
-import {
   isCardDef,
   isFieldDef,
   isBaseDef,
-} from '@cardstack/runtime-common/code-ref';
-
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
@@ -76,7 +75,7 @@ interface Signature {
     cardInstance: CardDef | undefined;
     selectedDeclaration?: ModuleDeclaration;
     selectDeclaration: (dec: ModuleDeclaration) => void;
-    openDefinition: (
+    goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
     ) => void;
@@ -86,8 +85,9 @@ interface Signature {
         displayName: string;
         ref: ResolvedCodeRef;
       },
+      sourceInstance?: CardDef,
     ) => Promise<void>;
-    delete: (item: CardDef | URL | null | undefined) => void | Promise<void>;
+    delete: (item: CardDef | URL | null | undefined) => void;
   };
 }
 
@@ -190,6 +190,20 @@ export default class DetailPanel extends Component<Signature> {
     ];
   }
 
+  @action private duplicateInstance() {
+    if (!this.args.cardInstance) {
+      throw new Error('must have a selected card instance');
+    }
+    let id: NewFileType = 'duplicate-instance';
+    let cardDef = Reflect.getPrototypeOf(this.args.cardInstance)!
+      .constructor as typeof CardDef;
+    this.args.createFile(
+      { id, displayName: capitalize(cardDef.displayName || 'Instance') },
+      undefined,
+      this.args.cardInstance,
+    );
+  }
+
   @action private createInstance() {
     if (!this.args.selectedDeclaration) {
       throw new Error('must have a selected delcaration');
@@ -251,7 +265,7 @@ export default class DetailPanel extends Component<Signature> {
     return {
       name: this.args.selectedDeclaration.exportName,
       module: `${this.operatorModeStateService.state.codePath!.href.replace(
-        /\.[^\.]+$/,
+        /\.[^.]+$/,
         '',
       )}`,
     };
@@ -364,6 +378,9 @@ export default class DetailPanel extends Component<Signature> {
                 @infoText={{this.lastModified.value}}
                 @actions={{array
                   (hash
+                    label='Duplicate' handler=this.duplicateInstance icon=Copy
+                  )
+                  (hash
                     label='Delete'
                     handler=(fn @delete @cardInstance)
                     icon=IconTrash
@@ -386,7 +403,7 @@ export default class DetailPanel extends Component<Signature> {
                     @fileURL={{this.cardInstanceType.type.module}}
                     @name={{this.cardInstanceType.type.displayName}}
                     @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
-                    @openDefinition={{@openDefinition}}
+                    @goToDefinition={{@goToDefinition}}
                     @codeRef={{codeRef}}
                   />
                 {{/let}}
@@ -424,7 +441,7 @@ export default class DetailPanel extends Component<Signature> {
                         @fileURL={{this.cardType.type.super.module}}
                         @name={{this.cardType.type.super.displayName}}
                         @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                        @openDefinition={{@openDefinition}}
+                        @goToDefinition={{@goToDefinition}}
                         @codeRef={{codeRef}}
                         @localName={{this.cardType.type.super.localName}}
                       />
@@ -438,7 +455,7 @@ export default class DetailPanel extends Component<Signature> {
                         @fileURL={{this.cardType.type.module}}
                         @name={{this.cardType.type.displayName}}
                         @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                        @openDefinition={{@openDefinition}}
+                        @goToDefinition={{@goToDefinition}}
                         @codeRef={{codeRef}}
                         @localName={{this.cardType.type.localName}}
                       />
