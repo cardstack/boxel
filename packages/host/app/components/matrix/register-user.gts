@@ -13,7 +13,6 @@ import { type IAuthData, type IRequestTokenResponse } from 'matrix-js-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  BoxelHeader,
   BoxelInput,
   BoxelInputGroup,
   Button,
@@ -21,7 +20,6 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
 import ENV from '@cardstack/host/config/environment';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
@@ -44,183 +42,160 @@ interface Signature {
 
 export default class RegisterUser extends Component<Signature> {
   <template>
-    <div class='registration-form' data-test-register-user>
-      <BoxelHeader @title='Boxel' @hasBackground={{false}} class='header'>
-        <:icon>
-          <BoxelIcon />
-        </:icon>
-      </BoxelHeader>
-      <div class='content'>
-        {{#if (eq this.currentPage 'waiting-page')}}
-          <span class='title' data-test-email-validation>Please check your email
-            to complete registration.</span>
-          <ul class='email-validation-instruction'>
-            <li>Leave this window open while we verify your email</li>
-            <li>This screen will update once your email is verified</li>
-          </ul>
+    <section class='content' data-test-register-user>
+      {{#if (eq this.currentPage 'waiting-page')}}
+        <p class='title' data-test-email-validation>Please check your email to
+          complete registration.</p>
+        <ul class='email-validation-instruction'>
+          <li>Leave this window open while we verify your email</li>
+          <li>This screen will update once your email is verified</li>
+        </ul>
+        <Button
+          data-test-resend-validation
+          {{on 'click' this.resendValidation}}
+          class='resend-email'
+          @kind='primary'
+          @disabled={{this.validateEmail.isRunning}}
+        >{{#if this.validateEmail.isRunning}}
+            <LoadingIndicator />
+          {{else}}Resend Email{{/if}}</Button>
+      {{else if (eq this.currentPage 'token-form')}}
+        <FieldContainer
+          @label='Registration Token'
+          @tag='label'
+          class='registration-field'
+          @vertical={{true}}
+        >
+          <BoxelInput
+            data-test-token-field
+            @state={{this.tokenInputState}}
+            @value={{this.token}}
+            @errorMessage={{this.tokenError}}
+            @onInput={{this.setToken}}
+          />
+        </FieldContainer>
+        <div class='button-wrapper'>
           <Button
-            data-test-resend-validation
-            {{on 'click' this.resendValidation}}
-            class='resend-email'
+            data-test-next-btn
+            class='button'
             @kind='primary'
-            @disabled={{this.validateEmail.isRunning}}
-          >{{#if this.validateEmail.isRunning}}
+            @disabled={{this.isNextButtonDisabled}}
+            {{on 'click' this.sendToken}}
+          >
+            {{#if this.doRegistrationFlow.isRunning}}
               <LoadingIndicator />
-            {{else}}Resend Email{{/if}}</Button>
-        {{else if (eq this.currentPage 'token-form')}}
-          <FieldContainer
-            @label='Registration Token'
-            @tag='label'
-            class='registration-field'
-            @vertical={{true}}
+            {{else}}
+              Next
+            {{/if}}
+          </Button>
+        </div>
+      {{else if (eq this.currentPage 'registration-form')}}
+        <header class='title'>Create a Boxel Account</header>
+        <FieldContainer
+          @label='Your Name'
+          @tag='label'
+          @vertical={{true}}
+          class='registration-field'
+        >
+          <BoxelInput
+            data-test-name-field
+            @state={{this.nameInputState}}
+            @value={{this.name}}
+            @errorMessage={{this.nameError}}
+            @onInput={{this.setName}}
+            @onBlur={{this.checkName}}
+          />
+        </FieldContainer>
+        <FieldContainer
+          @label='Email'
+          @tag='label'
+          @vertical={{true}}
+          class='registration-field'
+        >
+          <BoxelInput
+            data-test-email-field
+            @state={{this.emailInputState}}
+            @value={{this.email}}
+            @errorMessage={{this.emailError}}
+            @onInput={{this.setEmail}}
+            @onBlur={{this.checkEmail}}
+          />
+        </FieldContainer>
+        <FieldContainer
+          @label='Username'
+          @tag='label'
+          @vertical={{true}}
+          class='registration-field'
+        >
+          <BoxelInputGroup
+            data-test-username-field
+            @state={{this.usernameInputState}}
+            @value={{this.username}}
+            @errorMessage={{this.usernameError}}
+            @onInput={{this.setUsername}}
+            @onBlur={{this.checkUsername}}
           >
-            <BoxelInput
-              data-test-token-field
-              @state={{this.tokenInputState}}
-              @value={{this.token}}
-              @errorMessage={{this.tokenError}}
-              @onInput={{this.setToken}}
-            />
-          </FieldContainer>
-          <div class='button-wrapper'>
-            <Button
-              data-test-next-btn
-              class='button'
-              @kind='primary'
-              @disabled={{this.isNextButtonDisabled}}
-              {{on 'click' this.sendToken}}
-            >{{#if this.doRegistrationFlow.isRunning}}
-                <LoadingIndicator />
-              {{else}}Next{{/if}}</Button>
-          </div>
-        {{else if (eq this.currentPage 'registration-form')}}
-          <span class='title'>Create a Boxel Account</span>
-          <FieldContainer
-            @label='Your Name'
-            @tag='label'
-            @vertical={{true}}
-            class='registration-field'
-          >
-            <BoxelInput
-              data-test-name-field
-              @state={{this.nameInputState}}
-              @value={{this.name}}
-              @errorMessage={{this.nameError}}
-              @onInput={{this.setName}}
-              @onBlur={{this.checkName}}
-            />
-          </FieldContainer>
-          <FieldContainer
-            @label='Email'
-            @tag='label'
-            @vertical={{true}}
-            class='registration-field'
-          >
-            <BoxelInput
-              data-test-email-field
-              @state={{this.emailInputState}}
-              @value={{this.email}}
-              @errorMessage={{this.emailError}}
-              @onInput={{this.setEmail}}
-              @onBlur={{this.checkEmail}}
-            />
-          </FieldContainer>
-          <FieldContainer
-            @label='Username'
-            @tag='label'
-            @vertical={{true}}
-            class='registration-field'
-          >
-            <BoxelInputGroup
-              data-test-username-field
-              @state={{this.usernameInputState}}
-              @value={{this.username}}
-              @errorMessage={{this.usernameError}}
-              @onInput={{this.setUsername}}
-              @onBlur={{this.checkUsername}}
-            >
-              <:before as |Accessories|>
-                <Accessories.Text class='username-prefix'>@</Accessories.Text>
-              </:before>
-              <:after as |Accessories|>
-                <Accessories.Text>{{this.usernameSuffix}}</Accessories.Text>
-              </:after>
-            </BoxelInputGroup>
-          </FieldContainer>
-          <FieldContainer
-            @label='Password'
-            @tag='label'
-            @vertical={{true}}
-            class='registration-field'
-          >
-            <BoxelInput
-              data-test-password-field
-              @type='password'
-              @value={{this.password}}
-              @state={{this.passwordInputState}}
-              @errorMessage={{this.passwordError}}
-              @onInput={{this.setPassword}}
-              @onBlur={{this.checkPassword}}
-            />
-          </FieldContainer>
-          <FieldContainer
-            @label='Confirm Password'
-            @tag='label'
-            @vertical={{true}}
-            class='registration-field'
-          >
-            <BoxelInput
-              data-test-confirm-password-field
-              @type='password'
-              @value={{this.confirmPassword}}
-              @state={{this.confirmPasswordInputState}}
-              @errorMessage={{this.confirmPasswordError}}
-              @onInput={{this.setConfirmPassword}}
-              @onBlur={{this.checkConfirmPassword}}
-            />
-          </FieldContainer>
-          <div class='button-wrapper'>
-            <Button
-              data-test-register-btn
-              class='button'
-              @kind='primary'
-              @disabled={{this.isRegisterButtonDisabled}}
-              {{on 'click' this.register}}
-            >{{#if this.doRegistrationFlow.isRunning}}
-                <LoadingIndicator />
-              {{else}}Create Account{{/if}}</Button>
-            <span class='or'>or</span>
-            <Button
-              data-test-cancel-btn
-              class='button'
-              {{on 'click' this.cancel}}
-            >Login with an existing account</Button>
-          </div>
-        {{/if}}
-      </div>
-    </div>
+            <:before as |Accessories|>
+              <Accessories.Text class='username-prefix'>@</Accessories.Text>
+            </:before>
+            <:after as |Accessories|>
+              <Accessories.Text>{{this.usernameSuffix}}</Accessories.Text>
+            </:after>
+          </BoxelInputGroup>
+        </FieldContainer>
+        <FieldContainer
+          @label='Password'
+          @tag='label'
+          @vertical={{true}}
+          class='registration-field'
+        >
+          <BoxelInput
+            data-test-password-field
+            @type='password'
+            @value={{this.password}}
+            @state={{this.passwordInputState}}
+            @errorMessage={{this.passwordError}}
+            @onInput={{this.setPassword}}
+            @onBlur={{this.checkPassword}}
+          />
+        </FieldContainer>
+        <FieldContainer
+          @label='Confirm Password'
+          @tag='label'
+          @vertical={{true}}
+          class='registration-field'
+        >
+          <BoxelInput
+            data-test-confirm-password-field
+            @type='password'
+            @value={{this.confirmPassword}}
+            @state={{this.confirmPasswordInputState}}
+            @errorMessage={{this.confirmPasswordError}}
+            @onInput={{this.setConfirmPassword}}
+            @onBlur={{this.checkConfirmPassword}}
+          />
+        </FieldContainer>
+        <div class='button-wrapper'>
+          <Button
+            data-test-register-btn
+            class='button'
+            @kind='primary'
+            @disabled={{this.isRegisterButtonDisabled}}
+            {{on 'click' this.register}}
+          >{{#if this.doRegistrationFlow.isRunning}}
+              <LoadingIndicator />
+            {{else}}Create Account{{/if}}</Button>
+          <span class='or'>or</span>
+          <Button
+            data-test-cancel-btn
+            class='button'
+            {{on 'click' this.cancel}}
+          >Login with an existing account</Button>
+        </div>
+      {{/if}}
+    </section>
 
     <style>
-      .registration-form {
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
-        letter-spacing: var(--boxel-lsp);
-        width: 550px;
-      }
-      .header {
-        --boxel-header-icon-width: var(--boxel-icon-med);
-        --boxel-header-icon-height: var(--boxel-icon-med);
-        --boxel-header-padding: var(--boxel-sp);
-        --boxel-header-text-size: var(--boxel-font);
-
-        background-color: var(--boxel-light);
-        text-transform: uppercase;
-        max-width: max-content;
-        min-width: 100%;
-        gap: var(--boxel-sp-xxs);
-        letter-spacing: var(--boxel-lsp-lg);
-      }
       .content {
         display: flex;
         flex-direction: column;
