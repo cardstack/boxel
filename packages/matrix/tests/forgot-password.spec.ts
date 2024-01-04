@@ -60,11 +60,9 @@ test.describe('Forgot password', () => {
     await page.locator('[data-test-email-field]').fill('user1@example.com');
     await expect(page.locator('[data-test-reset-your-password-btn]')).toBeEnabled();
     await page.locator('[data-test-reset-your-password-btn]').click();
-
-    await expect(page.locator('[data-test-have-validated-btn]')).toHaveCount(1);
     await expect(page.locator('[data-test-resend-validation-btn]')).toHaveCount(1);
 
-    await validateEmailForResetPassword(page, 'user1@example.com', {
+    let resetPasswordPage = await validateEmailForResetPassword(page, 'user1@example.com', {
       onEmailPage: async (page) => {
         await expect(page).toHaveScreenshot('verification-email.png', {
           mask: [page.locator('.messagelist')],
@@ -79,28 +77,19 @@ test.describe('Forgot password', () => {
           maxDiffPixelRatio: 0.01,
         });
       },
-      onSuccessPage: async (page) => {
-        await expect(page.locator('body')).toContainText(
-          'Your email has now been validated',
-        );
-        await expect(page).toHaveScreenshot('success-page.png', {
-          maxDiffPixelRatio: 0.01,
-        });
-      },
     });
 
-    await page.locator('[data-test-have-validated-btn]').click();
-    await expect(page.locator('[data-test-reset-password-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('mypassword2!');
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword2!');
-    await expect(page.locator('[data-test-reset-password-btn]')).toBeEnabled();
-    await page.locator('[data-test-reset-password-btn]').click();
+    await expect(resetPasswordPage.locator('[data-test-reset-password-btn]')).toBeDisabled();
+    await resetPasswordPage.locator('[data-test-password-field]').fill('mypassword2!');
+    await resetPasswordPage.locator('[data-test-confirm-password-field]').fill('mypassword2!');
+    await expect(resetPasswordPage.locator('[data-test-reset-password-btn]')).toBeEnabled();
+    await resetPasswordPage.locator('[data-test-reset-password-btn]').click();
 
-    await expect(page.locator('[data-test-reset-password-success]')).toContainText('Your password is now reset');
-    await page.locator('[data-test-back-to-login-btn]').click();
+    await expect(resetPasswordPage.locator('[data-test-reset-password-success]')).toContainText('Your password is now reset');
+    await resetPasswordPage.locator('[data-test-back-to-login-btn]').click();
 
-    await login(page, 'user1', 'mypassword2!');
-    await assertLoggedIn(page);
+    await login(resetPasswordPage, 'user1', 'mypassword2!');
+    await assertLoggedIn(resetPasswordPage);
   });
 
   test('It shows an error when email does not belong to any account', async ({ page }) => {
@@ -127,7 +116,6 @@ test.describe('Forgot password', () => {
     await page.locator('[data-test-email-field]').fill('user1@example.com');
     await expect(page.locator('[data-test-reset-your-password-btn]')).toBeEnabled();
     await page.locator('[data-test-reset-your-password-btn]').click();
-    await expect(page.locator('[data-test-have-validated-btn]')).toHaveCount(1);
     await expect(page.locator('[data-test-resend-validation-btn]')).toHaveCount(1);
   });
 
@@ -139,76 +127,43 @@ test.describe('Forgot password', () => {
     await expect(page.locator('[data-test-reset-your-password-btn]')).toBeEnabled();
     await page.locator('[data-test-reset-your-password-btn]').click();
 
-    await expect(page.locator('[data-test-have-validated-btn]')).toHaveCount(1);
     await expect(page.locator('[data-test-resend-validation-btn]')).toHaveCount(1);
 
-    await validateEmailForResetPassword(page, 'user1@example.com');
-    
-    await page.locator('[data-test-have-validated-btn]').click();
-    await expect(page.locator('[data-test-reset-password-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('mypassword');
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword');
+    let resetPasswordPage = await validateEmailForResetPassword(page, 'user1@example.com');
+
+    await expect(resetPasswordPage.locator('[data-test-reset-password-btn]')).toBeDisabled();
+    await resetPasswordPage.locator('[data-test-password-field]').fill('mypassword');
+    await resetPasswordPage.locator('[data-test-confirm-password-field]').fill('mypassword');
     await expect(
-      page.locator(
+      resetPasswordPage.locator(
         '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'password field displays invalid validation state',
     ).toHaveCount(1);
     await expect(
-      page.locator(
+      resetPasswordPage.locator(
         '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText('Password must be at least 8 characters long and include a number and a symbol');
 
-    await page.locator('[data-test-password-field]').fill('mypassword!1');
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword!');
-    await page.locator('[data-test-reset-password-btn]').click();
+    await resetPasswordPage.locator('[data-test-password-field]').fill('mypassword!1');
+    await resetPasswordPage.locator('[data-test-confirm-password-field]').fill('mypassword!');
+    await resetPasswordPage.locator('[data-test-reset-password-btn]').click();
     await expect(
-      page.locator(
+      resetPasswordPage.locator(
         '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'confirm password displays invalid validation state',
     ).toHaveCount(1);
     await expect(
-      page.locator(
+      resetPasswordPage.locator(
         '[data-test-confirm-password-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText('Passwords do not match');
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword!1');
+    await resetPasswordPage.locator('[data-test-confirm-password-field]').fill('mypassword!1');
     
-    await expect(page.locator('[data-test-reset-password-btn]')).toBeEnabled();
-    await page.locator('[data-test-reset-password-btn]').click();
-  });
-
-  test('It shows an error when email has not been validated', async ({ page }) => {
-    await gotoForgotPassword(page);
-
-    await expect(page.locator('[data-test-reset-your-password-btn]')).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
-    await expect(page.locator('[data-test-reset-your-password-btn]')).toBeEnabled();
-    await page.locator('[data-test-reset-your-password-btn]').click();
-
-    await expect(page.locator('[data-test-have-validated-btn]')).toHaveCount(1);
-    await expect(page.locator('[data-test-resend-validation-btn]')).toHaveCount(1);
-
-    await page.locator('[data-test-have-validated-btn]').click();
-    await expect(page.locator('[data-test-reset-password-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('mypassword2!');
-    await page.locator('[data-test-confirm-password-field]').fill('mypassword2!');
-    await expect(page.locator('[data-test-reset-password-btn]')).toBeEnabled();
-    await page.locator('[data-test-reset-password-btn]').click();
-
-    await expect(
-      page.locator(
-        '[data-test-reset-password-error]',
-      ),
-      'displays reset password error',
-    ).toHaveCount(1);
-    await expect(
-      page.locator(
-        '[data-test-reset-password-error]',
-      ),
-    ).toContainText('Please check your email to validate reset password');
+    await expect(resetPasswordPage.locator('[data-test-reset-password-btn]')).toBeEnabled();
+    await resetPasswordPage.locator('[data-test-reset-password-btn]').click();
   });
 
   test('it can resend email validation message', async ({ page }) => {
@@ -218,8 +173,6 @@ test.describe('Forgot password', () => {
     await page.locator('[data-test-email-field]').fill('user1@example.com');
     await expect(page.locator('[data-test-reset-your-password-btn]')).toBeEnabled();
     await page.locator('[data-test-reset-your-password-btn]').click();
-
-    await expect(page.locator('[data-test-have-validated-btn]')).toHaveCount(1);
     await expect(page.locator('[data-test-resend-validation-btn]')).toHaveCount(1);
 
     await validateEmailForResetPassword(page, 'user1@example.com', { sendAttempts: 2 });

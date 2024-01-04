@@ -148,11 +148,10 @@ export async function validateEmailForResetPassword(
   opts?: {
     onEmailPage?: (page: Page) => Promise<void>;
     onValidationPage?: (page: Page) => Promise<void>;
-    onSuccessPage?: (page: Page) => Promise<void>;
     sendAttempts?: number;
     isLoggedInWhenValidated?: true;
   },
-) {
+): Promise<Page> {
   let sendAttempts = opts?.sendAttempts ?? 1;
   await expect(appPage.locator('[data-test-email-validation]')).toContainText(
     'Please check your email to reset your password',
@@ -205,11 +204,9 @@ export async function validateEmailForResetPassword(
   await validationPage.waitForTimeout(500);
   await validationBtn.click();
 
-  const successPage = await pagePromise;
-  await successPage.waitForLoadState();
-  if (opts?.onSuccessPage) {
-    await opts.onSuccessPage(validationPage);
-  }
+  const resetPasswordPage = await pagePromise;
+  await resetPasswordPage.waitForLoadState();
+  return resetPasswordPage;
 }
 
 export async function gotoRegistration(page: Page) {

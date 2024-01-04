@@ -162,6 +162,7 @@ export default class MatrixService extends Service {
       clearAuth();
       this.unbindEventListeners();
       await this.client.logout(true);
+      this.authState.mode = 'login';
     } catch (e) {
       console.log('Error logging out of Matrix', e);
     } finally {
