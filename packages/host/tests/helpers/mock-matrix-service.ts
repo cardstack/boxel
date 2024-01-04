@@ -10,7 +10,11 @@ import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import { AuthMode, AuthState, OperatorModeContext } from '@cardstack/host/services/matrix-service';
+import {
+  AuthMode,
+  AuthState,
+  OperatorModeContext,
+} from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type { RoomField } from 'https://cardstack.com/base/room';
