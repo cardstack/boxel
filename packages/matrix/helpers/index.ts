@@ -290,7 +290,7 @@ export async function register(page: Page, name: string,
 
   await validateEmail(page, email);
   
-  await openChat(page);
+  await openAiAssistant(page);
   await assertLoggedIn(page, { email, displayName: name});
   await logout(page);
   await assertLoggedOut(page);
