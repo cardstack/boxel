@@ -34,7 +34,7 @@ export default class ForgotPassword extends Component<Signature> {
     {{#if
       (or (eq this.state.type 'initial') (eq this.state.type 'validateEmail'))
     }}
-      <span class='title'>Forget your password?</span>
+      <span class='title'>Forgot your password?</span>
       <p class='info'>Enter email to receive a reset password link.</p>
       <FieldContainer
         @label='Email Address'
