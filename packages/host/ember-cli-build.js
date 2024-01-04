@@ -32,6 +32,7 @@ module.exports = function (defaults) {
 
     packagerOptions: {
       ...{
+        publicAssetURL: 'https://boxel-host-staging.stack.cards/',
         webpackConfig: {
           devtool: 'source-map',
           module: {
