@@ -286,8 +286,6 @@ export default class ProfileSettingsModal extends Component<Signature> {
             </FieldContainer>
           {{/if}}
         </form>
-
-        {{! TODO this should move into the display field input}}
         {{#if this.displayNameError}}
           <div class='error-message' data-test-profile-save-error>
             {{this.displayNameError.message}}
