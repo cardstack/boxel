@@ -6,14 +6,28 @@ import type { Signature } from './types.ts';
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
     xmlns='http://www.w3.org/2000/svg'
-    width='24'
-    height='24'
-    viewBox='0 0 24 24'
+    height='15'
+    viewBox='0 0 13.7 15'
+    width='13.7'
     ...attributes
-  ><path
-      fill='var(--icon-color, #000)'
-      d='M10 2 9 3H4v2h1v15c0 .522.191 1.055.568 1.432.377.377.91.568 1.432.568h10c.522 0 1.055-.191 1.432-.568.377-.377.568-.91.568-1.432V5h1V3h-5l-1-1h-4zM7 5h10v15H7V5zm2 2v11h2V7H9zm4 0v11h2V7h-2z'
-    /></svg>
+  ><g
+      fill='none'
+      stroke='var(--icon-color, #000)'
+      stroke-linecap='round'
+      stroke-linejoin='round'
+      stroke-width='var(--icon-stroke-width, 1px)'
+    ><path d='m3 6h11.7' transform='translate(-2 -2.4)' /><path
+        d='m14.1 4.6v9.1a1.3 1.3 0 0 1 -1.3 1.3h-6.5a1.3 1.3 0 0 1 -1.3-1.3v-9.1m1.95 0v-1.3a1.3 1.3 0 0 1 1.3-1.3h2.6a1.3 1.3 0 0 1 1.3 1.3v1.3'
+        transform='translate(-2.7 -1)'
+      /><path
+        d='m10 11v3.9'
+        stroke-width='1'
+        transform='translate(-4.45 -4.15)'
+      /><path
+        d='m14 11v3.9'
+        stroke-width='1'
+        transform='translate(-5.85 -4.15)'
+      /></g></svg>
 </template>;
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently

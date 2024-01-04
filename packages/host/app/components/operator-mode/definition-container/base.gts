@@ -145,10 +145,11 @@ export class Active extends Component<ActiveSignature> {
         <Button
           data-test-action-button='{{actionButton.label}}'
           class='action-button'
+          @size='small'
           @kind='text-only'
           {{on 'click' actionButton.handler}}
         >
-          <actionButton.icon width='24px' height='24px' />
+          <actionButton.icon width='20px' height='20px' />
           {{actionButton.label}}
         </Button>
       {{/each}}
@@ -162,15 +163,21 @@ export class Active extends Component<ActiveSignature> {
     </div>
     <style>
       .action-buttons {
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-auto-columns: max-content;
+        gap: var(--boxel-sp-4xs);
       }
       .action-button {
         --boxel-button-padding: var(--boxel-sp-xxxs);
         --icon-color: var(--boxel-highlight);
+        --icon-stroke-width: 2px;
         justify-content: flex-start;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxs);
         align-self: flex-start;
+        padding: 0 var(--boxel-sp-4xs);
+      }
+      .action-button:hover:not(:disabled) {
+        --icon-color: var(--boxel-highlight-hover);
       }
       .info-footer {
         margin-top: var(--boxel-sp-sm);
