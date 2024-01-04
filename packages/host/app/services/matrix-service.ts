@@ -57,7 +57,7 @@ export type OperatorModeContext = {
 
 export type AuthMode = 'login' | 'register' | 'forgot-password';
 
-type AuthState = {
+export type AuthState = {
   mode: AuthMode;
   sid?: string;
   clientSecret?: string;
