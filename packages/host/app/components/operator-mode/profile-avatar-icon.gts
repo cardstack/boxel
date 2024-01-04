@@ -1,8 +1,8 @@
 import { inject as service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { bool } from '@cardstack/boxel-ui/helpers';
+import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 import { stringToColor } from '@cardstack/host/lib/utils';
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -10,7 +10,8 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 interface Signature {
   Args: {
     userId: string | null;
-    cssVariables?: Record<string, string>;
+    size?: string; // CSS length value
+    border?: string; // CSS border value
   };
   Element: HTMLDivElement;
 }
@@ -28,25 +29,15 @@ export default class ProfileAvatarIcon extends Component<Signature> {
     }
   }
 
-  get style() {
-    let cssVariables = this.args.cssVariables || {};
-    cssVariables['profile-avatar-icon-background'] =
-      cssVariables['profile-avatar-icon-background'] ||
-      stringToColor(this.args.userId);
-    let style = '';
-
-    for (let [key, value] of Object.entries(cssVariables)) {
-      style += `--${key}: ${value};`;
-    }
-
-    return htmlSafe(style);
-  }
-
   <template>
     <ProfileAvatarIconVisual
       @isReady={{bool this.matrixService.profile.loaded}}
       @profileInitials={{this.profileInitials}}
-      style={{this.style}}
+      {{setCssVar
+        profile-avatar-icon-background=(stringToColor @userId)
+        profile-avatar-icon-size=@size
+        profile-avatar-icon-border=@border
+      }}
       ...attributes
     />
   </template>

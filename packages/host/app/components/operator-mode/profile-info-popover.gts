@@ -94,10 +94,8 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
     <div class='profile-popover-body' data-test-profile-icon-container>
       <ProfileAvatarIcon
         @userId={{this.matrixService.userId}}
-        @cssVariables={{hash
-          profile-avatar-icon-size='70px'
-          profile-avatar-icon-border='0'
-        }}
+        @size='70px'
+        @border='0'
       />
 
       <div class='display-name' data-test-profile-display-name>

@@ -103,7 +103,6 @@ export default class AiAssistantMessageUsage extends Component {
                 userId=this.userId
                 isReady=true
                 profileInitials=this.profileInitials
-                size=20
               }}
             />
             <AiAssistantMessage
@@ -116,31 +115,10 @@ export default class AiAssistantMessageUsage extends Component {
           </AiAssistantConversation>
         </div>
       </:example>
-      <:api as |Args|>
-        <Args.String
-          @name='formattedMessage'
-          @description='The message to display, as an html-safe string'
-          @onInput={{fn (mut this.formattedMessage)}}
-          @value={{this.formattedMessage}}
-        />
-        <Args.String
-          @name='datetime'
-          @description='The datetime to display'
-          @onInput={{this.setDateTimeFromString}}
-          @value={{this.datetimeAsString}}
-        />
-        <Args.Bool
-          @name='isFromAssistant'
-          @description='true when the message is from the AI Assistant'
-          @onInput={{fn (mut this.isFromAssistant)}}
-          @value={{this.isFromAssistant}}
-        />
-      </:api>
     </FreestyleUsage>
     <style>
       .example-container {
         background: var(--boxel-ai-purple);
-        min-height: 300px;
         width: 371px;
         overflow: hidden;
         position: relative;
