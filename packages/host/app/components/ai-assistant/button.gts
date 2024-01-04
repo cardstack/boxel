@@ -9,7 +9,7 @@ export default class AiAssistantButton extends Component<Signature> {
     {{! template-lint-disable no-inline-styles }}
     <button
       class='ai-assistant-button'
-      data-test-open-chat
+      data-test-open-ai-assistant
       style="background-image: image-set(url('/images/ai-assist-icon.webp') 1x, url('/images/ai-assist-icon@2x.webp') 2x, url('/images/ai-assist-icon@3x.webp') 3x)"
       ...attributes
     />

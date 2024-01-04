@@ -59,19 +59,19 @@ export async function setupMatrixOverride(
   };
 }
 
-export async function reloadAndOpenChat(page: Page) {
+export async function reloadAndOpenAiAssistant(page: Page) {
   await page.reload();
-  await openChat(page);
+  await openAiAssistant(page);
 }
 
 export async function toggleOperatorMode(page: Page) {
   await page.locator('[data-test-operator-mode-btn]').click();
 }
 
-export async function openChat(page: Page) {
-  await page.locator('[data-test-open-chat]').click();
+export async function openAiAssistant(page: Page) {
+  await page.locator('[data-test-open-ai-assistant]').click();
   await page.waitForFunction(() =>
-    document.querySelector('[data-test-close-chat-button]'),
+    document.querySelector('[data-test-close-ai-panel]'),
   );
 }
 
@@ -172,7 +172,7 @@ export async function login(
   if (opts?.expectFailure) {
     await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
   } else {
-    await openChat(page);
+    await openAiAssistant(page);
     await expect(page.locator('[data-test-rooms-list]')).toHaveCount(1);
   }
 }

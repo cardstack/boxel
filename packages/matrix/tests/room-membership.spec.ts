@@ -9,7 +9,7 @@ import {
   leaveRoom,
   openRoom,
   inviteToRoom,
-  reloadAndOpenChat,
+  reloadAndOpenAiAssistant,
   test,
 } from '../helpers';
 
@@ -34,7 +34,7 @@ test.describe('Room membership', () => {
     await page.locator('[data-test-decline-room-btn="Room 1"]').click();
     await assertRooms(page, {});
 
-    await reloadAndOpenChat(page);
+    await reloadAndOpenAiAssistant(page);
     await assertRooms(page, {});
   });
 
@@ -55,7 +55,7 @@ test.describe('Room membership', () => {
       joinedRooms: [{ name: 'Room 1' }],
     });
 
-    await reloadAndOpenChat(page);
+    await reloadAndOpenAiAssistant(page);
     await assertRooms(page, {
       joinedRooms: [{ name: 'Room 1' }],
     });
@@ -71,7 +71,7 @@ test.describe('Room membership', () => {
     await leaveRoom(page, 'Room 1');
     await assertRooms(page, {});
 
-    await reloadAndOpenChat(page);
+    await reloadAndOpenAiAssistant(page);
     await assertRooms(page, {});
   });
 
