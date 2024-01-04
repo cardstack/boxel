@@ -82,7 +82,7 @@ class PasswordModal extends Component<PasswordModalSignature> {
       <:footer>
         <div class='buttons'>
           <BoxelButton
-            data-test-confirm-cancel-button
+            data-test-password-confirm-cancel-button
             @size='tall'
             @kind='secondary-light'
             {{on 'click' @togglePasswordModal}}
@@ -528,10 +528,6 @@ export default class ProfileSettingsModal extends Component<Signature> {
     ].includes(this.emailState.type);
   }
 
-  private get emailHasBeenValidated() {
-    return ['initial', 'validateEmail'].includes(this.emailState.type);
-  }
-
   private get showPasswordModal() {
     return (
       this.emailState.type === 'askForPassword' ||
@@ -584,7 +580,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
         `invalid state: cannot perform clearPasswordError in state ${this.emailState.type}`,
       );
     }
-    this.emailState.passwordError = undefined;
+    this.emailState = {
+      ...this.emailState,
+      passwordError: undefined,
+    };
   }
 
   @action private confirmPasswordForEmailChange(password: string) {

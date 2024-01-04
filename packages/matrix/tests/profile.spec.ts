@@ -23,8 +23,12 @@ test.describe('Profile', () => {
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerUser(synapse, 'user1', 'pass');
+    await registerUser(synapse, 'user0', 'pass');
     await updateUser(synapse, admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@localhost'],
+    });
+    await updateUser(synapse, admin.accessToken, '@user0:localhost', {
+      emailAddresses: ['user0@localhost'],
     });
   });
 
@@ -86,6 +90,9 @@ test.describe('Profile', () => {
 
     // pending email state
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(0);
+    await expect(page.locator('[data-test-email-validation-msg]')).toHaveCount(
+      0,
+    );
     await expect(page.locator('[data-test-new-email]')).toContainText(
       'user2@localhost',
     );
@@ -128,23 +135,131 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-new-email]')).toHaveCount(0);
   });
 
-  test.skip('it can handle incorrect password when changing email', async ({
+  test('it can handle incorrect password when changing email', async ({
     page,
-  }) => {});
+  }) => {
+    await gotoProfileSettings(page);
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
 
-  test.skip('it can handle setting email to an already existing email when changing email', async ({
+    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-profile-settings-save-button]').click();
+
+    // password modal
+    await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
+    await page
+      .locator('[data-test-password-modal] [data-test-password-field]')
+      .fill('bad pass');
+    await page.locator('[data-test-confirm-password-button]').click();
+    await expect(
+      page.locator('[data-test-boxel-input-error-message]'),
+    ).toContainText('Invalid password');
+    await page
+      .locator('[data-test-password-modal] [data-test-password-field]')
+      .fill('pass');
+    await expect(
+      page.locator('[data-test-boxel-input-error-message]'),
+    ).toHaveCount(0);
+  });
+
+  test('it can handle setting email to an already existing email when changing email', async ({
     page,
-  }) => {});
+  }) => {
+    await gotoProfileSettings(page);
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
 
-  test.skip('it can resend email verification message', async ({ page }) => {});
+    await page.locator('[data-test-new-email-field]').fill('user0@localhost');
+    await page.locator('[data-test-profile-settings-save-button]').click();
 
-  test.skip('it can cancel email verification', async ({ page }) => {});
+    // password modal
+    await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
+    await page
+      .locator('[data-test-password-modal] [data-test-password-field]')
+      .fill('pass');
+    await page.locator('[data-test-confirm-password-button]').click();
 
-  test.skip('it can cancel password confirmation when changing email', async ({
+    await expect(
+      page.locator('[data-test-boxel-input-error-message]'),
+    ).toHaveText('Email address is already in use');
+    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await expect(
+      page.locator('[data-test-boxel-input-error-message]'),
+    ).toHaveCount(0);
+  });
+
+  test('it can resend email verification message', async ({ page }) => {
+    await gotoProfileSettings(page);
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-profile-settings-save-button]').click();
+
+    // password modal
+    await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
+    await page
+      .locator('[data-test-password-modal] [data-test-password-field]')
+      .fill('pass');
+    await page.locator('[data-test-confirm-password-button]').click();
+
+    // email client
+    await validateEmail(page, 'user2@localhost', {
+      sendAttempts: 2,
+      onAppTrigger: async (page) => {
+        await expect(page.locator('[data-test-resend-validation]')).toHaveCount(
+          1,
+        );
+      },
+    });
+  });
+
+  test('it can cancel email verification', async ({ page }) => {
+    await gotoProfileSettings(page);
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-profile-settings-save-button]').click();
+
+    // password modal
+    await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
+    await page
+      .locator('[data-test-password-modal] [data-test-password-field]')
+      .fill('pass');
+    await page.locator('[data-test-confirm-password-button]').click();
+
+    // pending email state
+    await page.locator('[data-test-cancel-email-change]').click();
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+    await expect(page.locator('[data-test-new-email]')).toHaveCount(0);
+  });
+
+  test('it can cancel password confirmation when changing email', async ({
     page,
-  }) => {});
+  }) => {
+    await gotoProfileSettings(page);
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-profile-settings-save-button]').click();
 
-  test.skip('it can cancel profile change after entering new email (but before verification)', async ({
-    page,
-  }) => {});
+    // password modal
+    await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
+    await page.locator('[data-test-password-confirm-cancel-button]').click();
+
+    await expect(page.locator('[data-test-password-modal]')).toHaveCount(0);
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+    await expect(page.locator('[data-test-new-email]')).toHaveCount(0);
+    await expect(page.locator('[data-test-email-validation-msg]')).toHaveCount(
+      0,
+    );
+  });
 });
