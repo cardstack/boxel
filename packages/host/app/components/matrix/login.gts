@@ -12,7 +12,6 @@ import {
   Button,
   FieldContainer,
   BoxelInput,
-  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
@@ -67,10 +66,10 @@ export default class Login extends Component<Signature> {
       data-test-login-btn
       @kind='primary'
       @disabled={{this.isLoginButtonDisabled}}
+      @loading={{this.doLogin.isRunning}}
       {{on 'click' this.login}}
-    >{{#if this.doLogin.isRunning}}
-        <LoadingIndicator />
-      {{else}}Sign in{{/if}}</Button>
+    >
+      Sign in</Button>
     {{#if this.error}}
       <div class='error' data-test-login-error>{{this.error}}</div>
     {{/if}}

@@ -14,7 +14,6 @@ import {
   Button,
   FieldContainer,
   BoxelInput,
-  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
@@ -58,10 +57,9 @@ export default class ForgotPassword extends Component<Signature> {
           data-test-reset-your-password-btn
           @kind='primary'
           @disabled={{this.isForgotPasswordBtnDisabled}}
+          @loading={{this.sendEmailValidationTask.isRunning}}
           {{on 'click' this.sendEmailValidation}}
-        >{{#if this.sendEmailValidationTask.isRunning}}
-            <LoadingIndicator />
-          {{else}}Reset Your Password{{/if}}</Button>
+        >Reset Your Password</Button>
         <span class='or'>or</span>
         <Button class='button' data-test-cancel-btn {{on 'click' @onLogin}}>Back
           to login</Button>
@@ -79,10 +77,9 @@ export default class ForgotPassword extends Component<Signature> {
         data-test-resend-validation-btn
         @kind='primary'
         @disabled={{this.sendEmailValidationTask.isRunning}}
+        @loading={{this.sendEmailValidationTask.isRunning}}
         {{on 'click' this.resendEmailValidation}}
-      >{{#if this.sendEmailValidationTask.isRunning}}
-          <LoadingIndicator />
-        {{else}}Resend Email{{/if}}</Button>
+      >Resend Email</Button>
     {{else if (eq this.state.type 'resetPassword')}}
       <span class='title'>Reset your password</span>
       <FieldContainer
@@ -123,10 +120,9 @@ export default class ForgotPassword extends Component<Signature> {
           data-test-reset-password-btn
           @kind='primary'
           @disabled={{this.isResetPasswordBtnDisabled}}
+          @loading={{this.resetPassword.isRunning}}
           {{on 'click' (perform this.resetPassword)}}
-        >{{#if this.resetPassword.isRunning}}
-            <LoadingIndicator />
-          {{else}}Reset Password{{/if}}</Button>
+        >Reset Password</Button>
       </div>
       {{#if this.error}}
         <span class='error' data-test-reset-password-error>{{this.error}}</span>

@@ -17,7 +17,6 @@ import {
   BoxelInputGroup,
   Button,
   FieldContainer,
-  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -58,9 +57,8 @@ export default class RegisterUser extends Component<Signature> {
         class='resend-email'
         @kind='primary'
         @disabled={{this.validateEmail.isRunning}}
-      >{{#if this.validateEmail.isRunning}}
-          <LoadingIndicator />
-        {{else}}Resend Email{{/if}}</Button>
+        @loading={{this.validateEmail.isRunning}}
+      >Resend Email</Button>
     {{else if (eq this.currentPage 'token-form')}}
       <FieldContainer
         @label='Registration Token'
@@ -82,10 +80,9 @@ export default class RegisterUser extends Component<Signature> {
           class='button'
           @kind='primary'
           @disabled={{this.isNextButtonDisabled}}
+          @loading={{this.doRegistrationFlow.isRunning}}
           {{on 'click' this.sendToken}}
-        >{{#if this.doRegistrationFlow.isRunning}}
-            <LoadingIndicator />
-          {{else}}Next{{/if}}</Button>
+        >Next</Button>
       </div>
     {{else if (eq this.currentPage 'registration-form')}}
       <span class='title'>Create a Boxel Account</span>
@@ -179,10 +176,9 @@ export default class RegisterUser extends Component<Signature> {
           class='button'
           @kind='primary'
           @disabled={{this.isRegisterButtonDisabled}}
+          @loading={{this.doRegistrationFlow.isRunning}}
           {{on 'click' this.register}}
-        >{{#if this.doRegistrationFlow.isRunning}}
-            <LoadingIndicator />
-          {{else}}Create Account{{/if}}</Button>
+        >Create Account</Button>
         <span class='or'>or</span>
         <Button
           data-test-cancel-btn
