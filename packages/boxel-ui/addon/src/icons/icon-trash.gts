@@ -15,7 +15,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
       stroke='var(--icon-color, #000)'
       stroke-linecap='round'
       stroke-linejoin='round'
-      stroke-width='var(--icon-stroke-width, 1px)'
+      stroke-width='1.5'
     ><path d='m3 6h11.7' transform='translate(-2 -2.4)' /><path
         d='m14.1 4.6v9.1a1.3 1.3 0 0 1 -1.3 1.3h-6.5a1.3 1.3 0 0 1 -1.3-1.3v-9.1m1.95 0v-1.3a1.3 1.3 0 0 1 1.3-1.3h2.6a1.3 1.3 0 0 1 1.3 1.3v1.3'
         transform='translate(-2.7 -1)'

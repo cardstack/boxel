@@ -168,13 +168,11 @@ export class Active extends Component<ActiveSignature> {
         gap: var(--boxel-sp-4xs);
       }
       .action-button {
-        --boxel-button-padding: var(--boxel-sp-xxxs);
+        --boxel-button-padding: 0 var(--boxel-sp-4xs);
         --icon-color: var(--boxel-highlight);
-        --icon-stroke-width: 2px;
         justify-content: flex-start;
         gap: var(--boxel-sp-xxs);
         align-self: flex-start;
-        padding: 0 var(--boxel-sp-4xs);
       }
       .action-button:hover:not(:disabled) {
         --icon-color: var(--boxel-highlight-hover);
