@@ -33,11 +33,7 @@ export default class ProfileAvatarIcon extends Component<Signature> {
     <ProfileAvatarIconVisual
       @isReady={{bool this.matrixService.profile.loaded}}
       @profileInitials={{this.profileInitials}}
-      {{setCssVar
-        profile-avatar-icon-background=(stringToColor @userId)
-        profile-avatar-icon-size=@size
-        profile-avatar-icon-border=@border
-      }}
+      {{setCssVar profile-avatar-icon-background=(stringToColor @userId)}}
       ...attributes
     />
   </template>

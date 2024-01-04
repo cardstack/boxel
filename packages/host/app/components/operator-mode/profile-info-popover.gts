@@ -1,4 +1,3 @@
-import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
@@ -6,6 +5,7 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -94,8 +94,10 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
     <div class='profile-popover-body' data-test-profile-icon-container>
       <ProfileAvatarIcon
         @userId={{this.matrixService.userId}}
-        @size='70px'
-        @border='0'
+        {{setCssVar
+          profile-avatar-icon-size='70px'
+          profile-avatar-icon-border='0'
+        }}
       />
 
       <div class='display-name' data-test-profile-display-name>
