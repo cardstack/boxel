@@ -1,13 +1,15 @@
-import Component from '@glimmer/component';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
 
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem, cssVar } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+
 import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
 
-import type RealmInfoService from '../services/realm-info-service';
 import RealmIcon from './operator-mode/realm-icon';
+
+import type RealmInfoService from '../services/realm-info-service';
 
 export interface RealmDropdownItem extends RealmInfo {
   path: string;
@@ -145,7 +147,7 @@ export default class RealmDropdown extends Component<Signature> {
 
   get selectedRealm(): RealmDropdownItem | undefined {
     if (!this.args.selectedRealmURL) {
-      return;
+      return undefined;
     }
     return this.realms.find(
       (realm) =>

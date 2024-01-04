@@ -1,9 +1,10 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
+
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { getPlural } from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
@@ -13,8 +14,8 @@ import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 import { CardType, Type } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
-import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import { inheritanceChain } from '@cardstack/host/resources/inheritance-chain';
+import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 

@@ -6,8 +6,8 @@ import {
   login,
   logout,
   openRoot,
-  openChat,
-  reloadAndOpenChat,
+  openAiAssistant,
+  reloadAndOpenAiAssistant,
   toggleOperatorMode,
   test,
 } from '../helpers';
@@ -28,7 +28,7 @@ test.describe('Login', () => {
     await page.locator('[data-test-password-field]').fill('pass');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openChat(page);
+    await openAiAssistant(page);
 
     await assertLoggedIn(page);
 
@@ -41,7 +41,7 @@ test.describe('Login', () => {
     ).toContainText('New Name');
 
     // reload to page to show that the access token persists
-    await reloadAndOpenChat(page);
+    await reloadAndOpenAiAssistant(page);
     await assertLoggedIn(page, { displayName: 'New Name' });
   });
 
@@ -95,7 +95,7 @@ test.describe('Login', () => {
       'login error message is not displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
-    await openChat(page);
+    await openAiAssistant(page);
 
     await assertLoggedIn(page);
   });
@@ -109,7 +109,7 @@ test.describe('Login', () => {
 
     await page.keyboard.press('Enter');
 
-    await openChat(page);
+    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 

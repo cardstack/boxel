@@ -7,9 +7,6 @@ import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 
-// @ts-expect-error cached doesn't have type yet
-import { tracked, cached } from '@glimmer/tracking';
-
 import { use, resource } from 'ember-resources';
 
 import startCase from 'lodash/startCase';
@@ -21,13 +18,13 @@ import {
   IconButton,
 } from '@cardstack/boxel-ui/components';
 
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 import {
   IconInherit,
   IconTrash,
   IconPlus,
   Copy,
 } from '@cardstack/boxel-ui/icons';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
 
 import {
   hasExecutableExtension,
@@ -268,7 +265,7 @@ export default class DetailPanel extends Component<Signature> {
     return {
       name: this.args.selectedDeclaration.exportName,
       module: `${this.operatorModeStateService.state.codePath!.href.replace(
-        /\.[^\.]+$/,
+        /\.[^.]+$/,
         '',
       )}`,
     };

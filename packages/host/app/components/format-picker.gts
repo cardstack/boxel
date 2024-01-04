@@ -2,9 +2,9 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
-
 import { eq } from '@cardstack/boxel-ui/helpers';
+
+import type { Format } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {

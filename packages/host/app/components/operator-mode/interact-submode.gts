@@ -1,23 +1,22 @@
-import Component from '@glimmer/component';
-
+import { concat, fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import { on } from '@ember/modifier';
-import { concat, fn } from '@ember/helper';
-import { action } from '@ember/object';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
+import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-
-import get from 'lodash/get';
-import { isEqual } from 'lodash';
 
 import { dropTask, restartableTask, task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import { isEqual } from 'lodash';
+import get from 'lodash/get';
+
+import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
-import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import {
   Deferred,
@@ -30,20 +29,22 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
-import type CardService from '../../services/card-service';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import type RecentFilesService from '../../services/recent-files-service';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import OperatorModeStack from './stack';
 import SubmodeLayout from './submode-layout';
+
+import type CardService from '../../services/card-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RecentFilesService from '../../services/recent-files-service';
 import type { Submode } from '../submode-switcher';
-import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -629,6 +630,7 @@ export default class InteractSubmode extends Component<Signature> {
         position: relative;
         background-position: center;
         background-size: cover;
+        flex: 1;
       }
       .no-cards {
         height: calc(100% -var(--search-sheet-closed-height));
