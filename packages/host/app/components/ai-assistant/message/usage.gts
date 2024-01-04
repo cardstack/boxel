@@ -51,7 +51,6 @@ export default class AiAssistantMessageUsage extends Component {
                 userId=this.userId
                 isReady=true
                 profileInitials=this.profileInitials
-                size=20
               }}
             />
           </AiAssistantConversation>
