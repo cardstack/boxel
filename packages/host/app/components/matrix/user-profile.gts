@@ -1,14 +1,12 @@
-import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { dropTask, restartableTask, all } from 'ember-concurrency';
+import { restartableTask, all } from 'ember-concurrency';
 
 import {
-  BoxelInput,
   FieldContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
@@ -33,22 +31,13 @@ export default class UserProfile extends Component {
         </div>
       </FieldContainer>
       <FieldContainer @label='Display Name' @tag='label'>
-        {{#if this.isEditMode}}
-          <BoxelInput
-            data-test-displayName-field
-            type='text'
-            @value={{this.displayName}}
-            @onInput={{this.setDisplayName}}
-          />
-        {{else}}
-          <div class='value' data-test-field-value='displayName'>
-            {{#if this.showLoading}}
-              <LoadingIndicator />
-            {{else}}
-              {{this.displayName}}
-            {{/if}}
-          </div>
-        {{/if}}
+        <div class='value' data-test-field-value='displayName'>
+          {{#if this.showLoading}}
+            <LoadingIndicator />
+          {{else}}
+            {{this.displayName}}
+          {{/if}}
+        </div>
       </FieldContainer>
     </div>
     <style>
@@ -75,7 +64,6 @@ export default class UserProfile extends Component {
   </template>
 
   @service private declare matrixService: MatrixService;
-  @tracked private isEditMode = false;
   @tracked private displayName: string | undefined;
   @tracked private email: string | undefined;
 
@@ -95,11 +83,6 @@ export default class UserProfile extends Component {
 
   private get showLoading() {
     return !this.displayName && this.loadProfile.isRunning;
-  }
-
-  @action
-  private setDisplayName(displayName: string) {
-    this.displayName = displayName;
   }
 
   private loadProfile = restartableTask(async () => {
