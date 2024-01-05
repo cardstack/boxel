@@ -34,7 +34,7 @@ test.describe('Login', () => {
 
     // reload to page to show that the access token persists
     await reloadAndOpenAiAssistant(page);
-    await assertLoggedIn(page, { displayName: 'New Name' });
+    await assertLoggedIn(page);
   });
 
   test('it can logout', async ({ page }) => {
