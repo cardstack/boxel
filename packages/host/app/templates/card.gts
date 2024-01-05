@@ -130,7 +130,7 @@ class CardRouteComponent extends Component<CardRouteSignature> {
         stacks: [
           [
             {
-              id: this.args.model?.id,
+              id: this.args.model.card.id,
               format: 'isolated',
             },
           ],
@@ -149,17 +149,14 @@ class CardRouteComponent extends Component<CardRouteSignature> {
 
   <template>
     <div class='card-isolated-component'>
-      {{#if @model}}
-        <Preview @card={{@model}} @format='isolated' />
-      {{else}}
-        <div>ERROR: cannot load card</div>
-      {{/if}}
+      <Preview @card={{@model.card}} @format='isolated' />
     </div>
 
     {{#if @controller.operatorModeEnabled}}
-      {{#if @model}}
-        <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
-      {{/if}}
+      <OperatorModeContainer
+        @onClose={{this.closeOperatorMode}}
+        @resetPasswordParams={{@model.resetPasswordParams}}
+      />
     {{/if}}
 
     {{outlet}}

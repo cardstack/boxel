@@ -1,3 +1,4 @@
+import { getOwner } from '@ember/application';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -23,9 +24,15 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
+export type ResetPasswordParams = {
+  sid: string;
+  clientSecret: string;
+};
+
 interface Signature {
   Args: {
     onLogin: () => void;
+    resetPasswordParams?: ResetPasswordParams;
   };
 }
 
@@ -61,8 +68,11 @@ export default class ForgotPassword extends Component<Signature> {
           {{on 'click' this.sendEmailValidation}}
         >Reset Your Password</Button>
         <span class='or'>or</span>
-        <Button class='button' data-test-cancel-btn {{on 'click' @onLogin}}>Back
-          to login</Button>
+        <Button
+          class='button'
+          data-test-cancel-btn
+          {{on 'click' this.backToLogin}}
+        >Back to login</Button>
       </div>
     {{else if (eq this.state.type 'waitForEmailValidation')}}
       <span class='title' data-test-email-validation>Please check your email to
@@ -137,7 +147,7 @@ export default class ForgotPassword extends Component<Signature> {
           class='button'
           data-test-back-to-login-btn
           @kind='primary'
-          {{on 'click' @onLogin}}
+          {{on 'click' this.backToLogin}}
         >Sign In to Boxel</Button>
       </div>
     {{/if}}
@@ -253,14 +263,11 @@ export default class ForgotPassword extends Component<Signature> {
   constructor(owner: Owner, args: any) {
     super(owner, args);
 
-    if (
-      this.matrixService.authState.sid &&
-      this.matrixService.authState.clientSecret
-    ) {
+    if (this.args.resetPasswordParams) {
       this.state = {
         type: 'resetPassword',
-        sid: this.matrixService.authState.sid,
-        clientSecret: this.matrixService.authState.clientSecret,
+        sid: this.args.resetPasswordParams.sid,
+        clientSecret: this.args.resetPasswordParams.clientSecret,
       };
     }
   }
@@ -378,8 +385,7 @@ export default class ForgotPassword extends Component<Signature> {
         this.state.email,
         clientSecret,
         this.state.sendAttempt,
-        window.location.href +
-          `&authMode=forgot-password&clientSecret=${clientSecret}`,
+        window.location.href + `&clientSecret=${clientSecret}`,
       );
       this.state = {
         ...this.state,
@@ -437,4 +443,17 @@ export default class ForgotPassword extends Component<Signature> {
       throw e;
     }
   });
+
+  @action
+  private backToLogin() {
+    let cardController = getOwner(this)!.lookup('controller:card') as any;
+    if (!cardController) {
+      throw new Error(
+        'OperatorModeStateService must be used in the context of a CardController',
+      );
+    }
+    cardController.sid = null;
+    cardController.clientSecret = null;
+    this.args.onLogin();
+  }
 }

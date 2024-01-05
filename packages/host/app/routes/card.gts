@@ -2,21 +2,21 @@ import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 
+import { ResetPasswordParams } from '@cardstack/host/components/matrix/forgot-password';
 import ENV from '@cardstack/host/config/environment';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
-import MatrixService, {
-  AuthMode,
-} from '@cardstack/host/services/matrix-service';
+import type CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type CardService from '../services/card-service';
-
 const { ownRealmURL } = ENV;
 
-export type Model = CardDef | null;
+export type Model = {
+  card: CardDef;
+  resetPasswordParams?: ResetPasswordParams;
+};
 
 export type ErrorModel = {
   message: string;
@@ -24,7 +24,7 @@ export type ErrorModel = {
   operatorModeState: string;
 };
 
-export default class RenderCard extends Route<Model | null> {
+export default class RenderCard extends Route<Model> {
   queryParams = {
     operatorModeState: {
       refreshModel: true, // Enabled so that back-forward navigation works in operator mode
@@ -32,31 +32,23 @@ export default class RenderCard extends Route<Model | null> {
     operatorModeEnabled: {
       refreshModel: true,
     },
-    authMode: {
-      refreshModel: true,
-    },
-    sid: {
-      refreshModel: true,
-    },
-    clientSecret: {
-      refreshModel: true,
-    },
+    sid: { refreshModel: true },
+    clientSecret: { refreshModel: true },
   };
 
   @service declare cardService: CardService;
   @service declare router: RouterService;
-  @service declare matrixService: MatrixService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
   async model(params: {
     path: string;
     operatorModeState: string;
     operatorModeEnabled: boolean;
-    authMode?: AuthMode;
     sid?: string;
     clientSecret?: string;
   }): Promise<Model> {
-    let { path, operatorModeState, operatorModeEnabled } = params;
+    let { clientSecret, path, operatorModeState, operatorModeEnabled, sid } =
+      params;
     path = path || '';
     let url = path
       ? new URL(`/${path}`, ownRealmURL)
@@ -65,18 +57,12 @@ export default class RenderCard extends Route<Model | null> {
     try {
       let cardResource = getCard(this, () => url.href);
       await cardResource.loaded;
-      let model = cardResource.card;
-      if (!model) {
+      let card = cardResource.card;
+      if (!card) {
         throw new Error(`Could not find ${url}`);
       }
 
       if (operatorModeEnabled) {
-        if (params.authMode) {
-          this.matrixService.setAuthMode(params.authMode);
-          this.matrixService.setSid(params.sid);
-          this.matrixService.setClientSecret(params.clientSecret);
-        }
-
         let operatorModeStateObject = JSON.parse(operatorModeState);
 
         if (this.operatorModeStateService.serialize() === operatorModeState) {
@@ -87,12 +73,30 @@ export default class RenderCard extends Route<Model | null> {
           // query param, which will trigger a refresh of the model, which will call the model hook again.
           // The model refresh happens automatically because we have operatorModeState: { refreshModel: true } in the queryParams.
           // We have that because we want to support back-forward navigation in operator mode.
-          return model;
+          return {
+            card,
+            resetPasswordParams:
+              sid && clientSecret
+                ? {
+                    sid,
+                    clientSecret,
+                  }
+                : undefined,
+          };
         }
         await this.operatorModeStateService.restore(operatorModeStateObject);
       }
 
-      return model;
+      return {
+        card,
+        resetPasswordParams:
+          sid && clientSecret
+            ? {
+                sid,
+                clientSecret,
+              }
+            : undefined,
+      };
     } catch (e) {
       (e as any).loadType = params.operatorModeEnabled
         ? 'stack'

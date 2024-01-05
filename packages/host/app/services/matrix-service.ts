@@ -1,4 +1,3 @@
-import { action } from '@ember/object';
 import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
@@ -14,7 +13,7 @@ import {
   type IEvent,
   type MatrixClient,
 } from 'matrix-js-sdk';
-import { TrackedMap, TrackedObject } from 'tracked-built-ins';
+import { TrackedMap } from 'tracked-built-ins';
 
 import {
   type LooseSingleCardDocument,
@@ -39,9 +38,9 @@ import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objecti
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
+import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
-import type CardService from '../services/card-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
@@ -55,21 +54,10 @@ export type OperatorModeContext = {
   openCards: CardDef[];
 };
 
-export type AuthMode = 'login' | 'register' | 'forgot-password';
-
-export type AuthState = {
-  mode: AuthMode;
-  sid?: string;
-  clientSecret?: string;
-};
-
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
-  @tracked authState: AuthState = new TrackedObject({
-    mode: 'login',
-  });
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
@@ -162,7 +150,6 @@ export default class MatrixService extends Service {
       clearAuth();
       this.unbindEventListeners();
       await this.client.logout(true);
-      this.authState.mode = 'login';
     } catch (e) {
       console.log('Error logging out of Matrix', e);
     } finally {
@@ -512,21 +499,6 @@ export default class MatrixService extends Service {
     for (let [event, handler] of this.#eventBindings) {
       this.client.off(event, handler);
     }
-  }
-
-  @action
-  setAuthMode(authMode: AuthMode) {
-    this.authState.mode = authMode;
-  }
-
-  @action
-  setSid(sid: string | undefined) {
-    this.authState.sid = sid;
-  }
-
-  @action
-  setClientSecret(clientSecret: string | undefined) {
-    this.authState.clientSecret = clientSecret;
   }
 }
 

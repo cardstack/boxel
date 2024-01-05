@@ -1,18 +1,25 @@
 import { fn } from '@ember/helper';
-import { service } from '@ember/service';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { CardContainer, BoxelHeader } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { bool, eq, or } from '@cardstack/boxel-ui/helpers';
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
-import type MatrixService from '@cardstack/host/services/matrix-service';
-
-import ForgotPassword from './forgot-password';
+import ForgotPassword, { ResetPasswordParams } from './forgot-password';
 import Login from './login';
 import RegisterUser from './register-user';
 
-export default class Auth extends Component {
+export type AuthMode = 'login' | 'register' | 'forgot-password';
+
+interface Signature {
+  Args: {
+    resetPasswordParams?: ResetPasswordParams;
+  };
+}
+
+export default class Auth extends Component<Signature> {
   <template>
     <div class='auth'>
       <div class='container'>
@@ -23,21 +30,19 @@ export default class Auth extends Component {
             </:icon>
           </BoxelHeader>
           <div class='content'>
-            {{#if (eq this.mode 'register')}}
-              <RegisterUser
-                @onCancel={{fn this.matrixService.setAuthMode 'login'}}
-              />
-            {{else if (eq this.mode 'forgot-password')}}
+            {{#if
+              (or (eq this.mode 'forgot-password') (bool @resetPasswordParams))
+            }}
               <ForgotPassword
-                @onLogin={{fn this.matrixService.setAuthMode 'login'}}
+                @resetPasswordParams={{@resetPasswordParams}}
+                @onLogin={{fn this.setMode 'login'}}
               />
+            {{else if (eq this.mode 'register')}}
+              <RegisterUser @onCancel={{fn this.setMode 'login'}} />
             {{else}}
               <Login
-                @onRegistration={{fn this.matrixService.setAuthMode 'register'}}
-                @onForgotPassword={{fn
-                  this.matrixService.setAuthMode
-                  'forgot-password'
-                }}
+                @onRegistration={{fn this.setMode 'register'}}
+                @onForgotPassword={{fn this.setMode 'forgot-password'}}
               />
             {{/if}}
           </div>
@@ -90,10 +95,11 @@ export default class Auth extends Component {
     </style>
   </template>
 
-  @service private declare matrixService: MatrixService;
+  @tracked mode: AuthMode = 'login';
 
-  private get mode() {
-    return this.matrixService.authState.mode;
+  @action
+  setMode(mode: AuthMode) {
+    this.mode = mode;
   }
 }
 
