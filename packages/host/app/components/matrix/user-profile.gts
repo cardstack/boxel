@@ -15,8 +15,6 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
-import { not } from '@cardstack/boxel-ui/helpers';
-
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 export default class UserProfile extends Component {
@@ -56,32 +54,11 @@ export default class UserProfile extends Component {
       </FieldContainer>
     </div>
     <div class='button-container'>
-      {{#if this.isEditMode}}
-        <Button
-          class='user-button'
-          data-test-profile-cancel-btn
-          @disabled={{not this.displayName}}
-          {{on 'click' this.cancel}}
-        >Cancel</Button>
-        <Button
-          class='user-button'
-          data-test-profile-save-btn
-          @kind='primary'
-          @disabled={{not this.displayName}}
-          {{on 'click' this.save}}
-        >Save</Button>
-      {{else}}
-        <Button
-          class='user-button'
-          data-test-profile-edit-btn
-          {{on 'click' this.doEdit}}
-        >Edit</Button>
-        <Button
-          class='user-button'
-          data-test-logout-btn
-          {{on 'click' this.logout}}
-        >Logout</Button>
-      {{/if}}
+      <Button
+        class='user-button'
+        data-test-logout-btn
+        {{on 'click' this.logout}}
+      >Logout</Button>
     </div>
     <style>
       .wrapper {
@@ -135,21 +112,6 @@ export default class UserProfile extends Component {
   }
 
   @action
-  private doEdit() {
-    this.isEditMode = true;
-  }
-
-  @action
-  private cancel() {
-    this.isEditMode = false;
-  }
-
-  @action
-  private save() {
-    this.doSave.perform();
-  }
-
-  @action
   private logout() {
     this.doLogout.perform();
   }
@@ -167,16 +129,6 @@ export default class UserProfile extends Component {
     let { threepids } = threePid;
     this.email = threepids.find((t) => t.medium === 'email')?.address;
     this.displayName = displayName;
-  });
-
-  private doSave = restartableTask(async () => {
-    if (!this.displayName) {
-      throw new Error(
-        `bug: should never get here, save button is disabled when there is no display name`,
-      );
-    }
-    await this.matrixService.client.setDisplayName(this.displayName);
-    this.isEditMode = false;
   });
 }
 

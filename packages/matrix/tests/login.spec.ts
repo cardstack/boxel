@@ -32,14 +32,6 @@ test.describe('Login', () => {
 
     await assertLoggedIn(page);
 
-    // edit the display name to show that our access token works
-    await page.locator('[data-test-profile-edit-btn]').click();
-    await page.locator('[data-test-displayName-field]').fill('New Name');
-    await page.locator('[data-test-profile-save-btn]').click();
-    await expect(
-      page.locator('[data-test-field-value="displayName"]'),
-    ).toContainText('New Name');
-
     // reload to page to show that the access token persists
     await reloadAndOpenAiAssistant(page);
     await assertLoggedIn(page, { displayName: 'New Name' });
