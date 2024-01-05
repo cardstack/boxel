@@ -236,7 +236,7 @@ pnpm start:without-matrix
 Then to run the tests from the CLI execute the following from `packages/matrix`:
 
 ```
-pnpm start:test
+pnpm test
 ```
 
 Alternatively you can also run these tests from VS Code using the VS Code Playwright plugin (which is very strongly recommended). From the "test tube" icon, you can click on the play button to run a single test or all the tests.
