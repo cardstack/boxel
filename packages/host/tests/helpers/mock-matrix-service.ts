@@ -1,8 +1,7 @@
-import { action } from '@ember/object';
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { TrackedMap, TrackedObject } from 'tracked-built-ins';
+import { TrackedMap } from 'tracked-built-ins';
 
 import { type MatrixCardError } from '@cardstack/runtime-common';
 
@@ -10,11 +9,7 @@ import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import {
-  AuthMode,
-  AuthState,
-  OperatorModeContext,
-} from '@cardstack/host/services/matrix-service';
+import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type { RoomField } from 'https://cardstack.com/base/room';
@@ -60,9 +55,6 @@ export class MockMatrixService extends Service {
   lastMessageSent: any;
   // @ts-ignore
   @tracked client: MockClient = new MockClient('@testuser:staging', '');
-  @tracked authState: AuthState = new TrackedObject({
-    mode: 'login',
-  });
   // @ts-ignore
   cardAPI!: typeof cardApi;
 
@@ -80,11 +72,6 @@ export class MockMatrixService extends Service {
   }
   get userId() {
     return this.client.getUserId();
-  }
-
-  @action
-  setAuthMode(authMode: AuthMode) {
-    this.authState.mode = authMode;
   }
 
   async allowedToSetObjective(_roomId: string): Promise<boolean> {
