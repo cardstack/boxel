@@ -11,6 +11,7 @@ let password = process.env.PASSWORD;
         if (err && !stdout.includes('User ID already taken')) {
           reject(err);
         }
+        console.log(stdout.trim());
         resolve(stdout.trim());
       });
   });
