@@ -173,8 +173,9 @@ export async function login(
 }
 
 export async function logout(page: Page) {
-  await page.locator('[data-test-logout-btn]').click();
-  await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
+  await page.locator('[data-test-profile-icon-button]').click();
+  await page.locator('[data-test-signout-button]').click();
+  await expect(page.locator('[data-test-login-form]')).toHaveCount(1);
 }
 
 export async function createRoom(

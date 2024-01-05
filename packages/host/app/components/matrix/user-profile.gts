@@ -1,4 +1,3 @@
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -10,7 +9,6 @@ import { dropTask, restartableTask, all } from 'ember-concurrency';
 
 import {
   BoxelInput,
-  Button,
   FieldContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
@@ -52,13 +50,6 @@ export default class UserProfile extends Component {
           </div>
         {{/if}}
       </FieldContainer>
-    </div>
-    <div class='button-container'>
-      <Button
-        class='user-button'
-        data-test-logout-btn
-        {{on 'click' this.logout}}
-      >Logout</Button>
     </div>
     <style>
       .wrapper {
@@ -110,15 +101,6 @@ export default class UserProfile extends Component {
   private setDisplayName(displayName: string) {
     this.displayName = displayName;
   }
-
-  @action
-  private logout() {
-    this.doLogout.perform();
-  }
-
-  private doLogout = dropTask(async () => {
-    await this.matrixService.logout();
-  });
 
   private loadProfile = restartableTask(async () => {
     let [profile, threePid] = await all([
