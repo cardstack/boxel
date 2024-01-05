@@ -1,8 +1,10 @@
 import * as childProcess from 'child_process';
 
+export const adminUsername = 'admin';
+export const adminPassword = 'password';
 
-let username = process.env.USERNAME;
-let password = process.env.PASSWORD;
+let username = process.env.USERNAME || adminUsername;
+let password = process.env.PASSWORD || adminPassword;
 
 (async () => {
   return new Promise<string>((resolve, reject) => {
