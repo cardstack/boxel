@@ -338,8 +338,8 @@ export default class DetailPanel extends Component<Signature> {
                 <:actions>
                   <IconButton
                     @icon={{IconTrash}}
-                    @width='20'
-                    @height='20'
+                    @width='18'
+                    @height='18'
                     {{on 'click' (fn @delete this.codePath)}}
                     class='delete-module-button'
                     aria-label='Delete Module'
@@ -544,9 +544,9 @@ export default class DetailPanel extends Component<Signature> {
       }
       .delete-module-button {
         --icon-color: var(--boxel-highlight);
-        border-radius: var(--boxel-border-radius-sm);
-        width: var(--boxel-icon-med);
-        height: var(--boxel-icon-med);
+        border-radius: var(--boxel-border-radius-xs);
+        width: 24px;
+        height: 24px;
       }
       .delete-module-button:hover:not(:disabled) {
         --icon-color: var(--boxel-danger);
