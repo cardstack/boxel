@@ -22,6 +22,7 @@
     "start:admin": "docker start synapse-admin",
     "start:host-pre-built": "cd ../host && pnpm start --path ./dist",
     "stop:admin": "docker stop synapse-admin",
+    "register-bot-user": "USERNAME=aibot PASSWORD=pass ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-test-user": "USERNAME=user PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-test-admin": "ts-node --transpileOnly ./scripts/register-test-admin.ts",
     "register-test-token": "pnpm run register-test-admin && ts-node --transpileOnly ./scripts/register-test-token.ts",
