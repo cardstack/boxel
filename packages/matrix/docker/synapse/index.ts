@@ -237,7 +237,7 @@ export async function loginUser(
 ): Promise<Credentials> {
   let response = await (
     await fetch(
-      `http://127.0.0.1:${synapse.mappedPort}/_matrix/client/r0/login`,
+      `http://localhost:${synapse.mappedPort}/_matrix/client/r0/login`,
       {
         method: 'POST',
         body: JSON.stringify({
@@ -263,7 +263,7 @@ export async function updateDisplayName(
   newDisplayName: string,
 ): Promise<void> {
   let response = await fetch(
-    `http://127.0.0.1:${synapse.mappedPort}/_matrix/client/v3/profile/${userId}/displayname`,
+    `http://localhost:${synapse.mappedPort}/_matrix/client/v3/profile/${userId}/displayname`,
     {
       method: 'PUT',
       headers: {
