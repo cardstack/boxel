@@ -1,3 +1,4 @@
+import Service from '@ember/service';
 import {
   currentURL,
   click,
@@ -40,6 +41,16 @@ import {
   visitOperatorMode,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+
+class MockSessionsService extends Service {
+  get canRead() {
+    return true;
+  }
+
+  get canWrite() {
+    return false;
+  }
+}
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
@@ -744,6 +755,27 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       await deferred.promise;
+    });
+
+    test('the edit button is hidden when the user lacks permissions', async function (assert) {
+      this.owner.register('service:sessions-service', MockSessionsService);
+
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert.dom('[data-test-edit-button]').doesNotExist();
     });
   });
 
