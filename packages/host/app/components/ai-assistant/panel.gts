@@ -22,6 +22,8 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
+import RoomInput from '@cardstack/host/components/matrix/room-input';
+import ENV from '@cardstack/host/config/environment';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -35,6 +37,9 @@ import { getRoom, RoomResource } from '../../resources/room';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 
 import AiAssistantMessage, { AiAssistantConversation } from './message';
+
+const { matrixURL } = ENV;
+const aiBotUserId = `@${aiBotUsername}:${new URL(matrixURL).hostname}`;
 
 interface Signature {
   Element: HTMLDivElement;
@@ -105,13 +110,13 @@ export default class AiAssistantPanel extends Component<Signature> {
       if (!resource.room) {
         continue;
       }
-      let joinedMember = resource.room.joinedMembers.find(
-        (m) =>
-          this.matrixService.userId === m.userId && aiBotUsername === m.userId,
-      );
-      if (joinedMember) {
-        rooms.push({ room: resource.room, member: joinedMember });
-        continue;
+      if (resource.room.joinedMembers.find((m) => aiBotUserId === m.userId)) {
+        let roomMember = resource.room.joinedMembers.find(
+          (m) => this.matrixService.userId === m.userId,
+        );
+        if (roomMember) {
+          rooms.push({ room: resource.room, member: roomMember });
+        }
       }
     }
     return rooms;
@@ -216,7 +221,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             <AiAssistantMessage
               @formattedMessage={{htmlSafe message.formattedMessage}}
               @datetime={{message.created}}
-              @isFromAssistant={{eq message.author.userId aiBotUsername}}
+              @isFromAssistant={{eq message.author.userId aiBotUserId}}
               @profileAvatar={{component
                 ProfileAvatarIcon
                 userId=message.author.userId
@@ -228,6 +233,9 @@ export default class AiAssistantPanel extends Component<Signature> {
             </div>
           {{/each}}
         </AiAssistantConversation>
+        {{#if this.currentRoomId}}
+          <RoomInput @roomId={{this.currentRoomId}} />
+        {{/if}}
       {{/if}}
     </div>
     <style>

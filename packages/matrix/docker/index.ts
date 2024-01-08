@@ -83,7 +83,7 @@ export function getHostPort(
           reject(err);
           return;
         }
-        // It's returned in the fomat 'port' (e.g. '8008')
+        // It's returned in the format 'port' (e.g. '8008')
         resolve(parseInt(stdout.trim().replace(/'/g, '')));
       },
     );
