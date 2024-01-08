@@ -551,6 +551,10 @@ export default class DetailPanel extends Component<Signature> {
       .delete-module-button:hover:not(:disabled) {
         --icon-color: var(--boxel-danger);
       }
+      .delete-module-button:focus:not(:disabled) {
+        --icon-color: var(--boxel-danger);
+        outline: 2px solid var(--boxel-danger);
+      }
     </style>
   </template>
 }
