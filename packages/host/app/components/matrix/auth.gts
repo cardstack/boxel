@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -35,15 +34,12 @@ export default class Auth extends Component<Signature> {
             }}
               <ForgotPassword
                 @resetPasswordParams={{@resetPasswordParams}}
-                @onLogin={{fn this.setMode 'login'}}
+                @setMode={{this.setMode}}
               />
             {{else if (eq this.mode 'register')}}
-              <RegisterUser @onCancel={{fn this.setMode 'login'}} />
+              <RegisterUser @setMode={{this.setMode}} />
             {{else}}
-              <Login
-                @onRegistration={{fn this.setMode 'register'}}
-                @onForgotPassword={{fn this.setMode 'forgot-password'}}
-              />
+              <Login @setMode={{this.setMode}} />
             {{/if}}
           </div>
         </CardContainer>

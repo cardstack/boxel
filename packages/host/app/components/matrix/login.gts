@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -17,10 +18,11 @@ import {
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
+import { AuthMode } from './auth';
+
 interface Signature {
   Args: {
-    onForgotPassword: () => void;
-    onRegistration: () => void;
+    setMode: (mode: AuthMode) => void;
   };
 }
 
@@ -59,7 +61,7 @@ export default class Login extends Component<Signature> {
       @kind='text-only'
       class='forgot-password'
       data-test-forgot-password
-      {{on 'click' @onForgotPassword}}
+      {{on 'click' (fn @setMode 'forgot-password')}}
     >Forgot password?</Button>
     <Button
       class='button'
@@ -77,7 +79,7 @@ export default class Login extends Component<Signature> {
     <Button
       class='button'
       data-test-register-user
-      {{on 'click' @onRegistration}}
+      {{on 'click' (fn @setMode 'login')}}
     >Create a new Boxel account</Button>
 
     <style>

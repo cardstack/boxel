@@ -24,6 +24,8 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
+import { AuthMode } from './auth';
+
 export type ResetPasswordParams = {
   sid: string;
   clientSecret: string;
@@ -31,7 +33,7 @@ export type ResetPasswordParams = {
 
 interface Signature {
   Args: {
-    onLogin: () => void;
+    setMode: (mode: AuthMode) => void;
     resetPasswordParams?: ResetPasswordParams;
   };
 }
@@ -454,6 +456,6 @@ export default class ForgotPassword extends Component<Signature> {
     }
     cardController.sid = null;
     cardController.clientSecret = null;
-    this.args.onLogin();
+    this.args.setMode('login');
   }
 }

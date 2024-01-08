@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
 import { action } from '@ember/object';
@@ -27,6 +28,8 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
+import { AuthMode } from './auth';
+
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
   login: 'm.login.dummy',
@@ -38,7 +41,7 @@ const MATRIX_REGISTRATION_TYPES = {
 const { matrixURL } = ENV;
 interface Signature {
   Args: {
-    onCancel: () => void;
+    setMode: (mode: AuthMode) => void;
   };
 }
 
@@ -183,7 +186,7 @@ export default class RegisterUser extends Component<Signature> {
         <Button
           data-test-cancel-btn
           class='button'
-          {{on 'click' this.cancel}}
+          {{on 'click' (fn @setMode 'login')}}
         >Login with an existing account</Button>
       </div>
     {{/if}}
@@ -557,10 +560,6 @@ export default class RegisterUser extends Component<Signature> {
     this.validateEmail.perform(clientSecret, sendAttempt);
   }
 
-  @action private cancel() {
-    this.args.onCancel();
-  }
-
   private validateEmail = restartableTask(
     async (clientSecret: string = uuidv4(), sendAttempt = 1) => {
       if (
@@ -678,7 +677,7 @@ export default class RegisterUser extends Component<Signature> {
 
     if (auth) {
       await this.matrixService.startAndSetDisplayName(auth, this.state.name);
-      this.args.onCancel();
+      this.args.setMode('login');
     }
   });
 
