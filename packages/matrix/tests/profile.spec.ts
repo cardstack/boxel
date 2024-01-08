@@ -72,13 +72,21 @@ test.describe('Profile', () => {
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeDisabled();
+    await expect(
+      page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
+    ).toContainText('Settings');
+    await page.locator('[data-test-change-email-button]').click();
+
+    await expect(
+      page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
+    ).toContainText('Settings > Email');
+    await expect(page.locator('[data-test-email-validation-msg]')).toHaveCount(
+      1,
+    );
     await page.locator('[data-test-new-email-field]').fill('user2@localhost');
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeEnabled();
-    await expect(page.locator('[data-test-email-validation-msg]')).toHaveCount(
-      1,
-    );
     await page.locator('[data-test-profile-settings-save-button]').click();
 
     // password modal
@@ -90,6 +98,9 @@ test.describe('Profile', () => {
 
     // pending email state
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(0);
+    await expect(
+      page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
+    ).toContainText('Settings');
     await expect(page.locator('[data-test-email-validation-msg]')).toHaveCount(
       0,
     );
@@ -142,6 +153,7 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
     );
+    await page.locator('[data-test-change-email-button]').click();
 
     await page.locator('[data-test-new-email-field]').fill('user2@localhost');
     await page.locator('[data-test-profile-settings-save-button]').click();
@@ -170,6 +182,7 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
     );
+    await page.locator('[data-test-change-email-button]').click();
 
     await page.locator('[data-test-new-email-field]').fill('user0@localhost');
     await page.locator('[data-test-profile-settings-save-button]').click();
@@ -195,6 +208,7 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
     );
+    await page.locator('[data-test-change-email-button]').click();
     await page.locator('[data-test-new-email-field]').fill('user2@localhost');
     await page.locator('[data-test-profile-settings-save-button]').click();
 
@@ -221,6 +235,7 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
     );
+    await page.locator('[data-test-change-email-button]').click();
     await page.locator('[data-test-new-email-field]').fill('user2@localhost');
     await page.locator('[data-test-profile-settings-save-button]').click();
 
@@ -246,6 +261,7 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
     );
+    await page.locator('[data-test-change-email-button]').click();
     await page.locator('[data-test-new-email-field]').fill('user2@localhost');
     await page.locator('[data-test-profile-settings-save-button]').click();
 
@@ -260,6 +276,23 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-new-email]')).toHaveCount(0);
     await expect(page.locator('[data-test-email-validation-msg]')).toHaveCount(
       0,
+    );
+  });
+
+  test('it can cancel changing an email', async ({ page }) => {
+    await gotoProfileSettings(page);
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+    await page.locator('[data-test-change-email-button]').click();
+    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+
+    await page.locator('[data-test-confirm-cancel-button]').click();
+    await expect(
+      page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
+    ).toContainText('Settings');
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
     );
   });
 });

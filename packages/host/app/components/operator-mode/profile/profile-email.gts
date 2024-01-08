@@ -6,9 +6,8 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, timeout, all } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 
-import perform from 'ember-concurrency/helpers/perform';
 import { type IAuthData } from 'matrix-js-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -18,7 +17,7 @@ import {
   FieldContainer,
 } from '@cardstack/boxel-ui/components';
 
-import { not, and, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { not, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   CheckMark,
@@ -28,8 +27,6 @@ import {
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 
-import { ProfileInfo } from '@cardstack/host/components/operator-mode/profile-info-popover';
-import config from '@cardstack/host/config/environment';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
 interface PasswordModalSignature {
@@ -125,198 +122,133 @@ class PasswordModal extends Component<PasswordModalSignature> {
 
 interface Signature {
   Args: {
-    toggleProfileSettings: () => void;
+    onSetup: (onSave: () => void, resetChangeEmail: () => void) => void;
+    changeEmail: () => void;
+    changeEmailComplete: () => void;
+    disableSave: (isDisabled: boolean) => void;
   };
   Element: HTMLElement;
 }
 
-export default class ProfileSettingsModal extends Component<Signature> {
+export default class ProfileEmail extends Component<Signature> {
   <template>
-    <ModalContainer
-      @onClose={{@toggleProfileSettings}}
-      @title='Settings'
-      @size='large'
-      @centered={{true}}
-      @isOpen={{true}}
-      class='profile-settings-modal'
-      data-test-settings-modal
-    >
-      <:sidebar>
-        <ProfileInfo />
-      </:sidebar>
-      <:content>
-        <form {{on 'submit' this.onSubmit}}>
-          <FieldContainer
-            @label='Name'
-            @tag='label'
-            class='profile-field'
-            @vertical={{false}}
-          >
-            <BoxelInput
-              data-test-display-name-field
-              @value={{this.matrixService.profile.displayName}}
-              @onInput={{this.setDisplayName}}
-              @valid={{this.isDisplayNameValid}}
-              @errorMessage={{if
-                (not this.isDisplayNameValid)
-                'Name is required'
-              }}
-              @state={{if
-                (and
-                  this.showDisplayNameValidation (not this.isDisplayNameValid)
-                )
-                'invalid'
-              }}
-            />
-          </FieldContainer>
-          {{#if this.hasPendingEmailChange}}
-            <FieldContainer
-              @label='Current Email'
-              @tag='label'
-              class='profile-field'
-              @vertical={{false}}
-            >
-              <div class='email-versions'>
-                <div class='email-version current'>
-                  <div class='header'>Current</div>
-                  <div
-                    class='email-value'
-                    data-test-current-email
-                  >{{this.matrixService.profile.email}}</div>
-                  <div class='verification-status'>
-                    <div class='indicator'>
-                      <CheckMark class='checked' />
-                      <span class='verification'>Verified</span>
-                    </div>
-                  </div>
-                </div>
-                <div class='email-version pending'>
-                  <div class='header'>Pending</div>
-                  <div
-                    class='email-value'
-                    data-test-new-email
-                  >{{this.email}}</div>
-                  <div class='verification-status'>
-                    <div class='indicator'>
-                      <IconX class='cross-out' />
-                      <span
-                        class='verification'
-                        data-test-new-email-not-verified
-                      >Not Verified</span>
-                    </div>
-                    <BoxelButton
-                      @kind='text-only'
-                      @size='extra-small'
-                      @loading={{this.isResending}}
-                      data-test-resend-validation
-                      {{on 'click' this.resendEmailVerification}}
-                    >Resend</BoxelButton>
-                    <BoxelButton
-                      @kind='secondary-light'
-                      @size='extra-small'
-                      data-test-cancel-email-change
-                      {{on 'click' this.cancelEmailChange}}
-                    >Cancel</BoxelButton>
-                  </div>
-                </div>
+    {{#if (eq this.emailState.type 'waitForValidation')}}
+      <FieldContainer @label='Current Email' @tag='label' class='profile-field'>
+        <div class='email-versions'>
+          <div class='email-version current'>
+            <div class='header'>Current</div>
+            <div
+              class='email-value'
+              data-test-current-email
+            >{{this.matrixService.profile.email}}</div>
+            <div class='verification-status'>
+              <div class='indicator'>
+                <CheckMark class='checked' />
+                <span class='verification'>Verified</span>
               </div>
-            </FieldContainer>
-          {{else}}
-            <FieldContainer
-              @label='Current Email'
-              @tag='label'
-              class='profile-field'
-              @vertical={{false}}
-            >
-              <div class='email'>
-                {{#if this.matrixService.profile.email}}
-                  <div class='email-value' data-test-current-email>
-                    {{this.matrixService.profile.email}}
-                  </div>
-                  <div class='verification-status'>
-                    <div class='indicator'>
-                      <CheckMark class='checked' />
-                      <span class='verification'>Verified</span>
-                    </div>
-                  </div>
-                {{else}}
-                  <div class='email-value' data-test-no-current-email>- email
-                    not set -</div>
-                {{/if}}
-              </div>
-            </FieldContainer>
-            <FieldContainer
-              @label='New Email'
-              @tag='label'
-              class='profile-field'
-              @vertical={{false}}
-            >
-              <div class='email'>
-                <BoxelInput
-                  data-test-new-email-field
-                  @value={{this.email}}
-                  @onInput={{this.setEmail}}
-                  @errorMessage={{this.emailError}}
-                  @state={{this.emailValidationState}}
-                />
-                {{#if
-                  (and
-                    (eq this.emailState.type 'validateEmail') (bool this.email)
-                  )
-                }}
-                  <div class='warning-box' data-test-email-validation-msg>
-                    <div class='warning-title'>
-                      <WarningIcon
-                        class='warning-icon'
-                        width='20px'
-                        height='20px'
-                        role='presentation'
-                      />
-                      <span>Before you proceed...</span>
-                    </div>
-                    <p class='warning'>
-                      You will need to
-                      <strong>verify your new email address</strong>
-                      before the change will take effect. You may cancel this
-                      process anytime before you verify your new email.
-                    </p>
-                  </div>
-                {{/if}}
-              </div>
-            </FieldContainer>
-          {{/if}}
-        </form>
-        {{#if this.displayNameError}}
-          <div class='error-message' data-test-profile-save-error>
-            {{this.displayNameError.message}}
+            </div>
           </div>
-        {{/if}}
-      </:content>
-      <:footer>
-        <div class='buttons'>
-          <BoxelButton
-            data-test-confirm-cancel-button
-            @size='tall'
-            @kind='secondary-light'
-            {{on 'click' @toggleProfileSettings}}
-          >
-            Cancel
-          </BoxelButton>
-
-          <BoxelButton
-            @kind='primary'
-            @size='tall'
-            @disabled={{this.isSaveButtonDisabled}}
-            class='save-button'
-            {{on 'click' (perform this.saveTask)}}
-            data-test-profile-settings-save-button
-          >
-            {{this.saveButtonText}}
-          </BoxelButton>
+          <div class='email-version pending'>
+            <div class='header'>Pending</div>
+            <div class='email-value' data-test-new-email>{{this.email}}</div>
+            <div class='verification-status'>
+              <div class='indicator'>
+                <IconX class='cross-out' />
+                <span class='verification' data-test-new-email-not-verified>Not
+                  Verified</span>
+              </div>
+              <BoxelButton
+                @kind='text-only'
+                @size='extra-small'
+                @loading={{this.isResending}}
+                data-test-resend-validation
+                {{on 'click' this.resendEmailVerification}}
+              >Resend</BoxelButton>
+              <BoxelButton
+                @kind='secondary-light'
+                @size='extra-small'
+                data-test-cancel-email-change
+                {{on 'click' this.cancelEmailChange}}
+              >Cancel</BoxelButton>
+            </div>
+          </div>
         </div>
-      </:footer>
-    </ModalContainer>
-
+      </FieldContainer>
+    {{else if (eq this.emailState.type 'initial')}}
+      <FieldContainer @label='Email' @tag='label' class='profile-field'>
+        <div class='email initial'>
+          <div class='email-wrapper'>
+            {{#if this.matrixService.profile.email}}
+              <div class='email-value' data-test-current-email>
+                {{this.matrixService.profile.email}}
+              </div>
+              <div class='verification-status'>
+                <div class='indicator'>
+                  <CheckMark class='checked' />
+                  <span class='verification'>Verified</span>
+                </div>
+              </div>
+            {{else}}
+              <div class='email-value' data-test-no-current-email>- email not
+                set -</div>
+            {{/if}}
+          </div>
+          <BoxelButton
+            @kind='secondary-light'
+            @size='extra-small'
+            data-test-change-email-button
+            {{on 'click' this.changeEmail}}
+          >Change Email</BoxelButton>
+        </div>
+      </FieldContainer>
+    {{else}}
+      <FieldContainer @label='Current Email' @tag='label' class='profile-field'>
+        <div class='email'>
+          {{#if this.matrixService.profile.email}}
+            <div class='email-value' data-test-current-email>
+              {{this.matrixService.profile.email}}
+            </div>
+            <div class='verification-status'>
+              <div class='indicator'>
+                <CheckMark class='checked' />
+                <span class='verification'>Verified</span>
+              </div>
+            </div>
+          {{else}}
+            <div class='email-value' data-test-no-current-email>- email not set
+              -</div>
+          {{/if}}
+        </div>
+      </FieldContainer>
+      <FieldContainer @label='New Email' @tag='label' class='profile-field'>
+        <div class='email'>
+          <BoxelInput
+            data-test-new-email-field
+            @value={{this.email}}
+            @onInput={{this.setEmail}}
+            @errorMessage={{this.emailError}}
+            @state={{this.emailValidationState}}
+          />
+          <div class='warning-box' data-test-email-validation-msg>
+            <div class='warning-title'>
+              <WarningIcon
+                class='warning-icon'
+                width='20px'
+                height='20px'
+                role='presentation'
+              />
+              <span>Before you proceed...</span>
+            </div>
+            <p class='warning'>
+              You will need to
+              <strong>verify your new email address</strong>
+              before the change will take effect. You may cancel this process
+              anytime before you verify your new email.
+            </p>
+          </div>
+        </div>
+      </FieldContainer>
+    {{/if}}
     {{#if this.showPasswordModal}}
       <PasswordModal
         @confirmPassword={{this.confirmPasswordForEmailChange}}
@@ -385,6 +317,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
         padding: var(--boxel-sp);
         margin: 0;
       }
+      .email.initial {
+        display: flex;
+        justify-content: space-between;
+      }
       .email-versions {
         border: 1px solid var(--boxel-form-control-border-color);
         border-radius: var(--boxel-form-control-border-radius);
@@ -442,14 +378,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
   </template>
 
   @service private declare matrixService: MatrixService;
-  @tracked private displayName: string | undefined;
   @tracked private emailError: string | undefined;
-  @tracked private saveSuccessIndicatorShown = false;
-  @tracked private displayNameError: Error | undefined;
-  @tracked private showDisplayNameValidation = false;
   @tracked private emailState:
     | { type: 'initial' }
-    | { type: 'validateEmail'; email: string }
+    | { type: 'setEmail'; email: string }
     | {
         type: 'askForPassword';
         email: string;
@@ -481,7 +413,22 @@ export default class ProfileSettingsModal extends Component<Signature> {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.setInitialValues.perform();
+    this.initialize.perform();
+    this.args.onSetup(
+      () => {
+        if (this.emailState.type === 'setEmail') {
+          this.emailState = {
+            type: 'askForPassword',
+            email: this.emailState.email,
+          };
+        }
+      },
+      () => {
+        this.emailState = {
+          type: 'initial',
+        };
+      },
+    );
   }
 
   private get email() {
@@ -493,37 +440,6 @@ export default class ProfileSettingsModal extends Component<Signature> {
 
   private get emailValidationState() {
     return this.emailError ? 'invalid' : 'initial';
-  }
-
-  private get saveButtonText() {
-    if (this.saveSuccessIndicatorShown) {
-      return 'Saved!';
-    }
-    return this.saveTask.isRunning ? 'Saving…' : 'Save';
-  }
-
-  private get isDisplayNameValid() {
-    return this.displayName !== undefined && this.displayName.length > 0;
-  }
-
-  private get isSaveButtonDisabled() {
-    return (
-      (this.saveTask.isRunning ||
-        !this.isDisplayNameValid ||
-        this.displayName === this.matrixService.profile.displayName) &&
-      (this.emailState.type !== 'validateEmail' ||
-        this.emailError ||
-        !this.email)
-    );
-  }
-
-  private get hasPendingEmailChange() {
-    return [
-      'askForPassword',
-      'requestEmailValidation',
-      'sendPassword',
-      'waitForValidation',
-    ].includes(this.emailState.type);
   }
 
   private get showPasswordModal() {
@@ -553,23 +469,28 @@ export default class ProfileSettingsModal extends Component<Signature> {
     );
   }
 
-  @action private setDisplayName(name: string) {
-    // We don't want to show validation error until the user has interacted with the field,
-    // i.e. when display name is blank and user opens settings modal
-    this.showDisplayNameValidation = true;
-    this.displayName = name;
+  @action private changeEmail() {
+    this.emailState = {
+      type: 'setEmail',
+      email: '',
+    };
+    this.args.changeEmail();
+    this.args.disableSave(true);
   }
 
   @action private setEmail(email: string) {
     this.emailError = undefined;
+    this.args.disableSave(email.length === 0);
     this.emailState = {
-      type: 'validateEmail',
+      type: 'setEmail',
       email,
     };
   }
 
   @action private cancelEmailChange() {
+    this.doEmailFlow.cancelAll();
     this.emailState = { type: 'initial' };
+    this.args.changeEmailComplete();
   }
 
   @action private clearPasswordError() {
@@ -600,11 +521,6 @@ export default class ProfileSettingsModal extends Component<Signature> {
     this.doEmailFlow.perform();
   }
 
-  @action private onSubmit(event: Event) {
-    event.preventDefault();
-    this.saveTask.perform();
-  }
-
   @action private resendEmailVerification() {
     if (
       this.emailState.type !== 'waitForValidation' &&
@@ -623,37 +539,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
     this.doEmailFlow.perform();
   }
 
-  private saveTask = restartableTask(async () => {
-    await this.matrixService.profile.loaded; // Prevent saving before profile is loaded
-
-    if (this.emailState.type === 'validateEmail') {
-      this.emailState = {
-        type: 'askForPassword',
-        email: this.emailState.email,
-      };
-    }
-
-    this.displayNameError = undefined;
-    if (this.displayName !== this.matrixService.profile.displayName) {
-      try {
-        await all([
-          this.matrixService.setDisplayName(this.displayName || ''),
-          timeout(config.minSaveTaskDurationMs),
-        ]);
-      } catch (e) {
-        this.displayNameError = new Error(
-          'Failed to save profile. Please try again.',
-        );
-      }
-      this.matrixService.reloadProfile(); // To get the updated display name in templates
-      this.afterSaveTask.perform();
-    }
-  });
-
   private doEmailFlow = restartableTask(async () => {
     if (
       this.emailState.type === 'initial' ||
-      this.emailState.type === 'validateEmail' ||
+      this.emailState.type === 'setEmail' ||
       this.emailState.type === 'askForPassword'
     ) {
       throw new Error(
@@ -686,9 +575,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
             default:
               this.emailError = e.data.error;
           }
+          this.args.disableSave(true);
           this.emailState = {
             ...this.emailState,
-            type: 'validateEmail',
+            type: 'setEmail',
           };
           return;
         }
@@ -727,6 +617,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
               ...this.emailState,
               type: 'waitForValidation',
             };
+            this.args.changeEmailComplete();
             this.doEmailFlow.perform();
             return;
           case 'M_FORBIDDEN':
@@ -751,18 +642,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
       );
       this.emailState = { type: 'initial' };
       this.matrixService.reloadProfile();
-      this.afterSaveTask.perform();
     }
   });
 
-  private afterSaveTask = restartableTask(async () => {
-    this.saveSuccessIndicatorShown = true;
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    this.saveSuccessIndicatorShown = false;
-  });
-
-  private setInitialValues = restartableTask(async () => {
+  private initialize = restartableTask(async () => {
     await this.matrixService.profile.loaded;
-    this.displayName = this.matrixService.profile.displayName;
   });
 }
