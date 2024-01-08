@@ -1,4 +1,5 @@
 import { getOwner } from '@ember/application';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -73,7 +74,7 @@ export default class ForgotPassword extends Component<Signature> {
         <Button
           class='button'
           data-test-cancel-btn
-          {{on 'click' this.backToLogin}}
+          {{on 'click' (fn @setMode 'login')}}
         >Back to login</Button>
       </div>
     {{else if (eq this.state.type 'waitForEmailValidation')}}
@@ -149,7 +150,7 @@ export default class ForgotPassword extends Component<Signature> {
           class='button'
           data-test-back-to-login-btn
           @kind='primary'
-          {{on 'click' this.backToLogin}}
+          {{on 'click' this.nullifyResetPasswordParams}}
         >Sign In to Boxel</Button>
       </div>
     {{/if}}
@@ -447,7 +448,7 @@ export default class ForgotPassword extends Component<Signature> {
   });
 
   @action
-  private backToLogin() {
+  private nullifyResetPasswordParams() {
     let cardController = getOwner(this)!.lookup('controller:card') as any;
     if (!cardController) {
       throw new Error(
