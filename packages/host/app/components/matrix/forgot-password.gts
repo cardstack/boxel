@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -71,7 +70,7 @@ export default class ForgotPassword extends Component<Signature> {
         <Button
           class='button'
           data-test-cancel-reset-password-btn
-          {{on 'click' (fn @returnToLogin)}}
+          {{on 'click' @returnToLogin}}
         >Back to login</Button>
       </div>
     {{else if (eq this.state.type 'waitForEmailValidation')}}
