@@ -1,5 +1,5 @@
 import { cfgDirFromTemplate, createRegistrationToken, loginUser } from '../docker/synapse';
-import { username, password } from './register-test-admin';
+import { adminUsername, adminPassword } from './register-test-user';
 
 (async () => {
   return new Promise<void>(async (resolve, reject) => {
@@ -10,7 +10,7 @@ import { username, password } from './register-test-admin';
         synapseId: '', 
         ...synapseCofig,
       }
-      let cred = await loginUser(synapseInstance, username, password);
+      let cred = await loginUser(synapseInstance, adminUsername, adminPassword);
       await createRegistrationToken(synapseInstance, cred.accessToken, 'dev-token');
       resolve();
     } catch(e: any) {
