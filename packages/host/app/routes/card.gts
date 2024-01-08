@@ -2,9 +2,9 @@ import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 
-import { ResetPasswordParams } from '@cardstack/host/components/matrix/forgot-password';
 import ENV from '@cardstack/host/config/environment';
 
+import { ResetPasswordParams } from '@cardstack/host/components/matrix/forgot-password';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -32,6 +32,7 @@ export default class RenderCard extends Route<Model> {
     operatorModeEnabled: {
       refreshModel: true,
     },
+    // `sid` and `clientSecret` come from email verification process to reset password
     sid: { refreshModel: true },
     clientSecret: { refreshModel: true },
   };

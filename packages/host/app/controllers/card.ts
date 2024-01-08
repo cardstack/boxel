@@ -5,6 +5,7 @@ export default class CardController extends Controller {
   queryParams = [
     'operatorModeState',
     'operatorModeEnabled',
+    // `sid` and `clientSecret` come from email verification process to reset password
     'sid',
     'clientSecret',
   ];
