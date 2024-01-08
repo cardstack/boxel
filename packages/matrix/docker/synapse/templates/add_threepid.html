@@ -1,0 +1,5 @@
+
+{% extends "_base.html" %}
+{% block title %}Verify a new email for your Boxel account{% endblock %}
+{% block info %}<p>Please confirm that this is your e-mail address by clicking on the button below or use <a href="{{ link }}">this link</a>.</p>{% endblock %}
+{% block button %}<button onclick="window.open('{{ link }}', '_blank')">Verify Email</button>{% endblock %}
