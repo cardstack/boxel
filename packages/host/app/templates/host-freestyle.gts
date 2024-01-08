@@ -8,6 +8,8 @@ import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 import { pageTitle } from 'ember-page-title';
 import RouteTemplate from 'ember-route-template';
 
+import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
+import ProfileAvatarIconVisualUsage from '@cardstack/host/components/operator-mode/profile-avatar-icon/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
 import formatComponentName from '../helpers/format-component-name';
@@ -25,7 +27,11 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
   formatComponentName = formatComponentName;
 
   get usageComponents() {
-    return [['SearchSheet', SearchSheetUsage]].map(([name, c]) => {
+    return [
+      ['AiAssistant::Message', AiAssistantMessageUsage],
+      ['ProfileAvatarIconVisualUsage', ProfileAvatarIconVisualUsage],
+      ['SearchSheet', SearchSheetUsage],
+    ].map(([name, c]) => {
       return {
         title: name,
         component: c,

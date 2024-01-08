@@ -91,10 +91,7 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
 
   <template>
     <div class='profile-popover-body' data-test-profile-icon-container>
-      <ProfileAvatarIcon
-        @userId={{this.matrixService.userId}}
-        class='profile-icon--big'
-      />
+      <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
 
       <div class='display-name' data-test-profile-display-name>
         {{this.matrixService.profile.displayName}}
@@ -109,16 +106,12 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
         margin: auto;
         display: flex;
         flex-direction: column;
+        --profile-avatar-icon-size: 70px;
+        --profile-avatar-icon-border: 0;
       }
 
       .profile-popover-body > * {
         margin: auto;
-      }
-
-      .profile-popover-body > .profile-icon {
-        width: 70px;
-        height: 70px;
-        font-size: var(--boxel-font-size-xxl);
       }
 
       .display-name {
