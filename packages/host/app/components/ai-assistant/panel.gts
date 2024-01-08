@@ -56,6 +56,11 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private isShowingPastSessions = false;
   @tracked private roomNameError: string | undefined;
 
+  constructor(owner: unknown, args: Signature) {
+    super(owner, args);
+    this.loadRooms.perform();
+  }
+
   @action
   private enterRoom(roomId: string) {
     this.currentRoomId = roomId;
@@ -147,6 +152,13 @@ export default class AiAssistantPanel extends Component<Signature> {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
     await Promise.all([...this.roomResources.values()].map((r) => r.loading));
+
+    if (!this.currentRoomId) {
+      let room = this.sortedAiSessionRooms.reverse()[0];
+      if (room) {
+        this.enterRoom(room.room.roomId);
+      }
+    }
   });
 
   @action
