@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 
 import { BoxelInput, IconButton } from '@cardstack/boxel-ui/components';
 import { Send } from '@cardstack/boxel-ui/icons';
+import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -28,6 +29,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         @onInput={{@onInput}}
         @onKeyPress={{this.onKeyPress}}
         @placeholder='Enter text here'
+        {{setCssVar chat-input-height=this.height}}
         ...attributes
       />
       <IconButton
@@ -50,8 +52,10 @@ export default class AiAssistantChatInput extends Component<Signature> {
         border-radius: var(--boxel-radius-sm);
       }
       .chat-input {
+        height: var(--chat-input-height);
         border-color: transparent;
         font-weight: 500;
+        padding: 3px;
         resize: none;
       }
       .chat-input::placeholder {
@@ -79,5 +83,22 @@ export default class AiAssistantChatInput extends Component<Signature> {
       ev.preventDefault();
       this.args.onSend();
     }
+  }
+
+  get height() {
+    const lineHeight = 18;
+    const padding = 6;
+
+    let lineCount = (this.args.value.match(/\n/g) ?? []).length + 1;
+    let count = 2;
+
+    if (lineCount > 5) {
+      count = 5;
+    } else if (lineCount > 2) {
+      count = lineCount;
+    }
+
+    let height = count * lineHeight + padding;
+    return `${height}px`;
   }
 }
