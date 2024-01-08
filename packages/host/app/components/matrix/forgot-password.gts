@@ -1,4 +1,3 @@
-import { getOwner } from '@ember/application';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -25,8 +24,6 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { AuthMode } from './auth';
-
 export type ResetPasswordParams = {
   sid: string;
   clientSecret: string;
@@ -34,7 +31,7 @@ export type ResetPasswordParams = {
 
 interface Signature {
   Args: {
-    setMode: (mode: AuthMode) => void;
+    returnToLogin: () => void;
     resetPasswordParams?: ResetPasswordParams;
   };
 }
@@ -74,7 +71,7 @@ export default class ForgotPassword extends Component<Signature> {
         <Button
           class='button'
           data-test-cancel-reset-password-btn
-          {{on 'click' (fn @setMode 'login')}}
+          {{on 'click' (fn @returnToLogin)}}
         >Back to login</Button>
       </div>
     {{else if (eq this.state.type 'waitForEmailValidation')}}
@@ -150,7 +147,7 @@ export default class ForgotPassword extends Component<Signature> {
           class='button'
           data-test-back-to-login-btn
           @kind='primary'
-          {{on 'click' this.nullifyResetPasswordParams}}
+          {{on 'click' @returnToLogin}}
         >Sign In to Boxel</Button>
       </div>
     {{/if}}
@@ -446,17 +443,4 @@ export default class ForgotPassword extends Component<Signature> {
       throw e;
     }
   });
-
-  @action
-  private nullifyResetPasswordParams() {
-    let cardController = getOwner(this)!.lookup('controller:card') as any;
-    if (!cardController) {
-      throw new Error(
-        'OperatorModeStateService must be used in the context of a CardController',
-      );
-    }
-    cardController.sid = null;
-    cardController.clientSecret = null;
-    this.args.setMode('login');
-  }
 }

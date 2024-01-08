@@ -79,7 +79,7 @@ export default class Login extends Component<Signature> {
     <Button
       class='button'
       data-test-register-user
-      {{on 'click' (fn @setMode 'login')}}
+      {{on 'click' (fn @setMode 'register')}}
     >Create a new Boxel account</Button>
 
     <style>

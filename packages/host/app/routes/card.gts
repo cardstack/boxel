@@ -4,19 +4,16 @@ import { service } from '@ember/service';
 
 import ENV from '@cardstack/host/config/environment';
 
-import { ResetPasswordParams } from '@cardstack/host/components/matrix/forgot-password';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import type CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
+import type CardService from '../services/card-service';
+
 const { ownRealmURL } = ENV;
 
-export type Model = {
-  card: CardDef;
-  resetPasswordParams?: ResetPasswordParams;
-};
+export type Model = CardDef | null;
 
 export type ErrorModel = {
   message: string;
@@ -24,7 +21,7 @@ export type ErrorModel = {
   operatorModeState: string;
 };
 
-export default class RenderCard extends Route<Model> {
+export default class RenderCard extends Route<Model | null> {
   queryParams = {
     operatorModeState: {
       refreshModel: true, // Enabled so that back-forward navigation works in operator mode
@@ -45,11 +42,8 @@ export default class RenderCard extends Route<Model> {
     path: string;
     operatorModeState: string;
     operatorModeEnabled: boolean;
-    sid?: string;
-    clientSecret?: string;
   }): Promise<Model> {
-    let { clientSecret, path, operatorModeState, operatorModeEnabled, sid } =
-      params;
+    let { path, operatorModeState, operatorModeEnabled } = params;
     path = path || '';
     let url = path
       ? new URL(`/${path}`, ownRealmURL)
@@ -58,8 +52,8 @@ export default class RenderCard extends Route<Model> {
     try {
       let cardResource = getCard(this, () => url.href);
       await cardResource.loaded;
-      let card = cardResource.card;
-      if (!card) {
+      let model = cardResource.card;
+      if (!model) {
         throw new Error(`Could not find ${url}`);
       }
 
@@ -74,30 +68,12 @@ export default class RenderCard extends Route<Model> {
           // query param, which will trigger a refresh of the model, which will call the model hook again.
           // The model refresh happens automatically because we have operatorModeState: { refreshModel: true } in the queryParams.
           // We have that because we want to support back-forward navigation in operator mode.
-          return {
-            card,
-            resetPasswordParams:
-              sid && clientSecret
-                ? {
-                    sid,
-                    clientSecret,
-                  }
-                : undefined,
-          };
+          return model;
         }
         await this.operatorModeStateService.restore(operatorModeStateObject);
       }
 
-      return {
-        card,
-        resetPasswordParams:
-          sid && clientSecret
-            ? {
-                sid,
-                clientSecret,
-              }
-            : undefined,
-      };
+      return model;
     } catch (e) {
       (e as any).loadType = params.operatorModeEnabled
         ? 'stack'

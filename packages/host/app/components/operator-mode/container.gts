@@ -29,7 +29,6 @@ import {
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogModal from '../card-catalog/modal';
-import { ResetPasswordParams } from '../matrix/forgot-password';
 import { Submodes } from '../submode-switcher';
 
 import type CardService from '../../services/card-service';
@@ -43,7 +42,6 @@ const { loginMessageTimeoutMs } = config;
 interface Signature {
   Args: {
     onClose: () => void;
-    resetPasswordParams?: ResetPasswordParams;
   };
 }
 
@@ -181,7 +179,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
           <InteractSubmode @write={{perform this.write}} />
         {{else}}
-          <Auth @resetPasswordParams={{@resetPasswordParams}} />
+          <Auth />
         {{/if}}
       {{/if}}
     </Modal>
