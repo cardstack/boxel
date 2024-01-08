@@ -73,7 +73,7 @@ export default class ForgotPassword extends Component<Signature> {
         <span class='or'>or</span>
         <Button
           class='button'
-          data-test-cancel-btn
+          data-test-cancel-reset-password-btn
           {{on 'click' (fn @setMode 'login')}}
         >Back to login</Button>
       </div>
@@ -255,8 +255,6 @@ export default class ForgotPassword extends Component<Signature> {
       }
     | {
         type: 'resetPassword';
-        clientSecret: string;
-        sid: string;
       }
     | { type: 'resetPasswordSuccess' } = {
     type: 'initial',
@@ -269,8 +267,6 @@ export default class ForgotPassword extends Component<Signature> {
     if (this.args.resetPasswordParams) {
       this.state = {
         type: 'resetPassword',
-        sid: this.args.resetPasswordParams.sid,
-        clientSecret: this.args.resetPasswordParams.clientSecret,
       };
     }
   }
@@ -419,14 +415,18 @@ export default class ForgotPassword extends Component<Signature> {
       throw new Error(
         `bug: should never get here: reset password button disabled when no password`,
       );
+    } else if (!this.args.resetPasswordParams) {
+      throw new Error(
+        `bug: should never get here: reset password params is required for resetting password`,
+      );
     }
 
     try {
       await this.matrixService.client.setPassword(
         {
           threepid_creds: {
-            sid: this.state.sid,
-            client_secret: this.state.clientSecret,
+            sid: this.args.resetPasswordParams.sid,
+            client_secret: this.args.resetPasswordParams.clientSecret,
           },
           type: 'm.login.email.identity',
         },
