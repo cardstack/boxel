@@ -413,7 +413,7 @@ export default class ForgotPassword extends Component<Signature> {
       );
     } else if (!this.args.resetPasswordParams) {
       throw new Error(
-        `bug: should never get here: reset password params is required for resetting password`,
+        `bug: should never get here: reset password params is required`,
       );
     }
 
