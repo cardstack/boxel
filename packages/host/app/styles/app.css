@@ -1,3 +1,6 @@
+:root {
+  --boxel-ai-purple: #290857;
+}
 .error {
   color: var(--boxel-error-100);
 }
