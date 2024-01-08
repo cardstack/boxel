@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -23,6 +24,8 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
+import { AuthMode } from './auth';
+
 export type ResetPasswordParams = {
   sid: string;
   clientSecret: string;
@@ -30,7 +33,8 @@ export type ResetPasswordParams = {
 
 interface Signature {
   Args: {
-    returnToLogin: () => void;
+    setMode: (mode: AuthMode) => void;
+    nullifyResetPasswordParams?: () => void;
     resetPasswordParams?: ResetPasswordParams;
   };
 }
@@ -70,7 +74,7 @@ export default class ForgotPassword extends Component<Signature> {
         <Button
           class='button'
           data-test-cancel-reset-password-btn
-          {{on 'click' @returnToLogin}}
+          {{on 'click' (fn @setMode 'login')}}
         >Back to login</Button>
       </div>
     {{else if (eq this.state.type 'waitForEmailValidation')}}
@@ -133,7 +137,14 @@ export default class ForgotPassword extends Component<Signature> {
           {{on 'click' (perform this.resetPassword)}}
         >Reset Password</Button>
       </div>
-      {{#if this.error}}
+      {{#if this.isResetPasswordParamsError}}
+        <span class='error' data-test-reset-password-error>Unable to reset your
+          password due to invalid password reset parameters. Please restart the
+          password reset flow by going back to
+          <a href='#' {{on 'click' this.returnToInitialForm}}>forgot password
+            form</a>
+          and try again.</span>
+      {{else if this.error}}
         <span class='error' data-test-reset-password-error>{{this.error}}</span>
       {{/if}}
     {{else if (eq this.state.type 'resetPasswordSuccess')}}
@@ -146,7 +157,7 @@ export default class ForgotPassword extends Component<Signature> {
           class='button'
           data-test-back-to-login-btn
           @kind='primary'
-          {{on 'click' @returnToLogin}}
+          {{on 'click' this.returnToLogin}}
         >Sign In to Boxel</Button>
       </div>
     {{/if}}
@@ -228,11 +239,16 @@ export default class ForgotPassword extends Component<Signature> {
         padding: 0;
         font: 500 var(--boxel-font-xs);
         margin: var(--boxel-sp-xxs) auto 0 auto;
+        text-align: center;
+      }
+      .error a {
+        text-decoration: underline;
       }
     </style>
   </template>
 
   @tracked private error: string | undefined;
+  @tracked private isResetPasswordParamsError = false;
   @tracked private email: string | undefined;
   @tracked private emailError: string | undefined;
   @tracked private password: string | undefined;
@@ -435,11 +451,28 @@ export default class ForgotPassword extends Component<Signature> {
       };
     } catch (e: any) {
       if (isMatrixError(e)) {
-        this.error = 'Please check your email to validate reset password';
-        setTimeout(() => (this.error = undefined), 2000);
+        this.isResetPasswordParamsError = true;
+      } else {
+        this.error =
+          'An unknown error happened. Please try again, or contact support if the problem persists.';
       }
 
       throw e;
     }
   });
+
+  @action
+  private returnToInitialForm() {
+    this.args.nullifyResetPasswordParams?.();
+    this.args.setMode('forgot-password');
+    this.state = {
+      type: 'initial',
+    };
+  }
+
+  @action
+  private returnToLogin() {
+    this.args.nullifyResetPasswordParams?.();
+    this.args.setMode('login');
+  }
 }

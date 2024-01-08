@@ -33,7 +33,8 @@ export default class Auth extends Component {
               )
             }}
               <ForgotPassword
-                @returnToLogin={{this.returnToLogin}}
+                @setMode={{this.setMode}}
+                @nullifyResetPasswordParams={{this.nullifyResetPasswordParams}}
                 @resetPasswordParams={{this.resetPasswordParams}}
               />
             {{else if (eq this.mode 'register')}}
@@ -113,10 +114,8 @@ export default class Auth extends Component {
     this.mode = mode;
   }
 
-  // Resets the parameters related to the password reset scenario
-  // before navigating back to the login page from forgot password page.
   @action
-  returnToLogin() {
+  nullifyResetPasswordParams() {
     let cardController = getOwner(this)!.lookup('controller:card') as any;
     if (!cardController) {
       throw new Error(
@@ -126,7 +125,6 @@ export default class Auth extends Component {
     cardController.sid = null;
     cardController.clientSecret = null;
     this.resetPasswordParams = undefined;
-    this.setMode('login');
   }
 }
 
