@@ -38,19 +38,10 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
   setupAcceptanceTestRealm,
+  setupSessionsServiceMock,
   visitOperatorMode,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
-
-class MockSessionsService extends Service {
-  get canRead() {
-    return true;
-  }
-
-  get canWrite() {
-    return false;
-  }
-}
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
@@ -61,6 +52,7 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupOnSave(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
+  setupSessionsServiceMock(hooks, true, true);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');
@@ -757,25 +749,27 @@ module('Acceptance | interact submode tests', function (hooks) {
       await deferred.promise;
     });
 
-    test('the edit button is hidden when the user lacks permissions', async function (assert) {
-      this.owner.register('service:sessions-service', MockSessionsService);
+    module('when the user lacks write permissions', function (hooks) {
+      setupSessionsServiceMock(hooks, true, false);
 
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Person/fadhlan`,
-              format: 'isolated',
-            },
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
+      test('the edit button is hidden when the user lacks permissions', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Person/fadhlan`,
+                format: 'isolated',
+              },
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'isolated',
+              },
+            ],
           ],
-        ],
-      });
+        });
 
-      assert.dom('[data-test-edit-button]').doesNotExist();
+        assert.dom('[data-test-edit-button]').doesNotExist();
+      });
     });
   });
 
