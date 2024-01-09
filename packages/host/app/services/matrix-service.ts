@@ -21,6 +21,10 @@ import {
   type MatrixCardError,
   sanitizeHtml,
 } from '@cardstack/runtime-common';
+import {
+  basicMappings,
+  generatePatchCallSpecification,
+} from '@cardstack/runtime-common/helpers/ai';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
@@ -280,12 +284,21 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
-    console.log(context);
+
     if (context?.submode === 'interact') {
+      // Serialize the top of all cards on all stacks
       let serializedCards = await Promise.all(
         context!.openCards.map(async (card) => {
           return await this.cardService.serializeCard(card);
         }),
+      );
+      let mappings = await basicMappings(this.loaderService.loader);
+
+      // Limiting support to modifying the top of just one stack
+      let patchSpec = generatePatchCallSpecification(
+        context!.openCards[0].constructor,
+        this.cardAPI,
+        mappings,
       );
       await this.client.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.message',
@@ -293,6 +306,7 @@ export default class MatrixService extends Service {
         formatted_body: html,
         context: {
           openCards: serializedCards,
+          cardSpec: patchSpec,
           submode: context.submode,
         },
       });
