@@ -7,7 +7,7 @@ import {
   updateUser,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import { login, test, setupMatrixOverride, validateEmail } from '../helpers';
+import { login, test, setupMatrixOverride, validateEmail, assertLoggedOut, assertLoggedIn, openAiAssistant } from '../helpers';
 
 test.describe('Profile', () => {
   let synapse: SynapseInstance;
@@ -41,6 +41,11 @@ test.describe('Profile', () => {
     await login(page, 'user1', 'pass');
     await page.locator('[data-test-profile-icon-button]').click();
     await page.locator('[data-test-settings-button]').click();
+  }
+
+  async function logoutFromProfileSettings(page: Page) {
+    await page.locator('[data-test-profile-icon-button]').click();
+    await page.locator('[data-test-signout-button]').click();
   }
 
   test('it can change display name in settings', async ({ page }) => {
@@ -294,5 +299,187 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
     );
+  });
+
+  test('it can change password in settings', async ({ page }) => {
+    await gotoProfileSettings(page);
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+
+    await page.locator('[data-test-change-password-button]').click();
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeDisabled();
+    await expect(
+      page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
+    ).toContainText('Settings > Password');
+    await page.locator('[data-test-current-password-field]').fill('pass');
+    await page.locator('[data-test-new-password-field]').fill('newpass123!');
+    await page.locator('[data-test-confirm-password-field]').fill('newpass123!');
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeEnabled();
+    await page.locator('[data-test-profile-settings-save-button]').click();
+      
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+    await expect(
+      page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
+    ).toContainText('Settings');
+    await page.locator('[data-test-confirm-cancel-button]').click();
+
+    await logoutFromProfileSettings(page);
+    await assertLoggedOut(page);
+
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('newpass123!');
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
+    await openAiAssistant(page);
+    await assertLoggedIn(page);
+  });
+
+  test('It shows an error when new password does not meet the requirement', async ({ page }) => {
+    await gotoProfileSettings(page);
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+
+    await page.locator('[data-test-change-password-button]').click();
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeDisabled();
+    await expect(
+      page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
+    ).toContainText('Settings > Password');
+    await page.locator('[data-test-current-password-field]').fill('pass');
+    await page.locator('[data-test-new-password-field]').fill('newpass');
+    await page.locator('[data-test-confirm-password-field]').fill('newpass');
+    await expect(
+      page.locator(
+        '[data-test-new-password-field][data-test-boxel-input-validation-state="invalid"]',
+      ),
+      'new password field displays invalid validation state',
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-new-password-field] ~ [data-test-boxel-input-error-message]',
+      ),
+    ).toContainText('Password must be at least 8 characters long and include a number and a symbol');
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeDisabled();
+    
+    await page.locator('[data-test-new-password-field]').fill('newpass123!');
+    await page.locator('[data-test-confirm-password-field]').fill('newpass1');
+    await page.locator('[data-test-new-password-field]').fill('newpass123!'); //This line is only for change focus from input
+    await expect(
+      page.locator(
+        '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
+      ),
+      'confirm password field displays invalid validation state',
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-confirm-password-field] ~ [data-test-boxel-input-error-message]',
+      ),
+    ).toContainText('Passwords do not match');
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeDisabled();
+    
+    await page.locator('[data-test-new-password-field]').fill('newpass123!');
+    await page.locator('[data-test-confirm-password-field]').fill('newpass123!');
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeEnabled();
+    await page.locator('[data-test-profile-settings-save-button]').click();
+      
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+    await expect(
+      page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
+    ).toContainText('Settings');
+    await page.locator('[data-test-confirm-cancel-button]').click();
+
+    await logoutFromProfileSettings(page);
+    await assertLoggedOut(page);
+
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('newpass123!');
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
+    await openAiAssistant(page);
+    await assertLoggedIn(page);
+  });
+
+  test('It shows an error when current password is invalid', async ({ page }) => {
+    await gotoProfileSettings(page);
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+
+    await page.locator('[data-test-change-password-button]').click();
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeDisabled();
+    await expect(
+      page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
+    ).toContainText('Settings > Password');
+
+    await page.locator('[data-test-current-password-field]').fill('invalidpass');
+    await page.locator('[data-test-new-password-field]').fill('newpass123!');
+    await page.locator('[data-test-confirm-password-field]').fill('newpass123!');
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeEnabled();
+    await page.locator('[data-test-profile-settings-save-button]').click();
+    await expect(
+      page.locator(
+        '[data-test-current-password-field][data-test-boxel-input-validation-state="invalid"]',
+      ),
+      'current password field displays invalid validation state',
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-current-password-field] ~ [data-test-boxel-input-error-message]',
+      ),
+    ).toContainText('Current password is invalid');
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeDisabled();
+
+    await page.locator('[data-test-current-password-field]').fill('pass');
+    await expect(
+      page.locator('[data-test-profile-settings-save-button]'),
+    ).toBeEnabled();
+    await page.locator('[data-test-profile-settings-save-button]').click();
+      
+    await expect(page.locator('[data-test-current-email]')).toContainText(
+      'user1@localhost',
+    );
+    await expect(
+      page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
+    ).toContainText('Settings');
+    await page.locator('[data-test-confirm-cancel-button]').click();
+
+    await logoutFromProfileSettings(page);
+    await assertLoggedOut(page);
+
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('newpass123!');
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
+    await openAiAssistant(page);
+    await assertLoggedIn(page);
   });
 });
