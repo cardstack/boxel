@@ -38,9 +38,9 @@ import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objecti
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
+import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
-import type CardService from '../services/card-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;

@@ -454,7 +454,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-signout-button]');
 
-    assert.dom('[data-test-login-form]').exists();
+    assert.dom('[data-test-login-btn]').exists();
   });
 
   test('can access and save settings via profile info popover', async function (assert) {

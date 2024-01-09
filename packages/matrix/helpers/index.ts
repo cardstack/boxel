@@ -147,11 +147,85 @@ export async function validateEmail(
   }
 }
 
+export async function validateEmailForResetPassword(
+  appPage: Page,
+  email: string,
+  opts?: {
+    onEmailPage?: (page: Page) => Promise<void>;
+    onValidationPage?: (page: Page) => Promise<void>;
+    sendAttempts?: number;
+    isLoggedInWhenValidated?: true;
+  },
+): Promise<Page> {
+  let sendAttempts = opts?.sendAttempts ?? 1;
+  await expect(appPage.locator('[data-test-email-validation]')).toContainText(
+    'Please check your email to reset your password',
+  );
+
+  for (let i = 0; i < sendAttempts - 1; i++) {
+    await appPage.waitForTimeout(500);
+    await appPage.locator('[data-test-resend-validation-btn]').click();
+  }
+
+  let context = appPage.context();
+  let emailPage = await context.newPage();
+  await emailPage.goto(mailHost);
+  await expect(
+    emailPage.locator('.messagelist .unread').filter({ hasText: email }),
+  ).toHaveCount(sendAttempts);
+  await emailPage
+    .locator('.messagelist .unread')
+    .filter({ hasText: email })
+    .first()
+    .click();
+  await expect(
+    emailPage.frameLocator('.messageview iframe').locator('body'),
+  ).toContainText('Reset Password');
+  await expect(emailPage.locator('.messageview .messageviewheader')).toContainText(
+    `To:${email}`,
+  );
+
+  if (opts?.onEmailPage) {
+    await opts.onEmailPage(emailPage);
+  }
+
+  const pagePromise = context.waitForEvent('page');
+  let btn = emailPage
+      .frameLocator('.messageview iframe')
+      .getByText('Reset Password')
+      .last();
+  // We have to delay before going to validation window
+  // to avoid the validation window won't open
+  await emailPage.waitForTimeout(500);
+  await btn.click();
+  
+  const validationPage = await pagePromise;
+  await validationPage.waitForLoadState();
+  if (opts?.onValidationPage) {
+    await opts.onValidationPage(validationPage);
+  }
+  let validationBtn = validationPage.locator('body')
+    .getByText('Confirm changing my password');
+  await validationPage.waitForTimeout(500);
+  await validationBtn.click();
+
+  const resetPasswordPage = await pagePromise;
+  await resetPasswordPage.waitForLoadState();
+  return resetPasswordPage;
+}
+
 export async function gotoRegistration(page: Page) {
   await openRoot(page);
   await toggleOperatorMode(page);
   await page.locator('[data-test-register-user]').click();
-  await expect(page.locator('[data-test-register-user]')).toHaveCount(1);
+  await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
+}
+
+export async function gotoForgotPassword(page: Page) {
+  await openRoot(page);
+  await toggleOperatorMode(page);
+  await page.locator('[data-test-forgot-password]').click();
+  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(1);
 }
 
 export async function login(
@@ -180,7 +254,49 @@ export async function login(
 export async function logout(page: Page) {
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();
-  await expect(page.locator('[data-test-login-form]')).toHaveCount(1);
+  await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
+}
+
+export async function register(page: Page, name: string,
+  email: string,
+  username: string,
+  password: string,
+  registrationToken?: string) {
+  await expect(
+    page.locator('[data-test-token-field]'),
+    'token field is not displayed',
+  ).toHaveCount(0);
+  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+  await page.locator('[data-test-name-field]').fill(name);
+  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+  await page.locator('[data-test-email-field]').fill(email);
+  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+  await page.locator('[data-test-username-field]').fill(username);
+  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+  await page.locator('[data-test-password-field]').fill(password);
+  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+  await page.locator('[data-test-confirm-password-field]').fill(password);
+  await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
+  await page.locator('[data-test-register-btn]').click();
+
+  if(registrationToken) {
+    await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-test-username-field]'),
+      'username field is not displayed',
+    ).toHaveCount(0);
+    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
+    await page.locator('[data-test-token-field]').fill(registrationToken);
+    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
+    await page.locator('[data-test-next-btn]').click();
+  }
+
+  await validateEmail(page, email);
+  
+  await openAiAssistant(page);
+  await assertLoggedIn(page, { email, displayName: name});
+  await logout(page);
+  await assertLoggedOut(page);
 }
 
 export async function createRoom(

@@ -26,6 +26,10 @@ export function isMatrixError(err: any): err is MatrixError {
   );
 }
 
+export function isValidPassword(password: string): boolean {
+  return /^(?=.*[0-9])(?=.*[!@#$%^&*])[a-zA-Z0-9!@#$%^&*]{8,}$/.test(password);
+}
+
 export interface InteractiveAuth {
   completed?: string[];
   session: string;

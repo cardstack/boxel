@@ -23,8 +23,9 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
             <BoxelIcon />
           </:icon>
         </BoxelHeader>
-
-        {{yield}}
+        <div class='content'>
+          {{yield}}
+        </div>
       </CardContainer>
     </div>
   </div>
@@ -45,21 +46,31 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
     }
 
     .auth-container {
-      width: var(--boxel-sm-container);
-      border-radius: var(--boxel-border-radius-xl);
+      background-color: var(--boxel-light);
+      border: 1px solid var(--boxel-form-control-border-color);
+      border-radius: var(--boxel-form-control-border-radius);
+      letter-spacing: var(--boxel-lsp);
+      width: 550px;
+      position: relative;
     }
-
     .header {
       --boxel-header-icon-width: var(--boxel-icon-med);
       --boxel-header-icon-height: var(--boxel-icon-med);
       --boxel-header-padding: var(--boxel-sp);
       --boxel-header-text-size: var(--boxel-font);
 
+      background-color: var(--boxel-light);
       text-transform: uppercase;
       max-width: max-content;
       min-width: 100%;
       gap: var(--boxel-sp-xxs);
       letter-spacing: var(--boxel-lsp-lg);
+    }
+    .content {
+      display: flex;
+      flex-direction: column;
+      padding: var(--boxel-sp) var(--boxel-sp-xl) calc(var(--boxel-sp) * 2)
+        var(--boxel-sp-xl);
     }
   </style>
 </template>;

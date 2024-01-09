@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
 import { action } from '@ember/object';
@@ -16,18 +17,20 @@ import {
   BoxelInputGroup,
   Button,
   FieldContainer,
-  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import ENV from '@cardstack/host/config/environment';
 import {
   isMatrixError,
+  isValidPassword,
   isInteractiveAuth,
   nextUncompletedStage,
   type InteractiveAuth,
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+
+import { AuthMode } from './auth';
 
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
@@ -40,171 +43,156 @@ const MATRIX_REGISTRATION_TYPES = {
 const { matrixURL } = ENV;
 interface Signature {
   Args: {
-    onCancel: () => void;
+    setMode: (mode: AuthMode) => void;
   };
 }
 
 export default class RegisterUser extends Component<Signature> {
   <template>
-    <section class='content' data-test-register-user>
-      {{#if (eq this.currentPage 'waiting-page')}}
-        <p class='title' data-test-email-validation>Please check your email to
-          complete registration.</p>
-        <ul class='email-validation-instruction'>
-          <li>Leave this window open while we verify your email</li>
-          <li>This screen will update once your email is verified</li>
-        </ul>
+    {{#if (eq this.currentPage 'waiting-page')}}
+      <span class='title' data-test-email-validation>Please check your email to
+        complete registration.</span>
+      <ul class='email-validation-instruction'>
+        <li>Leave this window open while we verify your email</li>
+        <li>This screen will update once your email is verified</li>
+      </ul>
+      <Button
+        data-test-resend-validation
+        {{on 'click' this.resendValidation}}
+        class='resend-email'
+        @kind='primary'
+        @disabled={{this.validateEmail.isRunning}}
+        @loading={{this.validateEmail.isRunning}}
+      >Resend Email</Button>
+    {{else if (eq this.currentPage 'token-form')}}
+      <FieldContainer
+        @label='Registration Token'
+        @tag='label'
+        class='registration-field'
+        @vertical={{true}}
+      >
+        <BoxelInput
+          data-test-token-field
+          @state={{this.tokenInputState}}
+          @value={{this.token}}
+          @errorMessage={{this.tokenError}}
+          @onInput={{this.setToken}}
+        />
+      </FieldContainer>
+      <div class='button-wrapper'>
         <Button
-          data-test-resend-validation
-          {{on 'click' this.resendValidation}}
-          class='resend-email'
+          data-test-next-btn
+          class='button'
           @kind='primary'
-          @disabled={{this.validateEmail.isRunning}}
-        >{{#if this.validateEmail.isRunning}}
-            <LoadingIndicator />
-          {{else}}Resend Email{{/if}}</Button>
-      {{else if (eq this.currentPage 'token-form')}}
-        <FieldContainer
-          @label='Registration Token'
-          @tag='label'
-          class='registration-field'
-          @vertical={{true}}
+          @disabled={{this.isNextButtonDisabled}}
+          @loading={{this.doRegistrationFlow.isRunning}}
+          {{on 'click' this.sendToken}}
+        >Next</Button>
+      </div>
+    {{else if (eq this.currentPage 'registration-form')}}
+      <span class='title'>Create a Boxel Account</span>
+      <FieldContainer
+        @label='Your Name'
+        @tag='label'
+        @vertical={{true}}
+        class='registration-field'
+      >
+        <BoxelInput
+          data-test-name-field
+          @state={{this.nameInputState}}
+          @value={{this.name}}
+          @errorMessage={{this.nameError}}
+          @onInput={{this.setName}}
+          @onBlur={{this.checkName}}
+        />
+      </FieldContainer>
+      <FieldContainer
+        @label='Email'
+        @tag='label'
+        @vertical={{true}}
+        class='registration-field'
+      >
+        <BoxelInput
+          data-test-email-field
+          @state={{this.emailInputState}}
+          @value={{this.email}}
+          @errorMessage={{this.emailError}}
+          @onInput={{this.setEmail}}
+          @onBlur={{this.checkEmail}}
+        />
+      </FieldContainer>
+      <FieldContainer
+        @label='Username'
+        @tag='label'
+        @vertical={{true}}
+        class='registration-field'
+      >
+        <BoxelInputGroup
+          data-test-username-field
+          @state={{this.usernameInputState}}
+          @value={{this.username}}
+          @errorMessage={{this.usernameError}}
+          @onInput={{this.setUsername}}
+          @onBlur={{this.checkUsername}}
         >
-          <BoxelInput
-            data-test-token-field
-            @state={{this.tokenInputState}}
-            @value={{this.token}}
-            @errorMessage={{this.tokenError}}
-            @onInput={{this.setToken}}
-          />
-        </FieldContainer>
-        <div class='button-wrapper'>
-          <Button
-            data-test-next-btn
-            class='button'
-            @kind='primary'
-            @disabled={{this.isNextButtonDisabled}}
-            {{on 'click' this.sendToken}}
-          >
-            {{#if this.doRegistrationFlow.isRunning}}
-              <LoadingIndicator />
-            {{else}}
-              Next
-            {{/if}}
-          </Button>
-        </div>
-      {{else if (eq this.currentPage 'registration-form')}}
-        <header class='title'>Create a Boxel Account</header>
-        <FieldContainer
-          @label='Your Name'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
-          <BoxelInput
-            data-test-name-field
-            @state={{this.nameInputState}}
-            @value={{this.name}}
-            @errorMessage={{this.nameError}}
-            @onInput={{this.setName}}
-            @onBlur={{this.checkName}}
-          />
-        </FieldContainer>
-        <FieldContainer
-          @label='Email'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
-          <BoxelInput
-            data-test-email-field
-            @state={{this.emailInputState}}
-            @value={{this.email}}
-            @errorMessage={{this.emailError}}
-            @onInput={{this.setEmail}}
-            @onBlur={{this.checkEmail}}
-          />
-        </FieldContainer>
-        <FieldContainer
-          @label='Username'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
-          <BoxelInputGroup
-            data-test-username-field
-            @state={{this.usernameInputState}}
-            @value={{this.username}}
-            @errorMessage={{this.usernameError}}
-            @onInput={{this.setUsername}}
-            @onBlur={{this.checkUsername}}
-          >
-            <:before as |Accessories|>
-              <Accessories.Text class='username-prefix'>@</Accessories.Text>
-            </:before>
-            <:after as |Accessories|>
-              <Accessories.Text>{{this.usernameSuffix}}</Accessories.Text>
-            </:after>
-          </BoxelInputGroup>
-        </FieldContainer>
-        <FieldContainer
-          @label='Password'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
-          <BoxelInput
-            data-test-password-field
-            @type='password'
-            @value={{this.password}}
-            @state={{this.passwordInputState}}
-            @errorMessage={{this.passwordError}}
-            @onInput={{this.setPassword}}
-            @onBlur={{this.checkPassword}}
-          />
-        </FieldContainer>
-        <FieldContainer
-          @label='Confirm Password'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
-          <BoxelInput
-            data-test-confirm-password-field
-            @type='password'
-            @value={{this.confirmPassword}}
-            @state={{this.confirmPasswordInputState}}
-            @errorMessage={{this.confirmPasswordError}}
-            @onInput={{this.setConfirmPassword}}
-            @onBlur={{this.checkConfirmPassword}}
-          />
-        </FieldContainer>
-        <div class='button-wrapper'>
-          <Button
-            data-test-register-btn
-            class='button'
-            @kind='primary'
-            @disabled={{this.isRegisterButtonDisabled}}
-            {{on 'click' this.register}}
-          >{{#if this.doRegistrationFlow.isRunning}}
-              <LoadingIndicator />
-            {{else}}Create Account{{/if}}</Button>
-          <span class='or'>or</span>
-          <Button
-            data-test-cancel-btn
-            class='button'
-            {{on 'click' this.cancel}}
-          >Login with an existing account</Button>
-        </div>
-      {{/if}}
-    </section>
-
+          <:before as |Accessories|>
+            <Accessories.Text class='username-prefix'>@</Accessories.Text>
+          </:before>
+          <:after as |Accessories|>
+            <Accessories.Text>{{this.usernameSuffix}}</Accessories.Text>
+          </:after>
+        </BoxelInputGroup>
+      </FieldContainer>
+      <FieldContainer
+        @label='Password'
+        @tag='label'
+        @vertical={{true}}
+        class='registration-field'
+      >
+        <BoxelInput
+          data-test-password-field
+          @type='password'
+          @value={{this.password}}
+          @state={{this.passwordInputState}}
+          @errorMessage={{this.passwordError}}
+          @onInput={{this.setPassword}}
+          @onBlur={{this.checkPassword}}
+        />
+      </FieldContainer>
+      <FieldContainer
+        @label='Confirm Password'
+        @tag='label'
+        @vertical={{true}}
+        class='registration-field'
+      >
+        <BoxelInput
+          data-test-confirm-password-field
+          @type='password'
+          @value={{this.confirmPassword}}
+          @state={{this.confirmPasswordInputState}}
+          @errorMessage={{this.confirmPasswordError}}
+          @onInput={{this.setConfirmPassword}}
+          @onBlur={{this.checkConfirmPassword}}
+        />
+      </FieldContainer>
+      <div class='button-wrapper'>
+        <Button
+          data-test-register-btn
+          class='button'
+          @kind='primary'
+          @disabled={{this.isRegisterButtonDisabled}}
+          @loading={{this.doRegistrationFlow.isRunning}}
+          {{on 'click' this.register}}
+        >Create Account</Button>
+        <span class='or'>or</span>
+        <Button
+          data-test-cancel-btn
+          class='button'
+          {{on 'click' (fn @setMode 'login')}}
+        >Login with an existing account</Button>
+      </div>
+    {{/if}}
     <style>
-      .content {
-        display: flex;
-        flex-direction: column;
-        padding: var(--boxel-sp) var(--boxel-sp-xl);
-      }
       .title {
         font: 700 var(--boxel-font-med);
         margin-bottom: var(--boxel-sp-sm);
@@ -508,11 +496,7 @@ export default class RegisterUser extends Component<Signature> {
   private checkPassword() {
     if (!this.password) {
       this.passwordError = 'Password is missing';
-    } else if (
-      !/^(?=.*[0-9])(?=.*[!@#$%^&*])[a-zA-Z0-9!@#$%^&*]{8,}$/.test(
-        this.password,
-      )
-    ) {
+    } else if (!isValidPassword(this.password)) {
       this.passwordError =
         'Password must be at least 8 characters long and include a number and a symbol';
     }
@@ -576,10 +560,6 @@ export default class RegisterUser extends Component<Signature> {
     this.state.sendAttempt++;
     let { clientSecret, sendAttempt } = this.state;
     this.validateEmail.perform(clientSecret, sendAttempt);
-  }
-
-  @action private cancel() {
-    this.args.onCancel();
   }
 
   private validateEmail = restartableTask(
@@ -686,7 +666,7 @@ export default class RegisterUser extends Component<Signature> {
 
     if (auth) {
       await this.matrixService.startAndSetDisplayName(auth, this.state.name);
-      this.args.onCancel();
+      this.args.setMode('login');
     }
   });
 
