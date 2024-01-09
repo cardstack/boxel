@@ -2,13 +2,13 @@ import Service from '@ember/service';
 
 export function setupSessionsServiceMock(
   hooks: NestedHooks,
-  read: boolean,
-  write: boolean,
+  read?: boolean,
+  write?: boolean,
 ) {
   hooks.beforeEach(function () {
     this.owner.register(
       'service:sessions-service',
-      generateMockSessionsService(read, write),
+      generateMockSessionsService(read ?? true, write ?? true),
     );
   });
 }
