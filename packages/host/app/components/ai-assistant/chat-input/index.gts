@@ -17,7 +17,6 @@ interface Signature {
   };
 }
 
-// @keyResponder
 export default class AiAssistantChatInput extends Component<Signature> {
   <template>
     <div class='chat-input-container'>
@@ -73,9 +72,6 @@ export default class AiAssistantChatInput extends Component<Signature> {
       }
       .send-button:hover:not(:disabled) {
         --icon-color: var(--boxel-highlight-hover);
-      }
-      .send-button > :deep(svg) {
-        margin: 0;
       }
     </style>
   </template>
