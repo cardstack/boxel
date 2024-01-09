@@ -182,7 +182,10 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       }}
     >
       {{! template-lint-disable no-triple-curlies }}
-      {{{@model.formattedMessage}}}
+
+      <div>
+        {{@fields.message}}
+      </div>
 
       {{#if this.attachedCardResource.cardError}}
         <div data-test-card-error class='error'>

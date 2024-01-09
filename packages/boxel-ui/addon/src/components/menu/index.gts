@@ -201,6 +201,7 @@ export default class Menu extends Component<Signature> {
         }
 
         .boxel-menu__item--dangerous {
+          --icon-color: var(--boxel-danger);
           color: var(--boxel-danger);
           fill: var(--boxel-danger);
         }

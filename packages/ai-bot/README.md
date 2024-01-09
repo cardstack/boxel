@@ -10,7 +10,7 @@ Access to the matrix server currently equates to access to GPT4 if this bot is c
 
 ### Matrix
 
-This bot requires a matrix user to connect as. Create one as described in the matrix package documentation with the username `aibot`. The bot will default to trying to connect with the password `pass` but you can choose your own and set the `BOXEL_AIBOT_PASSWORD` environment variable.
+This bot requires a matrix user to connect as. Create one as described in the matrix package documentation with the username `aibot` (`pnpm register-bot-user` in `packages/matrix`). The bot will default to trying to connect with the password `pass` but you can choose your own and set the `BOXEL_AIBOT_PASSWORD` environment variable.
 
 It will default to connecting on `http://localhost:8008/`, which can be overridden with the `MATRIX_URL` environment variable.
 
@@ -51,104 +51,3 @@ This will return a patch with the ID of the last card you uploaded. This does no
 
 Run `pnpm test`
 
-### Prompts
-
-Testing of LLMs should be done with some care as exact responses are not guaranteed.
-For testing we use [promptfoo](https://promptfoo.dev).
-
-To run these tests you must setup an API key for OpenAI. Once the prompts have run once, they will be cached locally.
-
-    pnpm promptfoo eval
-
-The results can be viewed in a nicer format in a browser after this with
-
-    pnpm promptfoo view
-
-#### Adding tests
-
-Tests are added to the `promptfooconfig.yaml` file. Each test can take either a list of messages in the following format:
-
-    - description: Update the name, understanding mis-spellings and world info
-        vars:
-            messages:
-                [
-                {
-                    'sender': 'ian',
-                    'content':
-                    {
-                        'msgtype': 'org.boxel.card',
-                        'body': 'Can make this about Hemmingway instead?',
-                        'instance':
-                        {
-                            'data':
-                            {
-                                'type': 'card',
-                                'id': 'http://localhost:4201/drafts/Author/1',
-                                'attributes':
-                                { 'firstName': 'Bob', 'lastName': 'Enwunder' },
-                                'meta':
-                                {
-                                    'adoptsFrom':
-                                    { 'module': '../author', 'name': 'Author' },
-                                },
-                            },
-                        },
-                    },
-                },
-                ]
-            aibot_username: '@aibot:localhost'
-
-Alternatively you can load an event list from a file.
-To do this with a chat you have had, use the `get-chat` command to load the messages from the server.
-
-You can get the chat by room name (make sure to include the #):
-
-    pnpm get-chat '#2023-08-28T13:14:15.914+01:00 - @ian:localhost'
-
-Or with the room ID (room IDs start with a !)
-
-    pnpm get-chat '!yPwdsFNrqEexxsyeLy:localhost'
-
-These will get saved in `tests/resources/chats` with the room name.
-If they do not contain confidential information then they can be committed to the repository.
-
-To use them in a test put the file path in the vars block.
-Add cut_from_end to remove the last n messages from the chat (this is useful to try getting the last response again
-with a new prompt).
-
-    - description: Update the name, understanding mis-spellings and world info
-        vars:
-            chat_history: tests/resources/chats/id.json
-            cut_from_end
-
-The other part of a test is a list of assertions.
-See the promptfoo page for details on the types of tests.
-They can include using a LLM to judge the result, which is useful for fuzzy tests like "it should not say it's a language model".
-
-        assert:
-        - type: contains-json
-            value:
-            {
-                'required': ['id', 'patch'],
-                'type': 'object',
-                'properties':
-                {
-                    'id':
-                    {
-                        'type': 'string',
-                        'pattern': '^http://localhost:4201/drafts/Author/1$',
-                    },
-                    'patch':
-                    {
-                        'type': 'object',
-                        'properties':
-                        {
-                            'firstName':
-                            { 'type': 'string', 'pattern': '^Ernest$' },
-                            'lastName':
-                            { 'type': 'string', 'pattern': '^Hemingway$' },
-                        },
-                        'required': ['firstName', 'lastName'],
-                    },
-                },
-            }

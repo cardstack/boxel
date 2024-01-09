@@ -29,6 +29,9 @@ export default class RenderCard extends Route<Model | null> {
     operatorModeEnabled: {
       refreshModel: true,
     },
+    // `sid` and `clientSecret` come from email verification process to reset password
+    sid: { refreshModel: true },
+    clientSecret: { refreshModel: true },
   };
 
   @service declare cardService: CardService;

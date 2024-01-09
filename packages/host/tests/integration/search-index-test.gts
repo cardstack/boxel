@@ -1235,6 +1235,7 @@ module('Integration | search-index', function (hooks) {
         posts: 100,
         title: 'Hassan Abdel-Rahman',
         thumbnailURL: undefined,
+        cardType: 'Person',
       },
       `search doc does not include fullName field`,
     );
@@ -1285,6 +1286,7 @@ module('Integration | search-index', function (hooks) {
       new URL(`${testRealmURL}CatalogEntry/booking`),
     );
     assert.deepEqual(entry?.searchData, {
+      cardType: 'Catalog Entry',
       id: `${testRealmURL}CatalogEntry/booking`,
       demo: {
         endTime: undefined,
@@ -1452,6 +1454,7 @@ module('Integration | search-index', function (hooks) {
     );
     if (hassanEntry) {
       assert.deepEqual(hassanEntry.searchData, {
+        cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/hassan`,
         firstName: 'Hassan',
         pets: [
@@ -1546,6 +1549,7 @@ module('Integration | search-index', function (hooks) {
     );
     if (entry) {
       assert.deepEqual(entry.searchData, {
+        cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/burcu`,
         firstName: 'Burcu',
         pets: [],
@@ -1736,6 +1740,7 @@ module('Integration | search-index', function (hooks) {
     );
     if (entry) {
       assert.deepEqual(entry.searchData, {
+        cardType: 'Catalog Entry',
         id: `${testRealmURL}pet-person-catalog-entry`,
         title: 'PetPerson',
         description: 'Catalog entry for PetPerson',
@@ -1892,6 +1897,7 @@ module('Integration | search-index', function (hooks) {
     );
     if (hassanEntry) {
       assert.deepEqual(hassanEntry.searchData, {
+        cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
         title: 'Hassan',
@@ -2055,6 +2061,7 @@ module('Integration | search-index', function (hooks) {
     );
     if (hassanEntry) {
       assert.deepEqual(hassanEntry.searchData, {
+        cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
         description: 'Dog owner',
@@ -2161,6 +2168,7 @@ module('Integration | search-index', function (hooks) {
     );
     if (mangoEntry) {
       assert.deepEqual(mangoEntry.searchData, {
+        cardType: 'Friend',
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
         title: 'Mango',
@@ -2324,6 +2332,7 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(
         hassanEntry.searchData,
         {
+          cardType: 'Friends',
           id: hassanID,
           firstName: 'Hassan',
           title: 'Hassan',
@@ -2447,6 +2456,7 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(
         mangoEntry.searchData,
         {
+          cardType: 'Friends',
           id: mangoID,
           firstName: 'Mango',
           title: 'Mango',
@@ -2571,6 +2581,7 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(
         vanGoghEntry.searchData,
         {
+          cardType: 'Friends',
           id: vanGoghID,
           firstName: 'Van Gogh',
           title: 'Van Gogh',
@@ -3621,6 +3632,41 @@ posts/ignore-me.json
           `${paths.url}mango`, // 12
           `${paths.url}vangogh`, // 29
           `${paths.url}ringo`, // 35
+        ],
+      );
+    });
+
+    test('can sort by card display name (card type shown in the interface)', async function (assert) {
+      let { data: matching } = await indexer.search({
+        sort: [
+          {
+            on: baseCardRef,
+            by: 'cardType',
+          },
+        ],
+      });
+
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}card-1`, // article
+          `${paths.url}cards/2`, // article
+          `${paths.url}card-2`, // book
+          `${paths.url}books/1`, // book
+          `${paths.url}books/2`, // book
+          `${paths.url}books/3`, // book
+          `${paths.url}booking1`, // booking
+          `${paths.url}booking2`, // booking
+          `${paths.url}catalog-entry-1`, // catalog entry
+          `${paths.url}catalog-entry-2`, // catalog entry
+          `${paths.url}mango`, // dog
+          `${paths.url}ringo`, // dog
+          `${paths.url}vangogh`, // dog
+          `${paths.url}friend2`, // friend
+          `${paths.url}friend1`, // friend
+          `${paths.url}person-card1`, // person
+          `${paths.url}person-card2`, // person
+          `${paths.url}cards/1`, // person
         ],
       );
     });

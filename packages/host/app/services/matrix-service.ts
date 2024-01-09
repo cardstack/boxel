@@ -21,6 +21,10 @@ import {
   type MatrixCardError,
   sanitizeHtml,
 } from '@cardstack/runtime-common';
+import {
+  basicMappings,
+  generatePatchCallSpecification,
+} from '@cardstack/runtime-common/helpers/ai';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
@@ -38,9 +42,9 @@ import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objecti
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
+import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
-import type CardService from '../services/card-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
@@ -280,12 +284,21 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
-    console.log(context);
+
     if (context?.submode === 'interact') {
+      // Serialize the top of all cards on all stacks
       let serializedCards = await Promise.all(
         context!.openCards.map(async (card) => {
           return await this.cardService.serializeCard(card);
         }),
+      );
+      let mappings = await basicMappings(this.loaderService.loader);
+
+      // Limiting support to modifying the top of just one stack
+      let patchSpec = generatePatchCallSpecification(
+        context!.openCards[0].constructor,
+        this.cardAPI,
+        mappings,
       );
       await this.client.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.message',
@@ -293,6 +306,7 @@ export default class MatrixService extends Service {
         formatted_body: html,
         context: {
           openCards: serializedCards,
+          cardSpec: patchSpec,
           submode: context.submode,
         },
       });
@@ -379,27 +393,28 @@ export default class MatrixService extends Service {
     return messages;
   }
 
-  // the matrix SDK is using an old version of this API that is not compatible
-  // with our current version matrix, so we use the API directly
-  async requestRegisterEmailToken(
+  private async requestEmailToken(
+    type: 'registration' | 'threepid',
     email: string,
     clientSecret: string,
     sendAttempt: number,
   ) {
-    let response = await fetch(
-      `${matrixURL}/_matrix/client/v3/register/email/requestToken`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          client_secret: clientSecret,
-          send_attempt: sendAttempt,
-        }),
+    let url =
+      type === 'registration'
+        ? `${matrixURL}/_matrix/client/v3/register/email/requestToken`
+        : `${matrixURL}/_matrix/client/v3/account/3pid/email/requestToken`;
+
+    let response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        email,
+        client_secret: clientSecret,
+        send_attempt: sendAttempt,
+      }),
+    });
     if (response.ok) {
       return (await response.json()) as MatrixSDK.IRequestTokenResponse;
     } else {
@@ -409,6 +424,32 @@ export default class MatrixService extends Service {
       error.status = response.status;
       throw error;
     }
+  }
+
+  async requestRegisterEmailToken(
+    email: string,
+    clientSecret: string,
+    sendAttempt: number,
+  ) {
+    return await this.requestEmailToken(
+      'registration',
+      email,
+      clientSecret,
+      sendAttempt,
+    );
+  }
+
+  async requestChangeEmailToken(
+    email: string,
+    clientSecret: string,
+    sendAttempt: number,
+  ) {
+    return await this.requestEmailToken(
+      'threepid',
+      email,
+      clientSecret,
+      sendAttempt,
+    );
   }
 
   async getPowerLevels(roomId: string): Promise<{ [userId: string]: number }> {

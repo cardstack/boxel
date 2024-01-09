@@ -11,9 +11,9 @@ import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
+import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
-import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile-settings-modal';
 import ENV from '@cardstack/host/config/environment';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
