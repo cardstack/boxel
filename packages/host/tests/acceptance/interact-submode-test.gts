@@ -1,4 +1,3 @@
-import Service from '@ember/service';
 import {
   currentURL,
   click,
