@@ -10,8 +10,8 @@ import AiAssistantChatInput from './index';
 export default class AiAssistantChatInputUsage extends Component {
   @tracked value = '';
 
-  @action onSend() {
-    console.log('message sent');
+  @action onSend(message: string) {
+    console.log(`message sent: ${message}`);
   }
 
   <template>

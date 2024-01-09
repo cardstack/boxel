@@ -2,6 +2,8 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import onKeyMod from 'ember-keyboard/modifiers/on-key';
+
 import { BoxelInput, IconButton } from '@cardstack/boxel-ui/components';
 import { Send } from '@cardstack/boxel-ui/icons';
 import { setCssVar } from '@cardstack/boxel-ui/modifiers';
@@ -11,10 +13,11 @@ interface Signature {
   Args: {
     value: string;
     onInput: (val: string) => void;
-    onSend: () => void;
+    onSend: (val: string) => void;
   };
 }
 
+// @keyResponder
 export default class AiAssistantChatInput extends Component<Signature> {
   <template>
     <div class='chat-input-container'>
@@ -27,13 +30,14 @@ export default class AiAssistantChatInput extends Component<Signature> {
         @type='textarea'
         @value={{@value}}
         @onInput={{@onInput}}
-        @onKeyPress={{this.onKeyPress}}
         @placeholder='Enter text here'
+        {{onKeyMod 'cmd+Enter' this.onSend}}
+        {{onKeyMod 'ctrl+Enter' this.onSend}}
         {{setCssVar chat-input-height=this.height}}
         ...attributes
       />
       <IconButton
-        {{on 'click' @onSend}}
+        {{on 'click' this.onSend}}
         class='send-button'
         @icon={{Send}}
         @height='20'
@@ -76,11 +80,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
     </style>
   </template>
 
-  @action onKeyPress(ev: KeyboardEvent) {
-    if (ev.key === 'Enter' && !ev.shiftKey) {
-      ev.preventDefault();
-      this.args.onSend();
-    }
+  @action onSend() {
+    this.args.onSend(this.args.value);
   }
 
   get height() {
