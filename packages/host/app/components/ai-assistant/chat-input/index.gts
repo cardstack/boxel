@@ -1,6 +1,6 @@
-import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import Component from '@glimmer/component';
 
 import { BoxelInput, IconButton } from '@cardstack/boxel-ui/components';
 import { Send } from '@cardstack/boxel-ui/icons';

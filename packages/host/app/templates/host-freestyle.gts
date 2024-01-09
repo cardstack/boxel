@@ -8,8 +8,8 @@ import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 import { pageTitle } from 'ember-page-title';
 import RouteTemplate from 'ember-route-template';
 
-import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
 import AiAssistantChatInputUsage from '@cardstack/host/components/ai-assistant/chat-input/usage';
+import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
 import ProfileAvatarIconVisualUsage from '@cardstack/host/components/operator-mode/profile-avatar-icon/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
