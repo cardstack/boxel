@@ -46,16 +46,13 @@ export default class AiAssistantChatInput extends Component<Signature> {
       .chat-input-container {
         display: grid;
         grid-template-columns: 1fr auto;
-        padding: var(--boxel-sp) var(--boxel-sp-xs) var(--boxel-sp)
-          var(--boxel-sp);
+        padding: var(--boxel-sp-xs);
         background-color: var(--boxel-light);
-        border-radius: var(--boxel-radius-sm);
       }
       .chat-input {
         height: var(--chat-input-height);
         border-color: transparent;
         font-weight: 500;
-        padding: 3px;
         resize: none;
       }
       .chat-input::placeholder {
@@ -86,8 +83,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
   }
 
   get height() {
-    const lineHeight = 18;
-    const padding = 6;
+    const lineHeight = 20;
+    const padding = 12;
 
     let lineCount = (this.args.value.match(/\n/g) ?? []).length + 1;
     let count = 2;
@@ -98,7 +95,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
       count = lineCount;
     }
 
-    let height = count * lineHeight + padding;
+    let height = count * lineHeight + 2 * padding;
     return `${height}px`;
   }
 }
