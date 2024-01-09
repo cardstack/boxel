@@ -3,7 +3,9 @@ import Component from '@glimmer/component';
 
 import { format as formatDate, formatISO } from 'date-fns';
 
+import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
+import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -14,6 +16,7 @@ interface Signature {
     datetime: Date;
     isFromAssistant: boolean;
     profileAvatar?: ComponentLike;
+    errorMessage?: string;
   };
 }
 
@@ -38,8 +41,19 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{formatDate @datetime 'iiii MMM d, yyyy, h:mm aa'}}
         </time>
       </div>
-      <div class='content'>
-        {{@formattedMessage}}
+      <div class='content-container'>
+        {{#if @errorMessage}}
+          <div class='error-container'>
+            <FailureBordered class='error-icon' />
+            <div class='error-message'>{{@errorMessage}}</div>
+            <Button class='retry-button' @size='small' @kind='secondary-dark'>
+              Retry
+            </Button>
+          </div>
+        {{/if}}
+        <div class='content'>
+          {{@formattedMessage}}
+        </div>
       </div>
     </div>
     <style>
@@ -77,11 +91,6 @@ export default class AiAssistantMessage extends Component<Signature> {
         white-space: nowrap;
       }
 
-      .content {
-        margin-top: var(--boxel-sp-xs);
-        font: var(--boxel-font-sm);
-      }
-
       /* spacing for sequential thread messages */
       .ai-assistant-message + .ai-assistant-message {
         margin-top: var(--boxel-sp-lg);
@@ -90,18 +99,50 @@ export default class AiAssistantMessage extends Component<Signature> {
       .ai-assistant-message + .hide-meta {
         margin-top: var(--boxel-sp);
       }
-      .content {
-        background: var(--boxel-light);
-        color: var(--boxel-dark);
-        letter-spacing: var(--boxel-lsp);
-        padding: var(--boxel-sp);
+
+      .content-container {
+        margin-top: var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius-xs)
           var(--boxel-border-radius-xl) var(--boxel-border-radius-xl)
           var(--boxel-border-radius-xl);
+        overflow: hidden;
+      }
+
+      .content {
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
+        padding: var(--boxel-sp);
       }
       .is-from-assistant .content {
         background: #433358;
         color: var(--boxel-light);
+      }
+
+      .error-container {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background-color: var(--boxel-danger);
+        color: var(--boxel-light);
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
+      }
+      .error-icon {
+        --icon-background-color: var(--boxel-light);
+        --icon-color: var(--boxel-danger);
+        margin-top: var(--boxel-sp-5xs);
+      }
+      .error-message {
+        align-self: center;
+      }
+      .retry-button {
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+        --boxel-button-min-height: max-content;
+        --boxel-button-min-width: max-content;
+        border-color: var(--boxel-light);
       }
     </style>
   </template>
