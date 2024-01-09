@@ -17,10 +17,12 @@ export default class AiAssistantChatInputUsage extends Component {
   <template>
     <FreestyleUsage @name='AiAssistant::ChatInput'>
       <:description>
-        Chat input field for AI Assistant is a BoxelInput component of type
+        Chat input field for AI Assistant is a \`BoxelInput\` component of type
         'textarea' with a send button. This component accepts all arguments that
-        are accepted by BoxelInput component in addition to an \`onSend\`
-        argument for action to take when input is submitted.
+        are accepted by \`BoxelInput\` component in addition to an \`onSend\`
+        argument for action to take when message is submitted. A message can be
+        submitted via pressing \`cmd+Enter\` or \`ctrl+Enter\` keys or by
+        clicking on the send button.
       </:description>
       <:example>
         <AiAssistantChatInput
@@ -42,7 +44,7 @@ export default class AiAssistantChatInputUsage extends Component {
         />
         <Args.Action
           @name='onSend'
-          @description='Action to be called when "enter" key is pressed or send button is clicked'
+          @description='Action to be called when "cmd+Enter" or \`ctrl+Enter\` keys are pressed or send button is clicked'
           @value={{this.onSend}}
         />
       </:api>
