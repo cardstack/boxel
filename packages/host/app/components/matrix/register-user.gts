@@ -9,7 +9,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import difference from 'lodash/difference';
 import { type IAuthData, type IRequestTokenResponse } from 'matrix-js-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -25,6 +24,9 @@ import ENV from '@cardstack/host/config/environment';
 import {
   isMatrixError,
   isValidPassword,
+  isInteractiveAuth,
+  nextUncompletedStage,
+  type InteractiveAuth,
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -644,23 +646,10 @@ export default class RegisterUser extends Component<Signature> {
     } catch (e: any) {
       let maybeRegistrationFlow = e.data;
       if (
-        isRegistrationFlows(maybeRegistrationFlow) &&
+        isInteractiveAuth(maybeRegistrationFlow) &&
         maybeRegistrationFlow.flows.length > 0
       ) {
-        let remainingStages = difference(
-          maybeRegistrationFlow.flows[0].stages,
-          maybeRegistrationFlow.completed ?? [],
-        );
-        if (remainingStages.length === 0) {
-          throw new Error(
-            `Completed all registration stages but encountered unsuccessful registration response: ${JSON.stringify(
-              e.data,
-              null,
-              2,
-            )}`,
-          );
-        }
-        let nextStage = remainingStages[0];
+        let nextStage = nextUncompletedStage(maybeRegistrationFlow);
         await this.nextStateFromResponse(nextStage, maybeRegistrationFlow);
       } else if (isMatrixError(e) && e.errcode === 'M_USER_IN_USE') {
         if (this.state.type === 'login') {
@@ -683,7 +672,7 @@ export default class RegisterUser extends Component<Signature> {
 
   private async nextStateFromResponse(
     nextStage: string,
-    registrationFlows: RegistrationFlows,
+    registrationFlows: InteractiveAuth,
   ) {
     let { session } = registrationFlows;
     if (
@@ -695,7 +684,6 @@ export default class RegisterUser extends Component<Signature> {
         `invalid state: cannot do nextStateFromResponse() in state ${this.state.type}`,
       );
     }
-    this.state.type;
     switch (nextStage) {
       case 'm.login.email.identity':
         // If current type is already 'waitForEmailValidation',
@@ -734,64 +722,6 @@ export default class RegisterUser extends Component<Signature> {
         );
     }
   }
-}
-
-interface RegistrationFlows {
-  completed?: string[];
-  session: string;
-  flows: Flow[];
-  error?: string;
-  errcode?: string;
-}
-
-interface Flow {
-  stages: string[];
-}
-
-function isFlow(flow: any): flow is Flow {
-  if (
-    typeof flow === 'object' &&
-    'stages' in flow &&
-    Array.isArray(flow.stages)
-  ) {
-    if (flow.stages.find((s: any) => typeof s !== 'string')) {
-      return false;
-    }
-    return true;
-  }
-  return false;
-}
-
-function isRegistrationFlows(
-  registration: any,
-): registration is RegistrationFlows {
-  if (
-    typeof registration === 'object' &&
-    'session' in registration &&
-    typeof registration.session === 'string' &&
-    'flows' in registration &&
-    Array.isArray(registration.flows)
-  ) {
-    if ('error' in registration && typeof registration.error !== 'string') {
-      return false;
-    }
-    if ('errcode' in registration && typeof registration.errcode !== 'string') {
-      return false;
-    }
-    if ('completed' in registration && !Array.isArray(registration.completed)) {
-      return false;
-    }
-    if (
-      'completed' in registration &&
-      registration.completed.length > 0 &&
-      registration.completed.find((c: any) => typeof c !== 'string')
-    ) {
-      return false;
-    }
-
-    return registration.flows.every((f: any) => isFlow(f));
-  }
-  return false;
 }
 
 declare module '@glint/environment-ember-loose/registry' {

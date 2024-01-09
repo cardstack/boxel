@@ -90,6 +90,7 @@ export default class Login extends Component<Signature> {
       .title {
         font: 700 var(--boxel-font-med);
         margin-bottom: var(--boxel-sp-sm);
+        padding: 0;
       }
       .field {
         margin-top: var(--boxel-sp);

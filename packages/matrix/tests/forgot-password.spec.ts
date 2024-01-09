@@ -22,7 +22,7 @@ const REGISTRATION_TOKEN = 'abc123';
 const name = 'user1';
 const email = 'user1@example.com';
 const username = 'user1';
-const password = 'mypassword1!'
+const password = 'mypassword1!';
 
 test.describe('Forgot password', () => {
   let synapse: SynapseInstance;

@@ -436,7 +436,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-profile-icon]').hasText('T');
     assert
       .dom('[data-test-profile-icon]')
-      .hasAttribute('style', 'background: #5ead6b');
+      .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
 
     assert.dom('[data-test-profile-popover]').doesNotExist();
 
@@ -484,7 +484,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     assert
       .dom('[data-test-profile-icon]')
-      .hasAttribute('style', 'background: #5ead6b');
+      .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
     assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
 
     await fillIn('[data-test-display-name-field]', '');

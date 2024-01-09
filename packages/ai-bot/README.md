@@ -10,7 +10,7 @@ Access to the matrix server currently equates to access to GPT4 if this bot is c
 
 ### Matrix
 
-This bot requires a matrix user to connect as. Create one as described in the matrix package documentation with the username `aibot`. The bot will default to trying to connect with the password `pass` but you can choose your own and set the `BOXEL_AIBOT_PASSWORD` environment variable.
+This bot requires a matrix user to connect as. Create one as described in the matrix package documentation with the username `aibot` (`pnpm register-bot-user` in `packages/matrix`). The bot will default to trying to connect with the password `pass` but you can choose your own and set the `BOXEL_AIBOT_PASSWORD` environment variable.
 
 It will default to connecting on `http://localhost:8008/`, which can be overridden with the `MATRIX_URL` environment variable.
 

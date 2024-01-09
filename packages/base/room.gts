@@ -8,7 +8,7 @@ import {
   FieldDef,
 } from './card-api';
 import StringField from './string';
-import DateTimeCard from './datetime';
+import DateTimeField from './datetime';
 import NumberField from './number';
 import MarkdownField from './markdown';
 import { BoxelMessage } from '@cardstack/boxel-ui/components';
@@ -146,7 +146,7 @@ export class RoomMemberField extends FieldDef {
   @field roomId = contains(StringField);
   @field displayName = contains(StringField);
   @field membership = contains(RoomMembershipField);
-  @field membershipDateTime = contains(DateTimeCard);
+  @field membershipDateTime = contains(DateTimeField);
   @field membershipInitiator = contains(StringField);
   @field name = contains(StringField, {
     computeVia: function (this: RoomMemberField) {
@@ -247,7 +247,7 @@ export class MessageField extends FieldDef {
   @field author = contains(RoomMemberField);
   @field message = contains(MarkdownField);
   @field formattedMessage = contains(StringField);
-  @field created = contains(DateTimeCard);
+  @field created = contains(DateTimeField);
   @field attachedCardId = contains(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
@@ -350,7 +350,7 @@ export class RoomField extends FieldDef {
     },
   });
 
-  @field created = contains(DateTimeCard, {
+  @field created = contains(DateTimeField, {
     computeVia: function (this: RoomField) {
       let roomState = roomStateCache.get(this);
       if (!roomState) {

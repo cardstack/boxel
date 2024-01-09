@@ -235,17 +235,19 @@ export async function loginUser(
   username: string,
   password: string,
 ): Promise<Credentials> {
-  let response = await (await fetch(
-    `http://127.0.0.1:${synapse.mappedPort}/_matrix/client/r0/login`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        type: 'm.login.password',
-        user: username,
-        password,
-      }),
-    },
-  )).json();
+  let response = await (
+    await fetch(
+      `http://localhost:${synapse.mappedPort}/_matrix/client/r0/login`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'm.login.password',
+          user: username,
+          password,
+        }),
+      },
+    )
+  ).json();
   return {
     homeServer: response.home_server,
     accessToken: response.access_token,
@@ -261,7 +263,7 @@ export async function updateDisplayName(
   newDisplayName: string,
 ): Promise<void> {
   let response = await fetch(
-    `http://127.0.0.1:${synapse.mappedPort}/_matrix/client/v3/profile/${userId}/displayname`,
+    `http://localhost:${synapse.mappedPort}/_matrix/client/v3/profile/${userId}/displayname`,
     {
       method: 'PUT',
       headers: {
@@ -304,6 +306,51 @@ export async function createRegistrationToken(
       `could not create registration token: ${
         res.status
       } - ${await res.text()}`,
+    );
+  }
+}
+
+export async function updateUser(
+  synapse: SynapseInstance,
+  adminAccessToken: string,
+  userId: string,
+  {
+    password,
+    displayname,
+    avatar_url,
+    emailAddresses,
+  }: {
+    password?: string;
+    displayname?: string;
+    avatar_url?: string;
+    emailAddresses?: string[];
+  },
+) {
+  let res = await fetch(
+    `http://localhost:${synapse.mappedPort}/_synapse/admin/v2/users/${userId}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${adminAccessToken}`,
+      },
+      body: JSON.stringify({
+        ...(password ? { password } : {}),
+        ...(displayname ? { displayname } : {}),
+        ...(avatar_url ? { avatar_url } : {}),
+        ...(emailAddresses
+          ? {
+              threepids: emailAddresses.map((address) => ({
+                medium: 'email',
+                address,
+              })),
+            }
+          : {}),
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(
+      `could not update user: ${res.status} - ${await res.text()}`,
     );
   }
 }

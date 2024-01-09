@@ -92,12 +92,17 @@ export async function validateEmail(
     onValidationPage?: (page: Page) => Promise<void>;
     sendAttempts?: number;
     isLoggedInWhenValidated?: true;
+    onAppTrigger?: (page: Page) => Promise<void>;
   },
 ) {
   let sendAttempts = opts?.sendAttempts ?? 1;
-  await expect(appPage.locator('[data-test-email-validation]')).toContainText(
-    'Please check your email to complete registration.',
-  );
+  if (opts?.onAppTrigger) {
+    await opts.onAppTrigger(appPage);
+  } else {
+    await expect(appPage.locator('[data-test-email-validation]')).toContainText(
+      'Please check your email to complete registration.',
+    );
+  }
 
   for (let i = 0; i < sendAttempts - 1; i++) {
     await appPage.waitForTimeout(500);
@@ -247,7 +252,8 @@ export async function login(
 }
 
 export async function logout(page: Page) {
-  await page.locator('[data-test-logout-btn]').click();
+  await page.locator('[data-test-profile-icon-button]').click();
+  await page.locator('[data-test-signout-button]').click();
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
