@@ -35,6 +35,9 @@ There exists a "dev" mode in which we can use ember-cli to host the card runtime
 
 ### ember-cli Hosted App
 
+Prerequisite:
+Make sure that you have created a matrix user for the base realm, drafts realm, and for the published realm. To make it easier, you can execute `pnpm register-realm-users` in `packages/matrix/`, this will create a matrix user for the base realm, drafts realm, and a matrix user for the published realm.
+
 In order to run the ember-cli hosted app:
 
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.

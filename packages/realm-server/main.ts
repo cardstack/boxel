@@ -18,6 +18,8 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   useTestingDomain,
+  username: usernames,
+  password: passwords,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -56,10 +58,20 @@ let {
         'relaxes document domain rules so that cross origin scripting can be used for test assertions across iframe boundaries',
       type: 'boolean',
     },
+    username: {
+      description: 'The matrix username for the realm user',
+      demandOption: true,
+      type: 'array',
+    },
+    password: {
+      description: 'The matrix password for the realm user',
+      demandOption: true,
+      type: 'array',
+    },
   })
   .parseSync();
 
-if (!(fromUrls.length === toUrls.length)) {
+if (fromUrls.length !== toUrls.length) {
   console.error(
     `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`,
   );
@@ -68,6 +80,16 @@ if (!(fromUrls.length === toUrls.length)) {
 if (fromUrls.length < paths.length) {
   console.error(
     `not enough url pairs were provided to satisfy the paths provided. There must be at least one --fromUrl/--toUrl pair for each --path parameter`,
+  );
+  process.exit(-1);
+}
+
+if (
+  paths.length !== usernames.length ||
+  usernames.length !== passwords.length
+) {
+  console.error(
+    `not enough username/password pairs were provided to satisfy the paths provided. There must be at least one --username/--password pair for each --path parameter`,
   );
   process.exit(-1);
 }
