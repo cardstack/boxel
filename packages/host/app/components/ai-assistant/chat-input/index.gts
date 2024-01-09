@@ -53,6 +53,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         height: var(--chat-input-height);
         border-color: transparent;
         font-weight: 500;
+        padding: var(--boxel-sp-xxs);
         resize: none;
       }
       .chat-input::placeholder {
@@ -84,7 +85,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
 
   get height() {
     const lineHeight = 20;
-    const padding = 12;
+    const padding = 9;
 
     let lineCount = (this.args.value.match(/\n/g) ?? []).length + 1;
     let count = 2;
