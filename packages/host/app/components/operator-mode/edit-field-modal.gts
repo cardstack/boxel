@@ -8,6 +8,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
+import onKeyMod from 'ember-keyboard/modifiers/on-key';
+
 import {
   BoxelButton,
   BoxelInput,
@@ -434,6 +436,7 @@ export default class EditFieldModal extends Component<Signature> {
             <BoxelButton
               @kind='primary'
               {{on 'click' this.saveField}}
+              {{onKeyMod 'Enter'}}
               @disabled={{this.submitDisabled}}
               data-test-save-field-button
             >
