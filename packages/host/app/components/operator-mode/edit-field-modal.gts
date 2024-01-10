@@ -1,4 +1,5 @@
 import { fn } from '@ember/helper';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -8,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
+import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
 import {
@@ -349,6 +351,9 @@ export default class EditFieldModal extends Component<Signature> {
       @onClose={{@onClose}}
       @size='medium'
       @centered={{true}}
+      {{focusTrap
+        focusTrapOptions=(hash initialFocus='.add-field-modal input')
+      }}
       class='add-field-modal'
       data-test-add-field-modal
       style={{cssVar boxel-modal-offset-top='40vh'}}
@@ -428,6 +433,7 @@ export default class EditFieldModal extends Component<Signature> {
             <BoxelButton
               @kind='secondary-light'
               {{on 'click' @onClose}}
+              {{onKeyMod 'Escape'}}
               data-test-cancel-adding-field-button
             >
               Cancel
