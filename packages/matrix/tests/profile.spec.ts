@@ -451,7 +451,7 @@ test.describe('Profile', () => {
       page.locator(
         '[data-test-current-password-field] ~ [data-test-boxel-input-error-message]',
       ),
-    ).toContainText('Current password is invalid');
+    ).toContainText('Invalid password');
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeDisabled();

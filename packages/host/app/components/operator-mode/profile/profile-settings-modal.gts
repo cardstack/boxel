@@ -17,7 +17,7 @@ import {
   FieldContainer,
 } from '@cardstack/boxel-ui/components';
 
-import { not, and, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { not, and, bool, eq, or } from '@cardstack/boxel-ui/helpers';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 
@@ -125,9 +125,13 @@ export default class ProfileSettingsModal extends Component<Signature> {
             />
           {{/if}}
         </form>
-        {{#if this.displayNameError}}
+        {{#if (or (bool this.displayNameError) (bool this.error))}}
           <div class='error-message' data-test-profile-save-error>
-            {{this.displayNameError.message}}
+            {{if
+              this.displayNameError
+              this.displayNameError.message
+              this.error
+            }}
           </div>
         {{/if}}
       </:content>
@@ -210,6 +214,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
   @tracked private newPasswordError: string | undefined;
   @tracked private confirmPassword: string | undefined;
   @tracked private confirmPasswordError: string | undefined;
+  @tracked private error: string | undefined;
   private onSaveEmail: (() => void) | undefined;
   private resetChangeEmail: (() => void) | undefined;
 
@@ -399,6 +404,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
     }
 
     try {
+      this.error = undefined;
       let auth = {
         type: 'm.login.password',
         user: this.matrixService.userId,
@@ -411,8 +417,12 @@ export default class ProfileSettingsModal extends Component<Signature> {
       await this.matrixService.client.setPassword(auth, this.newPassword);
       this.resetPasswordFields();
       this.submode = undefined;
-    } catch (e) {
-      this.currentPasswordError = 'Current password is invalid';
+    } catch (e: any) {
+      if ('errcode' in e.data && e.data.errcode === 'M_FORBIDDEN') {
+        this.currentPasswordError = 'Invalid password';
+      } else {
+        this.error = 'Unknown error';
+      }
     }
   }
 
