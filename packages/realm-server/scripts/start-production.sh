@@ -7,6 +7,7 @@ NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' ts-node \
   --port=3000 \
   \
   --path='/persistent/base' \
+  --matrixURL=${MATRIX_URL} \
   --username=${BASE_REALM_USERNAME} \
   --password=${BASE_REALM_PASSWORD} \
   --distURL='https://boxel-host.cardstack.com' \
@@ -14,12 +15,14 @@ NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' ts-node \
   --toUrl='https://realms.cardstack.com/base/' \
   \
   --path='/persistent/drafts' \
+  --matrixURL=${MATRIX_URL} \
   --username=${DRAFTS_REALM_USERNAME} \
   --password=${DRAFTS_REALM_PASSWORD} \
   --fromUrl='https://realms.cardstack.com/drafts/' \
   --toUrl='https://realms.cardstack.com/drafts/' \
   \
   --path='/persistent/published' \
+  --matrixURL=${MATRIX_URL} \
   --username=${PUBLISHED_REALM_USERNAME} \
   --password=${PUBLISHED_REALM_PASSWORD} \
   --fromUrl='https://realms.cardstack.com/published/' \

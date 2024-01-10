@@ -7,6 +7,7 @@ NODE_NO_WARNINGS=1 ts-node \
   --port=4201 \
   \
   --path='../base' \
+  --matrixURL='http://localhost:8008' \
   --username='base_realm' \
   --password='password' \
   --fromUrl='https://cardstack.com/base/' \

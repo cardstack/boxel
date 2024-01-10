@@ -20,6 +20,7 @@ let {
   useTestingDomain,
   username: usernames,
   password: passwords,
+  matrixURL: matrixURLs,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -58,6 +59,11 @@ let {
         'relaxes document domain rules so that cross origin scripting can be used for test assertions across iframe boundaries',
       type: 'boolean',
     },
+    matrixURL: {
+      description: 'The matrix homeserver for the realm',
+      demandOption: true,
+      type: 'array',
+    },
     username: {
       description: 'The matrix username for the realm user',
       demandOption: true,
@@ -86,10 +92,11 @@ if (fromUrls.length < paths.length) {
 
 if (
   paths.length !== usernames.length ||
-  usernames.length !== passwords.length
+  usernames.length !== passwords.length ||
+  paths.length !== matrixURLs.length
 ) {
   console.error(
-    `not enough username/password pairs were provided to satisfy the paths provided. There must be at least one --username/--password pair for each --path parameter`,
+    `not enough username/password pairs were provided to satisfy the paths provided. There must be at least one --username/--password/--matrixURL set for each --path parameter`,
   );
   process.exit(-1);
 }
@@ -118,6 +125,9 @@ if (distURL) {
   let realms: Realm[] = [];
   for (let [i, path] of paths.entries()) {
     let manager = new RunnerOptionsManager();
+    let matrixURL = String(matrixURLs[i]);
+    let username = String(usernames[i]);
+    let password = String(passwords[i]);
     let { getRunner, distPath } = await makeFastBootIndexRunner(
       dist,
       manager.getOptions.bind(manager),
@@ -130,6 +140,7 @@ if (distURL) {
         getRunner,
         manager,
         async () => readFileSync(join(distPath, 'index.html')).toString(),
+        { url: new URL(matrixURL), username, password },
         {
           deferStartUp: true,
           ...(useTestingDomain

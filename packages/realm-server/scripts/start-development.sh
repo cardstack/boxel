@@ -5,18 +5,21 @@ NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' ts-node \
   --port=4201 \
   \
   --path='../base' \
+  --matrixURL='http://localhost:8008' \
   --username='base_realm' \
   --password='password' \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/' \
   \
   --path='../drafts-realm' \
+  --matrixURL='http://localhost:8008' \
   --username='drafts_realm' \
   --password='password' \
   --fromUrl='http://localhost:4201/drafts/' \
   --toUrl='http://localhost:4201/drafts/' \
   \
   --path='../published-realm' \
+  --matrixURL='http://localhost:8008' \
   --username='published_realm' \
   --password='password' \
   --fromUrl='http://localhost:4201/published/' \

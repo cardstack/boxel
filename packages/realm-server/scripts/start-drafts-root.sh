@@ -5,6 +5,7 @@ NODE_NO_WARNINGS=1 ts-node \
   --port=4204 \
   \
   --path='../drafts-realm/' \
+  --matrixURL='http://localhost:8008' \
   --username='drafts_realm' \
   --password='password' \
   --toUrl='/' \

@@ -198,8 +198,16 @@ interface DeleteOperation {
   deferred: Deferred<void>;
 }
 
+interface MatrixAccess {
+  accessToken: string;
+  deviceId: string;
+}
+
 export class Realm {
   #startedUp = new Deferred<void>();
+  matrixCredentials: { username: string; password: string };
+  #matrixAccess: MatrixAccess | undefined;
+  matrixURL: URL;
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
   #router: Router;
@@ -237,9 +245,13 @@ export class Realm {
     indexRunner: IndexRunner,
     runnerOptsMgr: RunnerOptionsManager,
     getIndexHTML: () => Promise<string>,
+    matrix: { url: URL; username: string; password: string },
     opts?: Options,
   ) {
     this.paths = new RealmPaths(url);
+    let { username, password } = matrix;
+    this.matrixCredentials = { username, password };
+    this.matrixURL = matrix.url;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.loaderTemplate = loader;
@@ -492,6 +504,7 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
+    await this.loginToMatrix();
     await this.#warmUpCache();
     await this.#searchIndex.run();
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
@@ -534,6 +547,36 @@ export class Realm {
 
   async handle(request: Request): Promise<ResponseWithNodeStream> {
     return this.internalHandle(request, false);
+  }
+
+  private async loginToMatrix() {
+    let response = await fetch(
+      `${this.matrixURL.href}_matrix/client/v3/login`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          identifier: {
+            type: 'm.id.user',
+            user: this.matrixCredentials.username,
+          },
+          password: this.matrixCredentials.password,
+          type: 'm.login.password',
+        }),
+      },
+    );
+    let json = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        `Unable to login to matrix ${this.matrixURL.href} as user ${
+          this.matrixCredentials.username
+        }: status ${response.status} - ${JSON.stringify(json)}`,
+      );
+    }
+    let { access_token: accessToken, device_id: deviceId } = json;
+    this.#matrixAccess = { accessToken, deviceId };
   }
 
   private async internalHandle(
