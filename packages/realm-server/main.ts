@@ -125,13 +125,13 @@ if (distURL) {
     ...(distURL ? { assetsURL: new URL(distURL) } : {}),
   });
 
-  // RealmPermissions expects REALM_USER_PERMISSONS env var to be set. This is temporary until we start using a database to store user permissions.
+  // RealmPermissions expects REALM_USER_PERMISSIONS env var to be set. This is temporary until we start using a database to store user permissions.
   // For ease of development we are reading it from a file otherwise it needs to be set in the environment.
   if (
     process.env.NODE_ENV === 'development' &&
-    !process.env.REALM_USER_PERMISSONS
+    !process.env.REALM_USER_PERMISSIONS
   ) {
-    process.env.REALM_USER_PERMISSONS = fs.readFileSync(
+    process.env.REALM_USER_PERMISSIONS = fs.readFileSync(
       '.realms.json',
       'utf-8',
     );

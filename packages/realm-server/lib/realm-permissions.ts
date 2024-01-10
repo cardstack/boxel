@@ -2,10 +2,10 @@ export default class RealmPermissions {
   private config: Record<string, any> = {};
 
   constructor() {
-    let jsonContent = process.env.REALM_USER_PERMISSONS;
+    let jsonContent = process.env.REALM_USER_PERMISSIONS;
     if (!jsonContent) {
       throw new Error(
-        `REALM_USER_PERMISSONS env var is blank. It should have a JSON string value that looks like this:
+        `REALM_USER_PERMISSIONS env var is blank. It should have a JSON string value that looks like this:
           {
             "my-realm-name-1": {
               "users":{
@@ -24,7 +24,7 @@ export default class RealmPermissions {
       this.config = JSON.parse(jsonContent);
     } catch (error: any) {
       throw new Error(
-        `Error while JSON parsing env var REALM_USER_PERMISSONS: ${jsonContent}`,
+        `Error while JSON parsing env var REALM_USER_PERMISSIONS: ${jsonContent}`,
       );
     }
   }

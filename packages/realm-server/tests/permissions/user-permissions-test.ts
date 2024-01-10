@@ -16,7 +16,7 @@ module('user-permissions', function (_hooks) {
       },
     };
 
-    process.env.REALM_USER_PERMISSONS = JSON.stringify(permissionsConfig);
+    process.env.REALM_USER_PERMISSIONS = JSON.stringify(permissionsConfig);
 
     let permissions = new RealmPermissions();
 
