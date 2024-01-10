@@ -58,11 +58,15 @@ export default class RoomInput extends Component<RoomArgs> {
         cols='20'
       />
       {{#if this.cardtoSend}}
-        <Button data-test-remove-card-btn {{on 'click' this.removeCard}}>Remove
-          Card</Button>
+        <Button
+          @kind='secondary-dark'
+          data-test-remove-card-btn
+          {{on 'click' this.removeCard}}
+        >Remove Card</Button>
       {{else}}
         <Button
           data-test-choose-card-btn
+          @kind='secondary-dark'
           @disabled={{this.doChooseCard.isRunning}}
           {{on 'click' this.chooseCard}}
         >Choose Card</Button>
@@ -127,6 +131,7 @@ export default class RoomInput extends Component<RoomArgs> {
         padding: var(--boxel-sp);
         border: var(--boxel-border);
         border-radius: var(--boxel-border-radius);
+        color: var(--boxel-dark);
       }
     </style>
   </template>

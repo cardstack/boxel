@@ -67,6 +67,7 @@ export default class Room extends Component<RoomArgs> {
       </div>
       {{#unless this.isInviteMode}}
         <Button
+          @kind='secondary-dark'
           data-test-invite-mode-btn
           class='invite-btn'
           {{on 'click' this.showInviteMode}}
@@ -89,6 +90,7 @@ export default class Room extends Component<RoomArgs> {
         </FieldContainer>
         <div class='invite-button-wrapper'>
           <Button
+            @kind='secondary-dark'
             data-test-room-invite-cancel-btn
             {{on 'click' this.cancelInvite}}
           >Cancel</Button>
@@ -134,6 +136,7 @@ export default class Room extends Component<RoomArgs> {
           {{/unless}}
           {{#if (eq Message.card.command.commandType 'patch')}}
             <Button
+              @kind='secondary-dark'
               data-test-command-apply
               {{on
                 'click'
@@ -166,17 +169,22 @@ export default class Room extends Component<RoomArgs> {
         cols='20'
       />
       {{#if this.cardtoSend}}
-        <Button data-test-remove-card-btn {{on 'click' this.removeCard}}>Remove
-          Card</Button>
+        <Button
+          @kind='secondary-dark'
+          data-test-remove-card-btn
+          {{on 'click' this.removeCard}}
+        >Remove Card</Button>
       {{else}}
         {{#if this.canSetObjective}}
           <Button
+            @kind='secondary-dark'
             data-test-set-objective-btn
             @disabled={{this.doSetObjective.isRunning}}
             {{on 'click' this.setObjective}}
           >Set Objective</Button>
         {{/if}}
         <Button
+          @kind='secondary-dark'
           data-test-choose-card-btn
           @disabled={{this.doChooseCard.isRunning}}
           {{on 'click' this.chooseCard}}
@@ -260,6 +268,7 @@ export default class Room extends Component<RoomArgs> {
         padding: var(--boxel-sp);
         border: var(--boxel-border);
         border-radius: var(--boxel-border-radius);
+        color: var(--boxel-dark);
       }
 
       .members {
