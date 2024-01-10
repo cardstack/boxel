@@ -1,0 +1,46 @@
+name: Restart [realm-server]
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up env
+        run: |
+          echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/waypoint" >> $GITHUB_ENV
+          echo "WAYPOINT_SERVER_TOKEN=${{ secrets.STAGING_WAYPOINT_SERVER_TOKEN }}" >> $GITHUB_ENV
+          echo "WAYPOINT_SERVER_ADDR=${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}" >> $GITHUB_ENV
+          echo "WAYPOINT_SERVER_TLS=1" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2.0.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: lucasmelin/setup-waypoint@v1
+        with:
+          version: "0.11.3"
+
+      - name: Restart realm-server
+        uses: cardstack/gh-actions/waypoint-ecs-restart@main
+        with:
+          app: "boxel-realm-server"
+
+      - name: Wait service stable
+        uses: cardstack/gh-actions/waypoint-wait-service-stable@main
+        with:
+          app: "boxel-realm-server"
