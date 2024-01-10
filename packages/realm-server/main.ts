@@ -9,6 +9,7 @@ import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
+import fs from 'fs';
 
 let {
   port,
@@ -123,6 +124,19 @@ if (distURL) {
   let server = new RealmServer(realms, {
     ...(distURL ? { assetsURL: new URL(distURL) } : {}),
   });
+
+  // RealmPermissions expects REALM_USER_PERMISSONS env var to be set. This is temporary until we start using a database to store user permissions.
+  // For ease of development we are reading it from a file otherwise it needs to be set in the environment.
+  if (
+    process.env.NODE_ENV === 'development' &&
+    !process.env.REALM_USER_PERMISSONS
+  ) {
+    process.env.REALM_USER_PERMISSONS = fs.readFileSync(
+      '.realms.json',
+      'utf-8',
+    );
+  }
+
   server.listen(port);
   log.info(`Realm server listening on port ${port}:`);
   let additionalMappings = hrefs.slice(paths.length);

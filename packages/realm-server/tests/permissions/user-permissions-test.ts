@@ -3,9 +3,22 @@ import { module, test } from 'qunit';
 
 module('user-permissions', function (_hooks) {
   test('can read user permissions for specified realm', function (assert) {
-    let permissions = new RealmPermissions(
-      'tests/permissions/test-permissions.json',
-    );
+    let permissionsConfig = {
+      'public-realm': {
+        users: {
+          '*': ['read', 'write'],
+        },
+      },
+      'hassans-realm': {
+        users: {
+          '@hassan:boxel.ai': ['read', 'write'],
+        },
+      },
+    };
+
+    process.env.REALM_USER_PERMISSONS = JSON.stringify(permissionsConfig);
+
+    let permissions = new RealmPermissions();
 
     assert.throws(() => {
       permissions.can('user_x', 'read', 'nonexistent realm');

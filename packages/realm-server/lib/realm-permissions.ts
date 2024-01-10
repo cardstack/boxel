@@ -1,15 +1,30 @@
-import fs from 'fs';
-
 export default class RealmPermissions {
   private config: Record<string, any> = {};
 
-  constructor(filePath: string) {
+  constructor() {
+    let jsonContent = process.env.REALM_USER_PERMISSONS;
+    if (!jsonContent) {
+      throw new Error(
+        `REALM_USER_PERMISSONS env var is blank. It should have a JSON string value that looks like this:
+          {
+            "my-realm-name-1": {
+              "users":{
+                "*":["read"],
+                "@hassan:boxel.ai":["read", "write"],
+                ...
+              }
+            },
+            "my-realm-name-2": { ... }
+          }
+        `,
+      );
+    }
+
     try {
-      const jsonConfig = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      this.config = jsonConfig;
+      this.config = JSON.parse(jsonContent);
     } catch (error: any) {
       throw new Error(
-        `Error reading or parsing the configuration file: ${filePath} `,
+        `Error while JSON parsing env var REALM_USER_PERMISSONS: ${jsonContent}`,
       );
     }
   }
