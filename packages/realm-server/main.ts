@@ -10,6 +10,8 @@ import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
 
+const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
+
 let {
   port,
   distDir = join(__dirname, '..', 'host', 'dist'),
@@ -141,6 +143,7 @@ if (distURL) {
         manager,
         async () => readFileSync(join(distPath, 'index.html')).toString(),
         { url: new URL(matrixURL), username, password },
+        REALM_SECRET_SEED,
         {
           deferStartUp: true,
           ...(useTestingDomain

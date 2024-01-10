@@ -72,6 +72,8 @@ import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
+import { MatrixClient } from './matrix-client';
+import { Sha256 } from '@aws-crypto/sha256-js';
 
 export type RealmInfo = {
   name: string;
@@ -198,16 +200,9 @@ interface DeleteOperation {
   deferred: Deferred<void>;
 }
 
-interface MatrixAccess {
-  accessToken: string;
-  deviceId: string;
-}
-
 export class Realm {
   #startedUp = new Deferred<void>();
-  matrixCredentials: { username: string; password: string };
-  #matrixAccess: MatrixAccess | undefined;
-  matrixURL: URL;
+  #matrixClient: MatrixClient;
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
   #router: Router;
@@ -221,6 +216,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #flushOperations: Promise<void> | undefined;
   #operationQueue: Operation[] = [];
+  #realmSecretSeed: string;
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -246,12 +242,13 @@ export class Realm {
     runnerOptsMgr: RunnerOptionsManager,
     getIndexHTML: () => Promise<string>,
     matrix: { url: URL; username: string; password: string },
+    realmSecretSeed = uuidV4(),
     opts?: Options,
   ) {
     this.paths = new RealmPaths(url);
-    let { username, password } = matrix;
-    this.matrixCredentials = { username, password };
-    this.matrixURL = matrix.url;
+    let { username, password, url: matrixURL } = matrix;
+    this.#matrixClient = new MatrixClient(matrixURL, username, password);
+    this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.loaderTemplate = loader;
@@ -274,6 +271,11 @@ export class Realm {
       )
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .post(
+        '/_session',
+        SupportedMimeType.Session,
+        this.createSession.bind(this),
+      )
       .get(
         '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
@@ -504,7 +506,7 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.loginToMatrix();
+    await this.#matrixClient.login();
     await this.#warmUpCache();
     await this.#searchIndex.run();
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
@@ -549,34 +551,57 @@ export class Realm {
     return this.internalHandle(request, false);
   }
 
-  private async loginToMatrix() {
-    let response = await fetch(
-      `${this.matrixURL.href}_matrix/client/v3/login`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          identifier: {
-            type: 'm.id.user',
-            user: this.matrixCredentials.username,
-          },
-          password: this.matrixCredentials.password,
-          type: 'm.login.password',
-        }),
-      },
-    );
-    let json = await response.json();
-    if (!response.ok) {
-      throw new Error(
-        `Unable to login to matrix ${this.matrixURL.href} as user ${
-          this.matrixCredentials.username
-        }: status ${response.status} - ${JSON.stringify(json)}`,
-      );
+  private async createSession(request: Request) {
+    let body = await request.text();
+    let json;
+    try {
+      json = JSON.parse(body);
+    } catch (e) {
+      return badRequest(this.url, `Request body is not valid JSON`);
     }
-    let { access_token: accessToken, device_id: deviceId } = json;
-    this.#matrixAccess = { accessToken, deviceId };
+    let { user, challenge } = json as { user?: string; challenge?: string };
+    if (!user) {
+      return badRequest(this.url, `Request body missing 'user' property`);
+    }
+
+    if (!challenge) {
+      let dmRooms =
+        (await this.#matrixClient.getAccountData<Record<string, string>>(
+          'boxel.session-rooms',
+        )) ?? {};
+      let roomId = dmRooms[user];
+      if (!roomId) {
+        roomId = await this.#matrixClient.createDM(user);
+        dmRooms[user] = roomId;
+        await this.#matrixClient.setAccountData('boxel.session-rooms', dmRooms);
+      }
+
+      let challenge = uuidV4();
+      let hash = new Sha256();
+      hash.update(challenge);
+      hash.update(this.#realmSecretSeed);
+      let hashedChallenge = uint8ArrayToHex(await hash.digest());
+      await this.#matrixClient.sendRoomEvent(roomId, 'm.room.message', {
+        body: `auth-challenge: ${hashedChallenge}`,
+        msgtype: 'm.text',
+      });
+      return createResponse(
+        this.url,
+        JSON.stringify({
+          room: roomId,
+          challenge,
+        }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+    } else {
+      // TODO in this scenario we need to check the DM with the user and confirm
+      // if the user's challenge post in the DM has passed
+    }
   }
 
   private async internalHandle(
@@ -1389,4 +1414,10 @@ function sseToChunkData(type: string, data: string, id?: string): string {
     info.push(`id: ${id}`);
   }
   return info.join('\n') + '\n\n';
+}
+
+function uint8ArrayToHex(uint8: Uint8Array) {
+  return Array.from(uint8)
+    .map((i) => i.toString(16).padStart(2, '0'))
+    .join('');
 }

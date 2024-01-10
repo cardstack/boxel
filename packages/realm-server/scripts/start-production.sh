@@ -2,6 +2,7 @@
 pnpm setup:base-in-deployment
 pnpm setup:drafts-in-deployment
 pnpm setup:published-in-deployment
+# Don't forget to set REALM_SECRET_SEED ENV var!
 NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' ts-node \
   --transpileOnly main \
   --port=3000 \
