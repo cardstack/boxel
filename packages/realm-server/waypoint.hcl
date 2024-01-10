@@ -43,7 +43,7 @@ app "boxel-realm-server" {
       # parameter store
       secrets = {
         BOXEL_HTTP_BASIC_PW = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/BOXEL_HTTP_BASIC_PW"
-        REALM_USER_PERMISSONS = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/REALM_USER_PERMISSONS"
+        REALM_USER_PERMISSIONS = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/REALM_USER_PERMISSIONS"
       }
     }
   }
