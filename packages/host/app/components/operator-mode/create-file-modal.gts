@@ -10,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import camelCase from 'lodash/camelCase';
 
 import {
@@ -193,6 +194,7 @@ export default class CreateFileModal extends Component<Signature> {
                   @loading={{this.createCardInstance.isRunning}}
                   @disabled={{this.isCreateCardInstanceButtonDisabled}}
                   {{on 'click' (perform this.createCardInstance)}}
+                  {{onKeyMod 'Enter'}}
                   data-test-create-card-instance
                 >
                   Create
@@ -204,6 +206,7 @@ export default class CreateFileModal extends Component<Signature> {
                   @loading={{this.duplicateCardInstance.isRunning}}
                   @disabled={{this.isDuplicateCardInstanceButtonDisabled}}
                   {{on 'click' (perform this.duplicateCardInstance)}}
+                  {{onKeyMod 'Enter'}}
                   data-test-duplicate-card-instance
                 >
                   Duplicate
@@ -220,6 +223,7 @@ export default class CreateFileModal extends Component<Signature> {
                   @loading={{this.createDefinition.isRunning}}
                   @disabled={{this.isCreateDefinitionButtonDisabled}}
                   {{on 'click' (perform this.createDefinition)}}
+                  {{onKeyMod 'Enter'}}
                   data-test-create-definition
                 >
                   Create
