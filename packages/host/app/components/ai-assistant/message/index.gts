@@ -1,3 +1,4 @@
+import { on } from '@ember/modifier';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
@@ -17,6 +18,7 @@ interface Signature {
     isFromAssistant: boolean;
     profileAvatar?: ComponentLike;
     errorMessage?: string;
+    retryAction?: () => void;
   };
 }
 
@@ -46,9 +48,16 @@ export default class AiAssistantMessage extends Component<Signature> {
           <div class='error-container'>
             <FailureBordered class='error-icon' />
             <div class='error-message'>{{@errorMessage}}</div>
-            <Button class='retry-button' @size='small' @kind='secondary-dark'>
-              Retry
-            </Button>
+            {{#if @retryAction}}
+              <Button
+                {{on 'click' @retryAction}}
+                class='retry-button'
+                @size='small'
+                @kind='secondary-dark'
+              >
+                Retry
+              </Button>
+            {{/if}}
           </div>
         {{/if}}
         <div class='content'>

@@ -24,6 +24,10 @@ export default class AiAssistantMessageUsage extends Component {
     }
   }
 
+  @action retryAction() {
+    console.log('retry button pressed');
+  }
+
   get datetimeAsString() {
     return this.datetime.toISOString();
   }
@@ -54,6 +58,7 @@ export default class AiAssistantMessageUsage extends Component {
                 profileInitials=this.profileInitials
               }}
               @errorMessage={{this.errorMessage}}
+              @retryAction={{this.retryAction}}
             />
           </AiAssistantConversation>
         </div>
@@ -88,6 +93,11 @@ export default class AiAssistantMessageUsage extends Component {
           @description='Error state message to display'
           @onInput={{fn (mut this.errorMessage)}}
           @value={{this.errorMessage}}
+        />
+        <Args.Action
+          @name='retryAction'
+          @description='Action to be called in error state'
+          @value={{this.retryAction}}
         />
       </:api>
     </FreestyleUsage>
