@@ -17,8 +17,6 @@ import {
   LoadingIndicator,
   IconButton,
 } from '@cardstack/boxel-ui/components';
-
-import { cssVar } from '@cardstack/boxel-ui/helpers';
 import {
   IconInherit,
   IconTrash,
@@ -339,15 +337,13 @@ export default class DetailPanel extends Component<Signature> {
               >
                 <:actions>
                   <IconButton
-                    data-test-delete-module-button
                     @icon={{IconTrash}}
-                    aria-label='Delete'
+                    @width='18'
+                    @height='18'
                     {{on 'click' (fn @delete this.codePath)}}
-                    style={{cssVar
-                      boxel-icon-button-width='24px'
-                      boxel-icon-button-height='24px'
-                      icon-color='var(--boxel-highlight)'
-                    }}
+                    class='delete-module-button'
+                    aria-label='Delete Module'
+                    data-test-delete-module-button
                   />
                 </:actions>
               </Header>
@@ -496,6 +492,7 @@ export default class DetailPanel extends Component<Signature> {
         --boxel-header-background-color: var(--boxel-100);
         --boxel-header-text-color: var(--boxel-dark);
         --boxel-header-max-width: none;
+        height: 2.5rem;
       }
       .in-this-file-card-container {
         overflow: hidden;
@@ -544,6 +541,19 @@ export default class DetailPanel extends Component<Signature> {
       }
       .chain-icon {
         --icon-color: var(--boxel-dark);
+      }
+      .delete-module-button {
+        --icon-color: var(--boxel-highlight);
+        border-radius: var(--boxel-border-radius-xs);
+        width: 24px;
+        height: 24px;
+      }
+      .delete-module-button:hover:not(:disabled) {
+        --icon-color: var(--boxel-danger);
+      }
+      .delete-module-button:focus:not(:disabled) {
+        --icon-color: var(--boxel-danger);
+        outline: 2px solid var(--boxel-danger);
       }
     </style>
   </template>

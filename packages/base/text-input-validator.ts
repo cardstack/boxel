@@ -9,7 +9,7 @@ export class TextInputValidator<T> {
     private validate: (val: string) => string | null = () => null,
   ) {}
 
-  @tracked private lastEditedInputValue: string | undefined;
+  private lastEditedInputValue: string | undefined;
   @tracked errorMessage: string | undefined;
 
   get asString(): string {

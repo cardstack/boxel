@@ -419,10 +419,17 @@ export class CurrentRun {
         },
       }) as SingleCardDocument;
       searchData = await api.searchDoc(card);
+
       if (!searchData) {
         throw new Error(
           `bug: could not derive search doc for instance ${instanceURL.href}`,
         );
+      }
+
+      if (cardType.displayName === 'Card') {
+        searchData.cardType = cardType.name;
+      } else {
+        searchData.cardType = cardType.displayName;
       }
     } catch (err: any) {
       uncaughtError = err;
