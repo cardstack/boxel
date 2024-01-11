@@ -1,6 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
@@ -56,6 +57,11 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private isShowingPastSessions = false;
   @tracked private roomNameError: string | undefined;
 
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    this.loadRooms.perform();
+  }
+
   @action
   private enterRoom(roomId: string) {
     this.currentRoomId = roomId;
@@ -104,13 +110,13 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   @cached
-  private get myAiSessionRooms() {
+  private get joinedAiSessionRooms() {
     let rooms: { room: RoomField; member: RoomMemberField }[] = [];
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
         continue;
       }
-      if (resource.room.joinedMembers.find((m) => aiBotUserId === m.userId)) {
+      if (resource.room.roomMembers.find((m) => aiBotUserId === m.userId)) {
         let roomMember = resource.room.joinedMembers.find(
           (m) => this.matrixService.userId === m.userId,
         );
@@ -124,7 +130,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get sortedAiSessionRooms() {
-    return this.myAiSessionRooms.sort(
+    return this.joinedAiSessionRooms.sort(
       (a, b) =>
         a.member.membershipDateTime.getTime() -
         b.member.membershipDateTime.getTime(),
@@ -173,6 +179,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             @size='small'
             class='past-sessions-button'
             {{on 'click' this.togglePastSessions}}
+            data-test-past-sessions-button
           >
             Past Sessions
           </Button>

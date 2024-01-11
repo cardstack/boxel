@@ -687,6 +687,7 @@ module('Integration | operator-mode', function (hooks) {
       room_id: 'testroom',
       state_key: 'state',
       type: 'm.room.message',
+      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
       content: {
         body: 'i am the body',
         msgtype: 'org.boxel.command',
@@ -701,6 +702,9 @@ module('Integration | operator-mode', function (hooks) {
         },
       },
     });
+
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
 
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');
