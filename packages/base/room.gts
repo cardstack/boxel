@@ -230,7 +230,7 @@ type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
 type JSONObject = { [x: string]: JSONValue };
 
-type PatchObject = { patch: { attributes: JSONObject }; id: string };
+export type PatchObject = { patch: { attributes: JSONObject }; id: string };
 
 class PatchObjectField extends FieldDef {
   static [primitive]: PatchObject;

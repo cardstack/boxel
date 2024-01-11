@@ -23,12 +23,12 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
+import RoomApplyPatch from '@cardstack/host/components/matrix/room-apply-patch';
 import RoomInput from '@cardstack/host/components/matrix/room-input';
 import ENV from '@cardstack/host/config/environment';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type {
   RoomField,
@@ -52,7 +52,6 @@ interface Signature {
 
 export default class AiAssistantPanel extends Component<Signature> {
   @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
   @tracked private newRoomName: string | undefined;
   @tracked private newRoomInvite: string[] = [];
   @tracked private currentRoomId: string | undefined;
@@ -163,10 +162,6 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.isShowingPastSessions = !this.isShowingPastSessions;
   }
 
-  private patchCard = (cardId: string, attributes: any) => {
-    this.operatorModeStateService.patchCard.perform(cardId, attributes);
-  };
-
   <template>
     <div class='ai-assistant-panel' data-test-ai-assistant-panel ...attributes>
       <header>
@@ -226,10 +221,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         <LoadingIndicator />
       {{else}}
         <AiAssistantConversation>
-          <div
-            class='notices'
-            data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
-          >
+          <div class='notices'>
             <div data-test-timeline-start class='timeline-start'>
               - Beginning of conversation -
             </div>
@@ -245,20 +237,7 @@ export default class AiAssistantPanel extends Component<Signature> {
               }}
             />
             {{#if (eq message.command.commandType 'patch')}}
-              <Button
-                @kind='secondary-dark'
-                data-test-command-apply
-                {{on
-                  'click'
-                  (fn
-                    this.patchCard
-                    message.command.payload.id
-                    message.command.payload.patch.attributes
-                  )
-                }}
-                @loading={{this.operatorModeStateService.patchCard.isRunning}}
-                @disabled={{this.operatorModeStateService.patchCard.isRunning}}
-              >Apply</Button>
+              <RoomApplyPatch @payload={{message.command.payload}} />
             {{/if}}
           {{else}}
             <div data-test-no-messages>
