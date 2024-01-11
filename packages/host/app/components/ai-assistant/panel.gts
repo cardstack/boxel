@@ -22,7 +22,8 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
-import RoomsList from '@cardstack/host/components/matrix/rooms-list';
+import RoomNameEditor from '@cardstack/host/components/matrix/room-name-editor';
+import RoomList from '@cardstack/host/components/matrix/room-list';
 import RoomApplyPatch from '@cardstack/host/components/matrix/room-apply-patch';
 import RoomInput from '@cardstack/host/components/matrix/room-input';
 import ENV from '@cardstack/host/config/environment';
@@ -52,10 +53,10 @@ interface Signature {
 
 export default class AiAssistantPanel extends Component<Signature> {
   @service private declare matrixService: MatrixService;
-  @tracked private newRoomName: string | undefined;
   @tracked private newRoomInvite: string[] = [];
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
+  @tracked private isShowingRoomNameEditor = false;
   @tracked private roomNameError: string | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -66,27 +67,43 @@ export default class AiAssistantPanel extends Component<Signature> {
   @action
   private enterRoom(roomId: string) {
     this.currentRoomId = roomId;
+    this.isShowingPastSessions = false;
+  }
+
+  @action
+  private showRoomNameEditor() {
+    this.isShowingRoomNameEditor = true;
+  }
+
+  @action
+  private closeRoomNameEditor() {
+    this.isShowingRoomNameEditor = false;
+  }
+
+  @action private saveNewRoomName(_name: string) {
+    // TODO
+    throw new Error('not implemented');
   }
 
   @action
   private createNewSession() {
-    this.newRoomName = `${format(
+    let newRoomName = `${format(
       new Date(),
       "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
     )} - ${this.matrixService.userId}`;
     this.newRoomInvite = [aiBotUsername];
-    this.doCreateRoom.perform();
+    this.doCreateRoom.perform(newRoomName);
   }
 
-  private doCreateRoom = restartableTask(async () => {
-    if (!this.newRoomName) {
+  private doCreateRoom = restartableTask(async (roomName: string) => {
+    if (!roomName) {
       throw new Error(
         `bug: should never get here, create button is disabled when there is no new room name`,
       );
     }
     try {
       let newRoomId = await this.matrixService.createRoom(
-        this.newRoomName,
+        roomName,
         this.newRoomInvite,
       );
       this.enterRoom(newRoomId);
@@ -97,12 +114,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       throw e;
     }
-    this.resetCreateRoom();
   });
-
-  private resetCreateRoom() {
-    this.newRoomName = undefined;
-  }
 
   private roomResource = getRoom(this, () => this.currentRoomId);
 
@@ -204,7 +216,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         />
       </header>
       {{#if this.isShowingPastSessions}}
-        <RoomsList
+        <RoomList
           @rooms={{this.sortedAiSessionRooms}}
           @enterRoom={{this.enterRoom}}
         />
@@ -212,7 +224,23 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       {{#if this.doCreateRoom.isRunning}}
         <LoadingIndicator />
-      {{else}}
+      {{else if this.room}}
+        {{#if this.isShowingRoomNameEditor}}
+          <RoomNameEditor
+            @room={{this.room}}
+            @onSave={{this.saveNewRoomName}}
+            @onCancel={{this.closeRoomNameEditor}}
+            @roomNameError={{this.roomNameError}}
+          />
+        {{else}}
+          <Button
+            @kind='secondary-dark'
+            @size='extra-small'
+            {{on 'click' this.showRoomNameEditor}}
+          >
+            Rename Room
+          </Button>
+        {{/if}}
         <AiAssistantConversation>
           <div class='notices'>
             <div data-test-timeline-start class='timeline-start'>
