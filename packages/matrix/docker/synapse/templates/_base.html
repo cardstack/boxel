@@ -1,95 +1,42 @@
 <!DOCTYPE html>
 <html>
-   <head>
-      <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@400' rel='stylesheet'>
-      <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@700' rel='stylesheet'>
-      <link href='https://fonts.googleapis.com/css?family=Open%20Sans' rel='stylesheet'>
-      <link href='https://fonts.cdnfonts.com/css/arial-2' rel='stylesheet'>
-      <style>
-         * {
-          font-family: 'Poppins', 'Open Sans', helvetica, 'Arial', sans-serif;
-         }
-         .container {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100%;
-         }
-         .verification-form {
-          background-color: white;
-          border: 1px solid #d3d3d3;
-          border-radius: 10px;
-          letter-spacing: 0.025em;
-          width: 550px;
-         }
-         .header {
-          display: flex;
-          align-items: center;
-          text-transform: uppercase;
-          max-width: max-content;
-          min-width: 100%;
-          gap: calc(1.25rem / calc(1.33 * 2));
-          padding: 1.25rem;
-         }
-         .header__title {
-          color: black;
-          font-size: 16px;
-          font-weight: 700;
-         }
-         .content {
-          display: flex;
-          flex-direction: column;
-          padding: 20px 35.5px;
-         }
-         .title {
-          font-size: 20px;
-          font-weight: 700;
-          margin-bottom: 15px;
-         }
-         .content p {
-          font-size: 14px;
-          font-weight: 400;
-         }
-         .content a {
-          color: #03c4bf;
-          word-wrap: break-word;
-         }
-         .content button {
-          margin-top: 35px;
-          padding: 12px 26px;
-          font-weight: 600;
-          font-size: 13px;
-          letter-spacing: 0.025em;
-          color: white;
-          background-color: #03c4bf;
-          border: 1px solid #03c4bf;
-          border-radius: 100px;
-          cursor: pointer;
-         }
-         .content button:hover {
-          color: white;
-          background-color: #03b0ac;
-          border: 1px solid #03b0ac;
-         }
-      </style>
-   </head>
-   <body>
-      <div class="container">
-         <div class="verification-form">
-            <div class="header">
-               <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
-                  <g data-name="Group 16410">
-                     <path data-name="Subtraction 9" d="M17 22H5a5.006 5.006 0 0 1-5-5V5a5.006 5.006 0 0 1 5-5h12a5.005 5.005 0 0 1 5 5v12a5.006 5.006 0 0 1-5 5zM3.271 2.425a.907.907 0 0 0-.682 1.515.518.518 0 0 0 .047.052L5.85 7.18a1.678 1.678 0 0 1 .433 1.039v5.566a1.678 1.678 0 0 1-.433 1.039l-3.215 3.188a.587.587 0 0 0-.049.057.923.923 0 0 0 .7 1.509.9.9 0 0 0 .673-.3l3.15-3.128a1.7 1.7 0 0 1 1.042-.429h5.7a1.7 1.7 0 0 1 1.042.429l3.187 3.16a.479.479 0 0 0 .051.045.9.9 0 0 0 .58.213.924.924 0 0 0 .7-1.508l-.037-.041-.007-.007-.036-.037-3.179-3.152a1.681 1.681 0 0 1-.432-1.039V8.219a1.678 1.678 0 0 1 .433-1.039l3.118-3.092a.923.923 0 0 0-.559-1.645.9.9 0 0 0-.492.148.609.609 0 0 0-.139.1l-3.187 3.16a1.7 1.7 0 0 1-1.042.429h-5.7a1.7 1.7 0 0 1-1.042-.429L3.922 2.694a.638.638 0 0 0-.053-.047.918.918 0 0 0-.598-.222z" transform="translate(0 -.001)" style="fill:#03c4bf"/>
-                     <path data-name="Path 85929" d="M1.117 0H4.97a1.117 1.117 0 0 1 1.117 1.117V4.97A1.117 1.117 0 0 1 4.97 6.087H1.117A1.117 1.117 0 0 1 0 4.97V1.117A1.117 1.117 0 0 1 1.117 0z" transform="translate(7.968 8.018)" style="fill:#03c4bf"/>
-                  </g>
-               </svg>
-               <span class="header__title">Boxel</span>
-            </div>
-            <div class="content">
-               <span class="title">{% block title %}{%  endblock %}</span>
-               {% block content %}{%  endblock %}
-            </div>
-         </div>
-      </div>
-   </body>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boxel Email Verification</title>
+    <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@400' rel='stylesheet'/>
+    <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@700' rel='stylesheet'/>
+    <link href='https://fonts.googleapis.com/css?family=Open%20Sans' rel='stylesheet'/>
+    <link href='https://fonts.cdnfonts.com/css/arial-2' rel='stylesheet'/>
+  </head>
+  <body style="font-family: 'Poppins', 'Open Sans', helvetica, 'Arial', sans-serif; margin: 0; padding: 0;">
+    <table width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: white; border: 1px solid #d3d3d3; border-radius: 10px; letter-spacing: 0.025em; width: 550px; position: absolute; top: 30px; left: 50%; transform: translateX(-50%);">
+      <tr>
+        <td>
+          <table width="100%" border="0" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding: 1.25rem 0 1.25rem 1.25rem; width: 22px; height: 22px; vertical-align: middle;">
+                <div style="position: relative">
+                  <img style="width: 22px;height: 22px;position: absolute;top: 50%;transform: translateY(-50%)" src="https://d12nxmpmo97fii.cloudfront.net/boxel-icon.svg">
+                </div>
+              </td>
+              <td style="text-transform: uppercase; padding: 1.25rem 1.25rem 1.25rem 0.5rem;">
+                <div style="position:relative; height: 22px; width: fit-content;">
+                  <span style="position: absolute; top: 50%; transform: translateY(-50%); color: black; font-size: 16px; font-weight: 700;">Boxel</span>
+                </div>
+              </td>
+            </tr>
+          </table>
+          <table width="100%" border="0" cellpadding="0" cellspacing="0" style="padding: 20px 35.5px;border-collapse: separate;border-spacing: 0 16px;">
+            <tr>
+              <td style="font-size: 20px; font-weight: 700;">{% block title %}{% endblock %}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 14px; font-weight: 400;">{% block content %}{% endblock %}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
 </html>

@@ -2,6 +2,8 @@
 {% extends "_base.html" %}
 {% block title %}Verify a new email for your Boxel account{% endblock %}
 {% block content %}
-<p>Please confirm that this is your e-mail address by clicking on the button below or use <a href="{{ link }}">this link</a>.</p>
-<button onclick="window.open('{{ link }}', '_blank')">Verify Email</button>
+<p style="margin: 0;">Please confirm that this is your e-mail address by clicking on the button below or use <a href="{{ link }}">this link</a>.</p>
+<div style="margin-top: 35px; width: 100%;">
+  <a style="padding: 12px 0; font-weight: 600; font-size: 13px; letter-spacing: 0.025em; color: white; background-color: #03c4bf; border: 1px solid #03c4bf; border-radius: 100px; cursor: pointer; text-decoration: none; width:100%; display:block; text-align: center;" href="{{ link }}">Verify Email</a>
+</div>
 {% endblock %}
