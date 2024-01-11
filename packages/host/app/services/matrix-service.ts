@@ -47,7 +47,7 @@ import type LoaderService from './loader-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-const { matrixURL } = ENV;
+const { matrixURL, ownRealmURL } = ENV;
 const SET_OBJECTIVE_POWER_LEVEL = 50;
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -228,11 +228,76 @@ export default class MatrixService extends Service {
       try {
         await this._client.startClient();
         await this.initializeRooms();
+
+        // TODO this is a temporary measure to prove that we can obtain a realm session.
+        // ultimately we need to figure out a better approach in terms of when/where we
+        // obtain sessions for realms that we care about.
+        await this.createRealmSession(new URL(ownRealmURL));
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
       }
     }
+  }
+
+  async createRealmSession(realmURL: URL) {
+    await this.ready;
+    if (!this.isLoggedIn) {
+      throw new Error(
+        `must be logged in to matrix before a realm session can be created`,
+      );
+    }
+
+    let initialResponse = await fetch(`${realmURL.href}_session`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        user: this.userId,
+      }),
+    });
+    let initialJSON = (await initialResponse.json()) as {
+      room: string;
+      challenge: string;
+    };
+    if (initialResponse.status !== 401) {
+      throw new Error(
+        `unexpected response from POST ${realmURL.href}_session: ${
+          initialResponse.status
+        } - ${JSON.stringify(initialJSON)}`,
+      );
+    }
+    let { room, challenge } = initialJSON;
+    if (!this.rooms.has(room)) {
+      await this.client.joinRoom(room);
+    }
+    await this.sendMessage(room, `auth-response: ${challenge}`);
+    let challengeResponse = await fetch(`${realmURL.href}_session`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        user: this.userId,
+        challenge,
+      }),
+    });
+    let jwtJSON = (await challengeResponse.json()) as { jwt: string };
+    if (!challengeResponse.ok) {
+      throw new Error(
+        `Could not authenticate with realm ${realmURL.href} - ${
+          challengeResponse.status
+        }: ${JSON.stringify(jwtJSON)}`,
+      );
+    }
+    let { jwt } = jwtJSON;
+    let sessionStr = localStorage.getItem('boxel-session') ?? '{}';
+    let session = JSON.parse(sessionStr);
+    session[realmURL.href] = jwt;
+    localStorage.setItem('boxel-session', JSON.stringify(session));
+
+    // TODO need to figure out what we want to do with the JWT
   }
 
   async createRoom(

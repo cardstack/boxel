@@ -107,6 +107,12 @@ export interface RealmAdapter {
 
   remove(path: LocalPath): Promise<void>;
 
+  createJWT<T extends object>(
+    claims: T,
+    expiration: string,
+    secret: string,
+  ): string;
+
   createStreamingResponse(
     unresolvedRealmURL: string,
     req: Request,
@@ -235,14 +241,25 @@ export class Realm {
   }
 
   constructor(
-    url: string,
-    adapter: RealmAdapter,
-    loader: Loader,
-    indexRunner: IndexRunner,
-    runnerOptsMgr: RunnerOptionsManager,
-    getIndexHTML: () => Promise<string>,
-    matrix: { url: URL; username: string; password: string },
-    realmSecretSeed = uuidV4(),
+    {
+      url,
+      adapter,
+      loader,
+      indexRunner,
+      runnerOptsMgr,
+      getIndexHTML,
+      matrix,
+      realmSecretSeed = uuidV4(),
+    }: {
+      url: string;
+      adapter: RealmAdapter;
+      loader: Loader;
+      indexRunner: IndexRunner;
+      runnerOptsMgr: RunnerOptionsManager;
+      getIndexHTML: () => Promise<string>;
+      matrix: { url: URL; username: string; password: string };
+      realmSecretSeed?: string;
+    },
     opts?: Options,
   ) {
     this.paths = new RealmPaths(url);
@@ -564,12 +581,14 @@ export class Realm {
       return badRequest(this.url, `Request body missing 'user' property`);
     }
 
+    let dmRooms =
+      (await this.#matrixClient.getAccountData<Record<string, string>>(
+        'boxel.session-rooms',
+      )) ?? {};
+    let roomId = dmRooms[user];
+
     if (!challenge) {
-      let dmRooms =
-        (await this.#matrixClient.getAccountData<Record<string, string>>(
-          'boxel.session-rooms',
-        )) ?? {};
-      let roomId = dmRooms[user];
+      // Create challenge
       if (!roomId) {
         roomId = await this.#matrixClient.createDM(user);
         dmRooms[user] = roomId;
@@ -599,8 +618,79 @@ export class Realm {
         },
       );
     } else {
-      // TODO in this scenario we need to check the DM with the user and confirm
-      // if the user's challenge post in the DM has passed
+      // verify challenge
+      if (!roomId) {
+        return badRequest(
+          this.url,
+          `No challenge previously issued for user ${user}`,
+        );
+      }
+      let messages = await this.#matrixClient.roomMessages(roomId);
+      let latestChallenge = messages.find(
+        (m) =>
+          m.type === 'm.room.message' &&
+          m.sender === this.#matrixClient.userId &&
+          m.content.body.startsWith('auth-challenge:'),
+      );
+      if (!latestChallenge) {
+        return badRequest(
+          this.url,
+          `No challenge previously issued for user ${user}`,
+        );
+      }
+      let latestChallengeResponse = messages.find(
+        (m) =>
+          m.type === 'm.room.message' &&
+          m.sender === user &&
+          m.content.body.startsWith('auth-response:'),
+      );
+      if (!latestChallengeResponse) {
+        return badRequest(
+          this.url,
+          `No challenge response found for user ${user}`,
+        );
+      }
+
+      let challenge = latestChallenge.content.body.replace(
+        'auth-challenge: ',
+        '',
+      );
+      let response = latestChallengeResponse.content.body.replace(
+        'auth-response: ',
+        '',
+      );
+      let hash = new Sha256();
+      hash.update(response);
+      hash.update(this.#realmSecretSeed);
+      let hashedResponse = uint8ArrayToHex(await hash.digest());
+      if (hashedResponse === challenge) {
+        let jwt = this.#adapter.createJWT(
+          {
+            user,
+            realm: this.url,
+            // TODO load this from the realm server
+            permissions: ['read', 'write'],
+          },
+          '7d',
+          this.#realmSecretSeed,
+        );
+        return createResponse(
+          this.url,
+          JSON.stringify({
+            jwt,
+          }),
+          {
+            status: 201,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+      } else {
+        return createResponse(this.url, `user ${user} failed auth challenge`, {
+          status: 401,
+        });
+      }
     }
   }
 

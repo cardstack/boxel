@@ -1,5 +1,3 @@
-import { v4 as uuidV4 } from 'uuid';
-
 export interface MatrixAccess {
   accessToken: string;
   deviceId: string;
@@ -14,6 +12,10 @@ export class MatrixClient {
     private username: string,
     private password: string,
   ) {}
+
+  get userId() {
+    return this.access?.userId;
+  }
 
   async login() {
     let response = await fetch(
@@ -134,7 +136,7 @@ export class MatrixClient {
     if (!this.access) {
       throw new Error(`Missing matrix access token`);
     }
-    let txnId = uuidV4();
+    let txnId = Date.now();
     let response = await fetch(
       `${this.matrixURL.href}_matrix/client/v3/rooms/${roomId}/send/${type}/${txnId}`,
       {
@@ -155,5 +157,33 @@ export class MatrixClient {
       );
     }
     return json.event_id;
+  }
+
+  // This defaults to the last 10 messages in reverse chronological order
+  async roomMessages(roomId: string) {
+    if (!this.access) {
+      throw new Error(`Missing matrix access token`);
+    }
+    let response = await fetch(
+      `${this.matrixURL.href}_matrix/client/v3/rooms/${roomId}/messages?dir=b`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.access.accessToken}`,
+        },
+      },
+    );
+    let json = (await response.json()) as {
+      chunk: {
+        type: string;
+        sender: string;
+        origin_server_ts: number;
+        event_id: string;
+        content: {
+          body: string;
+        };
+      }[];
+    };
+    return json.chunk;
   }
 }

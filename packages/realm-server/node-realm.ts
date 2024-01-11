@@ -23,6 +23,7 @@ import {
 import { join } from 'path';
 import { Duplex } from 'node:stream';
 import type { UpdateEventData } from '@cardstack/runtime-common/realm';
+import jwt from 'jsonwebtoken';
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -144,6 +145,15 @@ export class NodeAdapter implements RealmAdapter {
     response.nodeStream = s;
     onClose(request, cleanup);
     return { response, writable: s as unknown as WritableStream };
+  }
+
+  createJWT<T extends object>(
+    claims: T,
+    expiration: string,
+    secret: string,
+  ): string {
+    let token = jwt.sign(claims, secret, { expiresIn: expiration });
+    return token;
   }
 }
 

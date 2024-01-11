@@ -136,14 +136,17 @@ if (distURL) {
     );
     realms.push(
       new Realm(
-        hrefs[i][0],
-        new NodeAdapter(resolve(String(path))),
-        loader,
-        getRunner,
-        manager,
-        async () => readFileSync(join(distPath, 'index.html')).toString(),
-        { url: new URL(matrixURL), username, password },
-        REALM_SECRET_SEED,
+        {
+          url: hrefs[i][0],
+          adapter: new NodeAdapter(resolve(String(path))),
+          loader,
+          indexRunner: getRunner,
+          runnerOptsMgr: manager,
+          getIndexHTML: async () =>
+            readFileSync(join(distPath, 'index.html')).toString(),
+          matrix: { url: new URL(matrixURL), username, password },
+          realmSecretSeed: REALM_SECRET_SEED,
+        },
         {
           deferStartUp: true,
           ...(useTestingDomain
