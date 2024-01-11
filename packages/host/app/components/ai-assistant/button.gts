@@ -31,14 +31,5 @@ export default class AiAssistantButton extends Component<Signature> {
         cursor: pointer;
       }
     </style>
-    <style unscoped>
-      .ai-assistant-button {
-        background-image: image-set(
-          url(/images/ai-assist-icon.webp) 1x,
-          url(/images/ai-assist-icon@2x.webp) 2x,
-          url(/images/ai-assist-icon@3x.webp) 3x
-        );
-      }
-    </style>
   </template>
 }
