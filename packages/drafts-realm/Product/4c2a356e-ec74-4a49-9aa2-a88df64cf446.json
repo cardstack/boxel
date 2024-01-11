@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "images": [
+        "https://i.etsystatic.com/20762234/r/il/eaaa62/4838318536/il_1588xN.4838318536_7nxb.jpg",
+        "https://i.etsystatic.com/20762234/r/il/72a997/5535384969/il_1588xN.5535384969_j6y5.jpg",
+        "https://i.etsystatic.com/20762234/r/il/796792/5535384921/il_1588xN.5535384921_rqh5.jpg",
+        "https://i.etsystatic.com/20762234/r/il/645e2d/5487271838/il_1588xN.5487271838_awnh.jpg",
+        "https://i.etsystatic.com/20762234/r/il/dbd300/5487271790/il_1588xN.5487271790_cbul.jpg",
+        "https://i.etsystatic.com/20762234/r/il/bad68b/5529797514/il_1588xN.5529797514_8moe.jpg"
+      ],
+      "unitPriceCents": 5841,
+      "usShippingCostCents": 0,
+      "leadTimeDays": 2,
+      "deliveryWindowDays": 12,
+      "isReturnable": true,
+      "details": "✅ DO YOUR OWN THING – Trade a cask for the bottle and create authentic whiskey flavor with our exclusive woodchip blends. The only extra you need is a bottle of neutral alcohol to infuse as a base. Why not craft homemade whiskey from a bottle you already have?\n\n✅ GET CREATIVE WITH NATURE - Experiment with three types of oak and six herbs & spices to give your cocktail a truly personal touch. All our botanicals are 100% natural, and freshly sourced and come in glass tubes with real corks. Here’s to the environment!\n\n✅ PAMPER YOUR EYES & PALATE -Our diy alcohol gift set includes six stainless steel whiskey ice cubes, two lovely glass prep bottles, and quality ingredients. Using the included labels, give your product a name and add your own touches.\n\n✅ BECOME A PRO AT THE BAR -Irish Blend and Scotch Single Malt to the original American Bourbon You'll get everything you need to succeed at your first-ever craft cocktail tasting, including a snappy glossary and three fantastic basic recipes!\n\n✅ GIVE THE GIFT OF PURE ENJOYMENT - Our gift kit is the ideal present for whiskey lovers and dabblers of both genders: a spirit(ed) surprise for friends & family. At birthday parties, under the Christmas tree, or at a wedding reception: do your own thing – DO YOUR WHISKY Infusion!\n\nDO YOUR WHISKY - the premium DIY kit that takes your whiskey experience to the next level. Our kit includes everything you need to add a botanical infusion touch to your whiskey, resulting in a natural aroma that will make your whiskey taste even better. The DO YOUR WHISKY kit contains a variety of spices to infuse your whiskey with your own unique flavors. With our pre-selected recipe ideas, you can get started right away and experiment with different botanicals to find the perfect blend for your taste. Our kit includes six stainless steel ice cubes to keep your drink chilled without watering it down, two empty glass bottles with the DO YOUR WHISKY label for you to personalize your creation, and twelve glass cylinders to store your infused whiskey. With DO YOUR WHISKY, making your own handmade whiskey has never been easier. All you need to do is purchase your preferred alcohol to get started.\n\nPersonalized Whiskey cocktail will taste better with your particular flavor - Do Your Whisky! Be unique and utilize top-notch spices to produce your own characteristic odor. You may brew your own homemade whiskey with the DO YOUR WHISKY kit's materials. Twelve glass cylinders, two empty glass bottles with the DO YOUR WHISKY label so you may personalize your concoction, six stainless steel ice cubes, and three pre-selected recipe ideas are all included in the kit. All you need to do to get started is purchase the booze.\n\nExperimenting with the botanicals will create an extraordinary taste experience you will not find in any industrially produced whiskey. How do you DO YOUR WHISKY?\n\nBOTANICALS\n\n* 🌿 american sweetheart (2x)\n* 🌿 dark chocolate (2x)\n* 🌿 vanilla dream (2x)\n* 🌿 bird's eye chili\n* 🌿 orange peel\n* 🌿 chai mix\n* 🌿 cocoa beans\n* 🌿 cinnamon\n* 🌿 coffee beans\n\n100% recyclable packaging\n100% biodegradable product\n\nAll you need is a neutral alcohol as a base and you are ready to make your Whiskey at home, yes seriously!\n\nWe recommend using a mild vodka as a base. Russian Standard or Smirnoff Vodka have proven to be particularly good. With the whiskey set you can also take a white whisky, un-aged bourbon or a corn schnapps. Corn schnapps can be found under the name \"moonshine\".\n\nPlease Note - This product does not include alcohol.Take advantage of our exclusive holiday deals and give the perfect Valentine's gift to your beloved partners, wives, husbands, girlfriends, and boyfriends with our special discounts.\n\n",
+      "reviewsCount": 14626,
+      "reviewsAverage": 4.9014,
+      "title": "DIY Whiskey Making Kit",
+      "description": null
+    },
+    "relationships": {
+      "seller": {
+        "links": {
+          "self": "../Seller/f215492e-1917-4f66-a1f2-33561830236b"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

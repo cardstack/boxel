@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "images": [
+        "https://i.etsystatic.com/14024996/r/il/250e89/1980044674/il_794xN.1980044674_aq4n.jpg",
+        "https://i.etsystatic.com/14024996/r/il/7419f5/1980329888/il_794xN.1980329888_phjf.jpg",
+        "https://i.etsystatic.com/14024996/r/il/cee84b/1179325444/il_794xN.1179325444_1y3h.jpg",
+        "https://i.etsystatic.com/14024996/r/il/bfed35/1210494745/il_794xN.1210494745_c5zt.jpg",
+        "https://i.etsystatic.com/14024996/r/il/d812cd/1946487050/il_794xN.1946487050_suco.jpg",
+        "https://i.etsystatic.com/14024996/r/il/3d1f28/2002648593/il_794xN.2002648593_mx8z.jpg"
+      ],
+      "unitPriceCents": 11309,
+      "usShippingCostCents": 0,
+      "leadTimeDays": 8,
+      "deliveryWindowDays": 6,
+      "isReturnable": true,
+      "details": "Introducing our The Great Wave off Kanagawa Leather Print Reproduction, a stunning piece of art that will transform your wall into a masterpiece.\n\nOur prints are printed on high-quality eco leather, giving a unique texture and feel that is superior to traditional canvas.\n\nEach print is handmade in Italy, ensuring the highest quality and durability.\n\nProduct Features:\n\n* Eco-leather print\n* Washable panels\n* UV-resistant coating\n* Stretched over polished pinewood frames\n* Ready to hang\n* Handmade in Italy\n* Thickness of each product is 1\" (2.5 cm)",
+      "reviewsCount": 329,
+      "reviewsAverage": 4.9,
+      "title": "The Great Wave off Kanagawa Leather Print Reproduction",
+      "description": null
+    },
+    "relationships": {
+      "seller": {
+        "links": {
+          "self": "../Seller/703dfdde-8279-42de-ab57-3cdd1d8695bc"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}
