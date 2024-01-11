@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -23,6 +22,7 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
+import RoomsList from '@cardstack/host/components/matrix/rooms-list';
 import RoomApplyPatch from '@cardstack/host/components/matrix/room-apply-patch';
 import RoomInput from '@cardstack/host/components/matrix/room-input';
 import ENV from '@cardstack/host/config/environment';
@@ -132,6 +132,11 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get sortedAiSessionRooms() {
+    return this.sortedAiSessions.map((r) => r.room);
+  }
+
+  @cached
+  private get sortedAiSessions() {
     return this.joinedAiSessionRooms.sort(
       (a, b) =>
         a.member.membershipDateTime.getTime() -
@@ -199,22 +204,10 @@ export default class AiAssistantPanel extends Component<Signature> {
         />
       </header>
       {{#if this.isShowingPastSessions}}
-        {{#each this.sortedAiSessionRooms as |joined|}}
-          <div class='room' data-test-joined-room={{joined.room.name}}>
-            <span class='room-item'>
-              <button
-                class='enter-room link'
-                data-test-enter-room={{joined.room.name}}
-                {{on 'click' (fn this.enterRoom joined.room.roomId)}}
-              >
-                {{joined.room.name}}
-              </button>
-            </span>
-          </div>
-        {{else}}
-          (No rooms)
-        {{/each}}
-
+        <RoomsList
+          @rooms={{this.sortedAiSessionRooms}}
+          @enterRoom={{this.enterRoom}}
+        />
       {{/if}}
 
       {{#if this.doCreateRoom.isRunning}}
