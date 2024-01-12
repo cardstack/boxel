@@ -123,11 +123,17 @@ jobs:
         env:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
+      - name: start matrix
+        run: pnpm start:synapse &
+        working-directory: packages/matrix
+      - name: start smtp
+        run: pnpm start:smtp &
+        working-directory: packages/matrix
       - name: create realm users
-        run: pnpm register-realm-users
+        run: sleep 10 && pnpm register-realm-users
         working-directory: packages/matrix
       - name: Start realm servers
-        run: pnpm start:all &
+        run: pnpm start:without-matrix &
         working-directory: packages/realm-server
       - name: host test suite
         run: pnpm test-with-percy
