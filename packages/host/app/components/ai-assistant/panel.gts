@@ -23,8 +23,8 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
-import RoomList from '@cardstack/host/components/matrix/room-list';
 import RoomInput from '@cardstack/host/components/matrix/room-input';
+import RoomList from '@cardstack/host/components/matrix/room-list';
 import ENV from '@cardstack/host/config/environment';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 

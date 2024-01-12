@@ -3,7 +3,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import { type MatrixCardError, aiBotUsername } from '@cardstack/runtime-common';
+import { type MatrixCardError } from '@cardstack/runtime-common';
 
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';

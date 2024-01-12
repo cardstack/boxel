@@ -1,5 +1,4 @@
 import { Input } from '@ember/component';
-import { registerDestructor } from '@ember/destroyable';
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -7,8 +6,7 @@ import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-//@ts-expect-error the types don't recognize the cached export
-import { tracked, cached } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
@@ -25,24 +23,16 @@ import {
   catalogEntryRef,
 } from '@cardstack/runtime-common';
 
-import config from '@cardstack/host/config/environment';
-
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import {
-  type CardDef,
-  type FieldDef,
-} from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 import { getRoom } from '../../resources/room';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-
-const { environment } = config;
 
 interface RoomArgs {
   Args: {
@@ -168,7 +158,6 @@ export default class RoomInput extends Component<RoomArgs> {
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @tracked private allowedToSetObjective: boolean | undefined;
-  @tracked private subscribedRoom: FieldDef | undefined;
 
   private shareCurrentContext = false;
   private messagesToSend: TrackedMap<string, string | undefined> =
@@ -176,7 +165,6 @@ export default class RoomInput extends Component<RoomArgs> {
   private cardsToSend: TrackedMap<string, CardDef | undefined> =
     new TrackedMap();
   private roomResource = getRoom(this, () => this.args.roomId);
-  private api: typeof CardAPI | undefined;
 
   constructor(owner: Owner, args: RoomArgs['Args']) {
     super(owner, args);
@@ -237,16 +225,6 @@ export default class RoomInput extends Component<RoomArgs> {
       await this.matrixService.setObjective(this.args.roomId, catalogEntry.ref);
     }
   });
-
-  @cached
-  private get attachedCardIds() {
-    if (!this.room) {
-      return [];
-    }
-    return this.room.messages
-      .filter((m) => m.attachedCardId)
-      .map((m) => m.attachedCardId);
-  }
 
   private get messageToSend() {
     return this.messagesToSend.get(this.args.roomId);
