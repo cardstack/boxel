@@ -11,10 +11,12 @@ import {
   inviteToRoom,
   reloadAndOpenAiAssistant,
   test,
+  registerRealmUsers,
 } from '../helpers';
 
 test.describe('Room membership', () => {
   test.beforeEach(async ({ synapse }) => {
+    await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
     await registerUser(synapse, 'user3', 'pass');

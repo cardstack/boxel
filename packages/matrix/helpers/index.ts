@@ -4,6 +4,7 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
+import { registerUser } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
 
@@ -30,6 +31,12 @@ export const test = base.extend<{ synapse: SynapseInstance }>({
     await use(page);
   },
 });
+
+export async function registerRealmUsers(synapse: SynapseInstance) {
+  await registerUser(synapse, 'base_realm', 'password');
+  await registerUser(synapse, 'drafts_realm', 'password');
+  await registerUser(synapse, 'published_realm', 'password');
+}
 
 export async function setupMatrixOverride(
   page: Page,
@@ -181,9 +188,9 @@ export async function validateEmailForResetPassword(
   await expect(
     emailPage.frameLocator('.messageview iframe').locator('body'),
   ).toContainText('Reset Password');
-  await expect(emailPage.locator('.messageview .messageviewheader')).toContainText(
-    `To:${email}`,
-  );
+  await expect(
+    emailPage.locator('.messageview .messageviewheader'),
+  ).toContainText(`To:${email}`);
 
   if (opts?.onEmailPage) {
     await opts.onEmailPage(emailPage);
@@ -191,20 +198,21 @@ export async function validateEmailForResetPassword(
 
   const pagePromise = context.waitForEvent('page');
   let btn = emailPage
-      .frameLocator('.messageview iframe')
-      .getByText('Reset Password')
-      .last();
+    .frameLocator('.messageview iframe')
+    .getByText('Reset Password')
+    .last();
   // We have to delay before going to validation window
   // to avoid the validation window won't open
   await emailPage.waitForTimeout(500);
   await btn.click();
-  
+
   const validationPage = await pagePromise;
   await validationPage.waitForLoadState();
   if (opts?.onValidationPage) {
     await opts.onValidationPage(validationPage);
   }
-  let validationBtn = validationPage.locator('body')
+  let validationBtn = validationPage
+    .locator('body')
     .getByText('Confirm changing my password');
   await validationPage.waitForTimeout(500);
   await validationBtn.click();
@@ -225,7 +233,9 @@ export async function gotoForgotPassword(page: Page) {
   await openRoot(page);
   await toggleOperatorMode(page);
   await page.locator('[data-test-forgot-password]').click();
-  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(1);
+  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(
+    1,
+  );
 }
 
 export async function login(
@@ -257,11 +267,14 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function register(page: Page, name: string,
+export async function register(
+  page: Page,
+  name: string,
   email: string,
   username: string,
   password: string,
-  registrationToken?: string) {
+  registrationToken?: string,
+) {
   await expect(
     page.locator('[data-test-token-field]'),
     'token field is not displayed',
@@ -279,7 +292,7 @@ export async function register(page: Page, name: string,
   await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
   await page.locator('[data-test-register-btn]').click();
 
-  if(registrationToken) {
+  if (registrationToken) {
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
     await expect(
       page.locator('[data-test-username-field]'),
@@ -292,9 +305,9 @@ export async function register(page: Page, name: string,
   }
 
   await validateEmail(page, email);
-  
+
   await openAiAssistant(page);
-  await assertLoggedIn(page, { email, displayName: name});
+  await assertLoggedIn(page, { email, displayName: name });
   await logout(page);
   await assertLoggedOut(page);
 }

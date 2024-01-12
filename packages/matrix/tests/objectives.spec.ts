@@ -10,10 +10,12 @@ import {
   sendMessage,
   joinRoom,
   test,
+  registerRealmUsers,
 } from '../helpers';
 
 test.describe('Room objectives', () => {
   test.beforeEach(async ({ synapse }) => {
+    await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
   });

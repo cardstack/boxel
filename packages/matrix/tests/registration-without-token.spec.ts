@@ -12,6 +12,7 @@ import {
   assertLoggedIn,
   setupMatrixOverride,
   openAiAssistant,
+  registerRealmUsers,
 } from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
@@ -26,6 +27,7 @@ test.describe('User Registration w/o Token', () => {
     });
     await smtpStart();
     await setupMatrixOverride(page, synapse);
+    await registerRealmUsers(synapse);
   });
 
   test.afterEach(async () => {

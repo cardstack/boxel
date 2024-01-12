@@ -15,6 +15,7 @@ import {
   assertLoggedOut,
   assertLoggedIn,
   openAiAssistant,
+  registerRealmUsers,
 } from '../helpers';
 
 test.describe('Profile', () => {
@@ -30,6 +31,7 @@ test.describe('Profile', () => {
     await setupMatrixOverride(page, synapse);
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user0', 'pass');
     await updateUser(synapse, admin.accessToken, '@user1:localhost', {

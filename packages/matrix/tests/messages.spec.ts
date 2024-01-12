@@ -13,10 +13,12 @@ import {
   reloadAndOpenAiAssistant,
   test,
   isInRoom,
+  registerRealmUsers,
 } from '../helpers';
 
 test.describe('Room messages', () => {
   test.beforeEach(async ({ synapse }) => {
+    await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
   });

@@ -9,11 +9,13 @@ import {
   openAiAssistant,
   reloadAndOpenAiAssistant,
   toggleOperatorMode,
+  registerRealmUsers,
   test,
 } from '../helpers';
 
 test.describe('Login', () => {
   test.beforeEach(async ({ synapse }) => {
+    await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
   });
 

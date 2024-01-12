@@ -15,6 +15,7 @@ import {
   validateEmailForResetPassword,
   login,
   register,
+  registerRealmUsers,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -43,6 +44,7 @@ test.describe('Forgot password', () => {
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
+    await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
     await register(page, name, email, username, password, REGISTRATION_TOKEN);

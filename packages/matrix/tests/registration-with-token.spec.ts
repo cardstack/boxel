@@ -15,6 +15,7 @@ import {
   test,
   setupMatrixOverride,
   openAiAssistant,
+  registerRealmUsers,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -32,6 +33,7 @@ test.describe('User Registration w/ Token', () => {
     });
     await smtpStart();
     await setupMatrixOverride(page, synapse);
+    await registerRealmUsers(synapse);
   });
 
   test.afterEach(async () => {

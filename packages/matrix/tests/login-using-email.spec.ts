@@ -13,6 +13,7 @@ import {
   setupMatrixOverride,
   register,
   openAiAssistant,
+  registerRealmUsers,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -37,6 +38,7 @@ test.describe('Login using email', () => {
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
+    await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
     await register(

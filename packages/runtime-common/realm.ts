@@ -531,7 +531,6 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#matrixClient.login();
     await this.#warmUpCache();
     await this.#searchIndex.run();
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
@@ -577,6 +576,9 @@ export class Realm {
   }
 
   private async createSession(request: Request) {
+    if (!this.#matrixClient.userId) {
+      await this.#matrixClient.login();
+    }
     let body = await request.text();
     let json;
     try {
