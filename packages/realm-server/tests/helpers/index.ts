@@ -18,7 +18,7 @@ export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
 const testMatrix = {
   url: new URL(`http://localhost:8008`),
-  username: 'note-test_realm',
+  username: 'node-test_realm',
   password: 'password',
 };
 let distPath = resolve(__dirname, '..', '..', '..', 'host', 'dist');

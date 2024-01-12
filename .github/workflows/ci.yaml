@@ -166,11 +166,17 @@ jobs:
         env:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
+      - name: start matrix
+        run: pnpm start:synapse &
+        working-directory: packages/matrix
+      - name: start smtp
+        run: pnpm start:smtp &
+        working-directory: packages/matrix
       - name: create realm users
-        run: pnpm register-realm-users
+        run: sleep 10 && pnpm register-realm-users
         working-directory: packages/matrix
       - name: Start realm servers
-        run: pnpm start:base &
+        run: pnpm start:without-matrix &
         working-directory: packages/realm-server
       - name: Run Playwright tests
         run: pnpm test
@@ -199,11 +205,17 @@ jobs:
         env:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
-      - name: create realm users
-        run: pnpm register-realm-users
+      - name: start matrix
+        run: pnpm start:synapse &
         working-directory: packages/matrix
-      - name: Start base realm server
-        run: pnpm start:all &
+      - name: start smtp
+        run: pnpm start:smtp &
+        working-directory: packages/matrix
+      - name: create realm users
+        run: sleep 10 && pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: Start realm servers
+        run: pnpm start:without-matrix &
         working-directory: packages/realm-server
       - name: realm server test suite
         run: pnpm test:wait-for-servers

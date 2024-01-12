@@ -246,13 +246,18 @@ export default class MatrixService extends Service {
   ): Promise<TokenClaims & { iat: number; exp: number }> {
     let tokenRefreshPeriod = 5 * 60; // 5 minutes
     let tokens = JSON.parse(localStorage.getItem('boxel-session') ?? '{}') as {
-      [realm: string]: TokenClaims & { exp: number; iat: number };
+      [realm: string]: string;
     };
     let token = tokens[realmURL.href];
     if (token) {
-      let expiration = token.exp;
+      let [_header, payload] = token.split('.');
+      let claims = JSON.parse(atob(payload)) as TokenClaims & {
+        iat: number;
+        exp: number;
+      };
+      let expiration = claims.exp;
       if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
-        return token;
+        return claims;
       }
     }
     await this.createRealmSession(realmURL);
