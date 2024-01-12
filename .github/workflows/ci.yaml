@@ -214,7 +214,7 @@ jobs:
       - name: create realm users
         run: sleep 10 && pnpm register-realm-users
         working-directory: packages/matrix
-      - name: Start base realm server
+      - name: Start realm servers
         run: pnpm start:without-matrix &
         working-directory: packages/realm-server
       - name: realm server test suite
