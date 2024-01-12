@@ -23,7 +23,6 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
-import RoomNameEditor from '@cardstack/host/components/matrix/room-name-editor';
 import RoomList from '@cardstack/host/components/matrix/room-list';
 import RoomInput from '@cardstack/host/components/matrix/room-input';
 import ENV from '@cardstack/host/config/environment';
@@ -58,7 +57,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private newRoomInvite: string[] = [];
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
-  @tracked private isShowingRoomNameEditor = false;
+  // @ts-ignore (glint is not recognizing that this variable is being used when set to private)
   @tracked private roomNameError: string | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -70,21 +69,6 @@ export default class AiAssistantPanel extends Component<Signature> {
   private enterRoom(roomId: string) {
     this.currentRoomId = roomId;
     this.isShowingPastSessions = false;
-  }
-
-  @action
-  private showRoomNameEditor() {
-    this.isShowingRoomNameEditor = true;
-  }
-
-  @action
-  private closeRoomNameEditor() {
-    this.isShowingRoomNameEditor = false;
-  }
-
-  @action private saveNewRoomName(_name: string) {
-    // TODO
-    throw new Error('not implemented');
   }
 
   @action
@@ -231,22 +215,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       {{#if this.doCreateRoom.isRunning}}
         <LoadingIndicator />
       {{else if this.room}}
-        {{#if this.isShowingRoomNameEditor}}
-          <RoomNameEditor
-            @room={{this.room}}
-            @onSave={{this.saveNewRoomName}}
-            @onCancel={{this.closeRoomNameEditor}}
-            @roomNameError={{this.roomNameError}}
-          />
-        {{else}}
-          <Button
-            @kind='secondary-dark'
-            @size='extra-small'
-            {{on 'click' this.showRoomNameEditor}}
-          >
-            Rename Room
-          </Button>
-        {{/if}}
         <AiAssistantConversation>
           <div class='notices'>
             <div data-test-timeline-start class='timeline-start'>
