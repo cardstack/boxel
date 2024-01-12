@@ -24,7 +24,7 @@ test.describe('Profile', () => {
       template: 'test',
       // email update tests require a static synapse port in order for the
       // link in the validation email to work
-      hostPort: 8009,
+      hostPort: 8008,
     });
     await smtpStart();
     await setupMatrixOverride(page, synapse);

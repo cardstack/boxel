@@ -26,7 +26,7 @@ test.describe('Login using email', () => {
       template: 'test',
       // user registration tests require a static synapse port in order for the
       // link in the validation email to work
-      hostPort: 8009,
+      hostPort: 8008,
     });
     await smtpStart();
     await setupMatrixOverride(page, synapse);
