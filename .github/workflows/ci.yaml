@@ -123,6 +123,15 @@ jobs:
         env:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
+      - name: Start matrix server
+        run: pnpm start:synapse &
+        working-directory: packages/matrix
+      - name: Start SMTP server
+        run: pnpm start:smtp &
+        working-directory: packages/matrix
+      - name: wait for matrix
+        run: sleep 10
+        working-directory: packages/matrix
       - name: Start realm servers
         run: pnpm start:all &
         working-directory: packages/realm-server
