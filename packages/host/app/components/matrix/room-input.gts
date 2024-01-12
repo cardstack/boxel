@@ -18,7 +18,12 @@ import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
 
 import { not, and } from '@cardstack/boxel-ui/helpers';
 
-import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
+import {
+  chooseCard,
+  baseCardRef,
+  isMatrixCardError,
+  catalogEntryRef,
+} from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 
@@ -31,6 +36,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 import { getRoom } from '../../resources/room';
 
@@ -47,6 +53,19 @@ interface RoomArgs {
 export default class RoomInput extends Component<RoomArgs> {
   helperId = guidFor(this);
   <template>
+    {{#if this.objective}}
+      <div class='room__objective'>
+        {{#if this.objectiveError}}
+          <div data-test-objective-error class='error'>
+            Error: cannot render card
+            {{this.objectiveError.id}}:
+            {{this.objectiveError.error.message}}
+          </div>
+        {{else}}
+          <this.objectiveComponent />
+        {{/if}}
+      </div>
+    {{/if}}
     <div class='send-message'>
       <BoxelInput
         data-test-message-field={{this.room.name}}
@@ -64,6 +83,14 @@ export default class RoomInput extends Component<RoomArgs> {
           {{on 'click' this.removeCard}}
         >Remove Card</Button>
       {{else}}
+        {{#if this.canSetObjective}}
+          <Button
+            @kind='secondary-dark'
+            data-test-set-objective-btn
+            @disabled={{this.doSetObjective.isRunning}}
+            {{on 'click' this.setObjective}}
+          >Set Objective</Button>
+        {{/if}}
         <Button
           data-test-choose-card-btn
           @kind='secondary-dark'
@@ -71,14 +98,15 @@ export default class RoomInput extends Component<RoomArgs> {
           {{on 'click' this.chooseCard}}
         >Choose Card</Button>
 
-        <label for='share-checkbox'>Allow access to the cards you can see at the
-          top of your stacks</label>
-        <Input
-          id={{(concat 'helper-text-' this.helperId)}}
-          data-test-share-context
-          @type='checkbox'
-          @checked={{this.shareCurrentContext}}
-        />
+        <label>
+          <Input
+            id={{(concat 'helper-text-' this.helperId)}}
+            data-test-share-context
+            @type='checkbox'
+            @checked={{this.shareCurrentContext}}
+          />
+          Allow access to the cards you can see at the top of your stacks
+        </label>
       {{/if}}
       <Button
         data-test-send-message-btn
@@ -139,6 +167,7 @@ export default class RoomInput extends Component<RoomArgs> {
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @tracked private allowedToSetObjective: boolean | undefined;
   @tracked private subscribedRoom: FieldDef | undefined;
 
   private shareCurrentContext = false;
@@ -157,6 +186,57 @@ export default class RoomInput extends Component<RoomArgs> {
   private get room() {
     return this.roomResource.room;
   }
+
+  private get canSetObjective() {
+    return !this.objective && this.allowedToSetObjective;
+  }
+
+  private get objectiveComponent() {
+    if (this.objective && !isMatrixCardError(this.objective)) {
+      return this.objective.constructor.getComponent(
+        this.objective,
+        'embedded',
+      );
+    }
+    return undefined;
+  }
+
+  private get objective() {
+    return this.matrixService.roomObjectives.get(this.args.roomId);
+  }
+
+  private get objectiveError() {
+    if (isMatrixCardError(this.objective)) {
+      return this.objective;
+    }
+    return undefined;
+  }
+
+  @action
+  private setObjective() {
+    this.doSetObjective.perform();
+  }
+
+  private doSetObjective = restartableTask(async () => {
+    // objective are currently non-primitive fields
+    let catalogEntry = await chooseCard<CatalogEntry>({
+      filter: {
+        every: [
+          {
+            on: catalogEntryRef,
+            eq: { isField: true },
+          },
+          {
+            on: catalogEntryRef,
+            eq: { isPrimitive: false },
+          },
+        ],
+      },
+    });
+    if (catalogEntry) {
+      await this.matrixService.setObjective(this.args.roomId, catalogEntry.ref);
+    }
+  });
 
   @cached
   private get attachedCardIds() {

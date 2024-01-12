@@ -21,7 +21,7 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
-import { aiBotUsername, isMatrixCardError } from '@cardstack/runtime-common';
+import { aiBotUsername } from '@cardstack/runtime-common';
 
 import RoomNameEditor from '@cardstack/host/components/matrix/room-name-editor';
 import RoomList from '@cardstack/host/components/matrix/room-list';
@@ -64,27 +64,6 @@ export default class AiAssistantPanel extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadRooms.perform();
-  }
-
-  private get objectiveComponent() {
-    if (this.objective && !isMatrixCardError(this.objective)) {
-      return this.objective.constructor.getComponent(
-        this.objective,
-        'embedded',
-      );
-    }
-    return undefined;
-  }
-
-  private get objective() {
-    return this.matrixService.roomObjectives.get(this.currentRoomId ?? '');
-  }
-
-  private get objectiveError() {
-    if (isMatrixCardError(this.objective)) {
-      return this.objective;
-    }
-    return undefined;
   }
 
   @action
@@ -267,19 +246,6 @@ export default class AiAssistantPanel extends Component<Signature> {
           >
             Rename Room
           </Button>
-        {{/if}}
-        {{#if this.objective}}
-          <div class='room__objective'>
-            {{#if this.objectiveError}}
-              <div data-test-objective-error class='error'>
-                Error: cannot render card
-                {{this.objectiveError.id}}:
-                {{this.objectiveError.error.message}}
-              </div>
-            {{else}}
-              <this.objectiveComponent />
-            {{/if}}
-          </div>
         {{/if}}
         <AiAssistantConversation>
           <div class='notices'>
