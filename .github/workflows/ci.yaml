@@ -124,10 +124,10 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
       - name: Start realm servers
-        run: pnpm start:base &
+        run: pnpm start:all &
         working-directory: packages/realm-server
       - name: create realm users
-        run: sleep 10 && pnpm register-realm-users
+        run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: host test suite
         run: pnpm test-with-percy
@@ -191,10 +191,10 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
       - name: Start realm servers
-        run: pnpm start:base &
+        run: pnpm start:all &
         working-directory: packages/realm-server
       - name: create realm users
-        run: sleep 10 && pnpm register-realm-users
+        run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: realm server test suite
         run: pnpm test:wait-for-servers
