@@ -56,7 +56,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @tracked private newRoomInvite: string[] = [];
   @tracked private currentRoomId: string | undefined;
-  @tracked private isShowingPastSessions = false;
+  @tracked private isShowingPastSessions = true;
   // @ts-ignore (glint is not recognizing that this variable is being used when set to private)
   @tracked private roomNameError: string | undefined;
 

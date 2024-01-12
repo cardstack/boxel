@@ -703,9 +703,6 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
-
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');
 
@@ -761,9 +758,6 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
-
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');
 
@@ -791,9 +785,6 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-open-ai-assistant]');
 
     matrixService.createAndJoinRoom('testroom');
-
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
 
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');
@@ -828,9 +819,6 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-open-ai-assistant]');
 
     matrixService.createAndJoinRoom('testroom');
-
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
 
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');
@@ -900,8 +888,6 @@ module('Integration | operator-mode', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
 
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');
@@ -937,8 +923,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-open-ai-assistant]');
     matrixService.createAndJoinRoom('testroom');
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
+
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');
     await waitFor('[data-test-objective-error]');
