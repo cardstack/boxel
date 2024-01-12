@@ -35,6 +35,7 @@ import IconX from './icons/icon-x.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
 import Profile from './icons/profile.gts';
 import Search from './icons/search.gts';
+import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
 import SuccessBordered from './icons/success-bordered.gts';
 import ThreeDotsHorizontal from './icons/three-dots-horizontal.gts';
@@ -73,6 +74,7 @@ export const ALL_ICON_COMPONENTS = [
   LoadingIndicator,
   Profile,
   Search,
+  Send,
   Sparkle,
   SuccessBordered,
   ThreeDotsHorizontal,
@@ -112,6 +114,7 @@ export {
   LoadingIndicator,
   Profile,
   Search,
+  Send,
   Sparkle,
   SuccessBordered,
   ThreeDotsHorizontal,

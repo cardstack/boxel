@@ -40,9 +40,10 @@ app "boxel-realm-server" {
         certificate       = "arn:aws:acm:us-east-1:120317779495:certificate/55a995ef-6f98-4834-a953-e1517cc74fb7"
       }
 
+      # parameter store
       secrets = {
-        # parameter store
         BOXEL_HTTP_BASIC_PW = "arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/BOXEL_HTTP_BASIC_PW"
+        REALM_USER_PERMISSIONS = "arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/REALM_USER_PERMISSIONS"
       }
     }
   }
