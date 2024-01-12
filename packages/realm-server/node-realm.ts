@@ -4,6 +4,7 @@ import {
   FileRef,
   createResponse,
   type ResponseWithNodeStream,
+  type TokenClaims,
 } from '@cardstack/runtime-common';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 import { ServerResponse } from 'http';
@@ -147,13 +148,20 @@ export class NodeAdapter implements RealmAdapter {
     return { response, writable: s as unknown as WritableStream };
   }
 
-  createJWT<T extends object>(
-    claims: T,
-    expiration: string,
-    secret: string,
-  ): string {
+  createJWT(claims: TokenClaims, expiration: string, secret: string): string {
     let token = jwt.sign(claims, secret, { expiresIn: expiration });
     return token;
+  }
+
+  verifyJWT(
+    token: string,
+    secret: string,
+  ): TokenClaims & { iat: number; exp: number } {
+    // throws TokenExpiredError and JsonWebTokenError
+    return jwt.verify(token, secret) as TokenClaims & {
+      iat: number;
+      exp: number;
+    };
   }
 }
 

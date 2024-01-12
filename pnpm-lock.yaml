@@ -1159,6 +1159,9 @@ importers:
       '@types/matrix-js-sdk':
         specifier: ^11.0.1
         version: 11.0.1
+      '@types/ms':
+        specifier: ^0.7.34
+        version: 0.7.34
       '@types/qs':
         specifier: ^6.9.7
         version: 6.9.7
@@ -1396,6 +1399,9 @@ importers:
       monaco-editor-webpack-plugin:
         specifier: ^7.0.1
         version: 7.0.1(monaco-editor@0.33.0)(webpack@5.89.0)
+      ms:
+        specifier: ^2.1.3
+        version: 2.1.3
       path-browserify:
         specifier: ^1.0.1
         version: 1.0.1
@@ -5561,7 +5567,7 @@ packages:
   /@types/debug@4.1.10:
     resolution: {integrity: sha512-tOSCru6s732pofZ+sMv9o4o3Zc+Sa8l3bxd/tweTQudFn06vAzb13ZX46Zi6m6EJ+RUbRTHvgQJ1gBtSgkaUYA==}
     dependencies:
-      '@types/ms': 0.7.33
+      '@types/ms': 0.7.34
     dev: true
 
   /@types/diff@5.0.2:
@@ -5783,8 +5789,8 @@ packages:
   /@types/minimatch@5.1.2:
     resolution: {integrity: sha512-K0VQKziLUWkVKiRVrx4a40iPaxTUefQmjtkQofBkYRcoaaL/8rhwDWww9qWbrgicNOgnpIsMxyNIUM4+n6dUIA==}
 
-  /@types/ms@0.7.33:
-    resolution: {integrity: sha512-AuHIyzR5Hea7ij0P9q7vx7xu4z0C28ucwjAZC0ja7JhINyCnOw8/DnvAPQQ9TfOlCtZAmCERKQX9+o1mgQhuOQ==}
+  /@types/ms@0.7.34:
+    resolution: {integrity: sha512-nG96G3Wp6acyAgJqGasjODb+acrI7KltPiRxzHPXnP3NgI28bpQDRv53olbqGXbfcgF5aiiHmO3xpwEpS5Ld9g==}
     dev: true
 
   /@types/node-fetch@2.6.7:
@@ -12399,7 +12405,7 @@ packages:
     engines: {node: 8.* || 10.* || >= 12}
     dependencies:
       '@babel/parser': 7.23.3
-      '@babel/traverse': 7.17.9
+      '@babel/traverse': 7.23.2(supports-color@8.1.1)
       recast: 0.18.10
     transitivePeerDependencies:
       - supports-color

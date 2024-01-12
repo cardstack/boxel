@@ -60,6 +60,7 @@ export type {
   FileRef,
   ResponseWithNodeStream,
   RealmInfo,
+  TokenClaims,
 } from './realm';
 
 import type { Saved } from './card-document';

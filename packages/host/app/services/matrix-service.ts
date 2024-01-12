@@ -19,6 +19,7 @@ import {
   type LooseSingleCardDocument,
   type CodeRef,
   type MatrixCardError,
+  type TokenClaims,
   sanitizeHtml,
 } from '@cardstack/runtime-common';
 import {
@@ -232,7 +233,7 @@ export default class MatrixService extends Service {
         // TODO this is a temporary measure to prove that we can obtain a realm session.
         // ultimately we need to figure out a better approach in terms of when/where we
         // obtain sessions for realms that we care about.
-        await this.createRealmSession(new URL(ownRealmURL));
+        await this.getRealmToken(new URL(ownRealmURL));
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
@@ -240,7 +241,25 @@ export default class MatrixService extends Service {
     }
   }
 
-  async createRealmSession(realmURL: URL) {
+  async getRealmToken(
+    realmURL: URL,
+  ): Promise<TokenClaims & { iat: number; exp: number }> {
+    let tokenRefreshPeriod = 5 * 60; // 5 minutes
+    let tokens = JSON.parse(localStorage.getItem('boxel-session') ?? '{}') as {
+      [realm: string]: TokenClaims & { exp: number; iat: number };
+    };
+    let token = tokens[realmURL.href];
+    if (token) {
+      let expiration = token.exp;
+      if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
+        return token;
+      }
+    }
+    await this.createRealmSession(realmURL);
+    return await this.getRealmToken(realmURL);
+  }
+
+  private async createRealmSession(realmURL: URL) {
     await this.ready;
     if (!this.isLoggedIn) {
       throw new Error(

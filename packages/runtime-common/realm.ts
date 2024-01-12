@@ -91,6 +91,12 @@ export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
 
+export interface TokenClaims {
+  user: string;
+  realm: string;
+  permissions: ('read' | 'write')[];
+}
+
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
@@ -107,11 +113,13 @@ export interface RealmAdapter {
 
   remove(path: LocalPath): Promise<void>;
 
-  createJWT<T extends object>(
-    claims: T,
-    expiration: string,
+  createJWT(claims: TokenClaims, expiration: string, secret: string): string;
+
+  // throws if token cannot be verified or expired
+  verifyJWT(
+    token: string,
     secret: string,
-  ): string;
+  ): TokenClaims & { iat: number; exp: number };
 
   createStreamingResponse(
     unresolvedRealmURL: string,
