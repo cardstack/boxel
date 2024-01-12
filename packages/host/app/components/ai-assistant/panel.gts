@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -20,16 +21,16 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
-import { aiBotUsername } from '@cardstack/runtime-common';
+import { aiBotUsername, isMatrixCardError } from '@cardstack/runtime-common';
 
 import RoomNameEditor from '@cardstack/host/components/matrix/room-name-editor';
 import RoomList from '@cardstack/host/components/matrix/room-list';
-import RoomApplyPatch from '@cardstack/host/components/matrix/room-apply-patch';
 import RoomInput from '@cardstack/host/components/matrix/room-input';
 import ENV from '@cardstack/host/config/environment';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type {
   RoomField,
@@ -53,6 +54,7 @@ interface Signature {
 
 export default class AiAssistantPanel extends Component<Signature> {
   @service private declare matrixService: MatrixService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @tracked private newRoomInvite: string[] = [];
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
@@ -62,6 +64,27 @@ export default class AiAssistantPanel extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadRooms.perform();
+  }
+
+  private get objectiveComponent() {
+    if (this.objective && !isMatrixCardError(this.objective)) {
+      return this.objective.constructor.getComponent(
+        this.objective,
+        'embedded',
+      );
+    }
+    return undefined;
+  }
+
+  private get objective() {
+    return this.matrixService.roomObjectives.get(this.currentRoomId ?? '');
+  }
+
+  private get objectiveError() {
+    if (isMatrixCardError(this.objective)) {
+      return this.objective;
+    }
+    return undefined;
   }
 
   @action
@@ -115,6 +138,10 @@ export default class AiAssistantPanel extends Component<Signature> {
       throw e;
     }
   });
+
+  private patchCard = (cardId: string, attributes: any) => {
+    this.operatorModeStateService.patchCard.perform(cardId, attributes);
+  };
 
   private roomResource = getRoom(this, () => this.currentRoomId);
 
@@ -241,6 +268,19 @@ export default class AiAssistantPanel extends Component<Signature> {
             Rename Room
           </Button>
         {{/if}}
+        {{#if this.objective}}
+          <div class='room__objective'>
+            {{#if this.objectiveError}}
+              <div data-test-objective-error class='error'>
+                Error: cannot render card
+                {{this.objectiveError.id}}:
+                {{this.objectiveError.error.message}}
+              </div>
+            {{else}}
+              <this.objectiveComponent />
+            {{/if}}
+          </div>
+        {{/if}}
         <AiAssistantConversation>
           <div class='notices'>
             <div data-test-timeline-start class='timeline-start'>
@@ -258,7 +298,24 @@ export default class AiAssistantPanel extends Component<Signature> {
               }}
             />
             {{#if (eq message.command.commandType 'patch')}}
-              <RoomApplyPatch @payload={{message.command.payload}} />
+              <div
+                data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
+              >
+                {{#let message.command.payload as |payload|}}
+                  <Button
+                    @kind='secondary-dark'
+                    data-test-command-apply
+                    {{on
+                      'click'
+                      (fn this.patchCard payload.id payload.patch.attributes)
+                    }}
+                    @loading={{this.operatorModeStateService.patchCard.isRunning}}
+                    @disabled={{this.operatorModeStateService.patchCard.isRunning}}
+                  >
+                    Apply
+                  </Button>
+                {{/let}}
+              </div>
             {{/if}}
           {{else}}
             <div data-test-no-messages>
