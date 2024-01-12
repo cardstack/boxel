@@ -133,7 +133,7 @@ jobs:
         run: sleep 10
         working-directory: packages/matrix
       - name: Start realm servers
-        run: pnpm start:all &
+        run: pnpm start:without-matrix &
         working-directory: packages/realm-server
       - name: host test suite
         run: pnpm test-with-percy
