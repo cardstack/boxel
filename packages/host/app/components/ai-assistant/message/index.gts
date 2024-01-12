@@ -15,8 +15,10 @@ interface Signature {
     isFromAssistant: boolean;
     profileAvatar?: ComponentLike;
   };
+  Blocks: { default: [] };
 }
 
+// TODO: Update Boxel::Message component
 export default class AiAssistantMessage extends Component<Signature> {
   <template>
     <div
@@ -40,6 +42,8 @@ export default class AiAssistantMessage extends Component<Signature> {
       </div>
       <div class='content'>
         {{@formattedMessage}}
+
+        <div>{{yield}}</div>
       </div>
     </div>
     <style>

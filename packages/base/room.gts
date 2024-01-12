@@ -11,9 +11,6 @@ import StringField from './string';
 import DateTimeField from './datetime';
 import NumberField from './number';
 import MarkdownField from './markdown';
-import { BoxelMessage } from '@cardstack/boxel-ui/components';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
 import {
   Loader,
@@ -93,14 +90,6 @@ class MatrixEventField extends FieldDef {
   static edit = class Edit extends JSONView {};
 }
 
-const messageStyle = {
-  boxelMessageAvatarSize: '2.5rem',
-  boxelMessageMetaHeight: '1.25rem',
-  boxelMessageGap: 'var(--boxel-sp)',
-  boxelMessageMarginLeft:
-    'calc( var(--boxel-message-avatar-size) + var(--boxel-message-gap) )',
-};
-
 class RoomMemberView extends Component<typeof RoomMemberField> {
   <template>
     <div class='container'>
@@ -168,25 +157,11 @@ class ScrollIntoView extends Modifier {
 class EmbeddedMessageField extends Component<typeof MessageField> {
   // TODO need to add the message specific CSS here
   <template>
-    <BoxelMessage
+    <div
       {{ScrollIntoView}}
       data-test-message-idx={{@model.index}}
       data-test-message-card={{@model.attachedCardId}}
-      @name={{@model.author.displayName}}
-      @datetime={{formatRFC3339 this.timestamp}}
-      style={{cssVar
-        boxel-message-avatar-size=messageStyle.boxelMessageAvatarSize
-        boxel-message-meta-height=messageStyle.boxelMessageMetaHeight
-        boxel-message-gap=messageStyle.boxelMessageGap
-        boxel-message-margin-left=messageStyle.boxelMessageMarginLeft
-      }}
     >
-      {{! template-lint-disable no-triple-curlies }}
-
-      <div>
-        {{@fields.message}}
-      </div>
-
       {{#if this.attachedCardResource.cardError}}
         <div data-test-card-error class='error'>
           Error: cannot render card
@@ -196,7 +171,7 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       {{else if this.attachedCardResource.card}}
         <this.cardComponent />
       {{/if}}
-    </BoxelMessage>
+    </div>
 
     <style>
       .error {
@@ -222,7 +197,7 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
     if (!card) {
       return;
     }
-    return card.constructor.getComponent(card, 'isolated');
+    return card.constructor.getComponent(card, 'atom');
   }
 }
 

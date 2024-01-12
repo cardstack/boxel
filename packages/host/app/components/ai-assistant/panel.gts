@@ -169,6 +169,20 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.isShowingPastSessions = !this.isShowingPastSessions;
   }
 
+  private get messageCardComponents() {
+    return this.room
+      ? this.room.messages.map((messageCard) => {
+          return {
+            component: messageCard.constructor.getComponent(
+              messageCard,
+              'embedded',
+            ),
+            card: messageCard,
+          };
+        })
+      : [];
+  }
+
   <template>
     <div class='ai-assistant-panel' data-test-ai-assistant-panel ...attributes>
       <header>
@@ -221,21 +235,25 @@ export default class AiAssistantPanel extends Component<Signature> {
               - Beginning of conversation -
             </div>
           </div>
-          {{#each this.room.messages as |message|}}
+          {{#each this.messageCardComponents as |Message|}}
             <AiAssistantMessage
-              @formattedMessage={{htmlSafe message.formattedMessage}}
-              @datetime={{message.created}}
-              @isFromAssistant={{eq message.author.userId aiBotUserId}}
+              @formattedMessage={{htmlSafe Message.card.formattedMessage}}
+              @datetime={{Message.card.created}}
+              @isFromAssistant={{eq Message.card.author.userId aiBotUserId}}
               @profileAvatar={{component
                 ProfileAvatarIcon
-                userId=message.author.userId
+                userId=Message.card.author.userId
               }}
-            />
-            {{#if (eq message.command.commandType 'patch')}}
+            >
+              {{#if Message.card.attachedCardId}}
+                <Message.component />
+              {{/if}}
+            </AiAssistantMessage>
+            {{#if (eq Message.card.command.commandType 'patch')}}
               <div
                 data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
               >
-                {{#let message.command.payload as |payload|}}
+                {{#let Message.card.command.payload as |payload|}}
                   <Button
                     @kind='secondary-dark'
                     data-test-command-apply

@@ -52,7 +52,9 @@ export default class AiAssistantMessageUsage extends Component {
                 isReady=true
                 profileInitials=this.profileInitials
               }}
-            />
+            >
+              <em>Optional embedded content</em>
+            </AiAssistantMessage>
           </AiAssistantConversation>
         </div>
       </:example>
@@ -81,7 +83,7 @@ export default class AiAssistantMessageUsage extends Component {
           @onInput={{fn (mut this.formattedMessage)}}
           @value={{this.formattedMessage}}
         />
-
+        <Args.Yield @description='Message content' />
       </:api>
     </FreestyleUsage>
     <FreestyleUsage @name='AiAssistant::Message example conversation'>
