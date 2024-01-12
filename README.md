@@ -80,6 +80,8 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4205 | qunit server mounting realms in iframes for testing       | ✅                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                     | ✅                  | 🚫                   |
+| :8009 | Test Matrix synapse server (for static port tests)        | 🚫                  | 🚫                   |
+
 
 #### Using `start:development`
 

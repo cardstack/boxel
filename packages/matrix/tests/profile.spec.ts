@@ -7,7 +7,15 @@ import {
   updateUser,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import { login, test, setupMatrixOverride, validateEmail, assertLoggedOut, assertLoggedIn, openAiAssistant } from '../helpers';
+import {
+  login,
+  test,
+  setupMatrixOverride,
+  validateEmail,
+  assertLoggedOut,
+  assertLoggedIn,
+  openAiAssistant,
+} from '../helpers';
 
 test.describe('Profile', () => {
   let synapse: SynapseInstance;
@@ -16,7 +24,7 @@ test.describe('Profile', () => {
       template: 'test',
       // email update tests require a static synapse port in order for the
       // link in the validation email to work
-      hostPort: 8008,
+      hostPort: 8009,
     });
     await smtpStart();
     await setupMatrixOverride(page, synapse);
@@ -316,12 +324,14 @@ test.describe('Profile', () => {
     ).toContainText('Settings > Password');
     await page.locator('[data-test-current-password-field]').fill('pass');
     await page.locator('[data-test-new-password-field]').fill('newpass123!');
-    await page.locator('[data-test-confirm-password-field]').fill('newpass123!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('newpass123!');
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeEnabled();
     await page.locator('[data-test-profile-settings-save-button]').click();
-      
+
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
     );
@@ -343,7 +353,9 @@ test.describe('Profile', () => {
     await assertLoggedIn(page);
   });
 
-  test('It shows an error when new password does not meet the requirement', async ({ page }) => {
+  test('It shows an error when new password does not meet the requirement', async ({
+    page,
+  }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
@@ -369,11 +381,13 @@ test.describe('Profile', () => {
       page.locator(
         '[data-test-new-password-field] ~ [data-test-boxel-input-error-message]',
       ),
-    ).toContainText('Password must be at least 8 characters long and include a number and a symbol');
+    ).toContainText(
+      'Password must be at least 8 characters long and include a number and a symbol',
+    );
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeDisabled();
-    
+
     await page.locator('[data-test-new-password-field]').fill('newpass123!');
     await page.locator('[data-test-confirm-password-field]').fill('newpass1');
     await page.locator('[data-test-new-password-field]').fill('newpass123!'); //This line is only for change focus from input
@@ -391,14 +405,16 @@ test.describe('Profile', () => {
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeDisabled();
-    
+
     await page.locator('[data-test-new-password-field]').fill('newpass123!');
-    await page.locator('[data-test-confirm-password-field]').fill('newpass123!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('newpass123!');
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeEnabled();
     await page.locator('[data-test-profile-settings-save-button]').click();
-      
+
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
     );
@@ -420,7 +436,9 @@ test.describe('Profile', () => {
     await assertLoggedIn(page);
   });
 
-  test('It shows an error when current password is invalid', async ({ page }) => {
+  test('It shows an error when current password is invalid', async ({
+    page,
+  }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
@@ -434,9 +452,13 @@ test.describe('Profile', () => {
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
     ).toContainText('Settings > Password');
 
-    await page.locator('[data-test-current-password-field]').fill('invalidpass');
+    await page
+      .locator('[data-test-current-password-field]')
+      .fill('invalidpass');
     await page.locator('[data-test-new-password-field]').fill('newpass123!');
-    await page.locator('[data-test-confirm-password-field]').fill('newpass123!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('newpass123!');
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeEnabled();
@@ -461,7 +483,7 @@ test.describe('Profile', () => {
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeEnabled();
     await page.locator('[data-test-profile-settings-save-button]').click();
-      
+
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
     );

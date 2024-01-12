@@ -76,7 +76,6 @@
     "start:base:root": "./scripts/start-base-root.sh",
     "start:drafts:root": "./scripts/start-drafts-root.sh",
     "start:all": "./scripts/start-all.sh",
-    "start:without-matrix": "./scripts/start-without-matrix.sh",
     "start:staging": "./scripts/start-staging.sh",
     "start:development": "./scripts/start-development.sh",
     "start:production": "./scripts/start-production.sh",
