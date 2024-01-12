@@ -15,12 +15,17 @@ export default class AiAssistantMessageUsage extends Component {
   @tracked datetime = new Date(2024, 0, 3, 12, 30);
   @tracked isFromAssistant = false;
   @tracked userId = 'johndoe:boxel.ai';
+  @tracked errorMessage = '';
 
   @action setDateTimeFromString(val: string) {
     let sinceEpoch = Date.parse(val);
     if (!isNaN(sinceEpoch)) {
       this.datetime = new Date(sinceEpoch);
     }
+  }
+
+  @action retryAction() {
+    console.log('retry button pressed');
   }
 
   get datetimeAsString() {
@@ -52,6 +57,8 @@ export default class AiAssistantMessageUsage extends Component {
                 isReady=true
                 profileInitials=this.profileInitials
               }}
+              @errorMessage={{this.errorMessage}}
+              @retryAction={{this.retryAction}}
             >
               <em>Optional embedded content</em>
             </AiAssistantMessage>
@@ -82,6 +89,17 @@ export default class AiAssistantMessageUsage extends Component {
           @description='The message to display, as an html-safe string'
           @onInput={{fn (mut this.formattedMessage)}}
           @value={{this.formattedMessage}}
+        />
+        <Args.String
+          @name='errorMessage'
+          @description='Error state message to display'
+          @onInput={{fn (mut this.errorMessage)}}
+          @value={{this.errorMessage}}
+        />
+        <Args.Action
+          @name='retryAction'
+          @description='Action to be called in error state'
+          @value={{this.retryAction}}
         />
         <Args.Yield @description='Message content' />
       </:api>
