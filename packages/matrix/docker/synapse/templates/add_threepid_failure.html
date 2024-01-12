@@ -1,0 +1,7 @@
+{% extends "_base.html" %}
+{% block title %}Request failed{% endblock %}
+
+{% block body %}
+<p style="margin: 0;">The request failed for the following reason: {{ failure_reason }}.</p>
+<p style="margin: 0;">No changes have been made to your account.</p>
+{% endblock %}
