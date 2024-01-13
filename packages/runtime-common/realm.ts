@@ -576,7 +576,7 @@ export class Realm {
   }
 
   private async createSession(request: Request) {
-    if (!this.#matrixClient.userId) {
+    if (!(await this.#matrixClient.isTokenValid())) {
       await this.#matrixClient.login();
     }
     let body = await request.text();
