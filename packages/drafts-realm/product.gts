@@ -12,10 +12,12 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
+// @ts-ignore TS1206: Decorators are not valid here.
 import { tracked } from '@glimmer/tracking';
+// @ts-ignore TS1206: Decorators are not valid here.
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { concat, fn } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 const usdFormatter = new Intl.NumberFormat('en-US', {
@@ -39,7 +41,10 @@ export function formatNumber(val: number | undefined) {
   return numberFormatter.format(val);
 }
 
-function expectedArrivalDescription(leadTimeDays, deliveryWindowDays) {
+function expectedArrivalDescription(
+  leadTimeDays: number,
+  deliveryWindowDays: number,
+) {
   let min = leadTimeDays;
   let max = leadTimeDays + deliveryWindowDays;
   // calculate a date range, relative to today
@@ -58,8 +63,9 @@ function expectedArrivalDescription(leadTimeDays, deliveryWindowDays) {
   }
 }
 interface EmbeddedProductComponentSignature {
+  Element: HTMLDivElement;
   Args: {
-    model: Product;
+    model: Partial<Product>;
   };
 }
 
@@ -256,9 +262,20 @@ export class Product extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof this> {
+    // @ts-ignore TS1206: Decorators are not valid here.
     @tracked activeImage = this.args.model.images?.[0];
-    @action updateActiveImage(image) {
+
+    // @ts-ignore TS1206: Decorators are not valid here.
+    @action updateActiveImage(image: string) {
       this.activeImage = image;
+    }
+
+    get leadTimeDays() {
+      return this.args.model.leadTimeDays || 0;
+    }
+
+    get deliveryWindowDays() {
+      return this.args.model.deliveryWindowDays || 0;
     }
 
     <template>
@@ -281,8 +298,8 @@ export class Product extends CardDef {
               <div>
                 🗓️ Order today, get by
                 {{expectedArrivalDescription
-                  @model.leadTimeDays
-                  @model.deliveryWindowDays
+                  this.leadTimeDays
+                  this.deliveryWindowDays
                 }}
               </div>
               {{#if @model.isReturnable}}
@@ -380,6 +397,11 @@ export class Product extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
+
 
 
 

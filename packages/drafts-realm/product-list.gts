@@ -1,32 +1,46 @@
-import { CardDef, field, linksTo, linksToMany, StringField } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  field,
+  linksToMany,
+} from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { Product as ProductCard, formatUsd, EmbeddedProductComponent } from './product';
+import {
+  Product as ProductCard,
+  formatUsd,
+  EmbeddedProductComponent,
+} from './product';
 import GlimmerComponent from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
+// @ts-ignore TS1206: Decorators are not valid here.
+import { action } from '@ember/object';
+// @ts-ignore TS1206: Decorators are not valid here.
 import { tracked } from '@glimmer/tracking';
 
 interface FeaturedProductComponentSignature {
   Args: {
-    model: ProductCard;
-    viewProduct: (ProductCard) => void;
-  }
+    model: ProductCard | undefined;
+    viewProduct: (arg0: ProductCard | undefined) => void;
+  };
 }
 
 class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponentSignature> {
   <template>
-    <div class="product">
-      <img {{on 'click' (fn @viewProduct @model)}} src={{@model.thumbnailURL}} alt={{@model.title}} />
+    <div class='product'>
+      <img
+        {{on 'click' (fn @viewProduct @model)}}
+        src={{@model.thumbnailURL}}
+        alt={{@model.title}}
+      />
       <div>
-        <div class="seller">
+        <div class='seller'>
           {{@model.seller.title}}
         </div>
-        <div class="title">
+        <div class='title'>
           {{@model.title}}
         </div>
-        <div class="price">
+        <div class='price'>
           {{formatUsd @model.unitPriceCents}}
         </div>
         <button {{on 'click' (fn @viewProduct @model)}}>Shop this item</button>
@@ -61,7 +75,8 @@ class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponent
       .price {
         color: green;
       }
-      .title, .price {
+      .title,
+      .price {
         font-weight: 600;
         font-size: 18px;
         line-height: 24px;
@@ -74,7 +89,7 @@ class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponent
         font-weight: 500;
         font-size: 14px;
         padding: 7px 24px;
-        border: 0; 
+        border: 0;
       }
     </style>
   </template>
@@ -82,20 +97,22 @@ class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponent
 
 export class ProductList extends CardDef {
   @field products = linksToMany(ProductCard);
-  static displayName = "Product List";
+  static displayName = 'Product List';
 
   static isolated = class Isolated extends Component<typeof this> {
+    // @ts-ignore TS1206: Decorators are not valid here.
     @tracked filterText = '';
 
+    // @ts-ignore TS1206: Decorators are not valid here.
     @action
-    updateFilter(event) {
-      this.filterText = event.target.value.toLowerCase();
+    updateFilter(event: Event) {
+      this.filterText = (event.target as any).value.toLowerCase();
     }
 
     get filteredProducts() {
       let { filterText } = this;
       if (!filterText) return this.args.model.products;
-      return this.args.model.products.filter(product => {
+      return this.args.model.products?.filter((product) => {
         return product.title?.toLowerCase().includes(filterText);
       });
     }
@@ -108,80 +125,88 @@ export class ProductList extends CardDef {
       return this.filteredProducts?.slice(1) || [];
     }
 
+    // @ts-ignore TS1206: Decorators are not valid here.
     @action
-    viewProduct(model) {
-      if (this.args.context?.actions?.viewCard) {
+    viewProduct(model: ProductCard | undefined) {
+      if (model && this.args.context?.actions?.viewCard) {
         this.args.context.actions.viewCard(model);
       } else {
-        console.warn("Product card opening functionality is not available here.")
+        console.warn(
+          'Product card opening functionality is not available here.',
+        );
       }
     }
 
     <template>
       <div>
-        <div class="search-container">
-          <BoxelInput @type="search" class="search-input" placeholder="Search products..." {{on 'input' this.updateFilter}} />
+        <div class='search-container'>
+          <BoxelInput
+            @type='search'
+            class='search-input'
+            placeholder='Search products...'
+            {{on 'input' this.updateFilter}}
+          />
         </div>
-        <div class="products-container">
-          <div class="featured">
+        <div class='products-container'>
+          <div class='featured'>
             <FeaturedProductComponent
               @viewProduct={{this.viewProduct}}
               @model={{this.featuredProduct}}
             />
           </div>
-          <div class="grid">
+          <div class='grid'>
             {{#each this.productsForGrid as |product|}}
-            <div class="grid-item">
-              <EmbeddedProductComponent
-                @model={{product}}
-                {{on 'click' (fn this.viewProduct product)}}
-                class="grid-item-product"
-              />
-            </div>
+              <div class='grid-item'>
+                <EmbeddedProductComponent
+                  @model={{product}}
+                  {{on 'click' (fn this.viewProduct product)}}
+                  class='grid-item-product'
+                />
+              </div>
             {{/each}}
           </div>
         </div>
       </div>
       <style>
-      .search-container {
-        background-image: url(https://i.imgur.com/PQuDAEo.jpg);
-        padding: var(--boxel-sp);
-      }
-      .search-input {
-        background-color: white;
-        color: black;
-      }
-      .search-input::placeholder {
-        color: var(--boxel-dark) !important;
-      }
-      .products-container {
-        padding: var(--boxel-sp);
-      }
-      .featured {
-        padding-bottom: var(--boxel-sp);
-        border-bottom: 2px solid black;
-        margin-bottom: var(--boxel-sp);
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr 1fr;
-        grid-gap: 0;
-      }
-      .grid-item {
-        border-bottom: 1px solid var(--boxel-200);
-        padding-bottom: var(--boxel-sp-xxs);
-        margin-bottom: var(--boxel-sp-xs);
-        padding-right: var(--boxel-sp);
-      }
-      .grid-item:nth-child(4) {
-        padding-right:0
-      }
-      .grid-item-product {
-        cursor: pointer;
-      }
+        .search-container {
+          background-image: url(https://i.imgur.com/PQuDAEo.jpg);
+          padding: var(--boxel-sp);
+        }
+        .search-input {
+          background-color: white;
+          color: black;
+        }
+        .search-input::placeholder {
+          color: var(--boxel-dark) !important;
+        }
+        .products-container {
+          padding: var(--boxel-sp);
+        }
+        .featured {
+          padding-bottom: var(--boxel-sp);
+          border-bottom: 2px solid black;
+          margin-bottom: var(--boxel-sp);
+        }
+        .grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr 1fr;
+          grid-gap: 0;
+        }
+        .grid-item {
+          border-bottom: 1px solid var(--boxel-200);
+          padding-bottom: var(--boxel-sp-xxs);
+          margin-bottom: var(--boxel-sp-xs);
+          padding-right: var(--boxel-sp);
+        }
+        .grid-item:nth-child(4) {
+          padding-right: 0;
+        }
+        .grid-item-product {
+          cursor: pointer;
+        }
       </style>
     </template>
-  }
+  };
 
   /*
 
@@ -196,5 +221,10 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
+
   */
 }
