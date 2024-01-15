@@ -1,0 +1,63 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "products.0": {
+        "links": {
+          "self": "../Product/d7d548f1-22ab-4332-a793-fa2aaf8f894a"
+        }
+      },
+      "products.1": {
+        "links": {
+          "self": "../Product/92df64d3-65b7-48a6-9a4c-e7b13a9b0ec5"
+        }
+      },
+      "products.2": {
+        "links": {
+          "self": "../Product/12df8671-2b17-4922-9a48-0ee8d795dd88"
+        }
+      },
+      "products.3": {
+        "links": {
+          "self": "../Product/4c2a356e-ec74-4a49-9aa2-a88df64cf446"
+        }
+      },
+      "products.4": {
+        "links": {
+          "self": "../Product/8e84d4ff-5528-4872-8734-491774c40a47"
+        }
+      },
+      "products.5": {
+        "links": {
+          "self": "../Product/1c49353e-2705-44c5-b008-13cd709eb743"
+        }
+      },
+      "products.6": {
+        "links": {
+          "self": "../Product/03b3e910-a7ea-4881-b2cc-a1bb738530d9"
+        }
+      },
+      "products.7": {
+        "links": {
+          "self": "../Product/518dbfc8-a9fa-4403-8422-885edb64063f"
+        }
+      },
+      "products.8": {
+        "links": {
+          "self": "../Product/13e1dc95-e84d-4ddd-ad17-fa6b3c59cca5"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product-list",
+        "name": "ProductList"
+      }
+    }
+  }
+}
