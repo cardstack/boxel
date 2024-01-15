@@ -31,7 +31,6 @@ export async function toggleOperatorMode(page: Page) {
 }
 
 export async function openAiAssistant(page: Page) {
-  await expect(page.locator('[data-test-open-ai-assistant]')).toHaveCount(1);
   await page.locator('[data-test-open-ai-assistant]').click();
   await page.waitForFunction(() =>
     document.querySelector('[data-test-close-ai-panel]'),
