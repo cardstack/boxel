@@ -5,7 +5,6 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
-import { type TokenClaims } from '@cardstack/runtime-common';
 import {
   clearLocalStorage,
   assertLoggedIn,
@@ -55,7 +54,11 @@ test.describe('Login', () => {
       `${testHost}/`
     ];
     let [_header, payload] = token.split('.');
-    let claims = JSON.parse(atob(payload)) as TokenClaims;
+    let claims = JSON.parse(atob(payload)) as {
+      user: string;
+      realm: string;
+      permissions: ('read' | 'write')[];
+    };
     expect(claims.user).toStrictEqual('@user1:localhost');
     expect(claims.realm).toStrictEqual(`${testHost}/`);
     expect(claims.permissions).toMatchObject(['read', 'write']);
