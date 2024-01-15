@@ -5,6 +5,7 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
+import { type TokenClaims } from '@cardstack/runtime-common';
 import {
   clearLocalStorage,
   assertLoggedIn,
@@ -16,6 +17,7 @@ import {
   reloadAndOpenAiAssistant,
   toggleOperatorMode,
   registerRealmUsers,
+  testHost,
 } from '../helpers';
 
 test.describe('Login', () => {
@@ -44,6 +46,19 @@ test.describe('Login', () => {
     await openAiAssistant(page);
 
     await assertLoggedIn(page);
+    let boxelSession = await page.evaluate(async () => {
+      // playwright needs a beat before it get access local storage
+      await new Promise((res) => setTimeout(res, 1000));
+      return window.localStorage.getItem('boxel-session');
+    });
+    let token = (JSON.parse(boxelSession!) as { [realmURL: string]: string })[
+      `${testHost}/`
+    ];
+    let [_header, payload] = token.split('.');
+    let claims = JSON.parse(atob(payload)) as TokenClaims;
+    expect(claims.user).toStrictEqual('@user1:localhost');
+    expect(claims.realm).toStrictEqual(`${testHost}/`);
+    expect(claims.permissions).toMatchObject(['read', 'write']);
 
     // reload to page to show that the access token persists
     await reloadAndOpenAiAssistant(page);
