@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "images": [
+        "https://i.etsystatic.com/16364929/r/il/ebc7de/1494228250/il_1588xN.1494228250_qeqn.jpg",
+        "https://i.etsystatic.com/16364929/r/il/939689/1494228286/il_1588xN.1494228286_rtii.jpg",
+        "https://i.etsystatic.com/16364929/r/il/b8b190/1494228324/il_1588xN.1494228324_5rtn.jpg",
+        "https://i.etsystatic.com/16364929/r/il/52e5be/1494228362/il_1588xN.1494228362_nd20.jpg",
+        "https://i.etsystatic.com/16364929/r/il/56284f/1541707445/il_1588xN.1541707445_e3fh.jpg",
+        "https://i.etsystatic.com/16364929/r/il/83c065/1494228636/il_1588xN.1494228636_a9lq.jpg"
+      ],
+      "unitPriceCents": 1500,
+      "usShippingCostCents": 0,
+      "leadTimeDays": 6,
+      "deliveryWindowDays": 7,
+      "isReturnable": false,
+      "details": "California Beach Volleyball played against a sunset. This beach decor scene would look great on any wall. It features a lifeguard tower with beach volleyball players in the background. This art would look great in any room. Bright colors and a simple design!\n\nThis artwork can be customized. If you need a particular color or size, please message me. I will do my best to accommodate!\n\nQUALITY:\n\nPrints are produced using a professional printer using quality archival pigment inks to ensure vivid and rich colored prints. Actual colors may vary slightly as each monitor displays colors differently.\n\nSHIPPING:\n\nMy large prints are wrapped in a bag and packaged in a wide poster tube for protection. Smaller prints will be sealed in a bag and mailed in a sturdy hardbacked envelope. Items will be weighed before shipping, in order to get accurate shipping cost to your location.\n",
+      "title": "California Beach Volleyball Sunset, Beach Decor, Beach Wall Art",
+      "description": null
+    },
+    "relationships": {
+      "seller": {
+        "links": {
+          "self": "../Seller/3c27ee4e-acea-4d88-bf8c-b5700360ddea"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}
