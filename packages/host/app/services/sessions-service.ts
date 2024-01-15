@@ -41,10 +41,7 @@ export default class SessionsService extends Service {
     }
 
     let [_header, payload] = rawJWT.split('.');
-    let claims = JSON.parse(atob(payload)) as TokenClaims & {
-      iat: number;
-      exp: number;
-    };
+    let claims = JSON.parse(atob(payload)) as RealmJWT;
 
     return claims;
   }
