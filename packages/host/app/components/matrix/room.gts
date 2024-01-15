@@ -78,7 +78,7 @@ export default class Room extends Component<Signature> {
         <div class='timeline-start' data-test-timeline-start>
           - Beginning of conversation -
         </div>
-        {{#each this.messageCardComponents as |Message|}}
+        {{#each this.messageCardComponents as |Message i|}}
           <AiAssistantMessage
             @formattedMessage={{htmlSafe Message.card.formattedMessage}}
             @datetime={{Message.card.created}}
@@ -87,6 +87,8 @@ export default class Room extends Component<Signature> {
               ProfileAvatarIcon
               userId=Message.card.author.userId
             }}
+            data-test-message-index={{i}}
+            data-test-boxel-message-from={{Message.card.author.name}}
           >
             {{#if Message.card.attachedCardId}}
               <Message.component />

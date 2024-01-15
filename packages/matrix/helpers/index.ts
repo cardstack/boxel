@@ -181,9 +181,9 @@ export async function validateEmailForResetPassword(
   await expect(
     emailPage.frameLocator('.messageview iframe').locator('body'),
   ).toContainText('Reset Password');
-  await expect(emailPage.locator('.messageview .messageviewheader')).toContainText(
-    `To:${email}`,
-  );
+  await expect(
+    emailPage.locator('.messageview .messageviewheader'),
+  ).toContainText(`To:${email}`);
 
   if (opts?.onEmailPage) {
     await opts.onEmailPage(emailPage);
@@ -191,20 +191,21 @@ export async function validateEmailForResetPassword(
 
   const pagePromise = context.waitForEvent('page');
   let btn = emailPage
-      .frameLocator('.messageview iframe')
-      .getByText('Reset Password')
-      .last();
+    .frameLocator('.messageview iframe')
+    .getByText('Reset Password')
+    .last();
   // We have to delay before going to validation window
   // to avoid the validation window won't open
   await emailPage.waitForTimeout(500);
   await btn.click();
-  
+
   const validationPage = await pagePromise;
   await validationPage.waitForLoadState();
   if (opts?.onValidationPage) {
     await opts.onValidationPage(validationPage);
   }
-  let validationBtn = validationPage.locator('body')
+  let validationBtn = validationPage
+    .locator('body')
     .getByText('Confirm changing my password');
   await validationPage.waitForTimeout(500);
   await validationBtn.click();
@@ -225,7 +226,9 @@ export async function gotoForgotPassword(page: Page) {
   await openRoot(page);
   await toggleOperatorMode(page);
   await page.locator('[data-test-forgot-password]').click();
-  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(1);
+  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(
+    1,
+  );
 }
 
 export async function login(
@@ -257,11 +260,14 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function register(page: Page, name: string,
+export async function register(
+  page: Page,
+  name: string,
   email: string,
   username: string,
   password: string,
-  registrationToken?: string) {
+  registrationToken?: string,
+) {
   await expect(
     page.locator('[data-test-token-field]'),
     'token field is not displayed',
@@ -279,7 +285,7 @@ export async function register(page: Page, name: string,
   await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
   await page.locator('[data-test-register-btn]').click();
 
-  if(registrationToken) {
+  if (registrationToken) {
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
     await expect(
       page.locator('[data-test-username-field]'),
@@ -292,9 +298,9 @@ export async function register(page: Page, name: string,
   }
 
   await validateEmail(page, email);
-  
+
   await openAiAssistant(page);
-  await assertLoggedIn(page, { email, displayName: name});
+  await assertLoggedIn(page, { email, displayName: name });
   await logout(page);
   await assertLoggedOut(page);
 }
@@ -305,13 +311,17 @@ export async function createRoom(
 ) {
   await page.locator('[data-test-create-room-mode-btn]').click();
   await page.locator('[data-test-room-name-field]').fill(roomDetails.name);
+  await page.locator('[data-test-create-room-btn]').click();
+  await isInRoom(page, roomDetails.name);
+
   if (roomDetails.invites && roomDetails.invites.length > 0) {
+    await page.locator('[data-test-invite-mode-btn]').click();
     await page
       .locator('[data-test-room-invite-field]')
       .fill(roomDetails.invites.join(', '));
+    await expect(page.locator('[data-test-room-invite-btn]')).toBeEnabled();
+    await page.locator('[data-test-room-invite-btn]').click();
   }
-  await page.locator('[data-test-create-room-btn]').click();
-  await isInRoom(page, roomDetails.name);
 }
 
 export async function isInRoom(page: Page, roomName: string) {
@@ -389,18 +399,18 @@ export async function assertMessages(
     card?: { id: string; text?: string };
   }[],
 ) {
-  await expect(page.locator('[data-test-message-idx]')).toHaveCount(
+  await expect(page.locator('[data-test-message-index]')).toHaveCount(
     messages.length,
   );
   for (let [index, { from, message, card }] of messages.entries()) {
     await expect(
       page.locator(
-        `[data-test-message-idx="${index}"] [data-test-boxel-message-name]`,
+        `[data-test-message-index="${index}"][data-test-boxel-message-from="${from}"]`,
       ),
-    ).toContainText(from);
+    ).toHaveCount(1);
     if (message != null) {
       await expect(
-        page.locator(`[data-test-message-idx="${index}"] .content`),
+        page.locator(`[data-test-message-index="${index}"] .content`),
       ).toContainText(message);
     }
     if (card) {

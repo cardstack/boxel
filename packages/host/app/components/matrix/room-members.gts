@@ -37,10 +37,10 @@ export default class RoomMembers extends Component<Signature> {
         <div class='invite-form'>
           <FieldContainer @label='Invite:' @tag='label'>
             <BoxelInput
-              data-test-room-invite-field
               type='text'
               @value={{this.membersToInviteFormatted}}
               @onInput={{this.setMembersToInvite}}
+              data-test-room-invite-field
             />
           </FieldContainer>
           <div class='invite-button-wrapper'>

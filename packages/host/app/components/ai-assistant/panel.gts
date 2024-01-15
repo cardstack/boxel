@@ -1,13 +1,15 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -18,7 +20,7 @@ import {
   FieldContainer,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { not, eq } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
@@ -26,7 +28,10 @@ import { aiBotUsername } from '@cardstack/runtime-common';
 import Room from '@cardstack/host/components/matrix/room';
 import RoomList from '@cardstack/host/components/matrix/room-list';
 
-import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
+import {
+  isMatrixError,
+  eventDebounceMs,
+} from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -124,9 +129,41 @@ export default class AiAssistantPanel extends Component<Signature> {
 
         {{#if this.isShowingPastSessions}}
           <RoomList
-            @rooms={{this.sortedAiSessionRooms}}
+            @rooms={{this.sortedJoinedAiSessions}}
             @enterRoom={{this.enterRoom}}
           />
+        {{/if}}
+
+        {{#if this.hasInvites}}
+          <ul class='room-list' data-test-invites-list>
+            <h3>Invites</h3>
+            {{#each this.sortedInvites as |invite|}}
+              <li class='room' data-test-invited-room={{invite.room.name}}>
+                <span class='room-item'>
+                  {{invite.room.name}}
+                  (from:
+                  <span
+                    data-test-invite-sender={{niceName
+                      invite.member.membershipInitiator
+                    }}
+                  >{{niceName invite.member.membershipInitiator}})</span>
+                </span>
+                <Button
+                  @kind='secondary-dark'
+                  data-test-decline-room-btn={{invite.room.name}}
+                  {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
+                >Decline</Button>
+                <Button
+                  @kind='primary'
+                  data-test-join-room-btn={{invite.room.name}}
+                  {{on 'click' (fn this.joinRoom invite.room.roomId)}}
+                >Join</Button>
+                {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
+                  <LoadingIndicator />
+                {{/if}}
+              </li>
+            {{/each}}
+          </ul>
         {{/if}}
       </header>
 
@@ -176,13 +213,14 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare router: RouterService;
 
-  @tracked private newRoomInvite: string[] = [];
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = true;
   @tracked private isShowingCreateNew = false;
   @tracked private newRoomName: string = this.newRoomAutoName;
   @tracked private roomNameError: string | undefined;
+  @tracked private roomIdForCurrentAction: string | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -229,31 +267,34 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @action
   private createNewSession() {
-    this.newRoomInvite = [aiBotUsername];
-    this.doCreateRoom.perform();
+    let newRoomName = this.newRoomName;
+    let newRoomInvite = [aiBotUsername];
+    this.doCreateRoom.perform(newRoomName, newRoomInvite);
   }
 
-  private doCreateRoom = restartableTask(async () => {
-    if (!this.newRoomName) {
-      throw new Error(
-        `bug: should never get here, create button is disabled when there is no new room name`,
-      );
-    }
-    try {
-      let newRoomId = await this.matrixService.createRoom(
-        this.newRoomName,
-        this.newRoomInvite,
-      );
-      this.enterRoom(newRoomId);
-    } catch (e) {
-      if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
-        this.roomNameError = 'Room already exists';
-        return;
+  private doCreateRoom = restartableTask(
+    async (newRoomName: string, newRoomInvite: string[]) => {
+      if (!newRoomName) {
+        throw new Error(
+          `bug: should never get here, create button is disabled when there is no new room name`,
+        );
       }
-      throw e;
-    }
-    this.resetCreateRoom();
-  });
+      try {
+        let newRoomId = await this.matrixService.createRoom(
+          newRoomName,
+          newRoomInvite,
+        );
+        this.enterRoom(newRoomId);
+      } catch (e) {
+        if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
+          this.roomNameError = 'Room already exists';
+          return;
+        }
+        throw e;
+      }
+      this.resetCreateRoom();
+    },
+  );
 
   private resetCreateRoom() {
     this.newRoomName = '';
@@ -266,8 +307,11 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   @cached
-  private get joinedAiSessionRooms() {
-    let rooms: { room: RoomField; member: RoomMemberField }[] = [];
+  private get aiSessionRooms() {
+    let rooms: {
+      joined: { room: RoomField; member: RoomMemberField }[];
+      invited: { room: RoomField; member: RoomMemberField }[];
+    } = { joined: [], invited: [] };
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
         continue;
@@ -277,25 +321,37 @@ export default class AiAssistantPanel extends Component<Signature> {
           (m) => this.matrixService.userId === m.userId,
         );
         if (roomMember) {
-          rooms.push({ room: resource.room, member: roomMember });
+          rooms.joined.push({ room: resource.room, member: roomMember });
         }
+      }
+      let invitedMember = resource.room.invitedMembers.find(
+        (m) => this.matrixService.userId === m.userId,
+      );
+      if (invitedMember) {
+        rooms.invited.push({ room: resource.room, member: invitedMember });
       }
     }
     return rooms;
   }
 
   @cached
-  private get sortedAiSessions() {
-    return this.joinedAiSessionRooms.sort(
+  private get sortedJoinedAiSessions() {
+    return this.aiSessionRooms.joined
+      .sort(
+        (a, b) =>
+          a.member.membershipDateTime.getTime() -
+          b.member.membershipDateTime.getTime(),
+      )
+      .map((r) => r.room);
+  }
+
+  @cached
+  private get sortedInvites() {
+    return this.aiSessionRooms.invited.sort(
       (a, b) =>
         a.member.membershipDateTime.getTime() -
         b.member.membershipDateTime.getTime(),
     );
-  }
-
-  @cached
-  private get sortedAiSessionRooms() {
-    return this.sortedAiSessions.map((r) => r.room);
   }
 
   @action
@@ -303,4 +359,42 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.currentRoomId = roomId;
     this.isShowingPastSessions = false;
   }
+
+  private get hasInvites() {
+    return this.aiSessionRooms.invited.length > 0;
+  }
+
+  @action
+  private leaveRoom(roomId: string) {
+    this.doLeaveRoom.perform(roomId);
+  }
+
+  @action
+  private joinRoom(roomId: string) {
+    this.doJoinRoom.perform(roomId);
+  }
+
+  private doLeaveRoom = restartableTask(async (roomId: string) => {
+    this.roomIdForCurrentAction = roomId;
+    await this.matrixService.client.leave(roomId);
+    await timeout(eventDebounceMs); // this makes it feel a bit more responsive
+    this.roomIdForCurrentAction = undefined;
+    if (
+      this.router.currentRoute.name === 'chat.room' &&
+      this.router.currentRoute.params.id === roomId
+    ) {
+      this.router.transitionTo('chat');
+    }
+  });
+
+  private doJoinRoom = restartableTask(async (roomId: string) => {
+    this.roomIdForCurrentAction = roomId;
+    await this.matrixService.client.joinRoom(roomId);
+    await timeout(eventDebounceMs); // this makes it feel a bit more responsive
+    this.roomIdForCurrentAction = undefined;
+  });
+}
+
+function niceName(userId: string): string {
+  return userId.split(':')[0].substring(1);
 }

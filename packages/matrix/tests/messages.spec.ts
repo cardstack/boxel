@@ -24,6 +24,7 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
     await createRoom(page, { name: 'Room 2' });
+    await page.locator(`[data-test-past-sessions-button]`).click();
     await openRoom(page, 'Room 1');
 
     await expect(page.locator('[data-test-timeline-start]')).toHaveCount(1);
@@ -50,10 +51,12 @@ test.describe('Room messages', () => {
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
     // make sure that room state doesn't leak
+    await page.locator(`[data-test-past-sessions-button]`).click();
     await openRoom(page, 'Room 2');
     await isInRoom(page, 'Room 2');
     await assertMessages(page, []);
 
+    await page.locator(`[data-test-past-sessions-button]`).click();
     await openRoom(page, 'Room 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
   });
@@ -64,7 +67,6 @@ test.describe('Room messages', () => {
       name: 'Room 1',
       invites: ['user2'],
     });
-    await openRoom(page, 'Room 1');
     await sendMessage(page, 'Room 1', 'first message');
     await logout(page);
 
@@ -118,7 +120,7 @@ test.describe('Room messages', () => {
     await openRoom(page, 'Room 1');
 
     let displayedMessageCount = await page
-      .locator('[data-test-message-idx]')
+      .locator('[data-test-message-index]')
       .count();
     expect(displayedMessageCount).toEqual(totalMessageCount);
   });
@@ -136,7 +138,7 @@ test.describe('Room messages', () => {
       },
     ]);
     await expect(
-      page.locator(`[data-test-message-idx="0"] .content em`),
+      page.locator(`[data-test-message-index="0"] .content em`),
     ).toContainText('style');
   });
 
@@ -187,7 +189,7 @@ test.describe('Room messages', () => {
       },
     ]);
     await expect(
-      page.locator(`[data-test-message-idx="0"] .content em`),
+      page.locator(`[data-test-message-index="0"] .content em`),
     ).toContainText('my');
   });
 
