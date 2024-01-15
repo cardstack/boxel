@@ -25,6 +25,8 @@ import { aiBotUsername } from '@cardstack/runtime-common';
 
 import RoomInput from '@cardstack/host/components/matrix/room-input';
 import RoomList from '@cardstack/host/components/matrix/room-list';
+import RoomMembers from '@cardstack/host/components/matrix/room-members';
+import RoomObjective from '@cardstack/host/components/matrix/room-objective';
 import ENV from '@cardstack/host/config/environment';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 
@@ -63,6 +65,17 @@ export default class AiAssistantPanel extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadRooms.perform();
+  }
+
+  @cached
+  private get memberNames() {
+    if (!this.room) {
+      return 'None';
+    }
+    return [
+      ...this.room.joinedMembers.map((m) => m.displayName),
+      ...this.room.invitedMembers.map((m) => `${m.displayName} (invited)`),
+    ].join(', ');
   }
 
   @action
@@ -228,7 +241,13 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       {{#if this.doCreateRoom.isRunning}}
         <LoadingIndicator />
-      {{else if this.room}}
+      {{else if this.currentRoomId}}
+        <hr />
+        <RoomMembers
+          @roomId={{this.currentRoomId}}
+          @memberNames={{this.memberNames}}
+        />
+        <hr />
         <AiAssistantConversation>
           <div class='notices'>
             <div data-test-timeline-start class='timeline-start'>
@@ -275,9 +294,8 @@ export default class AiAssistantPanel extends Component<Signature> {
             </div>
           {{/each}}
         </AiAssistantConversation>
-        {{#if this.currentRoomId}}
-          <RoomInput @roomId={{this.currentRoomId}} />
-        {{/if}}
+        <RoomObjective @roomId={{this.currentRoomId}} />
+        <RoomInput @roomId={{this.currentRoomId}} />
       {{/if}}
     </div>
     <style>
