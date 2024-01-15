@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "images": [
+        "https://i.etsystatic.com/16555624/r/il/9ee34f/4407428528/il_794xN.4407428528_nmcn.jpg",
+        "https://i.etsystatic.com/16555624/r/il/ccdf1c/4956749805/il_1140xN.4956749805_p8sh.jpg",
+        "https://i.etsystatic.com/16555624/r/il/235022/4956749015/il_1140xN.4956749015_t2ns.jpg",
+        "https://i.etsystatic.com/16555624/r/il/a8ebe7/4897680164/il_1140xN.4897680164_5r0c.jpg",
+        "https://i.etsystatic.com/16555624/r/il/a93d93/4897672816/il_1140xN.4897672816_mrfd.jpg"
+      ],
+      "unitPriceCents": 3440,
+      "usShippingCostCents": 850,
+      "leadTimeDays": 13,
+      "deliveryWindowDays": 20,
+      "isReturnable": true,
+      "details": "This tender hummingbird window hanging made of stained glass is a lovely decor for your home or garden as this cute green bird with flower will gladden your eye every day 😊 This marvellous work of hummingbird art can be hanged on a window and make you a bit happier by simply looking at it due to its beauty and vibrant colours 😍 Besides, this bird suncatcher could be hanged in the garden near a hummingbird feeder to attract birds’ attention 🐦 This adorable window hanging will be a unique gift for the loved ones 🎁\n\n!‼️ Please, note: this item is handcrafted - glass could slightly differ.\n\nThis stained glass item is made using L.C. Tiffany method of copper foil. During the process of manufacturing goods we use only the high quality materials, such as:\n\n* Stained Glass\n* Copper Foil\n* Tin\n* Stained Glass Paints\n\nEach stained glass decor is safely packaged into a box for delivering it to customer in excellent condition.",
+      "title": "Hummingbird stained glass window hangings",
+      "description": null
+    },
+    "relationships": {
+      "seller": {
+        "links": {
+          "self": "../Seller/dc28a198-e047-4d68-b45d-968c7bfc75f5"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

@@ -1,7 +1,5 @@
 import Service, { service } from '@ember/service';
 
-import { task } from 'ember-concurrency';
-
 import { stringify } from 'qs';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -54,13 +52,19 @@ export default class CardService extends Service {
   // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and SSE event.
   clientRequestIds = new Set<string>();
 
-  private getAPI = task(async (loader?: Loader) => {
+  loaderToCardAPILoadingCache = new WeakMap<Loader, Promise<typeof CardAPI>>();
+
+  async getAPI(loader?: Loader): Promise<typeof CardAPI> {
     loader = loader ?? this.loaderService.loader;
-    let api = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
-    );
-    return api;
-  });
+    if (!this.loaderToCardAPILoadingCache.has(loader)) {
+      let apiPromise = loader.import<typeof CardAPI>(
+        'https://cardstack.com/base/card-api',
+      );
+      this.loaderToCardAPILoadingCache.set(loader, apiPromise);
+      return apiPromise;
+    }
+    return this.loaderToCardAPILoadingCache.get(loader)!;
+  }
 
   // This is temporary until we have a better way of discovering the realms that
   // are available for a user // unresolved URLs
@@ -121,7 +125,7 @@ export default class CardService extends Service {
     loader?: Loader,
   ): Promise<CardDef> {
     loader = loader ?? this.loaderService.loader;
-    let api = await this.getAPI.perform(loader);
+    let api = await this.getAPI(loader);
     let card = await api.createFromSerialized(
       resource,
       doc,
@@ -145,7 +149,7 @@ export default class CardService extends Service {
     opts?: SerializeOpts,
     loader?: Loader,
   ): Promise<LooseSingleCardDocument> {
-    let api = await this.getAPI.perform(loader);
+    let api = await this.getAPI(loader);
     let serialized = api.serializeCard(card, opts);
     delete serialized.included;
     return serialized;
@@ -162,7 +166,7 @@ export default class CardService extends Service {
       cardChanged = true;
     }
     loader = loader ?? this.loaderService.loader;
-    let api = await this.getAPI.perform(loader);
+    let api = await this.getAPI(loader);
     try {
       api.subscribeToChanges(card, onCardChange);
       let doc = await this.serializeCard(card, {
@@ -258,7 +262,7 @@ export default class CardService extends Service {
     doc: LooseSingleCardDocument,
     loader?: Loader,
   ): Promise<CardDef | undefined> {
-    let api = await this.getAPI.perform(loader);
+    let api = await this.getAPI(loader);
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
@@ -292,7 +296,7 @@ export default class CardService extends Service {
     loader?: Loader,
   ): Promise<CardDef> {
     loader = loader ?? this.loaderService.loader;
-    let api = await this.getAPI.perform(loader);
+    let api = await this.getAPI(loader);
     let serialized = await this.serializeCard(source, {
       maybeRelativeURL: null, // forces URL's to be absolute.
     });
@@ -358,12 +362,12 @@ export default class CardService extends Service {
     cardOrField: BaseDef,
     loader?: Loader,
   ): Promise<{ [fieldName: string]: Field<typeof BaseDef> }> {
-    let api = await this.getAPI.perform(loader);
+    let api = await this.getAPI(loader);
     return api.getFields(cardOrField, { includeComputeds: true });
   }
 
   async isPrimitive(card: typeof FieldDef, loader?: Loader): Promise<boolean> {
-    let api = await this.getAPI.perform(loader);
+    let api = await this.getAPI(loader);
     return api.primitive in card;
   }
 
@@ -371,17 +375,17 @@ export default class CardService extends Service {
     card: CardDef,
     loader?: Loader,
   ): Promise<RealmInfo | undefined> {
-    let api = await this.getAPI.perform(loader);
+    let api = await this.getAPI(loader);
     return card[api.realmInfo];
   }
 
   async getRealmURL(card: CardDef, loader?: Loader): Promise<URL | undefined> {
-    let api = await this.getAPI.perform(loader);
+    let api = await this.getAPI(loader);
     return card[api.realmURL];
   }
 
   async cardsSettled(loader?: Loader) {
-    let api = await this.getAPI.perform(loader);
+    let api = await this.getAPI(loader);
     await api.flushLogs();
   }
 
