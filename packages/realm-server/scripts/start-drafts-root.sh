@@ -1,6 +1,6 @@
 #! /bin/sh
 
-NODE_NO_WARNINGS=1 REALM_SECRET_SEED="shhh! it's a secret" ts-node \
+NODE_NO_WARNINGS=1 REALM_SECRET_SEED="shhh! it's a secret" REALM_USER_PERMISSIONS="{}" ts-node \
   --transpileOnly main \
   --port=4204 \
   \

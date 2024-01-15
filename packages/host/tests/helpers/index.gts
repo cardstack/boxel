@@ -535,6 +535,7 @@ async function setupTestRealm({
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
+    permissions: { '*': ['read', 'write'] },
   });
   loader.prependURLHandlers([
     (req) => sourceFetchRedirectHandle(req, adapter, realmURL!),

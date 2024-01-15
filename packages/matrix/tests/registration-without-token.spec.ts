@@ -10,22 +10,19 @@ import {
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
-  setupMatrixOverride,
   openAiAssistant,
+  registerRealmUsers,
 } from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
   let synapse: SynapseInstance;
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async () => {
     synapse = await synapseStart({
       template: 'test-without-registration-token',
-      // user registration tests require a static synapse port in order for the
-      // link in the validation email to work
-      hostPort: 8009,
     });
     await smtpStart();
-    await setupMatrixOverride(page, synapse);
+    await registerRealmUsers(synapse);
   });
 
   test.afterEach(async () => {

@@ -1,6 +1,6 @@
 #! /bin/sh
 pnpm setup:base-assets
-NODE_ENV=development NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' REALM_SECRET_SEED="shhh! it's a secret" ts-node \
+NODE_ENV=development NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' REALM_SECRET_SEED="shhh! it's a secret" REALM_USER_PERMISSIONS="{}" ts-node \
   --transpileOnly main \
   --port=4201 \
   \

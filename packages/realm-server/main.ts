@@ -9,6 +9,7 @@ import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
+import RealmPermissions from './lib/realm-permissions';
 import fs from 'fs';
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
@@ -124,9 +125,12 @@ if (distURL) {
   dist = resolve(distDir);
 }
 
+let realmPermissions = new RealmPermissions();
+
 (async () => {
   let realms: Realm[] = [];
   for (let [i, path] of paths.entries()) {
+    let url = hrefs[i][0];
     let manager = new RunnerOptionsManager();
     let matrixURL = String(matrixURLs[i]);
     let username = String(usernames[i]);
@@ -135,10 +139,11 @@ if (distURL) {
       dist,
       manager.getOptions.bind(manager),
     );
+    let permissions = realmPermissions.permissionsForRealm(url);
     realms.push(
       new Realm(
         {
-          url: hrefs[i][0],
+          url,
           adapter: new NodeAdapter(resolve(String(path))),
           loader,
           indexRunner: getRunner,
@@ -147,6 +152,7 @@ if (distURL) {
             readFileSync(join(distPath, 'index.html')).toString(),
           matrix: { url: new URL(matrixURL), username, password },
           realmSecretSeed: REALM_SECRET_SEED,
+          permissions,
         },
         {
           deferStartUp: true,

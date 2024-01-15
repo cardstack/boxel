@@ -55,6 +55,7 @@ export async function createRealm(
     getIndexHTML: async () =>
       readFileSync(join(distPath, 'index.html')).toString(),
     matrix: testMatrix,
+    permissions: { '*': ['read', 'write'] },
   });
 }
 

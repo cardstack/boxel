@@ -1,8 +1,8 @@
 server_name: "localhost"
 pid_file: /data/homeserver.pid
-public_baseurl: "http://localhost:8009"
+public_baseurl: "http://localhost:8008"
 listeners:
-  - port: 8009
+  - port: 8008
     tls: false
     bind_addresses: ["::"]
     type: http

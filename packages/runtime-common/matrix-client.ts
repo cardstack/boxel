@@ -186,4 +186,39 @@ export class MatrixClient {
     };
     return json.chunk;
   }
+
+  async isTokenValid() {
+    if (!this.access) {
+      return false;
+    }
+    let userId = await this.whoami();
+    if (userId === this.access.userId) {
+      return true;
+    }
+    return false;
+  }
+
+  async whoami() {
+    if (!this.access) {
+      throw new Error(`Missing matrix access token`);
+    }
+    let response = await fetch(
+      `${this.matrixURL.href}_matrix/client/v3/account/whoami`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.access.accessToken}`,
+        },
+      },
+    );
+    let json = (await response.json()) as {
+      user_id: string;
+      device_id: string;
+    };
+    if (!response.ok) {
+      return undefined;
+    } else {
+      return json.user_id;
+    }
+  }
 }
