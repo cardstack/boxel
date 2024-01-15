@@ -26,7 +26,8 @@
     "register-realm-users": "./scripts/register-realm-users.sh",
     "register-test-admin": "ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-test-token": "pnpm run register-test-admin && ts-node --transpileOnly ./scripts/register-test-token.ts",
-    "test": "./scripts/test.sh",
+    "test": "./scripts/test.sh all",
+    "test:group": "./scripts/test.sh",
     "wait": "sleep 10000000",
     "lint": "glint"
   },

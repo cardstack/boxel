@@ -164,7 +164,7 @@ jobs:
         run: pnpm start:without-matrix &
         working-directory: packages/realm-server
       - name: Run Playwright tests
-        run: pnpm test group1
+        run: pnpm test:group group1
         working-directory: packages/matrix
       - uses: actions/upload-artifact@v3
         if: always()
@@ -197,7 +197,7 @@ jobs:
         run: pnpm start:without-matrix &
         working-directory: packages/realm-server
       - name: Run Playwright tests
-        run: pnpm test group2
+        run: pnpm test:group group2
         working-directory: packages/matrix
       - uses: actions/upload-artifact@v3
         if: always()
