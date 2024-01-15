@@ -20,9 +20,10 @@ module('user-permissions', function (_hooks) {
 
     let permissions = new RealmPermissions();
 
-    assert.throws(() => {
-      permissions.can('user_x', 'read', 'nonexistent realm');
-    }, /Realm nonexistent realm does not exist in the permissions config/);
+    // TODO For the time being realms without configs default to being wide open. we need to change
+    // this once we get our infra established for this
+    assert.ok(permissions.can('user_x', 'read', 'nonexistent realm'));
+    assert.ok(permissions.can('user_x', 'write', 'nonexistent realm'));
 
     assert.ok(
       permissions.can('any_user', 'read', 'https://cardstack.com/base/'),

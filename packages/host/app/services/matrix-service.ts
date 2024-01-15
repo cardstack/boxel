@@ -234,8 +234,13 @@ export default class MatrixService extends Service {
 
         // TODO this is a temporary measure to prove that we can obtain a realm session.
         // ultimately we need to figure out a better approach in terms of when/where we
-        // obtain sessions for realms that we care about.
-        await this.getRealmToken(new URL(ownRealmURL));
+        // obtain sessions for realms that we care about. wrapping this in an inner
+        // try/catch so token issues don't trigger a logout
+        try {
+          await this.getRealmToken(new URL(ownRealmURL));
+        } catch (tokenError) {
+          console.error(`could not obtain realm token`, tokenError);
+        }
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
@@ -314,22 +319,16 @@ export default class MatrixService extends Service {
         challenge,
       }),
     });
-    let jwtJSON = (await challengeResponse.json()) as { jwt: string };
     if (!challengeResponse.ok) {
       throw new Error(
         `Could not authenticate with realm ${realmURL.href} - ${
           challengeResponse.status
-        }: ${JSON.stringify(jwtJSON)}`,
+        }: ${JSON.stringify(await challengeResponse.json())}`,
       );
     }
-    let { jwt } = jwtJSON;
-    // let sessionStr = localStorage.getItem('boxel-session') ?? '{}';
-    // let session = JSON.parse(sessionStr);
-    // session[realmURL.href] = jwt;
-    this.sessionsService.setSession(realmURL, jwt);
-    // localStorage.setItem('boxel-session', JSON.stringify(session));
-
-    // TODO need to figure out what we want to do with the JWT
+    let token = challengeResponse.headers.get('Authorization');
+    console.log('token?', token);
+    this.sessionsService.setSession(realmURL, token);
   }
 
   async createRoom(
