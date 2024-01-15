@@ -6,6 +6,7 @@ import {
   type SynapseInstance,
 } from '../docker/synapse';
 import {
+  clearLocalStorage,
   assertLoggedIn,
   assertLoggedOut,
   login,
@@ -19,10 +20,11 @@ import {
 
 test.describe('Login', () => {
   let synapse: SynapseInstance;
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ page }) => {
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
+    await clearLocalStorage(page);
   });
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);

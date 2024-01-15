@@ -32,14 +32,14 @@ export default defineConfig({
     {
       name: 'group1',
       testMatch: new RegExp(
-        `.*(${group1.map((i) => i.replace(/\./i, '.')).join('|')})`,
+        `.*(${group1.map((i) => i.replace(/\./g, '\\.')).join('|')})`,
       ),
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'group2',
       testMatch: new RegExp(
-        `.*(${group2.map((i) => i.replace(/\./i, '.')).join('|')})`,
+        `.*(${group2.map((i) => i.replace(/\./g, '\\.')).join('|')})`,
       ),
       use: { ...devices['Desktop Chrome'] },
     },
