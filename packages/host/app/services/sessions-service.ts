@@ -73,20 +73,7 @@ export default class SessionsService extends Service {
     if (sessionsString) {
       try {
         this.realmURLToRawJWT = new TrackedMap(
-          JSON.parse(sessionsString).reduce(function (
-            sessions: RealmJWT[],
-            [realmUrl, rawToken]: [string, string],
-          ) {
-            try {
-              let url = new URL(realmUrl);
-              sessions.push({ realmURL: url.href, rawToken });
-            } catch (e) {
-              console.log(
-                `Ignoring non-URL session realm from storage: ${realmUrl}`,
-              );
-            }
-            return sessions;
-          }, []),
+          Object.entries(JSON.parse(sessionsString)),
         );
       } catch (e) {
         console.log('Error restoring sessions', e);
