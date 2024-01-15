@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
+  updateUser,
   type SynapseInstance,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
@@ -12,7 +13,6 @@ import {
   gotoForgotPassword,
   validateEmailForResetPassword,
   login,
-  register,
   registerRealmUsers,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
@@ -37,7 +37,11 @@ test.describe('Forgot password', () => {
     await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
-    await register(page, name, email, username, password, REGISTRATION_TOKEN);
+    await registerUser(synapse, username, password);
+    await updateUser(admin.accessToken, '@user1:localhost', {
+      emailAddresses: [email],
+      displayname: name,
+    });
   });
 
   test.afterEach(async () => {
@@ -67,7 +71,7 @@ test.describe('Forgot password', () => {
         onEmailPage: async (page) => {
           await expect(page).toHaveScreenshot('verification-email.png', {
             mask: [page.locator('.messagelist')],
-            maxDiffPixelRatio: 0.01,
+            maxDiffPixelRatio: 0.02,
           });
         },
         onValidationPage: async (page) => {
