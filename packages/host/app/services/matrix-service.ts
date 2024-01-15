@@ -45,6 +45,7 @@ import { importResource } from '../resources/import';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
+import type SessionsService from './sessions-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -62,6 +63,7 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare sessionsService: SessionsService;
   @tracked private _client: MatrixClient | undefined;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
@@ -245,21 +247,26 @@ export default class MatrixService extends Service {
     realmURL: URL,
   ): Promise<TokenClaims & { iat: number; exp: number }> {
     let tokenRefreshPeriod = 5 * 60; // 5 minutes
-    let tokens = JSON.parse(localStorage.getItem('boxel-session') ?? '{}') as {
-      [realm: string]: string;
-    };
-    let token = tokens[realmURL.href];
-    if (token) {
-      let [_header, payload] = token.split('.');
-      let claims = JSON.parse(atob(payload)) as TokenClaims & {
-        iat: number;
-        exp: number;
-      };
+    // let tokens = JSON.parse(localStorage.getItem('boxel-session') ?? '{}') as {
+    //   [realm: string]: string;
+    // };
+    // let token = tokens[realmURL.href];
+
+    if (this.sessionsService.currentJWT) {
+      console.log('jwt exists!');
+      let claims = this.sessionsService.currentJWT;
+      // let [_header, payload] = token.split('.');
+      // let claims = JSON.parse(atob(payload)) as TokenClaims & {
+      //   iat: number;
+      //   exp: number;
+      // };
+      console.log('claims', claims);
       let expiration = claims.exp;
       if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
         return claims;
       }
     }
+    console.log('no current JWT, creating one');
     await this.createRealmSession(realmURL);
     return await this.getRealmToken(realmURL);
   }
@@ -316,10 +323,11 @@ export default class MatrixService extends Service {
       );
     }
     let { jwt } = jwtJSON;
-    let sessionStr = localStorage.getItem('boxel-session') ?? '{}';
-    let session = JSON.parse(sessionStr);
-    session[realmURL.href] = jwt;
-    localStorage.setItem('boxel-session', JSON.stringify(session));
+    // let sessionStr = localStorage.getItem('boxel-session') ?? '{}';
+    // let session = JSON.parse(sessionStr);
+    // session[realmURL.href] = jwt;
+    this.sessionsService.setSession(realmURL, jwt);
+    // localStorage.setItem('boxel-session', JSON.stringify(session));
 
     // TODO need to figure out what we want to do with the JWT
   }
