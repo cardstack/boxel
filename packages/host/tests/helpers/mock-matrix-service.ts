@@ -142,6 +142,18 @@ export class MockMatrixService extends Service {
         membershipInitiator: '@testuser:staging',
       },
     });
+
+    addRoomEvent(this, {
+      event_id: 'eventinvite',
+      room_id: roomId,
+      type: 'm.room.member',
+      sender: '@testuser:staging',
+      state_key: '@aibot:localhost',
+      content: {
+        displayname: 'aibot',
+        membership: 'invite',
+      },
+    });
   }
 }
 

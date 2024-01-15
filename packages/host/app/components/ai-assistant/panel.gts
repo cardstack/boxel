@@ -15,7 +15,10 @@ import {
   Button,
   IconButton,
   LoadingIndicator,
+  FieldContainer,
+  BoxelInput,
 } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
@@ -35,6 +38,11 @@ import type {
 
 import { getRoom, RoomResource } from '../../resources/room';
 
+import ENV from '@cardstack/host/config/environment';
+
+const { matrixURL } = ENV;
+export const aiBotUserId = `@${aiBotUsername}:${new URL(matrixURL).hostname}`;
+
 interface Signature {
   Element: HTMLDivElement;
   Args: {
@@ -51,7 +59,9 @@ export default class AiAssistantPanel extends Component<Signature> {
             @kind='secondary-dark'
             @size='small'
             class='new-session-button'
-            {{on 'click' this.createNewSession}}
+            {{on 'click' this.displayCreateNew}}
+            data-test-create-room-mode-btn
+            data-test-create-new-session-button
           >
             New Session
           </Button>
@@ -81,6 +91,37 @@ export default class AiAssistantPanel extends Component<Signature> {
           />
         </div>
 
+        {{#if this.isShowingCreateNew}}
+          <div class='create-room'>
+            <FieldContainer
+              @label='Room Name'
+              @tag='label'
+              class='create-room__field'
+            >
+              <BoxelInput
+                @state={{this.roomNameInputState}}
+                @value={{this.newRoomName}}
+                @errorMessage={{this.roomNameError}}
+                @onInput={{this.setNewRoomName}}
+                data-test-room-name-field
+              />
+            </FieldContainer>
+          </div>
+          <div class='create-button-wrapper'>
+            <Button
+              @kind='secondary-dark'
+              {{on 'click' this.resetCreateRoom}}
+              data-test-create-room-cancel-btn
+            >Cancel</Button>
+            <Button
+              @kind='primary'
+              @disabled={{not this.newRoomName.length}}
+              {{on 'click' this.createNewSession}}
+              data-test-create-room-btn
+            >Create</Button>
+          </div>
+        {{/if}}
+
         {{#if this.isShowingPastSessions}}
           <RoomList
             @rooms={{this.sortedAiSessionRooms}}
@@ -89,11 +130,13 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{/if}}
       </header>
 
-      {{#if this.doCreateRoom.isRunning}}
-        <LoadingIndicator />
-      {{else if this.currentRoomId}}
-        <Room @roomId={{this.currentRoomId}} />
-      {{/if}}
+      {{#unless this.isShowingCreateNew}}
+        {{#if this.doCreateRoom.isRunning}}
+          <LoadingIndicator />
+        {{else if this.currentRoomId}}
+          <Room @roomId={{this.currentRoomId}} />
+        {{/if}}
+      {{/unless}}
     </div>
 
     <style>
@@ -117,6 +160,17 @@ export default class AiAssistantPanel extends Component<Signature> {
         --icon-color: var(--boxel-highlight);
         margin-left: auto;
       }
+      .create-room {
+        padding: var(--boxel-sp);
+      }
+      .create-room :deep(.boxel-label) {
+        color: var(--boxel-light);
+      }
+      .create-button-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
+      }
     </style>
   </template>
 
@@ -126,7 +180,8 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private newRoomInvite: string[] = [];
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = true;
-  // @ts-ignore (glint is not recognizing that this variable is being used when set to private)
+  @tracked private isShowingCreateNew = false;
+  @tracked private newRoomName: string = this.newRoomAutoName;
   @tracked private roomNameError: string | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -152,25 +207,41 @@ export default class AiAssistantPanel extends Component<Signature> {
     await Promise.all([...this.roomResources.values()].map((r) => r.loading));
   });
 
-  @action
-  private createNewSession() {
-    let newRoomName = `${format(
-      new Date(),
-      "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
-    )} - ${this.matrixService.userId}`;
-    this.newRoomInvite = [aiBotUsername];
-    this.doCreateRoom.perform(newRoomName);
+  @action private displayCreateNew() {
+    this.isShowingCreateNew = true;
   }
 
-  private doCreateRoom = restartableTask(async (roomName: string) => {
-    if (!roomName) {
+  private get roomNameInputState() {
+    return this.roomNameError ? 'invalid' : 'initial';
+  }
+
+  private get newRoomAutoName() {
+    return `${format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")} - ${
+      this.matrixService.userId
+    }`;
+  }
+
+  @action
+  private setNewRoomName(name: string) {
+    this.newRoomName = name;
+    this.roomNameError = undefined;
+  }
+
+  @action
+  private createNewSession() {
+    this.newRoomInvite = [aiBotUsername];
+    this.doCreateRoom.perform();
+  }
+
+  private doCreateRoom = restartableTask(async () => {
+    if (!this.newRoomName) {
       throw new Error(
         `bug: should never get here, create button is disabled when there is no new room name`,
       );
     }
     try {
       let newRoomId = await this.matrixService.createRoom(
-        roomName,
+        this.newRoomName,
         this.newRoomInvite,
       );
       this.enterRoom(newRoomId);
@@ -181,7 +252,13 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       throw e;
     }
+    this.resetCreateRoom();
   });
+
+  private resetCreateRoom() {
+    this.newRoomName = '';
+    this.isShowingCreateNew = false;
+  }
 
   @action
   togglePastSessions() {
@@ -195,15 +272,14 @@ export default class AiAssistantPanel extends Component<Signature> {
       if (!resource.room) {
         continue;
       }
-      // TODO: resolve missing aibot member id in tests
-      // if (resource.room.roomMembers.find((m) => aiBotUserId === m.userId)) {
-      let roomMember = resource.room.joinedMembers.find(
-        (m) => this.matrixService.userId === m.userId,
-      );
-      if (roomMember) {
-        rooms.push({ room: resource.room, member: roomMember });
+      if (resource.room.roomMembers.find((m) => aiBotUserId === m.userId)) {
+        let roomMember = resource.room.joinedMembers.find(
+          (m) => this.matrixService.userId === m.userId,
+        );
+        if (roomMember) {
+          rooms.push({ room: resource.room, member: roomMember });
+        }
       }
-      // }
     }
     return rooms;
   }

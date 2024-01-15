@@ -688,6 +688,7 @@ module('Integration | operator-mode', function (hooks) {
       state_key: 'state',
       type: 'm.room.message',
       origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
       content: {
         body: 'i am the body',
         msgtype: 'org.boxel.command',
@@ -743,6 +744,7 @@ module('Integration | operator-mode', function (hooks) {
       state_key: 'state',
       type: 'm.room.message',
       origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
       content: {
         body: 'i am the body',
         msgtype: 'org.boxel.command',

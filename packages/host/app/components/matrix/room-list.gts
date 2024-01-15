@@ -10,7 +10,7 @@ interface Signature {
 }
 
 const RoomList: TemplateOnlyComponent<Signature> = <template>
-  <ul class='room-list'>
+  <ul class='room-list' data-test-rooms-list>
     {{#each @rooms as |room|}}
       <li class='room-item' data-test-joined-room={{room.name}}>
         <button
