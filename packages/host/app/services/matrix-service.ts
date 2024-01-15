@@ -328,7 +328,12 @@ export default class MatrixService extends Service {
     }
     let token = challengeResponse.headers.get('Authorization');
     console.log('token?', token);
-    this.sessionsService.setSession(realmURL, token);
+
+    if (token) {
+      this.sessionsService.setSession(realmURL, token);
+    } else {
+      this.sessionsService.clearSession(realmURL);
+    }
   }
 
   async createRoom(
