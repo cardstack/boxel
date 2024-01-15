@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "images": [
+        "https://i.etsystatic.com/11651126/r/il/8a1854/4271282645/il_1588xN.4271282645_d35m.jpg",
+        "https://i.etsystatic.com/11651126/r/il/2e5686/4223621734/il_1588xN.4223621734_17qx.jpg",
+        "https://i.etsystatic.com/11651126/r/il/fe1115/4223621718/il_1588xN.4223621718_tizf.jpg",
+        "https://i.etsystatic.com/11651126/r/il/fce17f/4223621812/il_1588xN.4223621812_hy7b.jpg",
+        "https://i.etsystatic.com/11651126/r/il/06bf3d/4271279657/il_1588xN.4271279657_qfzy.jpg",
+        "https://i.etsystatic.com/11651126/r/il/4bfeaa/3556279056/il_1588xN.3556279056_gtc2.jpg"
+      ],
+      "unitPriceCents": 12454,
+      "usShippingCostCents": 0,
+      "leadTimeDays": 7,
+      "deliveryWindowDays": 3,
+      "isReturnable": true,
+      "details": "Men’s linen pajama set leaves your body feeling nothing but comfort while you sleep. Linen fabric is known for its natural breathability and moisture-wicking qualities, and it feels super soft on your skin. This linen pajama set includes a long-sleeve top that has a front button closure and long pants with an adjustable waistline.\n\nDetails:\n\n* Loose fit\n* Waist adjustable with drawstrings\n* Front closure with buttons\n* Lightweight linen (approx. 135 gsm)\n* Model is wearing size M and is 5'9\" (180 cm)\n\nFabrics & care:\n\n* OEKO-TEX certified (2019OK0776)\n* Made from 100% European flax\n* Stone washed for maximum softness\n* Machine washable\n",
+      "reviewsCount": 23274,
+      "reviewsAverage": 4.5,
+      "title": "Men's linen pajama set VIGO",
+      "description": null
+    },
+    "relationships": {
+      "seller": {
+        "links": {
+          "self": "../Seller/1d6caa4a-92f6-4b39-b831-bd466a2f962e"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

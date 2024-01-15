@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "images": [
+        "https://i.etsystatic.com/39837875/r/il/b458dc/4902254774/il_794xN.4902254774_hzf8.jpg",
+        "https://i.etsystatic.com/39837875/r/il/b62b08/4642226673/il_794xN.4642226673_edpy.jpg",
+        "https://i.etsystatic.com/39837875/r/il/b4b626/4593983984/il_794xN.4593983984_dtsw.jpg",
+        "https://i.etsystatic.com/39837875/r/il/b6fa16/4642262485/il_794xN.4642262485_m9qh.jpg",
+        "https://i.etsystatic.com/39837875/r/il/39f782/4594019308/il_794xN.4594019308_gx5u.jpg",
+        "https://i.etsystatic.com/39837875/r/il/a99508/4642267017/il_794xN.4642267017_et2z.jpg",
+        "https://i.etsystatic.com/39837875/r/il/f9cc89/5588274509/il_794xN.5588274509_3l0i.jpg"
+      ],
+      "unitPriceCents": 2486,
+      "usShippingCostCents": 748,
+      "leadTimeDays": 2,
+      "deliveryWindowDays": 11,
+      "isReturnable": false,
+      "details": "Premium Quality Personalized Laser Engraving.\n\nHeavy Base Rock Whiskey glass, 11 oz.\n\nHandMade Laser Etched and Personalized. \n\nDishwasher safe.\n\nGreat Gift For Any Special Occasion.\n\n",
+      "reviewsCount": 4401,
+      "reviewsAverage": 4.88,
+      "title": "Custom Whiskey Glass with premium quality side and bottom engraving",
+      "description": null
+    },
+    "relationships": {
+      "seller": {
+        "links": {
+          "self": "../Seller/16eb2270-4a77-4d2e-85cf-302d1a5ae467"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

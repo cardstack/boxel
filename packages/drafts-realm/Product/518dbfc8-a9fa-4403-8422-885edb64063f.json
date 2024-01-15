@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "images": [
+        "https://i.etsystatic.com/24503655/r/il/26b64c/2537115502/il_794xN.2537115502_l5au.jpg",
+        "https://i.etsystatic.com/24503655/r/il/016c07/2592289458/il_794xN.2592289458_bnh2.jpg",
+        "https://i.etsystatic.com/24503655/r/il/6d3e74/2493387386/il_794xN.2493387386_fwr7.jpg",
+        "https://i.etsystatic.com/24503655/r/il/6d3e74/2493387386/il_794xN.2493387386_fwr7.jpg",
+        "https://i.etsystatic.com/24503655/r/il/43ea3a/2541041993/il_794xN.2541041993_1yzc.jpg"
+      ],
+      "unitPriceCents": 899,
+      "usShippingCostCents": 400,
+      "leadTimeDays": 2,
+      "deliveryWindowDays": 10,
+      "isReturnable": false,
+      "details": "Keep your hands germ-free while you’re on the go with our refillable vegan leather handsanitizer carrier.\n\nSimply attach it to your purse or key chain.\n\n* Vegan Leather\n* Convenient Keychain Clip\n* Handy Wrist strap\n* Includes a 1 oz Refillable Bottle\n\nHand Sanitizer Keychain and 1 oz. Bottle\n\nNever find yourself without your favorite lotion, hand sanitizer, or soap when you need it the most.\n\nSix Feet Away’s unique design makes it easy to carry your favorite hand sanitizer or lotion. Fill our leak proof 1 oz bottle with hand sanitizer, alcohol gel,or your favorite product and attach it to your keys, bag, purse, or back-pack.\n\nNOTE: The Refillable Bottle is sent Empty",
+      "reviewsCount": 852,
+      "reviewsAverage": 4.97,
+      "title": "Hand Sanitizer Holder Keychain",
+      "description": null
+    },
+    "relationships": {
+      "seller": {
+        "links": {
+          "self": "../Seller/6ed2258d-f760-4d94-b0e6-48a5f5a37c3d"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}
