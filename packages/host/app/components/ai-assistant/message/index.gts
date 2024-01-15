@@ -177,6 +177,7 @@ export class AiAssistantConversation extends Component<AiAssistantConversationSi
     <style>
       .ai-assistant-conversation {
         padding: var(--boxel-sp);
+        overflow-y: auto;
       }
     </style>
   </template>

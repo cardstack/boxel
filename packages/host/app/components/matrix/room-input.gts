@@ -1,8 +1,6 @@
 import { Input } from '@ember/component';
-import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { guidFor } from '@ember/object/internals';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -16,34 +14,30 @@ import { not, and } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-
-import { getRoom } from '../../resources/room';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface RoomArgs {
   Args: {
     roomId: string;
+    roomName?: string;
   };
 }
 
 export default class RoomInput extends Component<RoomArgs> {
-  helperId = guidFor(this);
-
   <template>
     <div class='send-message'>
       <BoxelInput
-        data-test-message-field={{this.room.name}}
         type='text'
         @type='textarea'
         @value={{this.messageToSend}}
         @onInput={{this.setMessage}}
         rows='4'
         cols='20'
+        data-test-message-field={{@roomName}}
       />
 
       {{#if this.cardtoSend}}
@@ -65,20 +59,19 @@ export default class RoomInput extends Component<RoomArgs> {
         </Button>
       {{else}}
         <Button
-          data-test-choose-card-btn
           @kind='secondary-dark'
-          @disabled={{this.doChooseCard.isRunning}}
           {{on 'click' this.chooseCard}}
+          @disabled={{this.doChooseCard.isRunning}}
+          data-test-choose-card-btn
         >
           Choose Card
         </Button>
 
         <label>
           <Input
-            id={{(concat 'helper-text-' this.helperId)}}
-            data-test-share-context
             @type='checkbox'
             @checked={{this.shareCurrentContext}}
+            data-test-share-context
           />
           Allow access to the cards you can see at the top of your stacks
         </label>
@@ -101,7 +94,6 @@ export default class RoomInput extends Component<RoomArgs> {
         justify-content: right;
         flex-wrap: wrap;
         row-gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp);
       }
 
       .send-message button,
@@ -133,7 +125,6 @@ export default class RoomInput extends Component<RoomArgs> {
   </template>
 
   @service private declare matrixService: MatrixService;
-  @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   private shareCurrentContext = false;
@@ -141,11 +132,6 @@ export default class RoomInput extends Component<RoomArgs> {
     new TrackedMap();
   private cardsToSend: TrackedMap<string, CardDef | undefined> =
     new TrackedMap();
-  private roomResource = getRoom(this, () => this.args.roomId);
-
-  private get room() {
-    return this.roomResource.room;
-  }
 
   private get messageToSend() {
     return this.messagesToSend.get(this.args.roomId);

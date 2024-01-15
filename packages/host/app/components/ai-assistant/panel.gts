@@ -1,9 +1,7 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
@@ -18,16 +16,13 @@ import {
   IconButton,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
-import RoomInput from '@cardstack/host/components/matrix/room-input';
+import Room from '@cardstack/host/components/matrix/room';
 import RoomList from '@cardstack/host/components/matrix/room-list';
-import RoomMembers from '@cardstack/host/components/matrix/room-members';
-import RoomObjective from '@cardstack/host/components/matrix/room-objective';
-import ENV from '@cardstack/host/config/environment';
+
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -39,12 +34,6 @@ import type {
 } from 'https://cardstack.com/base/room';
 
 import { getRoom, RoomResource } from '../../resources/room';
-import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
-
-import AiAssistantMessage, { AiAssistantConversation } from './message';
-
-const { matrixURL } = ENV;
-const aiBotUserId = `@${aiBotUsername}:${new URL(matrixURL).hostname}`;
 
 interface Signature {
   Element: HTMLDivElement;
@@ -57,111 +46,65 @@ export default class AiAssistantPanel extends Component<Signature> {
   <template>
     <div class='ai-assistant-panel' data-test-ai-assistant-panel ...attributes>
       <header>
-        <Button
-          @kind='secondary-dark'
-          @size='small'
-          class='new-session-button'
-          {{on 'click' this.createNewSession}}
-        >
-          New Session
-        </Button>
-
-        {{#if this.loadRooms.isRunning}}
-          <LoadingIndicator />
-        {{else}}
+        <div class='header-buttons'>
           <Button
             @kind='secondary-dark'
             @size='small'
-            {{on 'click' this.togglePastSessions}}
-            data-test-past-sessions-button
+            class='new-session-button'
+            {{on 'click' this.createNewSession}}
           >
-            Past Sessions
+            New Session
           </Button>
+
+          {{#if this.loadRooms.isRunning}}
+            <LoadingIndicator />
+          {{else}}
+            <Button
+              @kind='secondary-dark'
+              @size='small'
+              {{on 'click' this.togglePastSessions}}
+              data-test-past-sessions-button
+            >
+              Past Sessions
+            </Button>
+          {{/if}}
+
+          <IconButton
+            @variant='primary'
+            @icon={{IconX}}
+            @width='20px'
+            @height='20px'
+            class='close-ai-panel'
+            {{on 'click' @onClose}}
+            aria-label='Remove'
+            data-test-close-ai-panel
+          />
+        </div>
+
+        {{#if this.isShowingPastSessions}}
+          <RoomList
+            @rooms={{this.sortedAiSessionRooms}}
+            @enterRoom={{this.enterRoom}}
+          />
         {{/if}}
-
-        <IconButton
-          @variant='primary'
-          @icon={{IconX}}
-          @width='20px'
-          @height='20px'
-          class='close-ai-panel'
-          {{on 'click' @onClose}}
-          aria-label='Remove'
-          data-test-close-ai-panel
-        />
       </header>
-
-      {{#if this.isShowingPastSessions}}
-        <RoomList
-          @rooms={{this.sortedAiSessionRooms}}
-          @enterRoom={{this.enterRoom}}
-        />
-      {{/if}}
 
       {{#if this.doCreateRoom.isRunning}}
         <LoadingIndicator />
       {{else if this.currentRoomId}}
-        <hr />
-        <RoomMembers
-          @roomId={{this.currentRoomId}}
-          @memberNames={{this.memberNames}}
-        />
-        <hr />
-        <AiAssistantConversation>
-          <div class='timeline-start' data-test-timeline-start>
-            - Beginning of conversation -
-          </div>
-          {{#each this.messageCardComponents as |Message|}}
-            <AiAssistantMessage
-              @formattedMessage={{htmlSafe Message.card.formattedMessage}}
-              @datetime={{Message.card.created}}
-              @isFromAssistant={{eq Message.card.author.userId aiBotUserId}}
-              @profileAvatar={{component
-                ProfileAvatarIcon
-                userId=Message.card.author.userId
-              }}
-            >
-              {{#if Message.card.attachedCardId}}
-                <Message.component />
-              {{/if}}
-            </AiAssistantMessage>
-            {{#if (eq Message.card.command.commandType 'patch')}}
-              <div
-                data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
-              >
-                {{#let Message.card.command.payload as |payload|}}
-                  <Button
-                    @kind='secondary-dark'
-                    data-test-command-apply
-                    {{on
-                      'click'
-                      (fn this.patchCard payload.id payload.patch.attributes)
-                    }}
-                    @loading={{this.operatorModeStateService.patchCard.isRunning}}
-                    @disabled={{this.operatorModeStateService.patchCard.isRunning}}
-                  >
-                    Apply
-                  </Button>
-                {{/let}}
-              </div>
-            {{/if}}
-          {{else}}
-            <div data-test-no-messages>
-              (No messages)
-            </div>
-          {{/each}}
-        </AiAssistantConversation>
-        <RoomObjective @roomId={{this.currentRoomId}} />
-        <RoomInput @roomId={{this.currentRoomId}} />
+        <Room @roomId={{this.currentRoomId}} />
       {{/if}}
     </div>
+
     <style>
       .ai-assistant-panel {
+        display: grid;
+        grid-template-rows: auto 1fr;
         background-color: var(--boxel-ai-purple);
         border: none;
         color: var(--boxel-light);
       }
-      header {
+      .header-buttons {
         align-items: center;
         display: flex;
         padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
@@ -174,14 +117,8 @@ export default class AiAssistantPanel extends Component<Signature> {
         --icon-color: var(--boxel-highlight);
         margin-left: auto;
       }
-
-      .timeline-start {
-        padding-bottom: var(--boxel-sp);
-      }
     </style>
   </template>
-
-  private roomResource = getRoom(this, () => this.currentRoomId);
 
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -214,10 +151,6 @@ export default class AiAssistantPanel extends Component<Signature> {
     await this.matrixService.flushTimeline;
     await Promise.all([...this.roomResources.values()].map((r) => r.loading));
   });
-
-  private get room() {
-    return this.roomResource.room;
-  }
 
   @action
   private createNewSession() {
@@ -294,33 +227,4 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.currentRoomId = roomId;
     this.isShowingPastSessions = false;
   }
-
-  @cached
-  private get memberNames() {
-    if (!this.room) {
-      return 'None';
-    }
-    return [
-      ...this.room.joinedMembers.map((m) => m.displayName),
-      ...this.room.invitedMembers.map((m) => `${m.displayName} (invited)`),
-    ].join(', ');
-  }
-
-  private get messageCardComponents() {
-    return this.room
-      ? this.room.messages.map((messageCard) => {
-          return {
-            component: messageCard.constructor.getComponent(
-              messageCard,
-              'embedded',
-            ),
-            card: messageCard,
-          };
-        })
-      : [];
-  }
-
-  private patchCard = (cardId: string, attributes: any) => {
-    this.operatorModeStateService.patchCard.perform(cardId, attributes);
-  };
 }

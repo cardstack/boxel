@@ -74,9 +74,6 @@ export default class RoomMembers extends Component<Signature> {
     </section>
 
     <style>
-      .room-members {
-        padding: var(--boxel-sp);
-      }
       .member-names {
         margin-bottom: var(--boxel-sp);
         display: flex;
