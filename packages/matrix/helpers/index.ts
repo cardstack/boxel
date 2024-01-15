@@ -1,9 +1,5 @@
-import { expect, type Page, test as base } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
+import { expect, type Page } from '@playwright/test';
+import { type SynapseInstance } from '../docker/synapse';
 import { registerUser } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
@@ -17,53 +13,12 @@ interface LoginOptions {
   expectFailure?: true;
 }
 
-export const test = base.extend<{ synapse: SynapseInstance }>({
-  // eslint-disable-next-line no-empty-pattern
-  synapse: async ({}, use) => {
-    let synapseInstance = await synapseStart();
-    await use(synapseInstance);
-    await synapseStop(synapseInstance.synapseId);
-  },
-
-  page: async ({ page, synapse }, use) => {
-    // Setup overrides
-    await setupMatrixOverride(page, synapse);
-    await use(page);
-  },
-});
-
 export async function registerRealmUsers(synapse: SynapseInstance) {
   await registerUser(synapse, 'base_realm', 'password');
   await registerUser(synapse, 'drafts_realm', 'password');
   await registerUser(synapse, 'published_realm', 'password');
-}
-
-export async function setupMatrixOverride(
-  page: Page,
-  synapse: SynapseInstance,
-) {
-  // Save the original goto function keeping mind this override function may be
-  // called more than once
-  const originalGoto = (page as any).originalGoto ?? page.goto.bind(page);
-  (page as any).originalGoto = originalGoto;
-
-  // Patch the goto function
-  page.goto = async (url, options) => {
-    const newUrl = new URL(url);
-    const params = new URLSearchParams(newUrl.search);
-
-    // Override the matrixURL
-    params.set('matrixURL', `http://localhost:${synapse.mappedPort}`);
-    newUrl.search = params.toString();
-
-    // Call the original goto function with the new URL
-    return await originalGoto(newUrl.href, options);
-  };
-
-  // Patch the reload function
-  page.reload = async (options) => {
-    return await page.goto(page.url(), options);
-  };
+  await registerUser(synapse, 'test_realm', 'password');
+  await registerUser(synapse, 'node-test_realm', 'password');
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {

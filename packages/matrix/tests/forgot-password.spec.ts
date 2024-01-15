@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
@@ -8,8 +8,6 @@ import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   clearLocalStorage,
   assertLoggedIn,
-  test,
-  setupMatrixOverride,
   gotoRegistration,
   gotoForgotPassword,
   validateEmailForResetPassword,
@@ -28,22 +26,14 @@ const password = 'mypassword1!';
 test.describe('Forgot password', () => {
   let synapse: SynapseInstance;
 
-  test.beforeEach(async ({ page, synapse }) => {
+  test.beforeEach(async ({ page }) => {
     synapse = await synapseStart({
       template: 'test',
-      // user registration tests require a static synapse port in order for the
-      // link in the validation email to work
-      hostPort: 8008,
     });
     await smtpStart();
-    await setupMatrixOverride(page, synapse);
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(
-      synapse,
-      admin.accessToken,
-      REGISTRATION_TOKEN,
-    );
+    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);

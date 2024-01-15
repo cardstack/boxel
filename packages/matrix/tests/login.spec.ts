@@ -1,5 +1,10 @@
-import { expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { registerUser } from '../docker/synapse';
+import {
+  synapseStart,
+  synapseStop,
+  type SynapseInstance,
+} from '../docker/synapse';
 import {
   assertLoggedIn,
   assertLoggedOut,
@@ -10,13 +15,17 @@ import {
   reloadAndOpenAiAssistant,
   toggleOperatorMode,
   registerRealmUsers,
-  test,
 } from '../helpers';
 
 test.describe('Login', () => {
-  test.beforeEach(async ({ synapse }) => {
+  let synapse: SynapseInstance;
+  test.beforeEach(async () => {
+    let synapse = await synapseStart();
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
+  });
+  test.afterEach(async () => {
+    await synapseStop(synapse.synapseId);
   });
 
   test('it can login', async ({ page }) => {

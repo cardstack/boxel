@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
@@ -9,8 +9,6 @@ import {
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   login,
-  test,
-  setupMatrixOverride,
   validateEmail,
   assertLoggedOut,
   assertLoggedIn,
@@ -20,24 +18,20 @@ import {
 
 test.describe('Profile', () => {
   let synapse: SynapseInstance;
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async () => {
     synapse = await synapseStart({
       template: 'test',
-      // email update tests require a static synapse port in order for the
-      // link in the validation email to work
-      hostPort: 8008,
     });
     await smtpStart();
-    await setupMatrixOverride(page, synapse);
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user0', 'pass');
-    await updateUser(synapse, admin.accessToken, '@user1:localhost', {
+    await updateUser(admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@localhost'],
     });
-    await updateUser(synapse, admin.accessToken, '@user0:localhost', {
+    await updateUser(admin.accessToken, '@user0:localhost', {
       emailAddresses: ['user0@localhost'],
     });
   });

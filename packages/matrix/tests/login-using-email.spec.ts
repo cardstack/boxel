@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
@@ -9,8 +9,6 @@ import {
   clearLocalStorage,
   gotoRegistration,
   assertLoggedIn,
-  test,
-  setupMatrixOverride,
   register,
   openAiAssistant,
   registerRealmUsers,
@@ -25,19 +23,11 @@ test.describe('Login using email', () => {
   test.beforeEach(async ({ page }) => {
     synapse = await synapseStart({
       template: 'test',
-      // user registration tests require a static synapse port in order for the
-      // link in the validation email to work
-      hostPort: 8008,
     });
     await smtpStart();
-    await setupMatrixOverride(page, synapse);
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(
-      synapse,
-      admin.accessToken,
-      REGISTRATION_TOKEN,
-    );
+    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
