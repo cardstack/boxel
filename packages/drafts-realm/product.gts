@@ -9,12 +9,11 @@ import {
   contains,
   containsMany,
   StringField,
+  FieldsTypeFor,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
-// @ts-ignore TS1206: Decorators are not valid here.
 import { tracked } from '@glimmer/tracking';
-// @ts-ignore TS1206: Decorators are not valid here.
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -32,16 +31,7 @@ export function formatUsd(val: number | undefined) {
   return usdFormatter.format(val / 100);
 }
 
-const numberFormatter = new Intl.NumberFormat('en-US');
-
-export function formatNumber(val: number | undefined) {
-  if (val === undefined) {
-    return '';
-  }
-  return numberFormatter.format(val);
-}
-
-function expectedArrivalDescription(
+export function expectedArrivalDescription(
   leadTimeDays: number,
   deliveryWindowDays: number,
 ) {
@@ -130,7 +120,7 @@ interface ProductImagesSignature {
   };
 }
 
-class ProductImages extends GlimmerComponent<ProductImagesSignature> {
+export class ProductImages extends GlimmerComponent<ProductImagesSignature> {
   <template>
     <div ...attributes>
       <img class='main' src={{@activeImage}} />
@@ -188,47 +178,148 @@ class ProductImages extends GlimmerComponent<ProductImagesSignature> {
   </template>
 }
 
-interface StarRatingSignature {
+interface ProductDetailSignature {
   Element: HTMLDivElement;
   Args: {
-    value: number | undefined;
+    model: Partial<Product>;
+    fields: FieldsTypeFor<Product>;
   };
 }
 
-class StarRating extends GlimmerComponent<StarRatingSignature> {
-  get rating() {
-    return this.args.value || 0;
+export class ProductDetail extends GlimmerComponent<ProductDetailSignature> {
+  get leadTimeDays() {
+    return this.args.model.leadTimeDays || 0;
   }
-  maxRating = 5;
-  fullClassNames = 'star-full';
-  emptyClassNames = 'star-empty';
 
-  get stars() {
-    let rating = Math.round(this.rating);
-    let starsArray = [];
-    for (let i = 1; i <= this.maxRating; i++) {
-      starsArray.push({ rating: i, full: rating >= i });
-    }
-    return starsArray;
+  get deliveryWindowDays() {
+    return this.args.model.deliveryWindowDays || 0;
   }
+
   <template>
-    <div class='StarRating' ...attributes>
-      {{#each this.stars as |star|}}
-        <button
-          class={{cn
-            'star'
-            (if star.full this.fullClassNames this.emptyClassNames)
+    <div ...attributes>
+      <h2>Item Details</h2>
+      <div class='details'>
+        <@fields.details />
+      </div>
+      <h2>Shipping and return policies</h2>
+      <div class='policies'>
+        <div>
+          🗓️ Order today, get by
+          {{expectedArrivalDescription
+            this.leadTimeDays
+            this.deliveryWindowDays
           }}
-          type='button'
-        >{{if star.full '★' '☆'}}</button>
-      {{/each}}
+        </div>
+        {{#if @model.isReturnable}}
+          <div>
+            ⮐ Free returns within 30 days
+          </div>
+        {{else}}
+          <div>⮐ Returns &amp; exchanges not accepted</div>
+        {{/if}}
+        <div>
+          {{#if (eq @model.usShippingCostCents 0)}}
+            🚚 Free shipping
+          {{else}}
+            🚚 Cost to ship:
+            {{formatUsd @model.usShippingCostCents}}
+          {{/if}}
+        </div>
+      </div>
     </div>
     <style>
-      .star {
-        color: inherit;
+      h2 {
+        margin-top: 0;
+        font-size: 1.1em;
+      }
+      .policies {
+        line-height: 2;
+      }
+    </style>
+  </template>
+}
+
+class Isolated extends Component<typeof Product> {
+  @tracked activeImage = this.args.model.images?.[0];
+
+  @action updateActiveImage(image: string) {
+    this.activeImage = image;
+  }
+
+  <template>
+    <div class='product'>
+      <div class='decorative-header'></div>
+      <div class='left-container'>
+        <ProductImages
+          @images={{@model.images}}
+          @activeImage={{this.activeImage}}
+          @onSelectImage={{this.updateActiveImage}}
+          class='images'
+        />
+        <ProductDetail
+          @model={{@model}}
+          @fields={{@fields}}
+          class='details-container'
+        />
+      </div>
+      <div class='right-container'>
+        <div class='seller-container'>
+          <span class='seller'>
+            {{@model.seller.title}}
+          </span>
+        </div>
+        <h1 class='title'>{{@model.title}}</h1>
+        <div class='price'>{{formatUsd @model.unitPriceCents}}</div>
+        <button>
+          Add to cart
+        </button>
+      </div>
+    </div>
+    <style>
+      .product {
+        display: grid;
+        grid-template-columns: 50% 50%;
+        width: 100%;
+      }
+      .decorative-header {
+        background-image: url(https://i.imgur.com/PQuDAEo.jpg);
+        height: var(--boxel-sp-xxl);
+        grid-column: 1 / span 2;
+        margin-bottom: var(--boxel-sp);
+      }
+      .images {
+        margin: 0 var(--boxel-sp);
+      }
+      .details-container {
+        background: var(--boxel-200);
+        border-radius: 16px;
+        margin: var(--boxel-sp);
+        padding: var(--boxel-sp);
+      }
+      .seller {
+        font-size: 1.1em;
+        margin-right: var(--boxel-sp);
+      }
+      .title,
+      .price {
+        font-size: 1.8em;
+        font-weight: 600;
+      }
+      .price {
+        color: green;
+      }
+      button {
+        margin-top: 10px;
+        border-radius: 20px;
+        background: black;
+        color: white;
+        font-weight: 500;
+        font-size: 14px;
+        padding: 7px 24px;
         border: 0;
-        background: none;
-        padding: 0;
+      }
+      div[data-test-compound-field-format='atom'] {
+        display: inline-block;
       }
     </style>
   </template>
@@ -247,8 +338,6 @@ export class Product extends CardDef {
   @field deliveryWindowDays = contains(NumberField);
   @field isReturnable = contains(BooleanField);
   @field details = contains(MarkdownField);
-  @field reviewsCount = contains(NumberField);
-  @field reviewsAverage = contains(NumberField);
   @field thumbnailURL = contains(StringField, {
     computeVia(this: Product) {
       return this.images?.[0];
@@ -261,206 +350,5 @@ export class Product extends CardDef {
     </template>
   };
 
-  static isolated = class Isolated extends Component<typeof this> {
-    // @ts-ignore TS1206: Decorators are not valid here.
-    @tracked activeImage = this.args.model.images?.[0];
-
-    // @ts-ignore TS1206: Decorators are not valid here.
-    @action updateActiveImage(image: string) {
-      this.activeImage = image;
-    }
-
-    get leadTimeDays() {
-      return this.args.model.leadTimeDays || 0;
-    }
-
-    get deliveryWindowDays() {
-      return this.args.model.deliveryWindowDays || 0;
-    }
-
-    <template>
-      <div class='product'>
-        <div class='decorative-header'></div>
-        <div class='left-container'>
-          <ProductImages
-            @images={{@model.images}}
-            @activeImage={{this.activeImage}}
-            @onSelectImage={{this.updateActiveImage}}
-            class='images'
-          />
-          <div class='details-container'>
-            <h2>Item Details</h2>
-            <div class='details'>
-              <@fields.details />
-            </div>
-            <h2>Shipping and return policies</h2>
-            <div class='policies'>
-              <div>
-                🗓️ Order today, get by
-                {{expectedArrivalDescription
-                  this.leadTimeDays
-                  this.deliveryWindowDays
-                }}
-              </div>
-              {{#if @model.isReturnable}}
-                <div>
-                  ⮐ Free returns within 30 days
-                </div>
-              {{else}}
-                <div>⮐ Returns &amp; exchanges not accepted</div>
-              {{/if}}
-              <div>
-                ⛟ Cost to ship:
-                {{formatUsd @model.usShippingCostCents}}</div>
-            </div>
-          </div>
-        </div>
-        <div class='right-container'>
-          <div class='seller-container'>
-            <span class='seller'>
-              {{@model.seller.title}}
-            </span>
-            <StarRating @value={{@model.reviewsAverage}} class='rating' />
-            <span class='reviews-count'>
-              ({{formatNumber @model.reviewsCount}})
-            </span>
-          </div>
-          <h1 class='title'>{{@model.title}}</h1>
-          <div class='price'>{{formatUsd @model.unitPriceCents}}</div>
-          <button>
-            Add to cart
-          </button>
-        </div>
-      </div>
-      <style>
-        .product {
-          display: grid;
-          grid-template-columns: 50% 50%;
-          width: 100%;
-        }
-        .decorative-header {
-          background-image: url(https://i.imgur.com/PQuDAEo.jpg);
-          height: var(--boxel-sp-xxl);
-          grid-column: 1 / span 2;
-          margin-bottom: var(--boxel-sp);
-        }
-        .images {
-          margin: 0 var(--boxel-sp);
-        }
-        .details-container {
-          background: var(--boxel-200);
-          border-radius: 16px;
-          margin: var(--boxel-sp);
-          padding: var(--boxel-sp);
-        }
-        .details-container h2 {
-          margin-top: 0;
-          font-size: 1.1em;
-        }
-        .policies {
-          line-height: 2;
-        }
-        .seller {
-          font-size: 1.1em;
-          margin-right: var(--boxel-sp);
-        }
-        .rating {
-          display: inline-block;
-        }
-        .title,
-        .price {
-          font-size: 1.8em;
-          font-weight: 600;
-        }
-        .price {
-          color: green;
-        }
-        button {
-          margin-top: 10px;
-          border-radius: 20px;
-          background: black;
-          color: white;
-          font-weight: 500;
-          font-size: 14px;
-          padding: 7px 24px;
-          border: 0;
-        }
-      </style>
-    </template>
-  };
-
-  /*
-  static atom = class Atom extends Component<typeof this> {
-    <template></template>
-  }
-
-  static edit = class Edit extends Component<typeof this> {
-    <template></template>
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  */
+  static isolated = Isolated;
 }
