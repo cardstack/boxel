@@ -695,18 +695,13 @@ export class Realm {
           '7d',
           this.#realmSecretSeed,
         );
-        return createResponse(
-          this.url,
-          JSON.stringify({
-            jwt,
-          }),
-          {
-            status: 201,
-            headers: {
-              'Content-Type': 'application/json',
-            },
+        return createResponse(this.url, null, {
+          status: 201,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: jwt,
           },
-        );
+        });
       } else {
         return createResponse(this.url, `user ${user} failed auth challenge`, {
           status: 401,

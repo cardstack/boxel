@@ -13,7 +13,7 @@ import {
   logout,
   openRoot,
   openAiAssistant,
-  // reloadAndOpenAiAssistant,
+  reloadAndOpenAiAssistant,
   toggleOperatorMode,
   registerRealmUsers,
 } from '../helpers';
@@ -46,9 +46,8 @@ test.describe('Login', () => {
     await assertLoggedIn(page);
 
     // reload to page to show that the access token persists
-    // TODO figure out why this assertion fails
-    // await reloadAndOpenAiAssistant(page);
-    // await assertLoggedIn(page);
+    await reloadAndOpenAiAssistant(page);
+    await assertLoggedIn(page);
   });
 
   test('it can logout', async ({ page }) => {
