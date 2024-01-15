@@ -97,6 +97,12 @@ export interface TokenClaims {
   permissions: ('read' | 'write')[];
 }
 
+export interface RealmPermissions {
+  users: {
+    [username: string]: ('read' | 'write')[];
+  };
+}
+
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
@@ -231,6 +237,7 @@ export class Realm {
   #flushOperations: Promise<void> | undefined;
   #operationQueue: Operation[] = [];
   #realmSecretSeed: string;
+  #permissions: RealmPermissions['users'];
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -258,6 +265,7 @@ export class Realm {
       getIndexHTML,
       matrix,
       realmSecretSeed = uuidV4(),
+      permissions,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -266,6 +274,7 @@ export class Realm {
       runnerOptsMgr: RunnerOptionsManager;
       getIndexHTML: () => Promise<string>;
       matrix: { url: URL; username: string; password: string };
+      permissions: RealmPermissions['users'];
       realmSecretSeed?: string;
     },
     opts?: Options,
@@ -273,6 +282,7 @@ export class Realm {
     this.paths = new RealmPaths(url);
     let { username, password, url: matrixURL } = matrix;
     this.#matrixClient = new MatrixClient(matrixURL, username, password);
+    this.#permissions = permissions;
     this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
@@ -674,12 +684,13 @@ export class Realm {
       hash.update(this.#realmSecretSeed);
       let hashedResponse = uint8ArrayToHex(await hash.digest());
       if (hashedResponse === challenge) {
+        let permissions =
+          this.#permissions[user] ?? this.#permissions['*'] ?? [];
         let jwt = this.#adapter.createJWT(
           {
             user,
             realm: this.url,
-            // TODO load this from the realm server
-            permissions: ['read', 'write'],
+            permissions,
           },
           '7d',
           this.#realmSecretSeed,
