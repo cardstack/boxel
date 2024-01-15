@@ -20,7 +20,7 @@ import {
 test.describe('Login', () => {
   let synapse: SynapseInstance;
   test.beforeEach(async () => {
-    let synapse = await synapseStart();
+    synapse = await synapseStart();
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
   });
