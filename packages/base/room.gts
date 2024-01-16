@@ -139,7 +139,7 @@ export class RoomMemberField extends FieldDef {
   @field membershipInitiator = contains(StringField);
   @field name = contains(StringField, {
     computeVia: function (this: RoomMemberField) {
-      return this.displayName ?? this.userId.split(':')[0].substring(1);
+      return this.displayName ?? this.userId?.split(':')[0].substring(1);
     },
   });
   static embedded = class Embedded extends RoomMemberView {};
