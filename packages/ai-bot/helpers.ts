@@ -43,6 +43,9 @@ export function constructHistory(history: IRoomEvent[]) {
   const latestEventsMap = new Map<string, IRoomEvent>();
   for (let event of history) {
     let content = event.content;
+    if (content.data) {
+      content.data = JSON.parse(content.data);
+    }
     if (event.type == 'm.room.message') {
       let eventId = event.event_id!;
       if (content['m.relates_to']?.rel_type === 'm.replace') {
@@ -84,15 +87,13 @@ export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
       // If a user has uploaded a card, add it to the context
       // It's the best we have
       if (content.msgtype === 'org.boxel.card') {
-        cards.push(content.instance);
+        cards.push(content.data.instance);
       } else if (content.msgtype === 'org.boxel.message') {
         // If a user has switched to sharing their current context
         // and they have open cards then use those
-        // We only want to keep the most recent versions of these
-        if (content.context.openCards.length > 0) {
-          cards = content.context.openCards.map(
-            (card: { data: any }) => card.data,
-          );
+        const context = content.data.context;
+        if (context.openCards.length > 0) {
+          cards = context.openCards.map((card: { data: any }) => card.data);
         }
       } else {
         // The user hasn't shared any cards in this message so we shouldn't use any.
@@ -114,7 +115,10 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
   }
   const lastMessage = userMessages[userMessages.length - 1];
   const content = lastMessage.content;
-  if (content.msgtype === 'org.boxel.message' && content.context.cardSpec) {
+  if (
+    content.msgtype === 'org.boxel.message' &&
+    content.data.context.cardSpec
+  ) {
     return [
       {
         name: 'patchCard',
@@ -128,7 +132,7 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
             card_id: {
               type: 'string',
             },
-            attributes: content.context.cardSpec,
+            attributes: content.data.context.cardSpec,
           },
           required: ['card_id', 'attributes', 'description'],
         },

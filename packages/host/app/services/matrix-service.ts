@@ -277,6 +277,17 @@ export default class MatrixService extends Service {
     );
   }
 
+  private async sendEvent(
+    roomId: string,
+    eventType: string,
+    content: MatrixSDK.IContent,
+  ) {
+    if (content.data) {
+      content.data = JSON.stringify(content.data);
+    }
+    await this.client.sendEvent(roomId, eventType, content);
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
@@ -284,7 +295,6 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
-
     if (context?.submode === 'interact') {
       // Serialize the top of all cards on all stacks
       let serializedCards = await Promise.all(
@@ -300,14 +310,16 @@ export default class MatrixService extends Service {
         this.cardAPI,
         mappings,
       );
-      await this.client.sendEvent(roomId, 'm.room.message', {
+      await this.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.message',
         body,
         formatted_body: html,
-        context: {
-          openCards: serializedCards,
-          cardSpec: patchSpec,
-          submode: context.submode,
+        data: {
+          context: {
+            openCards: serializedCards,
+            cardSpec: patchSpec,
+            submode: context.submode,
+          },
         },
       });
       return;
@@ -321,11 +333,13 @@ export default class MatrixService extends Service {
       })`.trim();
     }
     if (card) {
-      await this.client.sendEvent(roomId, 'm.room.message', {
+      await this.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.card',
         body,
         formatted_body: html,
-        instance: serializedCard,
+        data: {
+          instance: serializedCard!,
+        },
       });
     } else {
       await this.client.sendHtmlMessage(roomId, body ?? '', html);

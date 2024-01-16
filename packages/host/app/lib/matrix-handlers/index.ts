@@ -64,6 +64,14 @@ export interface Context extends EventSendingContext {
 
 export async function addRoomEvent(context: EventSendingContext, event: Event) {
   let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
+  // If we are receiving an event which contains
+  // a data field, we need to parse it
+  // because matrix doesn't support all json types
+  // Corresponding encoding is done in
+  // sendEvent in the matrix-service
+  if (event.content?.data) {
+    event.content.data = JSON.parse(event.content.data);
+  }
   eventId = eventId ?? stateKey; // room state may not necessary have an event ID
   if (!eventId) {
     throw new Error(
