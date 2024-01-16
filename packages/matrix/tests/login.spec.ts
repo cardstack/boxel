@@ -18,6 +18,9 @@ import {
   registerRealmUsers,
   testHost,
 } from '../helpers';
+import jwt from 'jsonwebtoken';
+
+const REALM_SECRET_SEED = "shhh! it's a secret";
 
 test.describe('Login', () => {
   let synapse: SynapseInstance;
@@ -53,8 +56,7 @@ test.describe('Login', () => {
     let token = (JSON.parse(boxelSession!) as { [realmURL: string]: string })[
       `${testHost}/`
     ];
-    let [_header, payload] = token.split('.');
-    let claims = JSON.parse(atob(payload)) as {
+    let claims = jwt.verify(token, REALM_SECRET_SEED) as {
       user: string;
       realm: string;
       permissions: ('read' | 'write')[];
@@ -71,9 +73,21 @@ test.describe('Login', () => {
   test('it can logout', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await assertLoggedIn(page);
+    let boxelSession = await page.evaluate(async () => {
+      // playwright needs a beat before it get access local storage
+      await new Promise((res) => setTimeout(res, 1000));
+      return window.localStorage.getItem('boxel-session');
+    });
+    expect(boxelSession).toBeTruthy();
 
     await logout(page);
     await assertLoggedOut(page);
+    boxelSession = await page.evaluate(async () => {
+      // playwright needs a beat before it get access local storage
+      await new Promise((res) => setTimeout(res, 1000));
+      return window.localStorage.getItem('boxel-session');
+    });
+    expect(boxelSession).toBeFalsy();
 
     // reload to page to show that the logout state persists
     await page.reload();

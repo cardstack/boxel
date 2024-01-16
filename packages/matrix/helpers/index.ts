@@ -222,51 +222,6 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function register(
-  page: Page,
-  name: string,
-  email: string,
-  username: string,
-  password: string,
-  registrationToken?: string,
-) {
-  await expect(
-    page.locator('[data-test-token-field]'),
-    'token field is not displayed',
-  ).toHaveCount(0);
-  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-  await page.locator('[data-test-name-field]').fill(name);
-  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-  await page.locator('[data-test-email-field]').fill(email);
-  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-  await page.locator('[data-test-username-field]').fill(username);
-  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-  await page.locator('[data-test-password-field]').fill(password);
-  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-  await page.locator('[data-test-confirm-password-field]').fill(password);
-  await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
-  await page.locator('[data-test-register-btn]').click();
-
-  if (registrationToken) {
-    await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
-    await expect(
-      page.locator('[data-test-username-field]'),
-      'username field is not displayed',
-    ).toHaveCount(0);
-    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
-    await page.locator('[data-test-token-field]').fill(registrationToken);
-    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
-    await page.locator('[data-test-next-btn]').click();
-  }
-
-  await validateEmail(page, email);
-
-  await openAiAssistant(page);
-  await assertLoggedIn(page, { email, displayName: name });
-  await logout(page);
-  await assertLoggedOut(page);
-}
-
 export async function createRoom(
   page: Page,
   roomDetails: { name: string; invites?: string[] },

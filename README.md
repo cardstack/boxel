@@ -149,7 +149,7 @@ pnpm start:admin
 
 Then visit `http://localhost:8080`, and enter the admin user's username (`admin`) and the password, also enter in your matrix server url `http://localhost:8008` in the homeserver URL field, and click "Signin".
 
-Note you can use this same administrative interface to login to the staging and production matrix server. The credentials are available in AWS secrets manager.
+Note you can use this same administrative interface to login to the staging and production matrix server. The credentials are available in AWS SSM Parameter Store.
 
 To stop the admin console run the following in the packages/matrix workspace:
 

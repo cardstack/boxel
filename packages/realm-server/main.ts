@@ -13,6 +13,12 @@ import RealmPermissions from './lib/realm-permissions';
 import fs from 'fs';
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
+if (!REALM_SECRET_SEED) {
+  console.error(
+    `The REALM_SECRET_SEED environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
 
 let {
   port,

@@ -640,6 +640,7 @@ function saveAuth(auth: IAuthData) {
 
 function clearAuth() {
   localStorage.removeItem('auth');
+  localStorage.removeItem('boxel-session');
 }
 
 function getAuth(): IAuthData | undefined {
