@@ -13,7 +13,6 @@ import { restartableTask, /* task, */ timeout, all } from 'ember-concurrency';
 
 // import { type FieldDef } from 'https://cardstack.com/base/card-api';
 // import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -33,11 +32,14 @@ import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+
 import AiAssistantMessage, {
   AiAssistantConversation,
 } from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
+
 import RoomInput from './room-input';
 import RoomMembers from './room-members';
 

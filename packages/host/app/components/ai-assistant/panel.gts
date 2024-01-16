@@ -28,6 +28,7 @@ import { aiBotUsername } from '@cardstack/runtime-common';
 import Room from '@cardstack/host/components/matrix/room';
 import RoomList from '@cardstack/host/components/matrix/room-list';
 
+import ENV from '@cardstack/host/config/environment';
 import {
   isMatrixError,
   eventDebounceMs,
@@ -42,8 +43,6 @@ import type {
 } from 'https://cardstack.com/base/room';
 
 import { getRoom, RoomResource } from '../../resources/room';
-
-import ENV from '@cardstack/host/config/environment';
 
 const { matrixURL } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${new URL(matrixURL).hostname}`;
