@@ -1,4 +1,3 @@
-// import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -11,20 +10,14 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, /* task, */ timeout, all } from 'ember-concurrency';
 
-// import { type FieldDef } from 'https://cardstack.com/base/card-api';
-// import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
-  // apiFor,
   catalogEntryRef,
   chooseCard,
   isMatrixCardError,
 } from '@cardstack/runtime-common';
-
-// import ENV from '@cardstack/host/config/environment';
 
 import { getRoom } from '@cardstack/host/resources/room';
 
@@ -42,8 +35,6 @@ import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 
 import RoomInput from './room-input';
 import RoomMembers from './room-members';
-
-// const { environment } = ENV;
 
 interface Signature {
   Args: {
@@ -189,22 +180,11 @@ export default class Room extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
-  // @tracked private subscribedRoom: FieldDef | undefined;
   @tracked private isAllowedToSetObjective: boolean | undefined;
-
-  // private api: typeof CardAPI | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
-
-    // We use a signal in DOM for playwright to be able to tell if the interior
-    // card async has settled. This is akin to test-waiters in ember-test. (playwright
-    // runs against the development environment of ember serve)
-    // if (environment === 'development') {
-    //   registerDestructor(this, this.cleanup);
-    //   this.subscribeToRoomChanges.perform();
-    // }
   }
 
   private doMatrixEventFlush = restartableTask(async () => {
@@ -214,35 +194,6 @@ export default class Room extends Component<Signature> {
     this.isAllowedToSetObjective =
       await this.matrixService.allowedToSetObjective(this.args.roomId);
   });
-
-  // private subscribeToRoomChanges = task(async () => {
-  //   // eslint-disable-next-line no-constant-condition
-  //   while (true) {
-  //     if (this.room && this.subscribedRoom !== this.room) {
-  //       if (this.subscribedRoom) {
-  //         this.api = await apiFor(this.subscribedRoom);
-  //         this.api.unsubscribeFromChanges(
-  //           this.subscribedRoom,
-  //           this.onCardChange,
-  //         );
-  //       }
-  //       this.subscribedRoom = this.room;
-  //       this.api = await apiFor(this.subscribedRoom);
-  //       this.api.subscribeToChanges(this.subscribedRoom, this.onCardChange);
-  //     }
-  //     await timeout(50);
-  //   }
-  // });
-
-  // private onCardChange = () => {
-  //   this.doWhenRoomChanges.perform();
-  // };
-
-  // private cleanup = () => {
-  //   if (this.subscribedRoom && this.api) {
-  //     this.api.unsubscribeFromChanges(this.subscribedRoom, this.onCardChange);
-  //   }
-  // };
 
   private get room() {
     return this.roomResource.room;
