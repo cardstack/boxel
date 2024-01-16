@@ -108,7 +108,6 @@ test.describe('Room messages', () => {
       name: 'Room 1',
       invites: ['user2'],
     });
-    await openRoom(page, 'Room 1');
 
     for (let i = 1; i <= totalMessageCount; i++) {
       await sendMessage(page, 'Room 1', `message ${i}`);
