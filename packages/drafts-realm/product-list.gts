@@ -12,7 +12,6 @@ import {
 import GlimmerComponent from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
 // @ts-ignore TS1206: Decorators are not valid here.
 import { action } from '@ember/object';
 // @ts-ignore TS1206: Decorators are not valid here.
@@ -100,29 +99,12 @@ export class ProductList extends CardDef {
   static displayName = 'Product List';
 
   static isolated = class Isolated extends Component<typeof this> {
-    // @ts-ignore TS1206: Decorators are not valid here.
-    @tracked filterText = '';
-
-    // @ts-ignore TS1206: Decorators are not valid here.
-    @action
-    updateFilter(event: Event) {
-      this.filterText = (event.target as any).value.toLowerCase();
-    }
-
-    get filteredProducts() {
-      let { filterText } = this;
-      if (!filterText) return this.args.model.products;
-      return this.args.model.products?.filter((product) => {
-        return product.title?.toLowerCase().includes(filterText);
-      });
-    }
-
     get featuredProduct() {
-      return this.filteredProducts?.[0];
+      return this.args.model.products?.[0];
     }
 
     get productsForGrid() {
-      return this.filteredProducts?.slice(1) || [];
+      return this.args.model.products?.slice(1) || [];
     }
 
     // @ts-ignore TS1206: Decorators are not valid here.
@@ -139,14 +121,7 @@ export class ProductList extends CardDef {
 
     <template>
       <div>
-        <div class='search-container'>
-          <BoxelInput
-            @type='search'
-            class='search-input'
-            placeholder='Search products...'
-            {{on 'input' this.updateFilter}}
-          />
-        </div>
+        <div class='decorative-header'></div>
         <div class='products-container'>
           <div class='featured'>
             <FeaturedProductComponent
@@ -168,9 +143,9 @@ export class ProductList extends CardDef {
         </div>
       </div>
       <style>
-        .search-container {
+        .decorative-header {
           background-image: url(https://i.imgur.com/PQuDAEo.jpg);
-          padding: var(--boxel-sp);
+          height: var(--boxel-sp-xxl);
         }
         .search-input {
           background-color: white;
@@ -221,6 +196,8 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
 
 
 
