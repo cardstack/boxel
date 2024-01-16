@@ -398,7 +398,7 @@ export async function assertMessages(
   messages: {
     from: string;
     message?: string;
-    card?: { id: string; text?: string };
+    card?: { id: string; title?: string };
   }[],
 ) {
   await expect(page.locator('[data-test-message-index]')).toHaveCount(
@@ -421,17 +421,18 @@ export async function assertMessages(
           `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`,
         ),
       ).toHaveCount(1);
-      if (card.text) {
-        if (message != null && card.text.includes(message)) {
+      if (card.title) {
+        if (message != null && card.title.includes(message)) {
           throw new Error(
-            `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.text}'`,
+            `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
           );
         }
+        // note: attached cards are in atom format (which display the title by default)
         await expect(
           page.locator(
-            `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`,
+            `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"] [data-test-card-format="atom"]`,
           ),
-        ).toContainText(card.text);
+        ).toContainText(card.title);
       }
     } else {
       await expect(

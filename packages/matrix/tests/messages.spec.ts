@@ -180,7 +180,7 @@ test.describe('Room messages', () => {
       {
         from: 'user1',
         message: 'This is my card',
-        card: { id: testCard, text: 'Hassan' },
+        card: { id: testCard, title: 'Hassan' },
       },
     ]);
     await expect(
@@ -197,7 +197,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [
       {
         from: 'user1',
-        card: { id: testCard, text: 'Hassan' },
+        card: { id: testCard, title: 'Hassan' },
       },
     ]);
   });
@@ -219,7 +219,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [
       {
         from: 'user1',
-        card: { id: testCard, text: '1.1' },
+        card: { id: testCard, title: 'Type Examples' },
       },
     ]);
   });
@@ -265,7 +265,7 @@ test.describe('Room messages', () => {
         message: 'message 1',
         card: {
           id: testCard1,
-          text: 'Hassan',
+          title: 'Hassan',
         },
       },
     ]);
@@ -277,7 +277,7 @@ test.describe('Room messages', () => {
         message: 'message 1',
         card: {
           id: testCard1,
-          text: 'Hassan',
+          title: 'Hassan',
         },
       },
       {
@@ -285,7 +285,7 @@ test.describe('Room messages', () => {
         message: 'message 2',
         card: {
           id: testCard2,
-          text: 'Mango',
+          title: 'Mango',
         },
       },
     ]);
@@ -298,7 +298,7 @@ test.describe('Room messages', () => {
         message: 'message 1',
         card: {
           id: testCard1,
-          text: 'Hassan',
+          title: 'Hassan',
         },
       },
       {
@@ -306,7 +306,7 @@ test.describe('Room messages', () => {
         message: 'message 2',
         card: {
           id: testCard2,
-          text: 'Mango',
+          title: 'Mango',
         },
       },
     ]);
@@ -320,7 +320,7 @@ test.describe('Room messages', () => {
         message: 'message 1',
         card: {
           id: testCard1,
-          text: 'Hassan',
+          title: 'Hassan',
         },
       },
       {
@@ -328,7 +328,7 @@ test.describe('Room messages', () => {
         message: 'message 2',
         card: {
           id: testCard2,
-          text: 'Mango',
+          title: 'Mango',
         },
       },
     ]);
