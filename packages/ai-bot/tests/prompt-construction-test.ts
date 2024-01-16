@@ -515,45 +515,47 @@ module('getModifyPrompt', () => {
           msgtype: 'org.boxel.message',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
-          context: {
-            openCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/drafts/Friend/1',
-                  attributes: {
-                    firstName: 'Hassan',
-                    thumbnailURL: null,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: './2',
+          data: {
+            context: {
+              openCards: [
+                {
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/drafts/Friend/1',
+                    attributes: {
+                      firstName: 'Hassan',
+                      thumbnailURL: null,
+                    },
+                    relationships: {
+                      friend: {
+                        links: {
+                          self: './2',
+                        },
+                        data: {
+                          type: 'card',
+                          id: 'http://localhost:4201/drafts/Friend/2',
+                        },
                       },
-                      data: {
-                        type: 'card',
-                        id: 'http://localhost:4201/drafts/Friend/2',
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../friend',
+                        name: 'Friend',
                       },
                     },
                   },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../friend',
-                      name: 'Friend',
-                    },
+                },
+              ],
+              cardSpec: {
+                type: 'object',
+                properties: {
+                  firstName: {
+                    type: 'string',
                   },
                 },
               },
-            ],
-            cardSpec: {
-              type: 'object',
-              properties: {
-                firstName: {
-                  type: 'string',
-                },
-              },
+              submode: 'interact',
             },
-            submode: 'interact',
           },
         },
         origin_server_ts: 1696813813166,
@@ -590,45 +592,47 @@ module('getModifyPrompt', () => {
           msgtype: 'org.boxel.message',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
-          context: {
-            openCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/drafts/Friend/1',
-                  attributes: {
-                    firstName: 'Hassan',
-                    thumbnailURL: null,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: './2',
+          data: {
+            context: {
+              openCards: [
+                {
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/drafts/Friend/1',
+                    attributes: {
+                      firstName: 'Hassan',
+                      thumbnailURL: null,
+                    },
+                    relationships: {
+                      friend: {
+                        links: {
+                          self: './2',
+                        },
+                        data: {
+                          type: 'card',
+                          id: 'http://localhost:4201/drafts/Friend/2',
+                        },
                       },
-                      data: {
-                        type: 'card',
-                        id: 'http://localhost:4201/drafts/Friend/2',
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../friend',
+                        name: 'Friend',
                       },
                     },
                   },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../friend',
-                      name: 'Friend',
-                    },
+                },
+              ],
+              cardSpec: {
+                type: 'object',
+                properties: {
+                  firstName: {
+                    type: 'string',
                   },
                 },
               },
-            ],
-            cardSpec: {
-              type: 'object',
-              properties: {
-                firstName: {
-                  type: 'string',
-                },
-              },
+              submode: 'interact',
             },
-            submode: 'interact',
           },
         },
         origin_server_ts: 1696813813166,
@@ -678,45 +682,47 @@ module('getModifyPrompt', () => {
           msgtype: 'org.boxel.message',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
-          context: {
-            openCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/drafts/Friend/1',
-                  attributes: {
-                    firstName: 'Hassan',
-                    thumbnailURL: null,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: './2',
+          data: {
+            context: {
+              openCards: [
+                {
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/drafts/Friend/1',
+                    attributes: {
+                      firstName: 'Hassan',
+                      thumbnailURL: null,
+                    },
+                    relationships: {
+                      friend: {
+                        links: {
+                          self: './2',
+                        },
+                        data: {
+                          type: 'card',
+                          id: 'http://localhost:4201/drafts/Friend/2',
+                        },
                       },
-                      data: {
-                        type: 'card',
-                        id: 'http://localhost:4201/drafts/Friend/2',
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../friend',
+                        name: 'Friend',
                       },
                     },
                   },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../friend',
-                      name: 'Friend',
-                    },
+                },
+              ],
+              cardSpec: {
+                type: 'object',
+                properties: {
+                  firstName: {
+                    type: 'string',
                   },
                 },
               },
-            ],
-            cardSpec: {
-              type: 'object',
-              properties: {
-                firstName: {
-                  type: 'string',
-                },
-              },
+              submode: 'interact',
             },
-            submode: 'interact',
           },
         },
         origin_server_ts: 1696813813166,
@@ -732,33 +738,35 @@ module('getModifyPrompt', () => {
         content: {
           msgtype: 'org.boxel.message',
           body: 'set the location to home',
-          context: {
-            openCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/drafts/Meeting/2',
-                  attributes: {
-                    location: 'Work',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../meeting',
-                      name: 'Meeting',
+          data: {
+            context: {
+              openCards: [
+                {
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/drafts/Meeting/2',
+                    attributes: {
+                      location: 'Work',
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../meeting',
+                        name: 'Meeting',
+                      },
                     },
                   },
                 },
-              },
-            ],
-            cardSpec: {
-              type: 'object',
-              properties: {
-                location: {
-                  type: 'string',
+              ],
+              cardSpec: {
+                type: 'object',
+                properties: {
+                  location: {
+                    type: 'string',
+                  },
                 },
               },
+              submode: 'interact',
             },
-            submode: 'interact',
           },
         },
         origin_server_ts: 1696813813167,
