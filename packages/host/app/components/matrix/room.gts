@@ -255,7 +255,11 @@ export default class Room extends Component<Signature> {
     }
     return [
       ...this.room.joinedMembers.map((m) => m.name),
-      ...this.room.invitedMembers.map((m) => `${m.name} (invited)`),
+      ...this.room.invitedMembers
+        .map((m) =>
+          m.userId !== aiBotUserId ? `${m.name} (invited)` : undefined,
+        )
+        .filter(Boolean),
     ].join(', ');
   }
 
