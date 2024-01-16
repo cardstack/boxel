@@ -678,7 +678,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
-    await click('[data-test-open-chat]');
+    await click('[data-test-open-ai-assistant]');
 
     matrixService.createAndJoinRoom('testroom');
 
@@ -734,7 +734,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
-    await click('[data-test-open-chat]');
+    await click('[data-test-open-ai-assistant]');
 
     matrixService.createAndJoinRoom('testroom');
 
@@ -784,7 +784,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
-    await click('[data-test-open-chat]');
+    await click('[data-test-open-ai-assistant]');
 
     matrixService.createAndJoinRoom('testroom');
 
@@ -818,7 +818,7 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     assert.dom('[data-test-boxel-header-title]').hasText('Pet');
-    await click('[data-test-open-chat]');
+    await click('[data-test-open-ai-assistant]');
 
     matrixService.createAndJoinRoom('testroom');
 
@@ -861,7 +861,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
-    await click('[data-test-open-chat]');
+    await click('[data-test-open-ai-assistant]');
     matrixService.createAndJoinRoom('testroom');
     addRoomEvent(matrixService, {
       event_id: 'event1',
@@ -924,7 +924,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
-    await click('[data-test-open-chat]');
+    await click('[data-test-open-ai-assistant]');
     matrixService.createAndJoinRoom('testroom');
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');

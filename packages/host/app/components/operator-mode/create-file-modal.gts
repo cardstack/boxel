@@ -3,10 +3,10 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { capitalize } from '@ember/string';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { capitalize } from '@ember/string';
 
 import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -36,25 +36,30 @@ import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 import ModalContainer from '../modal-container';
 
 import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
-import RealmInfoProvider from './realm-info-provider';
+
 import RealmIcon from './realm-icon';
-import type LoaderService from '../../services/loader-service';
+import RealmInfoProvider from './realm-info-provider';
+
 import type CardService from '../../services/card-service';
+import type LoaderService from '../../services/loader-service';
 
 export type NewFileType =
+  | 'duplicate-instance'
   | 'card-instance'
   | 'card-definition'
   | 'field-definition';
 export const newFileTypes: NewFileType[] = [
-  'card-instance',
+  'duplicate-instance',
   'card-definition',
   'field-definition',
+  'card-instance',
 ];
 const waiter = buildWaiter('create-file-modal:on-setup-waiter');
 
@@ -74,7 +79,11 @@ export default class CreateFileModal extends Component<Signature> {
     <ModalContainer
       class='create-file-modal'
       @cardContainerClass='create-file'
-      @title='New {{this.maybeFileType.displayName}}'
+      @title='{{if
+        (eq this.maybeFileType.id "duplicate-instance")
+        "Duplicate"
+        "New"
+      }} {{this.maybeFileType.displayName}}'
       @size='medium'
       @isOpen={{this.isModalOpen}}
       @onClose={{this.onCancel}}
@@ -93,37 +102,39 @@ export default class CreateFileModal extends Component<Signature> {
                 @onSelect={{this.onSelectRealm}}
               />
             </FieldContainer>
-            <FieldContainer
-              @label={{if
-                (eq this.maybeFileType.id 'card-instance')
-                'Adopted From'
-                'Inherits From'
-              }}
-              class='field'
-              data-test-inherits-from-field
-            >
-              <div class='field-contents'>
-                {{#if this.definitionClass}}
-                  <Pill @inert={{true}}>
-                    {{this.definitionClass.displayName}}
-                  </Pill>
-                {{else}}
-                  {{#if this.selectedCatalogEntry}}
-                    <SelectedTypePill @entry={{this.selectedCatalogEntry}} />
+            {{#unless (eq this.fileType.id 'duplicate-instance')}}
+              <FieldContainer
+                @label={{if
+                  (eq this.maybeFileType.id 'card-instance')
+                  'Adopted From'
+                  'Inherits From'
+                }}
+                class='field'
+                data-test-inherits-from-field
+              >
+                <div class='field-contents'>
+                  {{#if this.definitionClass}}
+                    <Pill @inert={{true}}>
+                      {{this.definitionClass.displayName}}
+                    </Pill>
+                  {{else}}
+                    {{#if this.selectedCatalogEntry}}
+                      <SelectedTypePill @entry={{this.selectedCatalogEntry}} />
+                    {{/if}}
+                    <Button
+                      class={{if this.selectedCatalogEntry 'change-trigger'}}
+                      @kind='text-only'
+                      @size='small'
+                      @disabled={{this.isCreateRunning}}
+                      {{on 'click' (perform this.chooseType)}}
+                      data-test-select-card-type
+                    >
+                      {{if this.selectedCatalogEntry 'Change' 'Select'}}
+                    </Button>
                   {{/if}}
-                  <Button
-                    class={{if this.selectedCatalogEntry 'change-trigger'}}
-                    @kind='text-only'
-                    @size='small'
-                    @disabled={{this.isCreateRunning}}
-                    {{on 'click' (perform this.chooseType)}}
-                    data-test-select-card-type
-                  >
-                    {{if this.selectedCatalogEntry 'Change' 'Select'}}
-                  </Button>
-                {{/if}}
-              </div>
-            </FieldContainer>
+                </div>
+              </FieldContainer>
+            {{/unless}}
             {{#if
               (or
                 (eq this.fileType.id 'card-definition')
@@ -186,6 +197,17 @@ export default class CreateFileModal extends Component<Signature> {
                 >
                   Create
                 </Button>
+              {{else if (eq this.fileType.id 'duplicate-instance')}}
+                <Button
+                  @kind='primary'
+                  @size='tall'
+                  @loading={{this.duplicateCardInstance.isRunning}}
+                  @disabled={{this.isDuplicateCardInstanceButtonDisabled}}
+                  {{on 'click' (perform this.duplicateCardInstance)}}
+                  data-test-duplicate-card-instance
+                >
+                  Duplicate
+                </Button>
               {{else if
                 (or
                   (eq this.fileType.id 'card-definition')
@@ -232,7 +254,7 @@ export default class CreateFileModal extends Component<Signature> {
       }
       .footer-buttons {
         display: flex;
-        justify-content: flex-end;
+        margin-left: auto;
         gap: var(--boxel-sp-xxs);
       }
       .gts-extension {
@@ -275,6 +297,7 @@ export default class CreateFileModal extends Component<Signature> {
           displayName: string;
           ref: ResolvedCodeRef;
         };
+        sourceInstance?: CardDef;
       }
     | undefined;
 
@@ -291,11 +314,13 @@ export default class CreateFileModal extends Component<Signature> {
       displayName: string;
       ref: ResolvedCodeRef;
     },
+    sourceInstance?: CardDef,
   ) {
     return await this.makeCreateFileRequst.perform(
       fileType,
       realmURL,
       definitionClass,
+      sourceInstance,
     );
   }
 
@@ -311,12 +336,14 @@ export default class CreateFileModal extends Component<Signature> {
         displayName: string;
         ref: ResolvedCodeRef;
       },
+      sourceInstance?: CardDef,
     ) => {
       this.currentRequest = {
         fileType,
         newFileDeferred: new Deferred(),
         realmURL,
         definitionClass,
+        sourceInstance,
       };
       await this.onSetup.perform();
       let url = await this.currentRequest.newFileDeferred.promise;
@@ -399,6 +426,10 @@ export default class CreateFileModal extends Component<Signature> {
     );
   }
 
+  private get isDuplicateCardInstanceButtonDisabled() {
+    return !this.selectedRealmURL || this.duplicateCardInstance.isRunning;
+  }
+
   private get isCreateDefinitionButtonDisabled() {
     return (
       (!this.selectedCatalogEntry && !this.definitionClass) ||
@@ -475,7 +506,7 @@ export default class CreateFileModal extends Component<Signature> {
     let realmPath = new RealmPaths(this.selectedRealmURL);
     // assert that filename is a GTS file and is a LocalPath
     let fileName: LocalPath = `${this.fileName.replace(
-      /\.[^\.].+$/,
+      /\.[^.].+$/,
       '',
     )}.gts`.replace(/^\//, '');
     let url = realmPath.fileURL(fileName);
@@ -519,7 +550,7 @@ export class ${className} extends ${exportName}Parent {
         module
           .split('/')
           .pop()!
-          .replace(/\.[^\.]+$/, ''),
+          .replace(/\.[^.]+$/, ''),
       );
       // check for parent/className declaration collision
       parent = parent === className ? `${parent}Parent` : parent;
@@ -562,6 +593,33 @@ export class ${className} extends ${exportName} {
 
     await this.cardService.saveSource(url, src.join('\n').trim());
     this.currentRequest.newFileDeferred.fulfill(url);
+  });
+
+  private duplicateCardInstance = restartableTask(async () => {
+    if (!this.currentRequest) {
+      throw new Error(
+        `Cannot duplicateCardInstance when there is no this.currentRequest`,
+      );
+    }
+    if (!this.currentRequest.sourceInstance) {
+      throw new Error(
+        `Cannot duplicateCardInstance when there is no sourceInstance`,
+      );
+    }
+    if (!this.selectedRealmURL) {
+      throw new Error(
+        `Cannot duplicateCardInstance where where is no selected realm URL`,
+      );
+    }
+    let duplicate = await this.cardService.copyCard(
+      this.currentRequest.sourceInstance,
+      this.selectedRealmURL,
+    );
+    let saved = await this.cardService.saveModel(this, duplicate);
+    if (!saved) {
+      throw new Error(`unable to save duplicated card instance`);
+    }
+    this.currentRequest.newFileDeferred.fulfill(new URL(`${saved.id}.json`));
   });
 
   private createCardInstance = restartableTask(async () => {

@@ -10,6 +10,8 @@ import { Button, IconButton } from '@cardstack/boxel-ui/components';
 
 import { cn, eq, gt } from '@cardstack/boxel-ui/helpers';
 
+import { Eye as EyeIcon } from '@cardstack/boxel-ui/icons';
+
 import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogItem from './item';
@@ -18,7 +20,6 @@ import CardCatalogResultsHeader from './results-header';
 import type CardService from '../../services/card-service';
 
 import type { RealmCards } from '../card-catalog/modal';
-import { Eye as EyeIcon } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {

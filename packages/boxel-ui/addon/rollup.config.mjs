@@ -22,6 +22,7 @@ export default {
       'components.js',
       'helpers.js',
       'icons.js',
+      'modifiers.js',
       'usage.js',
     ]),
 

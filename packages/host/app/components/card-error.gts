@@ -1,5 +1,6 @@
-import { eq } from '@cardstack/boxel-ui/helpers';
 import Component from '@glimmer/component';
+
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {

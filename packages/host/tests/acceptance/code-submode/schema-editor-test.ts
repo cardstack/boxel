@@ -1,5 +1,4 @@
 import {
-  visit,
   click,
   waitFor,
   fillIn,
@@ -12,9 +11,7 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
-import stringify from 'safe-stable-stringify';
-
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -27,11 +24,13 @@ import {
   setupServerSentEvents,
   setupOnSave,
   getMonacoContent,
+  visitOperatorMode,
   waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -48,21 +47,20 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
     static displayName = 'Person';
-    @field firstName = contains(StringCard);
-    @field lastName = contains(StringCard);
-    @field title = contains(StringCard, {
+    @field firstName = contains(StringField);
+    @field lastName = contains(StringField);
+    @field title = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
     @field friends = linksToMany(Friend);
-    @field address = containsMany(StringCard);
+    @field address = containsMany(StringField);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <div data-test-person>
@@ -89,12 +87,12 @@ const employeeCardSource = `
     field,
     Component,
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
   import { Person } from './person';
 
   export class Employee extends Person {
     static displayName = 'Employee';
-    @field department = contains(StringCard);
+    @field department = contains(StringField);
 
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -113,7 +111,7 @@ const inThisFileSource = `
     CardDef,
     FieldDef,
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -135,7 +133,7 @@ const inThisFileSource = `
 
   export class ExportedCard extends CardDef {
     static displayName = 'exported card';
-    @field someString = contains(StringCard);
+    @field someString = contains(StringField);
   }
 
   export class ExportedCardInheritLocalCard extends LocalCard {
@@ -147,7 +145,7 @@ const inThisFileSource = `
   }
   export class ExportedField extends FieldDef {
     static displayName = 'exported field';
-    @field someString = contains(StringCard);
+    @field someString = contains(StringField);
   }
 
   export class ExportedFieldInheritLocalField extends LocalField {
@@ -159,13 +157,13 @@ const inThisFileSource = `
 
 const friendCardSource = `
   import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
-    @field name = contains(StringCard);
+    @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
-    @field title = contains(StringCard, {
+    @field title = contains(StringField, {
       computeVia: function (this: Person) {
         return name;
       },
@@ -336,17 +334,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test('schema editor lists the inheritance chain', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
@@ -475,17 +466,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test('when selecting card definition from a card instance in code mode, the right hand panel changes from card preview to schema mode', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}Person/1.json`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-code-mode-card-preview-body]');
@@ -500,17 +484,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test('shows displayName of CardResource when field refers to itself', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}friend.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
@@ -526,17 +503,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test('card type and fields are clickable and navigate to the correct file', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor(
@@ -553,11 +523,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.dom('[data-test-current-module-name]').hasText('person.gts');
 
     // Go back so that we can test clicking on a field definition button
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    });
 
     await waitFor(
       '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
@@ -586,17 +555,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
@@ -699,17 +661,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         },
       },
     ];
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
@@ -799,18 +754,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test<TestContextWithSave>('deleting a field from schema editor', async function (assert) {
-    assert.expect(7);
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    assert.expect(9);
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
@@ -824,7 +772,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .containsText('+ 5 Fields');
 
     assert.true(
-      getMonacoContent().includes('firstName = contains(StringCard)'),
+      getMonacoContent().includes('firstName = contains(StringField)'),
     );
 
     this.onSave((_, content) => {
@@ -832,10 +780,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         throw new Error('expected string save data');
       }
       assert.false(
-        content.includes('firstName = contains(StringCard)'),
+        content.includes('firstName = contains(StringField)'),
         'firstName field removed from saved module',
       );
     });
+    assert.dom('[data-test-remove-field-modal]').doesNotExist();
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
     await click('[data-test-boxel-menu-item-text="Remove Field"]');
 
     assert.dom('[data-test-remove-field-modal]').exists();
@@ -872,17 +822,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
   test<TestContextWithSave>('editing a field from schema editor', async function (assert) {
     assert.expect(2);
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
-    })!;
-
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
 
     await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
@@ -924,18 +867,136 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     );
   });
 
+  test<TestContextWithSave>('adding a "default" field type from the schema editor', async function (assert) {
+    assert.expect(1);
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-schema]');
+    await click('[data-test-add-field-button]');
+
+    await fillIn('[data-test-field-name-input]', 'middleName');
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.codeEqual(
+        content,
+        `
+  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { Friend } from './friend';
+
+  export class Person extends CardDef {
+    static displayName = 'Person';
+    @field firstName = contains(StringField);
+    @field lastName = contains(StringField);
+    @field title = contains(StringField, {
+      computeVia: function (this: Person) {
+        return [this.firstName, this.lastName].filter(Boolean).join(' ');
+      },
+    });
+    @field friends = linksToMany(Friend);
+    @field address = containsMany(StringField);
+    @field middleName = contains(StringField);
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div data-test-person>
+          <p>First name: <@fields.firstName /></p>
+          <p>Last name: <@fields.lastName /></p>
+          <p>Title: <@fields.title /></p>
+          <p>Address List: <@fields.address /></p>
+          <p>Friends: <@fields.friends /></p>
+        </div>
+        <style>
+          div {
+            color: green;
+            content: '';
+          }
+        </style>
+      </template>
+    };
+  }`,
+      );
+      deferred.fulfill();
+    });
+    await click('[data-test-save-field-button]');
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('renaming a field from the schema editor', async function (assert) {
+    assert.expect(1);
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-schema]');
+
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-schema-editor-field-contextual-button]',
+    );
+    await click('[data-test-boxel-menu-item-text="Edit Field Settings"]');
+
+    await fillIn('[data-test-field-name-input]', 'givenName');
+
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.codeEqual(
+        content,
+        `
+  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { Friend } from './friend';
+
+  export class Person extends CardDef {
+    static displayName = 'Person';
+    @field givenName = contains(StringField);
+    @field lastName = contains(StringField);
+    @field title = contains(StringField, {
+      computeVia: function (this: Person) {
+        return [this.firstName, this.lastName].filter(Boolean).join(' ');
+      },
+    });
+    @field friends = linksToMany(Friend);
+    @field address = containsMany(StringField);
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div data-test-person>
+          <p>First name: <@fields.firstName /></p>
+          <p>Last name: <@fields.lastName /></p>
+          <p>Title: <@fields.title /></p>
+          <p>Address List: <@fields.address /></p>
+          <p>Friends: <@fields.friends /></p>
+        </div>
+        <style>
+          div {
+            color: green;
+            content: '';
+          }
+        </style>
+      </template>
+    };
+  }`,
+      );
+      deferred.fulfill();
+    });
+    await click('[data-test-save-field-button]');
+    await deferred.promise;
+  });
+
   test('tooltip is displayed when hovering over a pill', async function (assert) {
-    let operatorModeStateParam = stringify({
-      stacks: [],
+    await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}ambiguous-display-names.gts`,
-    })!;
+    });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
     await waitForCodeEditor();
     await waitFor(`[data-test-boxel-selector-item-text="BlogPost"]`);
     await click(`[data-test-boxel-selector-item-text="BlogPost"]`);

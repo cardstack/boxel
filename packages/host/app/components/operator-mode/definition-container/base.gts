@@ -8,9 +8,10 @@ import {
   Label,
 } from '@cardstack/boxel-ui/components';
 
+import type { Icon } from '@cardstack/boxel-ui/icons';
+
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import type { Icon } from '@cardstack/boxel-ui/icons';
 
 interface Action {
   label: string;
@@ -144,9 +145,11 @@ export class Active extends Component<ActiveSignature> {
         <Button
           data-test-action-button='{{actionButton.label}}'
           class='action-button'
+          @size='small'
+          @kind='text-only'
           {{on 'click' actionButton.handler}}
         >
-          <actionButton.icon width='24px' height='24px' />
+          <actionButton.icon width='20px' height='20px' />
           {{actionButton.label}}
         </Button>
       {{/each}}
@@ -160,18 +163,19 @@ export class Active extends Component<ActiveSignature> {
     </div>
     <style>
       .action-buttons {
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-auto-columns: max-content;
+        gap: var(--boxel-sp-4xs);
       }
       .action-button {
-        --boxel-button-text-color: var(--boxel-highlight);
-        --boxel-button-padding: 0px;
+        --boxel-button-padding: 0 var(--boxel-sp-4xs);
         --icon-color: var(--boxel-highlight);
-        color: var(--boxel-highlight);
-        border: none;
         justify-content: flex-start;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxs);
         align-self: flex-start;
+      }
+      .action-button:hover:not(:disabled) {
+        --icon-color: var(--boxel-highlight-hover);
       }
       .info-footer {
         margin-top: var(--boxel-sp-sm);

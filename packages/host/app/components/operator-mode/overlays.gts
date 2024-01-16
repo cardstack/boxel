@@ -4,9 +4,9 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { restartableTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
 import { type TrackedArray } from 'tracked-built-ins';
-import { restartableTask } from 'ember-concurrency';
 
 import {
   BoxelDropdown,
@@ -15,11 +15,6 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { and, bool, cn, eq, menuItem, not } from '@cardstack/boxel-ui/helpers';
 
-import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
-
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import OperatorModeOverlayItemHeader from './overlay-item-header';
-import { RenderedCardForOverlayActions } from './stack-item';
 import {
   Eye as EyeIcon,
   ThreeDotsHorizontal,
@@ -27,6 +22,13 @@ import {
   IconCircleSelected,
   IconTrash,
 } from '@cardstack/boxel-ui/icons';
+
+import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
+
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
+import OperatorModeOverlayItemHeader from './overlay-item-header';
+import { RenderedCardForOverlayActions } from './stack-item';
 
 import type { MiddlewareState } from '@floating-ui/dom';
 
@@ -126,7 +128,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
                   @items={{array
                     (menuItem
                       'Delete'
-                      (fn @publicAPI.deleteCard card)
+                      (fn @publicAPI.delete card)
                       icon=IconTrash
                       dangerous=true
                     )
@@ -231,10 +233,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
       boundRenderedCardElement.add(renderedCard.element);
       renderedCard.element.addEventListener(
         'mouseenter',
+        // eslint-disable-next-line ember/no-side-effects
         (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard),
       );
       renderedCard.element.addEventListener(
         'mouseleave',
+        // eslint-disable-next-line ember/no-side-effects
         (_e: MouseEvent) => (this.currentlyHoveredCard = null),
       );
       renderedCard.element.addEventListener('click', (e: MouseEvent) => {

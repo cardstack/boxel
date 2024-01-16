@@ -25,4 +25,5 @@ declare const config: {
   monacoCursorDebounceMs: number;
   serverEchoDebounceMs: number;
   loginMessageTimeoutMs: number;
+  minSaveTaskDurationMs: number;
 };

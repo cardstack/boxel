@@ -106,7 +106,7 @@ export class CardResource extends Resource<Args> {
     this.cachedOnly = cachedOnly;
     this._loader = loader;
     this.onCardInstanceChange = onCardInstanceChange;
-
+    this.cardError = undefined;
     if (isLive && this.url) {
       this.loaded = this.loadLiveModel.perform(new URL(this.url));
     } else if (this.url) {

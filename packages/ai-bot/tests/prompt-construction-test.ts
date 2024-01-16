@@ -1,5 +1,5 @@
 import { module, test, assert } from 'qunit';
-import { getModifyPrompt, getRelevantCards } from '../helpers';
+import { getFunctions, getModifyPrompt, getRelevantCards } from '../helpers';
 import { IRoomEvent } from 'matrix-js-sdk';
 
 module('getModifyPrompt', () => {
@@ -504,5 +504,298 @@ module('getModifyPrompt', () => {
     ];
     const relevantCards = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 0);
+  });
+
+  test('If a user stops sharing their context then ignore function calls', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          context: {
+            openCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Friend/1',
+                  attributes: {
+                    firstName: 'Hassan',
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './2',
+                      },
+                      data: {
+                        type: 'card',
+                        id: 'http://localhost:4201/drafts/Friend/2',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              },
+            ],
+            cardSpec: {
+              type: 'object',
+              properties: {
+                firstName: {
+                  type: 'string',
+                },
+              },
+            },
+            submode: 'interact',
+          },
+        },
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          body: 'Just a regular message',
+        },
+        origin_server_ts: 1696813813167,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+    const functions = getFunctions(history, '@aibot:localhost');
+    assert.equal(functions.length, 0);
+  });
+
+  test('Create patch function calls when there is a cardSpec', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          context: {
+            openCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Friend/1',
+                  attributes: {
+                    firstName: 'Hassan',
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './2',
+                      },
+                      data: {
+                        type: 'card',
+                        id: 'http://localhost:4201/drafts/Friend/2',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              },
+            ],
+            cardSpec: {
+              type: 'object',
+              properties: {
+                firstName: {
+                  type: 'string',
+                },
+              },
+            },
+            submode: 'interact',
+          },
+        },
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+
+    const functions = getFunctions(history, '@aibot:localhost');
+    assert.equal(functions.length, 1);
+    assert.deepEqual(functions[0], {
+      name: 'patchCard',
+      description:
+        'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making',
+      parameters: {
+        type: 'object',
+        properties: {
+          description: {
+            type: 'string',
+          },
+          card_id: {
+            type: 'string',
+          },
+          attributes: {
+            type: 'object',
+            properties: {
+              firstName: {
+                type: 'string',
+              },
+            },
+          },
+        },
+        required: ['card_id', 'attributes', 'description'],
+      },
+    });
+  });
+
+  test('Gets only the latest shared cards in a context', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          context: {
+            openCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Friend/1',
+                  attributes: {
+                    firstName: 'Hassan',
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './2',
+                      },
+                      data: {
+                        type: 'card',
+                        id: 'http://localhost:4201/drafts/Friend/2',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              },
+            ],
+            cardSpec: {
+              type: 'object',
+              properties: {
+                firstName: {
+                  type: 'string',
+                },
+              },
+            },
+            submode: 'interact',
+          },
+        },
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the location to home',
+          context: {
+            openCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Meeting/2',
+                  attributes: {
+                    location: 'Work',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../meeting',
+                      name: 'Meeting',
+                    },
+                  },
+                },
+              },
+            ],
+            cardSpec: {
+              type: 'object',
+              properties: {
+                location: {
+                  type: 'string',
+                },
+              },
+            },
+            submode: 'interact',
+          },
+        },
+        origin_server_ts: 1696813813167,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+
+    const functions = getFunctions(history, '@aibot:localhost');
+    assert.equal(functions.length, 1);
+    assert.deepEqual(functions[0], {
+      name: 'patchCard',
+      description:
+        'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making',
+      parameters: {
+        type: 'object',
+        properties: {
+          description: {
+            type: 'string',
+          },
+          card_id: {
+            type: 'string',
+          },
+          attributes: {
+            type: 'object',
+            properties: {
+              location: {
+                type: 'string',
+              },
+            },
+          },
+        },
+        required: ['card_id', 'attributes', 'description'],
+      },
+    });
   });
 });

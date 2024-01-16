@@ -1,15 +1,16 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { array } from '@ember/helper';
+
 import {
   BoxelDropdown,
   IconButton,
   Menu,
 } from '@cardstack/boxel-ui/components';
+import { menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
 import {
   ThreeDotsHorizontal,
   Warning as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
-import { menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {

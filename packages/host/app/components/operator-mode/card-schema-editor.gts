@@ -37,9 +37,10 @@ import {
   isOwnField,
   calculateTotalOwnFields,
 } from '@cardstack/host/utils/schema-editor';
-import ContextMenuButton from './context-menu-button';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
+
+import ContextMenuButton from './context-menu-button';
 
 interface Signature {
   Args: {
@@ -50,7 +51,7 @@ interface Signature {
     allowFieldManipulation: boolean;
     childFields: string[];
     parentFields: string[];
-    openDefinition: (
+    goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
     ) => void;
@@ -251,7 +252,7 @@ export default class CardSchemaEditor extends Component<Signature> {
           <Tooltip @placement='bottom'>
             <:trigger>
               <Pill
-                {{on 'click' (fn @openDefinition codeRef @cardType.localName)}}
+                {{on 'click' (fn @goToDefinition codeRef @cardType.localName)}}
                 data-test-card-schema-navigational-button
               >
                 <:icon>
@@ -339,7 +340,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                           <Pill
                             {{on
                               'click'
-                              (fn @openDefinition codeRef field.card.localName)
+                              (fn @goToDefinition codeRef field.card.localName)
                             }}
                             data-test-card-schema-field-navigational-button
                           >

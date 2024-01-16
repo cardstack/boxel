@@ -97,11 +97,15 @@ export default class CardService extends Service {
       ...args,
     });
     if (!response.ok) {
+      let responseText = await response.text();
       let err = new Error(
         `status: ${response.status} -
-          ${response.statusText}. ${await response.text()}`,
-      );
-      (err as any).status = response.status;
+          ${response.statusText}. ${responseText}`,
+      ) as any;
+
+      err.status = response.status;
+      err.responseText = responseText;
+
       throw err;
     }
     if (response.status !== 204) {
@@ -226,6 +230,25 @@ export default class CardService extends Service {
       throw new Error(errorMessage);
     }
     this.subscriber?.(url, content);
+    return response;
+  }
+
+  async deleteSource(url: URL, loader?: Loader) {
+    loader = loader ?? this.loaderService.loader;
+    let response = await loader.fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Could not delete file ${url}, status ${
+        response.status
+      }: ${response.statusText} - ${await response.text()}`;
+      console.error(errorMessage);
+      throw new Error(errorMessage);
+    }
     return response;
   }
 

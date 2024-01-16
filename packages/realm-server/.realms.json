@@ -1,0 +1,17 @@
+{
+  "base": {
+    "users": {
+      "*": ["read"]
+    }
+  },
+  "drafts": {
+    "users": {
+      "*": ["read", "write"]
+    }
+  },
+  "published": {
+    "users": {
+      "*": ["read", "write"]
+    }
+  }
+}

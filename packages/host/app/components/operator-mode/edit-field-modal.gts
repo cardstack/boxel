@@ -112,8 +112,8 @@ export default class EditFieldModal extends Component<Signature> {
     // When adding a new field, we want to default to the base string card
     if (!field) {
       let ref = {
-        module: 'https://cardstack.com/base/string', // This seems fundamental enough to be hardcoded
-        name: 'default',
+        module: 'https://cardstack.com/base/card-api', // This seems fundamental enough to be hardcoded
+        name: 'StringField',
       };
       this.isFieldDef = true;
 
@@ -294,6 +294,7 @@ export default class EditFieldModal extends Component<Signature> {
       .footer-buttons {
         display: flex;
         height: 100%;
+        margin-left: auto;
       }
       .footer-buttons > div {
         margin-top: auto;

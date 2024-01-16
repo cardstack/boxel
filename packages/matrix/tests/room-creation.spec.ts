@@ -5,7 +5,7 @@ import {
   logout,
   assertRooms,
   createRoom,
-  reloadAndOpenChat,
+  reloadAndOpenAiAssistant,
   test,
 } from '../helpers';
 
@@ -40,7 +40,7 @@ test.describe('Room creation', () => {
       joinedRooms: [{ name: 'Room 1' }],
     });
 
-    await reloadAndOpenChat(page);
+    await reloadAndOpenAiAssistant(page);
     await assertRooms(page, {
       joinedRooms: [{ name: 'Room 1' }],
     });

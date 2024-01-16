@@ -10,24 +10,16 @@ import {
   IRoomEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import { ChatCompletionChunk } from 'openai/resources/chat';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
   constructHistory,
-  extractContentFromStream,
-  processStream,
   getModifyPrompt,
   cleanContent,
+  getFunctions,
 } from './helpers';
+import { OpenAIError } from 'openai/error';
 
 let log = logger('ai-bot');
-
-/***
- * TODO:
- * When constructing the historical cards, also get the card ones so we have that context
- * Which model to use & system prompts
- * interactions?
- */
 
 const openai = new OpenAI();
 
@@ -74,87 +66,26 @@ async function sendMessage(
   return await sendEvent(client, room, 'm.room.message', messageObject);
 }
 
-async function sendOption(client: MatrixClient, room: Room, content: any) {
-  log.info('sending option', content);
-  let patch = content['patch'];
-  if (patch['attributes']) {
-    patch = patch['attributes'];
-  }
-  let id = content['id'];
-  let command = {
-    type: 'patch',
-    id: id,
-    patch: {
-      attributes: patch,
-    },
-  };
+async function sendOption(client: MatrixClient, room: Room, patch: any) {
+  log.info('sending option', patch);
+  let id = patch['card_id'];
   let messageObject = {
     body: 'patch',
     msgtype: 'org.boxel.command',
     formatted_body: 'A patch',
     format: 'org.matrix.custom.html',
     data: {
-      command: command,
+      command: {
+        type: 'patch',
+        id: id,
+        patch: {
+          attributes: patch['attributes'],
+        },
+      },
     },
   };
+  log.info(JSON.stringify(messageObject, null, 2));
   return await sendEvent(client, room, 'm.room.message', messageObject);
-}
-
-async function sendStream(
-  stream: AsyncIterable<ChatCompletionChunk>,
-  client: MatrixClient,
-  room: Room,
-  appendTo?: string,
-) {
-  let unsent = 0;
-  let lastUnsentMessage = undefined;
-  for await (const message of processStream(extractContentFromStream(stream))) {
-    // If we've not got a current message to edit and we're processing text
-    // rather than structured data, start a new message to update.
-    if (message.type == 'text') {
-      // remove general cruft
-      let cleanedContent = cleanContent(message.content!);
-      // If we're left with nothing after cleaning, don't send anything
-      if (cleanedContent) {
-        // If there's no message to append to, just send the message
-        // If there's more than 20 pending messages, send the message
-        if (!appendTo) {
-          let initialMessage = await sendMessage(
-            client,
-            room,
-            cleanedContent,
-            appendTo,
-          );
-          unsent = 0;
-          lastUnsentMessage = undefined;
-          appendTo = initialMessage.event_id;
-        }
-
-        if (unsent > 20 || message.complete) {
-          await sendMessage(client, room, cleanedContent, appendTo);
-          lastUnsentMessage = undefined;
-          unsent = 0;
-        } else {
-          lastUnsentMessage = message;
-          unsent += 1;
-        }
-      }
-    } else {
-      if (message.type == 'command') {
-        await sendOption(client, room, message.content);
-      }
-      unsent = 0;
-      appendTo = undefined;
-    }
-  }
-
-  // Make sure we send any remaining content at the end of the stream
-  if (lastUnsentMessage && lastUnsentMessage.content) {
-    let cleanedContent = cleanContent(lastUnsentMessage.content);
-    if (cleanedContent) {
-      await sendMessage(client, room, cleanedContent, appendTo);
-    }
-  }
 }
 
 function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
@@ -167,20 +98,47 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
   return undefined;
 }
 
-async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
-  let messages = getModifyPrompt(history, aiBotUsername);
-  return await openai.chat.completions.create(
-    {
+function getResponse(history: IRoomEvent[], aiBotUsername: string) {
+  let functions = getFunctions(history, aiBotUsername);
+  let messages = getModifyPrompt(history, aiBotUsername, functions);
+  if (functions.length === 0) {
+    return openai.beta.chat.completions.stream({
       model: 'gpt-4-1106-preview',
       messages: messages,
-      stream: true,
-    },
-    {
-      // Retry with exponential backoff,
-      // Let OpenAI library handle approved logic
-      maxRetries: 5,
-    },
-  );
+    });
+  } else {
+    return openai.beta.chat.completions.stream({
+      model: 'gpt-4-1106-preview',
+      messages: messages,
+      functions: functions,
+      function_call: 'auto',
+    });
+  }
+}
+
+async function sendError(
+  client: MatrixClient,
+  room: Room,
+  error: any,
+  eventToUpdate: string | undefined,
+) {
+  if (error instanceof OpenAIError) {
+    log.error(`OpenAI error: ${error.name} - ${error.message}`);
+  } else {
+    log.error(`Unknown error: ${error}`);
+  }
+  try {
+    await sendMessage(
+      client,
+      room,
+      'There was an error processing your request, please try again later',
+      eventToUpdate,
+    );
+  } catch (e) {
+    // We've had a problem sending the error message back to the user
+    // Log and continue
+    log.error(`Error sending error message back to user: ${e}`);
+  }
 }
 
 (async () => {
@@ -294,24 +252,60 @@ Common issues are:
         };
         return await sendOption(client, room, command);
       }
-      try {
-        const stream = await getResponse(history, userId);
-        return await sendStream(stream, client, room, initialMessage.event_id);
-      } catch (error) {
-        if (error instanceof OpenAI.APIError) {
-          log.error(
-            `OpenAI error: ${error.status} - ${error.name} - ${error.message} (${error.headers})`,
-          );
-        } else {
-          log.error(`Unexpected error: ${error}`);
-        }
-        return await sendMessage(
-          client,
-          room,
-          'There was an error processing your request, please try again later',
-          initialMessage.event_id,
-        );
+
+      let unsent = 0;
+      const runner = await getResponse(history, userId)
+        .on('content', async (_delta, snapshot) => {
+          unsent += 1;
+          if (unsent > 5) {
+            unsent = 0;
+            await sendMessage(
+              client,
+              room,
+              cleanContent(snapshot),
+              initialMessage.event_id,
+            );
+          }
+        })
+        .on('functionCall', async (functionCall) => {
+          console.log('Function call', functionCall);
+          let args;
+          try {
+            args = JSON.parse(functionCall.arguments);
+          } catch (error) {
+            return await sendError(
+              client,
+              room,
+              error,
+              initialMessage.event_id,
+            );
+          }
+          if (functionCall.name === 'patchCard') {
+            await sendMessage(
+              client,
+              room,
+              args.description,
+              initialMessage.event_id,
+            );
+            return await sendOption(client, room, args);
+          }
+          return;
+        })
+        .on('error', async (error: OpenAIError) => {
+          return await sendError(client, room, error, initialMessage.event_id);
+        });
+
+      // We also need to catch the error when getting the final content
+      let finalContent = await runner.finalContent().catch(async (error) => {
+        return await sendError(client, room, error, initialMessage.event_id);
+      });
+      if (finalContent) {
+        finalContent = cleanContent(finalContent);
       }
+      if (finalContent) {
+        await sendMessage(client, room, finalContent, initialMessage.event_id);
+      }
+      return;
     },
   );
 

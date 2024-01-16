@@ -1,11 +1,12 @@
+import { registerDestructor } from '@ember/destroyable';
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
-import Modifier from 'ember-modifier';
 
 import { task } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import Modifier from 'ember-modifier';
 
 import {
   BoxelDropdown,
@@ -18,11 +19,10 @@ import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import { IconLink, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
-import { registerDestructor } from '@ember/destroyable';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import Preview from '@cardstack/host/components/preview';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import Preview from '@cardstack/host/components/preview';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 

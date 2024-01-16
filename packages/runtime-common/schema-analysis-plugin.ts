@@ -545,3 +545,27 @@ function insertOrReplace(item: Declaration, arr: Declaration[]) {
   }
   return arr;
 }
+
+export function isEquivalentBodyPosition(
+  path: NodePath | undefined,
+  newPath: NodePath | undefined,
+) {
+  if (
+    path?.node &&
+    newPath?.node &&
+    'body' in path.node &&
+    'body' in newPath.node &&
+    path.node.body &&
+    newPath.node.body &&
+    'loc' in path.node.body &&
+    'loc' in newPath.node.body &&
+    path.node.body.loc &&
+    newPath.node.body.loc
+  ) {
+    let { start: newStart, end: newEnd } = newPath.node.body.loc;
+    let { start, end } = path.node.body.loc;
+    // @ts-expect-error Property 'token' does not exist on type '{ line: number; column: number; }'.
+    return start.token === newStart.token && end.token === newEnd.token;
+  }
+  return false;
+}

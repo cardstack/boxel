@@ -6,8 +6,8 @@ import {
   login,
   logout,
   openRoot,
-  openChat,
-  reloadAndOpenChat,
+  openAiAssistant,
+  reloadAndOpenAiAssistant,
   toggleOperatorMode,
   test,
 } from '../helpers';
@@ -28,21 +28,13 @@ test.describe('Login', () => {
     await page.locator('[data-test-password-field]').fill('pass');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openChat(page);
+    await openAiAssistant(page);
 
     await assertLoggedIn(page);
 
-    // edit the display name to show that our access token works
-    await page.locator('[data-test-profile-edit-btn]').click();
-    await page.locator('[data-test-displayName-field]').fill('New Name');
-    await page.locator('[data-test-profile-save-btn]').click();
-    await expect(
-      page.locator('[data-test-field-value="displayName"]'),
-    ).toContainText('New Name');
-
     // reload to page to show that the access token persists
-    await reloadAndOpenChat(page);
-    await assertLoggedIn(page, { displayName: 'New Name' });
+    await reloadAndOpenAiAssistant(page);
+    await assertLoggedIn(page);
   });
 
   test('it can logout', async ({ page }) => {
@@ -57,7 +49,7 @@ test.describe('Login', () => {
     await assertLoggedOut(page);
   });
 
-  test('it can logout using the profile menu', async ({ page }) => {
+  test('it can logout using the profile popover', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
     await expect(
@@ -70,7 +62,7 @@ test.describe('Login', () => {
       '@user1:localhost',
     );
     await page.locator('[data-test-signout-button]').click();
-    await expect(page.locator('[data-test-login-form]')).toBeVisible();
+    await expect(page.locator('[data-test-login-btn]')).toBeVisible();
   });
 
   test('it shows an error when invalid credentials are provided', async ({
@@ -95,7 +87,7 @@ test.describe('Login', () => {
       'login error message is not displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
-    await openChat(page);
+    await openAiAssistant(page);
 
     await assertLoggedIn(page);
   });
@@ -109,7 +101,7 @@ test.describe('Login', () => {
 
     await page.keyboard.press('Enter');
 
-    await openChat(page);
+    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 
