@@ -170,7 +170,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{#if this.doCreateRoom.isRunning}}
           <LoadingIndicator />
         {{else if this.currentRoomId}}
-          <Room @roomId={{this.currentRoomId}} />
+          <Room @roomId={{this.currentRoomId}} @leaveRoom={{this.leaveRoom}} />
         {{/if}}
       {{/unless}}
     </div>
@@ -217,7 +217,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = true;
   @tracked private isShowingCreateNew = false;
-  @tracked private newRoomName: string = '';
+  @tracked private newRoomName = '';
   @tracked private roomNameError: string | undefined;
   @tracked private roomIdForCurrentAction: string | undefined;
 
@@ -379,11 +379,8 @@ export default class AiAssistantPanel extends Component<Signature> {
     await this.matrixService.client.leave(roomId);
     await timeout(eventDebounceMs); // this makes it feel a bit more responsive
     this.roomIdForCurrentAction = undefined;
-    if (
-      this.router.currentRoute.name === 'chat.room' &&
-      this.router.currentRoute.params.id === roomId
-    ) {
-      this.router.transitionTo('chat');
+    if (this.currentRoomId === roomId) {
+      this.currentRoomId = undefined;
     }
   });
 
