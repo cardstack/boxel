@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "images": [
+        "https://i.etsystatic.com/15040126/r/il/29ad12/5605593265/il_1588xN.5605593265_kf13.jpg",
+        "https://i.etsystatic.com/15040126/r/il/8ab9a8/5605593345/il_1588xN.5605593345_al14.jpg",
+        "https://i.etsystatic.com/15040126/r/il/a62b8c/5575513721/il_1588xN.5575513721_3kz2.jpg",
+        "https://i.etsystatic.com/15040126/r/il/a3047f/5527399772/il_1588xN.5527399772_5ghd.jpg",
+        "https://i.etsystatic.com/15040126/r/il/1740d3/5617188945/il_1588xN.5617188945_7wi9.jpg"
+      ],
+      "unitPriceCents": 1756,
+      "usShippingCostCents": 0,
+      "leadTimeDays": 7,
+      "deliveryWindowDays": 12,
+      "isReturnable": false,
+      "details": "There's nothing better than warming-up with a nice cup of your favorite beverage out of this simple and funny mug. The perfect gift for a competitive person who enjoys coffee, tea or hot chocolate.\n\n* ⭐ White or Black Ceramic Mug\n* ⭐ 11-oz Size or 15-oz Size (NEW!)\n* ⭐ Double Sided Design\n* ⭐ Microwave Safe\n* ⭐ Dishwasher Safe\n\n✅ Our Guarantee: If your mug arrives damaged or with a print quality issue, please message us directly with a photo and we will replace it free of charge! We always stand by the quality of our products!\n",
+      "title": "Ultimate Frisbee Player Mug, Tears of the People I Beat",
+      "description": null
+    },
+    "relationships": {
+      "seller": {
+        "links": {
+          "self": "../Seller/83611506-061b-4d44-841b-342796449a96"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}
