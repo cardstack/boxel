@@ -64,8 +64,8 @@ export default class AiAssistantPanel extends Component<Signature> {
             @size='small'
             class='new-session-button'
             {{on 'click' this.displayCreateNew}}
+            @disabled={{this.isShowingCreateNew}}
             data-test-create-room-mode-btn
-            data-test-create-new-session-button
           >
             New Session
           </Button>
@@ -114,7 +114,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           <div class='create-button-wrapper'>
             <Button
               @kind='secondary-dark'
-              {{on 'click' this.resetCreateRoom}}
+              {{on 'click' this.closeCreateRoom}}
               data-test-create-room-cancel-btn
             >Cancel</Button>
             <Button
@@ -217,7 +217,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = true;
   @tracked private isShowingCreateNew = false;
-  @tracked private newRoomName: string = this.newRoomAutoName;
+  @tracked private newRoomName: string = '';
   @tracked private roomNameError: string | undefined;
   @tracked private roomIdForCurrentAction: string | undefined;
 
@@ -245,6 +245,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   });
 
   @action private displayCreateNew() {
+    this.newRoomName = this.newRoomAutoName;
     this.isShowingCreateNew = true;
   }
 
@@ -291,12 +292,12 @@ export default class AiAssistantPanel extends Component<Signature> {
         }
         throw e;
       }
-      this.resetCreateRoom();
+      this.closeCreateRoom();
     },
   );
 
-  private resetCreateRoom() {
-    this.newRoomName = '';
+  @action
+  private closeCreateRoom() {
     this.isShowingCreateNew = false;
   }
 

@@ -73,6 +73,8 @@ export async function openAiAssistant(page: Page) {
   await page.waitForFunction(() =>
     document.querySelector('[data-test-close-ai-panel]'),
   );
+  await expect(page.locator('[data-test-rooms-list]')).toHaveCount(1);
+  await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions off
 }
 
 export async function openRoot(page: Page) {
@@ -250,7 +252,6 @@ export async function login(
     await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
   } else {
     await openAiAssistant(page);
-    await expect(page.locator('[data-test-rooms-list]')).toHaveCount(1);
   }
 }
 
@@ -338,6 +339,7 @@ export async function leaveRoom(page: Page, roomName: string) {
 }
 
 export async function openRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
   await isInRoom(page, roomName);
 }
@@ -447,6 +449,7 @@ interface RoomAssertions {
 }
 
 export async function assertRooms(page: Page, rooms: RoomAssertions) {
+  await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
   if (rooms.joinedRooms && rooms.joinedRooms.length > 0) {
     await page.waitForFunction(
       (rooms: RoomAssertions) =>
@@ -487,9 +490,12 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
       `invited rooms are not displayed`,
     ).toHaveCount(0);
   }
+  await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions off
 }
 
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
+  await page.locator('[data-test-profile-icon-button]').click();
+
   await expect(
     page.locator('[data-test-username-field]'),
     'username field is not displayed',
@@ -498,16 +504,22 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
     page.locator('[data-test-password-field]'),
     'password field is not displayed',
   ).toHaveCount(0);
-  await expect(page.locator('[data-test-field-value="userId"]')).toContainText(
+
+  await expect(page.locator('[data-test-profile-display-name]')).toContainText(
+    opts?.displayName ?? 'user1',
+  );
+  await expect(page.locator('[data-test-profile-icon-handle]')).toContainText(
     opts?.userId ?? '@user1:localhost',
   );
-  await expect(
-    page.locator('[data-test-field-value="displayName"]'),
-  ).toContainText(opts?.displayName ?? 'user1');
+
   if (opts?.email) {
-    await expect(page.locator('[data-test-field-value="email"]')).toHaveText(
+    await page.locator('[data-test-settings-button]').click();
+    await expect(page.locator('[data-test-current-email]')).toContainText(
       opts.email,
     );
+    await page.locator('[data-test-confirm-cancel-button]').click(); // close settings modal + popover
+  } else {
+    await page.locator('[data-test-profile-icon-button]').click(); // close profile popover
   }
 }
 

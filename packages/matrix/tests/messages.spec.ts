@@ -24,7 +24,6 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
     await createRoom(page, { name: 'Room 2' });
-    await page.locator(`[data-test-past-sessions-button]`).click();
     await openRoom(page, 'Room 1');
 
     await expect(page.locator('[data-test-timeline-start]')).toHaveCount(1);
@@ -51,12 +50,10 @@ test.describe('Room messages', () => {
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
     // make sure that room state doesn't leak
-    await page.locator(`[data-test-past-sessions-button]`).click();
     await openRoom(page, 'Room 2');
     await isInRoom(page, 'Room 2');
     await assertMessages(page, []);
 
-    await page.locator(`[data-test-past-sessions-button]`).click();
     await openRoom(page, 'Room 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
   });
@@ -144,23 +141,19 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
     await createRoom(page, { name: 'Room 2' });
-    await page.locator(`[data-test-past-sessions-button]`).click();
     await openRoom(page, 'Room 1');
 
     await writeMessage(page, 'Room 1', 'room 1 message');
-    await page.locator(`[data-test-past-sessions-button]`).click();
     await openRoom(page, 'Room 2');
     await expect(
       page.locator('[data-test-message-field="Room 2"]'),
     ).toHaveValue('');
 
     await writeMessage(page, 'Room 2', 'room 2 message');
-    await page.locator(`[data-test-past-sessions-button]`).click();
     await openRoom(page, 'Room 1');
     await expect(
       page.locator('[data-test-message-field="Room 1"]'),
     ).toHaveValue('room 1 message');
-    await page.locator(`[data-test-past-sessions-button]`).click();
     await openRoom(page, 'Room 2');
     await expect(
       page.locator('[data-test-message-field="Room 2"]'),

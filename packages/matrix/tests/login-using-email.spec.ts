@@ -12,7 +12,6 @@ import {
   test,
   setupMatrixOverride,
   register,
-  openAiAssistant,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -39,7 +38,14 @@ test.describe('Login using email', () => {
     );
     await clearLocalStorage(page);
     await gotoRegistration(page);
-    await register(page, 'Test User', 'user1@example.com', 'user1', 'mypassword1!', REGISTRATION_TOKEN)
+    await register(
+      page,
+      'Test User',
+      'user1@example.com',
+      'user1',
+      'mypassword1!',
+      REGISTRATION_TOKEN,
+    );
   });
 
   test.afterEach(async () => {
@@ -54,8 +60,6 @@ test.describe('Login using email', () => {
     await page.locator('[data-test-password-field]').fill('mypassword1!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
-
     await assertLoggedIn(page, {
       email: 'user1@example.com',
       displayName: 'Test User',
