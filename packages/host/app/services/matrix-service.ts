@@ -20,6 +20,7 @@ import {
   type CodeRef,
   type MatrixCardError,
   sanitizeHtml,
+  aiBotUsername,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
@@ -49,6 +50,7 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const SET_OBJECTIVE_POWER_LEVEL = 50;
+const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const DEFAULT_PAGE_SIZE = 50;
 
 export type Event = Partial<IEvent>;
@@ -256,6 +258,14 @@ export default class MatrixService extends Service {
       topic,
       room_alias_name: encodeURIComponent(name),
     });
+    invites.map((i) => {
+      console.log('Inviting', i, 'to room', roomId, 'are they', aiBotUsername);
+      let full = i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`;
+      if (i === aiBotUsername) {
+        console.log('Setting power level for ai bot', i, AI_BOT_POWER_LEVEL);
+        this.client.setPowerLevel(roomId, full, AI_BOT_POWER_LEVEL, null);
+      }
+    });
     return roomId;
   }
 
@@ -268,12 +278,12 @@ export default class MatrixService extends Service {
       );
     }
     await Promise.all(
-      invite.map((i) =>
+      invite.map((i) => {
         this.client.invite(
           roomId,
           i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`,
-        ),
-      ),
+        );
+      }),
     );
   }
 
