@@ -41,6 +41,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         @icon={{Send}}
         @height='20'
         @width='20'
+        data-test-send-message-btn
       >
         Send
       </IconButton>
@@ -49,7 +50,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
       .chat-input-container {
         display: grid;
         grid-template-columns: 1fr auto;
-        padding: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-xs);
         background-color: var(--boxel-light);
       }
       .chat-input {
