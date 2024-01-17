@@ -664,7 +664,7 @@ function saveAuth(auth: IAuthData) {
 
 function clearAuth() {
   localStorage.removeItem('auth');
-  localStorage.removeItem('boxel-session');
+  this.sessionsService.clearSession(this.realmURL);
 }
 
 function getAuth(): IAuthData | undefined {
