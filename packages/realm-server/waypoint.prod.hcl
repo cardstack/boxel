@@ -44,10 +44,10 @@ app "boxel-realm-server" {
       secrets = {
         BOXEL_HTTP_BASIC_PW = "arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/BOXEL_HTTP_BASIC_PW"
         REALM_USER_PERMISSIONS = "arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/REALM_USER_PERMISSIONS"
-        REALM_SECRET_SEED="arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/realm_secret_seed"
-        BASE_REALM_PASSWORD="arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/base_realm_password"
-        DRAFTS_REALM_PASSWORD="arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/drafts_realm_password"
-        PUBLISHED_REALM_PASSWORD="arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/published_realm_password"
+        REALM_SECRET_SEED="arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/REALM_SECRET_SEED"
+        BASE_REALM_PASSWORD="arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/BASE_REALM_PASSWORD"
+        DRAFTS_REALM_PASSWORD="arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/DRAFTS_REALM_PASSWORD"
+        PUBLISHED_REALM_PASSWORD="arn:aws:ssm:us-east-1:120317779495:parameter/production/boxel/PUBLISHED_REALM_PASSWORD"
       }
     }
   }
