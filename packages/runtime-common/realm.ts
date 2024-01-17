@@ -62,7 +62,12 @@ import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properti
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
 import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
-import { Router, SupportedMimeType } from './router';
+import {
+  AuthorizationError,
+  PermissionError,
+  Router,
+  SupportedMimeType,
+} from './router';
 import { parseQueryString } from './query';
 //@ts-ignore service worker can't handle this
 import type { Readable } from 'stream';
@@ -74,6 +79,8 @@ import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 import { MatrixClient } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
+import { default as RealmPermissionsUtil } from '../realm-server/lib/realm-permissions';
+import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 
 export type RealmInfo = {
   name: string;
@@ -879,7 +886,43 @@ export class Realm {
     return response;
   }
 
+  private async checkPermission(
+    request: Request,
+    neededPermission: 'read' | 'write',
+  ) {
+    let authorizationString = request.headers.get('Authorization');
+    if (!authorizationString) {
+      throw new AuthorizationError("Missing 'Authorization' header");
+    }
+    let tokenString = authorizationString.replace('Bearer ', '');
+
+    let token: TokenClaims;
+
+    try {
+      token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
+      let realmPermissions = new RealmPermissionsUtil();
+
+      if (!realmPermissions.can(token.user, neededPermission, token.realm)) {
+        throw new PermissionError(
+          'Insufficient permissions to perform this action',
+        );
+      }
+    } catch (e) {
+      if (e instanceof TokenExpiredError) {
+        throw new AuthorizationError('Token expired');
+      }
+
+      if (e instanceof JsonWebTokenError) {
+        throw new AuthorizationError('Invalid token');
+      }
+
+      throw e;
+    }
+  }
+
   private async upsertCardSource(request: Request): Promise<Response> {
+    await this.checkPermission(request, 'write');
+
     let { lastModified } = await this.write(
       this.paths.local(request.url),
       await request.text(),
@@ -893,6 +936,8 @@ export class Realm {
   private async getCardSourceOrRedirect(
     request: Request,
   ): Promise<ResponseWithNodeStream> {
+    // await this.checkPermission(request, 'read');
+
     let localName = this.paths.local(request.url);
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
@@ -912,6 +957,8 @@ export class Realm {
   }
 
   private async removeCardSource(request: Request): Promise<Response> {
+    await this.checkPermission(request, 'write');
+
     let localName = this.paths.local(request.url);
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
@@ -1003,6 +1050,8 @@ export class Realm {
   }
 
   private async createCard(request: Request): Promise<Response> {
+    await this.checkPermission(request, 'write');
+
     let body = await request.text();
     let json;
     try {
@@ -1068,6 +1117,8 @@ export class Realm {
   }
 
   private async patchCard(request: Request): Promise<Response> {
+    await this.checkPermission(request, 'write');
+
     let localPath = this.paths.local(request.url);
     if (localPath.startsWith('_')) {
       return methodNotAllowed(this.url, request);
@@ -1157,6 +1208,8 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
+    // await this.checkPermission(request, 'read');
+
     let localPath = this.paths.local(request.url);
     if (localPath === '') {
       localPath = 'index';
@@ -1251,6 +1304,8 @@ export class Realm {
   }
 
   private async getDirectoryListing(request: Request): Promise<Response> {
+    // await this.checkPermission(request, 'read');
+
     // a LocalPath has no leading nor trailing slash
     let localPath: LocalPath = this.paths.local(request.url);
     let url = this.paths.directoryURL(localPath);
@@ -1311,6 +1366,8 @@ export class Realm {
   }
 
   private async search(request: Request): Promise<Response> {
+    // await this.checkPermission(request, 'read');
+
     let doc = await this.#searchIndex.search(
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true },

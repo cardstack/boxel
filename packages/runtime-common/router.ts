@@ -2,6 +2,9 @@ import { notFound, CardError, responseWithError } from './error';
 import { logger } from './index';
 import { RealmPaths } from './paths';
 
+export class AuthorizationError extends Error {}
+export class PermissionError extends Error {}
+
 type Handler = (request: Request) => Promise<Response>;
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 export enum SupportedMimeType {
@@ -95,10 +98,18 @@ export class Router {
     try {
       return await handler(request);
     } catch (err) {
+      if (err instanceof AuthorizationError) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      if (err instanceof PermissionError) {
+        return new Response('Not allowed', { status: 403 });
+      }
       if (err instanceof CardError) {
         return responseWithError(this.#paths.url, err);
       }
+
       this.log.error(err);
+
       return new Response(`unexpected exception in realm ${err}`, {
         status: 500,
       });

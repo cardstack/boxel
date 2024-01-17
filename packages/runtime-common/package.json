@@ -22,6 +22,7 @@
     "@types/babel__traverse": "^7.14.2",
     "@types/diff": "^5.0.2",
     "@types/flat": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.5",
     "@types/lodash": "^4.14.182",
     "@types/pluralize": "^0.0.30",
     "@types/qs": "^6.9.7",
