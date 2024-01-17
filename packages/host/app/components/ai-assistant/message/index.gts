@@ -20,8 +20,10 @@ interface Signature {
     errorMessage?: string;
     retryAction?: () => void;
   };
+  Blocks: { default: [] };
 }
 
+// TODO: Update Boxel::Message component
 export default class AiAssistantMessage extends Component<Signature> {
   <template>
     <div
@@ -62,6 +64,8 @@ export default class AiAssistantMessage extends Component<Signature> {
         {{/if}}
         <div class='content'>
           {{@formattedMessage}}
+
+          <div>{{yield}}</div>
         </div>
       </div>
     </div>
@@ -173,6 +177,7 @@ export class AiAssistantConversation extends Component<AiAssistantConversationSi
     <style>
       .ai-assistant-conversation {
         padding: var(--boxel-sp);
+        overflow-y: auto;
       }
     </style>
   </template>

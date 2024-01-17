@@ -687,18 +687,22 @@ module('Integration | operator-mode', function (hooks) {
       room_id: 'testroom',
       state_key: 'state',
       type: 'm.room.message',
+      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
       content: {
         body: 'i am the body',
         msgtype: 'org.boxel.command',
         formatted_body: 'A patch',
         format: 'org.matrix.custom.html',
-        command: {
-          type: 'patch',
-          id: `${testRealmURL}Person/fadhlan`,
-          patch: {
-            attributes: { firstName: 'Dave' },
+        data: JSON.stringify({
+          command: {
+            type: 'patch',
+            id: `${testRealmURL}Person/fadhlan`,
+            patch: {
+              attributes: { firstName: 'Dave' },
+            },
           },
-        },
+        }),
       },
     });
 
@@ -741,18 +745,22 @@ module('Integration | operator-mode', function (hooks) {
       room_id: 'testroom',
       state_key: 'state',
       type: 'm.room.message',
+      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
       content: {
         body: 'i am the body',
         msgtype: 'org.boxel.command',
         formatted_body: 'A patch',
         format: 'org.matrix.custom.html',
-        command: {
-          type: 'patch',
-          id: `${testRealmURL}Person/anotherPerson`,
-          patch: {
-            attributes: { firstName: 'Dave' },
+        data: JSON.stringify({
+          command: {
+            type: 'patch',
+            id: `${testRealmURL}Person/anotherPerson`,
+            patch: {
+              attributes: { firstName: 'Dave' },
+            },
           },
-        },
+        }),
       },
     });
 
@@ -869,23 +877,26 @@ module('Integration | operator-mode', function (hooks) {
         body: 'card with error',
         formatted_body: 'card with error',
         msgtype: 'org.boxel.card',
-        instance: {
-          data: {
-            id: 'http://this-is-not-a-real-card.com',
-            type: 'card',
-            attributes: {
-              firstName: 'Boom',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'http://not-a-real-card.com',
-                name: 'Boom',
+        data: JSON.stringify({
+          instance: {
+            data: {
+              id: 'http://this-is-not-a-real-card.com',
+              type: 'card',
+              attributes: {
+                firstName: 'Boom',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://not-a-real-card.com',
+                  name: 'Boom',
+                },
               },
             },
           },
-        },
+        }),
       },
     });
+
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');
     await waitFor('[data-test-card-error]');
@@ -920,6 +931,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-open-ai-assistant]');
     matrixService.createAndJoinRoom('testroom');
+
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');
     await waitFor('[data-test-objective-error]');

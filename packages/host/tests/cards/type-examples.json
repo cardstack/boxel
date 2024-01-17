@@ -1,0 +1,25 @@
+{
+    "data": {
+      "type": "card",
+      "id": "http://localhost:4202/test/type-examples",
+      "attributes": {
+        "intField": 1,
+        "stringField": "string",
+        "stringArrayField": [
+          "string1",
+          "string2"
+        ],
+        "booleanField": true,
+        "dateField": "2023-01-01",
+        "floatField": 1.1,
+        "dateTimeField": "2018-01-01T12:00:00.000Z"
+      },
+      "meta": {
+        "adoptsFrom": {
+          "module": "./type-examples",
+          "name": "TypeExamples"
+        }
+      }
+    }
+  }
+  

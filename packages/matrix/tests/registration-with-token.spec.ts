@@ -12,7 +12,6 @@ import {
   assertLoggedIn,
   assertLoggedOut,
   logout,
-  openAiAssistant,
   registerRealmUsers,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
@@ -87,7 +86,6 @@ test.describe('User Registration w/ Token', () => {
       },
     });
 
-    await openAiAssistant(page);
     await assertLoggedIn(page, {
       email: 'user1@example.com',
       displayName: 'Test User',
@@ -146,7 +144,6 @@ test.describe('User Registration w/ Token', () => {
 
     await validateEmail(page, 'user2@example.com');
 
-    await openAiAssistant(page);
     await assertLoggedIn(page, {
       userId: '@user2:localhost',
       displayName: 'Test User',
@@ -217,7 +214,6 @@ test.describe('User Registration w/ Token', () => {
     await page.locator('[data-test-next-btn]').click();
     await validateEmail(page, 'user1@example.com');
 
-    await openAiAssistant(page);
     await assertLoggedIn(page, {
       userId: '@user1:localhost',
       displayName: 'Test User',

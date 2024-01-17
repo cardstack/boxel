@@ -12,7 +12,6 @@ import {
   clearLocalStorage,
   gotoRegistration,
   assertLoggedIn,
-  openAiAssistant,
   registerRealmUsers,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
@@ -54,8 +53,6 @@ test.describe('Login using email', () => {
     await page.locator('[data-test-password-field]').fill('mypassword1!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
-
     await assertLoggedIn(page, {
       email: 'user1@example.com',
       displayName: 'Test User',

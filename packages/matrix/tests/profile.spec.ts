@@ -12,7 +12,6 @@ import {
   validateEmail,
   assertLoggedOut,
   assertLoggedIn,
-  openAiAssistant,
   registerRealmUsers,
 } from '../helpers';
 
@@ -345,7 +344,6 @@ test.describe('Profile', () => {
     await page.locator('[data-test-password-field]').fill('newpass123!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 
@@ -428,7 +426,6 @@ test.describe('Profile', () => {
     await page.locator('[data-test-password-field]').fill('newpass123!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 
@@ -497,7 +494,6 @@ test.describe('Profile', () => {
     await page.locator('[data-test-password-field]').fill('newpass123!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 });

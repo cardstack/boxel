@@ -12,8 +12,6 @@ import {
   login,
   logout,
   openRoot,
-  openAiAssistant,
-  reloadAndOpenAiAssistant,
   toggleOperatorMode,
   registerRealmUsers,
   testHost,
@@ -45,7 +43,6 @@ test.describe('Login', () => {
     await page.locator('[data-test-password-field]').fill('pass');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
 
     await assertLoggedIn(page);
     let boxelSession = await page.evaluate(async () => {
@@ -66,7 +63,7 @@ test.describe('Login', () => {
     expect(claims.permissions).toMatchObject(['read', 'write']);
 
     // reload to page to show that the access token persists
-    await reloadAndOpenAiAssistant(page);
+    await page.reload();
     await assertLoggedIn(page);
   });
 
@@ -132,7 +129,6 @@ test.describe('Login', () => {
       'login error message is not displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
 
     await assertLoggedIn(page);
   });
@@ -146,7 +142,6 @@ test.describe('Login', () => {
 
     await page.keyboard.press('Enter');
 
-    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 
