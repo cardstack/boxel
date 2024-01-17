@@ -1461,12 +1461,18 @@ importers:
       '@types/fs-extra':
         specifier: ^9.0.13
         version: 9.0.13
+      '@types/jsonwebtoken':
+        specifier: ^9.0.5
+        version: 9.0.5
       '@types/node':
         specifier: ^18.18.5
         version: 18.18.5
       fs-extra:
         specifier: ^10.1.0
         version: 10.1.0
+      jsonwebtoken:
+        specifier: ^9.0.2
+        version: 9.0.2
       start-server-and-test:
         specifier: ^1.14.0
         version: 1.14.0

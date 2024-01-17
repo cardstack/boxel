@@ -54,13 +54,20 @@ export function getBoxComponent(
     format: Format;
   } {
     let format: Format;
-
+    let availableFormats = formats;
+    let effectiveDefaultFormat = defaultFormat;
     if (field?.computeVia) {
-      format = 'embedded';
-    } else {
-      format =
-        userFormat && formats.includes(userFormat) ? userFormat : defaultFormat;
+      availableFormats = formats.filter(
+        (f) => !['isolated', 'edit'].includes(f),
+      );
+      if (!availableFormats.includes(effectiveDefaultFormat)) {
+        effectiveDefaultFormat = 'embedded';
+      }
     }
+    format =
+      userFormat && availableFormats.includes(userFormat)
+        ? userFormat
+        : effectiveDefaultFormat;
 
     let fields: FieldsTypeFor<BaseDef>;
     if (internalFieldsCache?.format === format) {

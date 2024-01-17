@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -10,6 +11,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
+import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import camelCase from 'lodash/camelCase';
 
 import {
@@ -87,6 +90,10 @@ export default class CreateFileModal extends Component<Signature> {
       @size='medium'
       @isOpen={{this.isModalOpen}}
       @onClose={{this.onCancel}}
+      {{focusTrap
+        isActive=this.onSetup.isIdle
+        focusTrapOptions=(hash initialFocus=this.initialFocusSelector)
+      }}
       data-test-ready={{this.onSetup.isIdle}}
       data-test-create-file-modal
     >
@@ -181,6 +188,7 @@ export default class CreateFileModal extends Component<Signature> {
             <div class='footer-buttons'>
               <Button
                 {{on 'click' this.onCancel}}
+                {{onKeyMod 'Escape'}}
                 @size='tall'
                 data-test-cancel-create-file
               >
@@ -193,6 +201,7 @@ export default class CreateFileModal extends Component<Signature> {
                   @loading={{this.createCardInstance.isRunning}}
                   @disabled={{this.isCreateCardInstanceButtonDisabled}}
                   {{on 'click' (perform this.createCardInstance)}}
+                  {{onKeyMod 'Enter'}}
                   data-test-create-card-instance
                 >
                   Create
@@ -204,6 +213,7 @@ export default class CreateFileModal extends Component<Signature> {
                   @loading={{this.duplicateCardInstance.isRunning}}
                   @disabled={{this.isDuplicateCardInstanceButtonDisabled}}
                   {{on 'click' (perform this.duplicateCardInstance)}}
+                  {{onKeyMod 'Enter'}}
                   data-test-duplicate-card-instance
                 >
                   Duplicate
@@ -220,6 +230,7 @@ export default class CreateFileModal extends Component<Signature> {
                   @loading={{this.createDefinition.isRunning}}
                   @disabled={{this.isCreateDefinitionButtonDisabled}}
                   {{on 'click' (perform this.createDefinition)}}
+                  {{onKeyMod 'Enter'}}
                   data-test-create-definition
                 >
                   Create
@@ -387,6 +398,18 @@ export default class CreateFileModal extends Component<Signature> {
     this.fileName = name;
   }
 
+  private get initialFocusSelector() {
+    switch (this.maybeFileType?.id) {
+      case 'card-instance':
+      case 'card-definition':
+      case 'field-definition':
+      case 'duplicate-instance':
+        return '.create-file-modal .realm-dropdown-trigger';
+      default:
+        return false;
+    }
+  }
+
   private get maybeFileType() {
     return this.currentRequest?.fileType;
   }
@@ -448,11 +471,13 @@ export default class CreateFileModal extends Component<Signature> {
     let token = waiter.beginAsync();
     try {
       if (!this.definitionClass) {
-        let fieldOrCard =
-          this.fileType.id === 'field-definition' ? 'field' : 'card';
+        let catalogEntryPath =
+          this.fileType.id === 'field-definition'
+            ? 'fields/field'
+            : 'types/card';
         let resource = getCard(
           this,
-          () => `${baseRealm.url}types/${fieldOrCard}`,
+          () => `${baseRealm.url}${catalogEntryPath}`,
           {
             isLive: () => false,
           },

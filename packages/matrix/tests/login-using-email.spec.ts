@@ -2,15 +2,16 @@ import { expect, test } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
+  updateUser,
   type SynapseInstance,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
+  openRoot,
+  toggleOperatorMode,
   clearLocalStorage,
   gotoRegistration,
   assertLoggedIn,
-  register,
-  openAiAssistant,
   registerRealmUsers,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
@@ -31,14 +32,11 @@ test.describe('Login using email', () => {
     await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
-    await register(
-      page,
-      'Test User',
-      'user1@example.com',
-      'user1',
-      'mypassword1!',
-      REGISTRATION_TOKEN,
-    );
+    await registerUser(synapse, 'user1', 'mypassword1!');
+    await updateUser(admin.accessToken, '@user1:localhost', {
+      emailAddresses: ['user1@example.com'],
+      displayname: 'Test User',
+    });
   });
 
   test.afterEach(async () => {
@@ -47,14 +45,14 @@ test.describe('Login using email', () => {
   });
 
   test('Login using email', async ({ page }) => {
+    await openRoot(page);
+    await toggleOperatorMode(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1@example.com');
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-password-field]').fill('mypassword1!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
-
     await assertLoggedIn(page, {
       email: 'user1@example.com',
       displayName: 'Test User',

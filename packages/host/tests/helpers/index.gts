@@ -536,6 +536,7 @@ async function setupTestRealm({
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
     permissions: { '*': ['read', 'write'] },
+    realmSecretSeed: "shhh! it's a secret",
   });
   loader.prependURLHandlers([
     (req) => sourceFetchRedirectHandle(req, adapter, realmURL!),
@@ -618,7 +619,7 @@ export class TestRealmAdapter implements RealmAdapter {
   createJWT(claims: TokenClaims, expiration: string, secret: string) {
     let nowInSeconds = Math.floor(Date.now() / 1000);
     let expires = nowInSeconds + ms(expiration) / 1000;
-    let header = { alg: 'HS256', typ: 'JWT' };
+    let header = { alg: 'none', typ: 'JWT' };
     let payload = {
       iat: nowInSeconds,
       exp: expires,

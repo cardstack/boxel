@@ -264,7 +264,7 @@ export class Realm {
       runnerOptsMgr,
       getIndexHTML,
       matrix,
-      realmSecretSeed = uuidV4(),
+      realmSecretSeed,
       permissions,
     }: {
       url: string;
@@ -275,7 +275,7 @@ export class Realm {
       getIndexHTML: () => Promise<string>;
       matrix: { url: URL; username: string; password: string };
       permissions: RealmPermissions['users'];
-      realmSecretSeed?: string;
+      realmSecretSeed: string;
     },
     opts?: Options,
   ) {
@@ -601,112 +601,121 @@ export class Realm {
       return badRequest(this.url, `Request body missing 'user' property`);
     }
 
+    if (!challenge) {
+      return await this.createChallenge(user);
+    } else {
+      return await this.verifyChallenge(user);
+    }
+  }
+
+  private async createChallenge(user: string) {
     let dmRooms =
       (await this.#matrixClient.getAccountData<Record<string, string>>(
         'boxel.session-rooms',
       )) ?? {};
     let roomId = dmRooms[user];
+    if (!roomId) {
+      roomId = await this.#matrixClient.createDM(user);
+      dmRooms[user] = roomId;
+      await this.#matrixClient.setAccountData('boxel.session-rooms', dmRooms);
+    }
 
-    if (!challenge) {
-      // Create challenge
-      if (!roomId) {
-        roomId = await this.#matrixClient.createDM(user);
-        dmRooms[user] = roomId;
-        await this.#matrixClient.setAccountData('boxel.session-rooms', dmRooms);
-      }
-
-      let challenge = uuidV4();
-      let hash = new Sha256();
-      hash.update(challenge);
-      hash.update(this.#realmSecretSeed);
-      let hashedChallenge = uint8ArrayToHex(await hash.digest());
-      await this.#matrixClient.sendRoomEvent(roomId, 'm.room.message', {
-        body: `auth-challenge: ${hashedChallenge}`,
-        msgtype: 'm.text',
-      });
-      return createResponse(
-        this.url,
-        JSON.stringify({
-          room: roomId,
-          challenge,
-        }),
-        {
-          status: 401,
-          headers: {
-            'Content-Type': 'application/json',
-          },
+    let challenge = uuidV4();
+    let hash = new Sha256();
+    hash.update(challenge);
+    hash.update(this.#realmSecretSeed);
+    let hashedChallenge = uint8ArrayToHex(await hash.digest());
+    await this.#matrixClient.sendRoomEvent(roomId, 'm.room.message', {
+      body: `auth-challenge: ${hashedChallenge}`,
+      msgtype: 'm.text',
+    });
+    return createResponse(
+      this.url,
+      JSON.stringify({
+        room: roomId,
+        challenge,
+      }),
+      {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
         },
-      );
-    } else {
-      // verify challenge
-      if (!roomId) {
-        return badRequest(
-          this.url,
-          `No challenge previously issued for user ${user}`,
-        );
-      }
-      let messages = await this.#matrixClient.roomMessages(roomId);
-      let latestChallenge = messages.find(
-        (m) =>
-          m.type === 'm.room.message' &&
-          m.sender === this.#matrixClient.userId &&
-          m.content.body.startsWith('auth-challenge:'),
-      );
-      if (!latestChallenge) {
-        return badRequest(
-          this.url,
-          `No challenge previously issued for user ${user}`,
-        );
-      }
-      let latestChallengeResponse = messages.find(
-        (m) =>
-          m.type === 'm.room.message' &&
-          m.sender === user &&
-          m.content.body.startsWith('auth-response:'),
-      );
-      if (!latestChallengeResponse) {
-        return badRequest(
-          this.url,
-          `No challenge response found for user ${user}`,
-        );
-      }
+      },
+    );
+  }
 
-      let challenge = latestChallenge.content.body.replace(
-        'auth-challenge: ',
-        '',
+  private async verifyChallenge(user: string) {
+    let dmRooms =
+      (await this.#matrixClient.getAccountData<Record<string, string>>(
+        'boxel.session-rooms',
+      )) ?? {};
+    let roomId = dmRooms[user];
+    if (!roomId) {
+      return badRequest(
+        this.url,
+        `No challenge previously issued for user ${user}`,
       );
-      let response = latestChallengeResponse.content.body.replace(
-        'auth-response: ',
-        '',
+    }
+    let messages = await this.#matrixClient.roomMessages(roomId);
+    let latestChallenge = messages.find(
+      (m) =>
+        m.type === 'm.room.message' &&
+        m.sender === this.#matrixClient.userId &&
+        m.content.body.startsWith('auth-challenge:'),
+    );
+    if (!latestChallenge) {
+      return badRequest(
+        this.url,
+        `No challenge previously issued for user ${user}`,
       );
-      let hash = new Sha256();
-      hash.update(response);
-      hash.update(this.#realmSecretSeed);
-      let hashedResponse = uint8ArrayToHex(await hash.digest());
-      if (hashedResponse === challenge) {
-        let permissions =
-          this.#permissions[user] ?? this.#permissions['*'] ?? [];
-        let jwt = this.#adapter.createJWT(
-          {
-            user,
-            realm: this.url,
-            permissions,
-          },
-          '7d',
-          this.#realmSecretSeed,
-        );
-        return createResponse(this.url, null, {
-          status: 201,
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: jwt,
-          },
-        });
-      } else {
-        return createResponse(this.url, `user ${user} failed auth challenge`, {
-          status: 401,
-        });
-      }
+    }
+    let latestChallengeResponse = messages.find(
+      (m) =>
+        m.type === 'm.room.message' &&
+        m.sender === user &&
+        m.content.body.startsWith('auth-response:'),
+    );
+    if (!latestChallengeResponse) {
+      return badRequest(
+        this.url,
+        `No challenge response found for user ${user}`,
+      );
+    }
+
+    let challenge = latestChallenge.content.body.replace(
+      'auth-challenge: ',
+      '',
+    );
+    let response = latestChallengeResponse.content.body.replace(
+      'auth-response: ',
+      '',
+    );
+    let hash = new Sha256();
+    hash.update(response);
+    hash.update(this.#realmSecretSeed);
+    let hashedResponse = uint8ArrayToHex(await hash.digest());
+    if (hashedResponse === challenge) {
+      let permissions = this.#permissions[user] ?? this.#permissions['*'] ?? [];
+      let jwt = this.#adapter.createJWT(
+        {
+          user,
+          realm: this.url,
+          permissions,
+        },
+        '7d',
+        this.#realmSecretSeed,
+      );
+      return createResponse(this.url, null, {
+        status: 201,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: jwt,
+        },
+      });
+    } else {
+      return createResponse(this.url, `user ${user} failed auth challenge`, {
+        status: 401,
+      });
     }
   }
 

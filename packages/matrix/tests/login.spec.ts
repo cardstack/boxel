@@ -12,11 +12,13 @@ import {
   login,
   logout,
   openRoot,
-  openAiAssistant,
-  reloadAndOpenAiAssistant,
   toggleOperatorMode,
   registerRealmUsers,
+  testHost,
 } from '../helpers';
+import jwt from 'jsonwebtoken';
+
+const REALM_SECRET_SEED = "shhh! it's a secret";
 
 test.describe('Login', () => {
   let synapse: SynapseInstance;
@@ -41,21 +43,48 @@ test.describe('Login', () => {
     await page.locator('[data-test-password-field]').fill('pass');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
 
     await assertLoggedIn(page);
+    let boxelSession = await page.evaluate(async () => {
+      // playwright needs a beat before it get access local storage
+      await new Promise((res) => setTimeout(res, 1000));
+      return window.localStorage.getItem('boxel-session');
+    });
+    let token = (JSON.parse(boxelSession!) as { [realmURL: string]: string })[
+      `${testHost}/`
+    ];
+    let claims = jwt.verify(token, REALM_SECRET_SEED) as {
+      user: string;
+      realm: string;
+      permissions: ('read' | 'write')[];
+    };
+    expect(claims.user).toStrictEqual('@user1:localhost');
+    expect(claims.realm).toStrictEqual(`${testHost}/`);
+    expect(claims.permissions).toMatchObject(['read', 'write']);
 
     // reload to page to show that the access token persists
-    await reloadAndOpenAiAssistant(page);
+    await page.reload();
     await assertLoggedIn(page);
   });
 
   test('it can logout', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await assertLoggedIn(page);
+    let boxelSession = await page.evaluate(async () => {
+      // playwright needs a beat before it get access local storage
+      await new Promise((res) => setTimeout(res, 1000));
+      return window.localStorage.getItem('boxel-session');
+    });
+    expect(boxelSession).toBeTruthy();
 
     await logout(page);
     await assertLoggedOut(page);
+    boxelSession = await page.evaluate(async () => {
+      // playwright needs a beat before it get access local storage
+      await new Promise((res) => setTimeout(res, 1000));
+      return window.localStorage.getItem('boxel-session');
+    });
+    expect(boxelSession).toBeFalsy();
 
     // reload to page to show that the logout state persists
     await page.reload();
@@ -100,7 +129,6 @@ test.describe('Login', () => {
       'login error message is not displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
 
     await assertLoggedIn(page);
   });
@@ -114,7 +142,6 @@ test.describe('Login', () => {
 
     await page.keyboard.press('Enter');
 
-    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 

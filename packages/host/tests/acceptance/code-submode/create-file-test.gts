@@ -455,7 +455,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
-    assert.expect(8);
+    assert.expect(9);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
@@ -481,6 +481,7 @@ export class TestCard extends CardDef {
   */
 }`.trim();
     await openNewFileModal('Card Definition');
+    assert.dom('[data-test-selected-type]').hasText('General Card');
     assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
@@ -574,8 +575,9 @@ export class TestCard extends Person {
   });
 
   test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
-    assert.expect(2);
+    assert.expect(3);
     await openNewFileModal('Field Definition');
+    assert.dom('[data-test-selected-type]').hasText('General Field');
     await click('[data-test-select-card-type]');
     await waitFor('[data-test-card-catalog-modal]');
 

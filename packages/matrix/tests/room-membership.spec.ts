@@ -92,8 +92,6 @@ test.describe('Room membership', () => {
       name: 'Room 1',
       invites: ['user2', 'user3'],
     });
-
-    await openRoom(page, 'Room 1');
     await expect(page.locator('[data-test-room-members]')).toHaveText(
       `Members: user1, user2 (invited), user3 (invited)`,
     );
@@ -127,7 +125,6 @@ test.describe('Room membership', () => {
     await createRoom(page, {
       name: 'Room 1',
     });
-    await openRoom(page, 'Room 1');
     await expect(page.locator('[data-test-room-members]')).toHaveText(
       `Members: user1`,
     );
@@ -158,7 +155,6 @@ test.describe('Room membership', () => {
     await createRoom(page, {
       name: 'Room 1',
     });
-    await openRoom(page, 'Room 1');
     await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is not displayed',

@@ -56,6 +56,7 @@ export async function createRealm(
       readFileSync(join(distPath, 'index.html')).toString(),
     matrix: testMatrix,
     permissions: { '*': ['read', 'write'] },
+    realmSecretSeed: "shhh! it's a secret",
   });
 }
 
