@@ -144,6 +144,68 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
   }
 }
 
+export function shouldSetRoomTitle(
+  rawEventLog: IRoomEvent[],
+  aiBotUserId: string,
+) {
+  // If the room title has been set already, we don't want to set it again
+  let nameEvents = rawEventLog.filter((event) => event.type === 'm.room.name');
+  if (nameEvents.length > 1) {
+    return false;
+  }
+
+  // If there has been a command sent,
+  // we should be at a stage where we can set the room title
+  let patchEvents = rawEventLog.filter(
+    (event) => event.content.msgtype === 'org.boxel.command',
+  );
+
+  if (patchEvents.length > 0) {
+    return true;
+  }
+
+  // If there has been a 5 user messages we should still set the room title
+  let userEvents = rawEventLog.filter(
+    (event) => event.sender !== aiBotUserId && event.type === 'm.room.message',
+  );
+  if (userEvents.length >= 5) {
+    return true;
+  }
+
+  return false;
+}
+
+export function getStartOfConversation(
+  history: IRoomEvent[],
+  aiBotUserId: string,
+  maxLength = 2000,
+) {
+  /**
+   * Get just the start of the conversation
+   * useful for summarising while limiting the context
+   */
+  let messages: OpenAIPromptMessage[] = [];
+  let totalLength = 0;
+  for (let event of history) {
+    let body = event.content.body;
+    if (body && totalLength + body.length <= maxLength) {
+      if (event.sender === aiBotUserId) {
+        messages.push({
+          role: 'assistant',
+          content: body,
+        });
+      } else {
+        messages.push({
+          role: 'user',
+          content: body,
+        });
+      }
+      totalLength += body.length;
+    }
+  }
+  return messages;
+}
+
 export function getModifyPrompt(
   history: IRoomEvent[],
   aiBotUserId: string,
