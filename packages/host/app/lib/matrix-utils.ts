@@ -27,7 +27,7 @@ export function isMatrixError(err: any): err is MatrixError {
 }
 
 export function isValidPassword(password: string): boolean {
-  return /^(?=.*[0-9])(?=.*[!@#$%^&*])[a-zA-Z0-9!@#$%^&*]{8,}$/.test(password);
+  return password.length >= 8;
 }
 
 export interface InteractiveAuth {

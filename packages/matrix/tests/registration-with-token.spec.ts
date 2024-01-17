@@ -276,10 +276,8 @@ test.describe('User Registration w/ Token', () => {
     await page.locator('[data-test-name-field]').fill('user1');
     await page.locator('[data-test-email-field]').fill('user1@example.com');
     await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword1');
-    await page
-      .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1');
+    await page.locator('[data-test-password-field]').fill('short');
+    await page.locator('[data-test-confirm-password-field]').fill('short');
     await expect(
       page.locator(
         '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
@@ -289,26 +287,7 @@ test.describe('User Registration w/ Token', () => {
       page.locator(
         '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
       ),
-    ).toHaveText(
-      'Password must be at least 8 characters long and include a number and a symbol',
-    );
-
-    await page.locator('[data-test-password-field]').fill('mypassword!');
-    await page
-      .locator('[data-test-confirm-password-field]')
-      .fill('mypassword!');
-    await expect(
-      page.locator(
-        '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
-      ),
-    ).toHaveCount(1);
-    await expect(
-      page.locator(
-        '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
-      ),
-    ).toHaveText(
-      'Password must be at least 8 characters long and include a number and a symbol',
-    );
+    ).toHaveText('Password must be at least 8 characters long');
 
     await page.locator('[data-test-password-field]').fill('mypassword!1');
     await page
