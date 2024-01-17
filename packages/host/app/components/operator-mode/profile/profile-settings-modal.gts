@@ -343,7 +343,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
       this.newPasswordError = 'Password is missing';
     } else if (!isValidPassword(this.newPassword)) {
       this.newPasswordError =
-        'Password must be at least 8 characters long and include a number and a symbol';
+        'Password must be at least 8 characters long';
     }
   }
 

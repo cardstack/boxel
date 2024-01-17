@@ -379,9 +379,7 @@ test.describe('Profile', () => {
       page.locator(
         '[data-test-new-password-field] ~ [data-test-boxel-input-error-message]',
       ),
-    ).toContainText(
-      'Password must be at least 8 characters long and include a number and a symbol',
-    );
+    ).toContainText('Password must be at least 8 characters long');
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeDisabled();
