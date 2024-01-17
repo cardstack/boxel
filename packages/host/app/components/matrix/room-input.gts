@@ -8,17 +8,15 @@ import { restartableTask } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
-
-import { not, and } from '@cardstack/boxel-ui/helpers';
+import { Button } from '@cardstack/boxel-ui/components';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
+import AiAssistantChatInput from '@cardstack/host/components/ai-assistant/chat-input';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface RoomArgs {
   Args: {
@@ -29,17 +27,14 @@ interface RoomArgs {
 
 export default class RoomInput extends Component<RoomArgs> {
   <template>
-    <div class='send-message'>
-      <BoxelInput
-        type='text'
-        @type='textarea'
-        @value={{this.messageToSend}}
-        @onInput={{this.setMessage}}
-        rows='4'
-        cols='20'
-        data-test-message-field={{@roomName}}
-      />
+    <AiAssistantChatInput
+      @value={{this.messageToSend}}
+      @onInput={{this.setMessage}}
+      @onSend={{this.sendMessage}}
+      data-test-message-field={{@roomName}}
+    />
 
+    <div class='attach-card'>
       {{#if this.cardtoSend}}
         <div class='selected-card'>
           <div class='field'>Selected Card:</div>
@@ -51,7 +46,7 @@ export default class RoomInput extends Component<RoomArgs> {
           </div>
         </div>
         <Button
-          @kind='secondary-dark'
+          @kind='secondary'
           {{on 'click' this.removeCard}}
           data-test-remove-card-btn
         >
@@ -59,50 +54,36 @@ export default class RoomInput extends Component<RoomArgs> {
         </Button>
       {{else}}
         <Button
-          @kind='secondary-dark'
+          @kind='primary'
           {{on 'click' this.chooseCard}}
           @disabled={{this.doChooseCard.isRunning}}
           data-test-choose-card-btn
         >
           Choose Card
         </Button>
-
-        <label>
-          <Input
-            @type='checkbox'
-            @checked={{this.shareCurrentContext}}
-            data-test-share-context
-          />
-          Allow access to the cards you can see at the top of your stacks
-        </label>
       {{/if}}
-
-      <Button
-        data-test-send-message-btn
-        @disabled={{and (not this.messageToSend) (not this.cardtoSend)}}
-        @loading={{this.doSendMessage.isRunning}}
-        @kind='primary'
-        {{on 'click' this.sendMessage}}
-      >
-        Send
-      </Button>
+      <label>
+        <Input
+          @type='checkbox'
+          @checked={{this.shareCurrentContext}}
+          data-test-share-context
+        />
+        Allow access to the cards you can see at the top of your stacks
+      </label>
     </div>
 
     <style>
-      .send-message {
+      .attach-card {
+        background-color: var(--boxel-100);
+        color: var(--boxel-dark);
         display: flex;
         justify-content: right;
         flex-wrap: wrap;
         row-gap: var(--boxel-sp-sm);
-      }
-
-      .send-message button,
-      .send-message .selected-card {
-        margin-left: var(--boxel-sp-sm);
+        padding: var(--boxel-sp);
       }
 
       .selected-card {
-        margin: var(--boxel-sp);
         float: right;
       }
 
@@ -119,7 +100,6 @@ export default class RoomInput extends Component<RoomArgs> {
         padding: var(--boxel-sp);
         border: var(--boxel-border);
         border-radius: var(--boxel-border-radius);
-        color: var(--boxel-dark);
       }
     </style>
   </template>
@@ -134,7 +114,7 @@ export default class RoomInput extends Component<RoomArgs> {
     new TrackedMap();
 
   private get messageToSend() {
-    return this.messagesToSend.get(this.args.roomId);
+    return this.messagesToSend.get(this.args.roomId) ?? '';
   }
 
   private get cardtoSend() {
