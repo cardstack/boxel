@@ -147,6 +147,7 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
 export function shouldSetRoomTitle(
   rawEventLog: IRoomEvent[],
   aiBotUserId: string,
+  additionalCommands = 0, // These are any that have been sent since the event log was retrieved
 ) {
   // If the room title has been set already, we don't want to set it again
   let nameEvents = rawEventLog.filter((event) => event.type === 'm.room.name');
@@ -156,11 +157,11 @@ export function shouldSetRoomTitle(
 
   // If there has been a command sent,
   // we should be at a stage where we can set the room title
-  let patchEvents = rawEventLog.filter(
+  let commandsSent = rawEventLog.filter(
     (event) => event.content.msgtype === 'org.boxel.command',
   );
 
-  if (patchEvents.length > 0) {
+  if (commandsSent.length + additionalCommands > 0) {
     return true;
   }
 

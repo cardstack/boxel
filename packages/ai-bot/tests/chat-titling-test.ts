@@ -230,4 +230,19 @@ module('shouldSetRoomTitle', () => {
     ];
     assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost'));
   });
+
+  test('Set a title if the bot has sent a command in the last event, not seen in the log', () => {
+    const eventLog: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          body: 'Hey please perform an action',
+        },
+        sender: '@user:localhost',
+      },
+    ];
+    assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost', 1));
+  });
 });

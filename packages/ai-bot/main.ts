@@ -154,7 +154,7 @@ async function setTitle(
       role: 'system',
       content: `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words. 
               Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
-              Explain the general actions and user intent`,
+              Explain the general actions and user intent.`,
     },
     ...getStartOfConversation(history, userId),
   ];
@@ -179,11 +179,17 @@ async function setTitle(
     log.info('Setting room title to', title);
     return await client.setRoomName(room.roomId, title);
   } catch (error) {
-    return await sendError(client, room, error);
+    return await sendError(client, room, error, undefined);
   }
 }
 
-async function handleDebugCommands(eventBody, client, room, history, userId) {
+async function handleDebugCommands(
+  eventBody: string,
+  client: MatrixClient,
+  room: Room,
+  history: IRoomEvent[],
+  userId: string,
+) {
   // Explicitly set the room name
   if (eventBody.startsWith('debug:title:set:')) {
     return await client.setRoomName(
@@ -206,7 +212,7 @@ async function handleDebugCommands(eventBody, client, room, history, userId) {
         client,
         room,
         'Error parsing your debug patch as JSON: ' + patchMessage,
-        initialMessage.event_id,
+        undefined,
       );
     }
     let command = {
@@ -313,6 +319,7 @@ Common issues are:
       }
 
       let unsent = 0;
+      let sentCommands = 0;
       const runner = await getResponse(history, aiBotUserId)
         .on('content', async (_delta, snapshot) => {
           unsent += 1;
@@ -340,6 +347,7 @@ Common issues are:
             );
           }
           if (functionCall.name === 'patchCard') {
+            sentCommands += 1;
             await sendMessage(
               client,
               room,
@@ -365,8 +373,8 @@ Common issues are:
         await sendMessage(client, room, finalContent, initialMessage.event_id);
       }
 
-      if (shouldSetRoomTitle(eventList, aiBotUserId)) {
-        await setTitle(client, room, history, aiBotUserId);
+      if (shouldSetRoomTitle(eventList, aiBotUserId, sentCommands)) {
+        return await setTitle(client, room, history, aiBotUserId);
       }
       return;
     },
