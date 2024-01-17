@@ -11,6 +11,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import StringField from 'https://cardstack.com/base/string';
 
 export class TypeExamples extends CardDef {
+  static displayName = 'Type Examples';
   @field floatField = contains(NumberField);
   @field intField = contains(NumberField);
   @field stringField = contains(StringField);
@@ -18,4 +19,9 @@ export class TypeExamples extends CardDef {
   @field dateTimeField = contains(DateTimeField);
   @field booleanField = contains(BooleanField);
   @field stringArrayField = containsMany(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: TypeExamples) {
+      return this.constructor.displayName;
+    },
+  });
 }

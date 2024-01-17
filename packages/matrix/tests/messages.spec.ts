@@ -64,7 +64,6 @@ test.describe('Room messages', () => {
       name: 'Room 1',
       invites: ['user2'],
     });
-    await openRoom(page, 'Room 1');
     await sendMessage(page, 'Room 1', 'first message');
     await logout(page);
 
@@ -106,7 +105,6 @@ test.describe('Room messages', () => {
       name: 'Room 1',
       invites: ['user2'],
     });
-    await openRoom(page, 'Room 1');
 
     for (let i = 1; i <= totalMessageCount; i++) {
       await sendMessage(page, 'Room 1', `message ${i}`);
@@ -117,10 +115,9 @@ test.describe('Room messages', () => {
     await joinRoom(page, 'Room 1');
     await openRoom(page, 'Room 1');
 
-    let displayedMessageCount = await page
-      .locator('[data-test-message-idx]')
-      .count();
-    expect(displayedMessageCount).toEqual(totalMessageCount);
+    await expect(page.locator('[data-test-message-index]')).toHaveCount(
+      totalMessageCount,
+    );
   });
 
   test(`it can send a markdown message`, async ({ page }) => {
@@ -136,7 +133,7 @@ test.describe('Room messages', () => {
       },
     ]);
     await expect(
-      page.locator(`[data-test-message-idx="0"] .content em`),
+      page.locator(`[data-test-message-index="0"] .content em`),
     ).toContainText('style');
   });
 
@@ -183,11 +180,11 @@ test.describe('Room messages', () => {
       {
         from: 'user1',
         message: 'This is my card',
-        card: { id: testCard, text: 'Hassan' },
+        card: { id: testCard, title: 'Hassan' },
       },
     ]);
     await expect(
-      page.locator(`[data-test-message-idx="0"] .content em`),
+      page.locator(`[data-test-message-index="0"] .content em`),
     ).toContainText('my');
   });
 
@@ -200,7 +197,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [
       {
         from: 'user1',
-        card: { id: testCard, text: 'Hassan' },
+        card: { id: testCard, title: 'Hassan' },
       },
     ]);
   });
@@ -222,7 +219,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [
       {
         from: 'user1',
-        card: { id: testCard, text: '1.1' },
+        card: { id: testCard, title: 'Type Examples' },
       },
     ]);
   });
@@ -268,7 +265,7 @@ test.describe('Room messages', () => {
         message: 'message 1',
         card: {
           id: testCard1,
-          text: 'Hassan',
+          title: 'Hassan',
         },
       },
     ]);
@@ -280,7 +277,7 @@ test.describe('Room messages', () => {
         message: 'message 1',
         card: {
           id: testCard1,
-          text: 'Hassan',
+          title: 'Hassan',
         },
       },
       {
@@ -288,7 +285,7 @@ test.describe('Room messages', () => {
         message: 'message 2',
         card: {
           id: testCard2,
-          text: 'Mango',
+          title: 'Mango',
         },
       },
     ]);
@@ -301,7 +298,7 @@ test.describe('Room messages', () => {
         message: 'message 1',
         card: {
           id: testCard1,
-          text: 'Hassan',
+          title: 'Hassan',
         },
       },
       {
@@ -309,7 +306,7 @@ test.describe('Room messages', () => {
         message: 'message 2',
         card: {
           id: testCard2,
-          text: 'Mango',
+          title: 'Mango',
         },
       },
     ]);
@@ -323,7 +320,7 @@ test.describe('Room messages', () => {
         message: 'message 1',
         card: {
           id: testCard1,
-          text: 'Hassan',
+          title: 'Hassan',
         },
       },
       {
@@ -331,7 +328,7 @@ test.describe('Room messages', () => {
         message: 'message 2',
         card: {
           id: testCard2,
-          text: 'Mango',
+          title: 'Mango',
         },
       },
     ]);

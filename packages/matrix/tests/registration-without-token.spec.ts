@@ -11,7 +11,6 @@ import {
   gotoRegistration,
   assertLoggedIn,
   setupMatrixOverride,
-  openAiAssistant,
 } from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
@@ -53,7 +52,6 @@ test.describe('User Registration w/o Token', () => {
     await page.locator('[data-test-register-btn]').click();
     await validateEmail(page, 'user1@example.com');
 
-    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 });
