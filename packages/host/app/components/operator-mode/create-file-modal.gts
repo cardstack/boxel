@@ -448,11 +448,13 @@ export default class CreateFileModal extends Component<Signature> {
     let token = waiter.beginAsync();
     try {
       if (!this.definitionClass) {
-        let fieldOrCard =
-          this.fileType.id === 'field-definition' ? 'field' : 'card';
+        let catalogEntryPath =
+          this.fileType.id === 'field-definition'
+            ? 'fields/field'
+            : 'types/card';
         let resource = getCard(
           this,
-          () => `${baseRealm.url}types/${fieldOrCard}`,
+          () => `${baseRealm.url}${catalogEntryPath}`,
           {
             isLive: () => false,
           },
