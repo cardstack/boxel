@@ -55,7 +55,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
-private panelWidths: PanelWidths = {
+  private panelWidths: PanelWidths = {
     submodePanel: 500,
     aiAssistantPanel: 200,
   };
