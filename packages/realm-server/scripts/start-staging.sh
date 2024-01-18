@@ -7,7 +7,7 @@ NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' REALM_USER_PERMISSIONS="{}" ts-node \
   --port=3000 \
   \
   --path='/persistent/base' \
-  --matrixURL=${MATRIX_URL} \
+  --matrixURL='https://matrix-staging.stack.cards' \
   --username='base_realm' \
   --password=${BASE_REALM_PASSWORD} \
   --distURL='https://boxel-host-staging.stack.cards' \
@@ -15,14 +15,14 @@ NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' REALM_USER_PERMISSIONS="{}" ts-node \
   --toUrl='https://realms-staging.stack.cards/base/' \
   \
   --path='/persistent/drafts' \
-  --matrixURL=${MATRIX_URL} \
+  --matrixURL='https://matrix-staging.stack.cards' \
   --username='drafts_realm' \
   --password=${DRAFTS_REALM_PASSWORD} \
   --fromUrl='https://realms-staging.stack.cards/drafts/' \
   --toUrl='https://realms-staging.stack.cards/drafts/' \
   \
   --path='/persistent/published' \
-  --matrixURL=${MATRIX_URL} \
+  --matrixURL='https://matrix-staging.stack.cards' \
   --username='published_realm' \
   --password=${PUBLISHED_REALM_PASSWORD} \
   --fromUrl='https://realms-staging.stack.cards/published/' \
