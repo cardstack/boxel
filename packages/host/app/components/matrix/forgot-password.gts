@@ -324,8 +324,7 @@ export default class ForgotPassword extends Component<Signature> {
     if (!this.password) {
       this.passwordError = 'Password is missing';
     } else if (!isValidPassword(this.password)) {
-      this.passwordError =
-        'Password must be at least 8 characters long';
+      this.passwordError = 'Password must be at least 8 characters long';
     }
   }
 
