@@ -84,7 +84,7 @@ test.describe('Login', () => {
       await new Promise((res) => setTimeout(res, 1000));
       return window.localStorage.getItem('boxel-sessions');
     });
-    expect(boxelSession).toBeFalsy();
+    expect(boxelSession).toBe('{}');
 
     // reload to page to show that the logout state persists
     await page.reload();
