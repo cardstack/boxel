@@ -48,7 +48,7 @@ test.describe('Login', () => {
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
       await new Promise((res) => setTimeout(res, 1000));
-      return window.localStorage.getItem('boxel-sessions');
+      return window.localStorage.getItem('boxel-session');
     });
     let token = (JSON.parse(boxelSession!) as { [realmURL: string]: string })[
       `${testHost}/`
@@ -73,7 +73,7 @@ test.describe('Login', () => {
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
       await new Promise((res) => setTimeout(res, 1000));
-      return window.localStorage.getItem('boxel-sessions');
+      return window.localStorage.getItem('boxel-session');
     });
     expect(boxelSession).toBeTruthy();
 
@@ -82,7 +82,7 @@ test.describe('Login', () => {
     boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
       await new Promise((res) => setTimeout(res, 1000));
-      return window.localStorage.getItem('boxel-sessions');
+      return window.localStorage.getItem('boxel-session');
     });
     expect(boxelSession).toBe('{}');
 

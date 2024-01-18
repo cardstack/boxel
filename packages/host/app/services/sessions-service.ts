@@ -8,7 +8,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 type RealmJWT = TokenClaims & { iat: number; exp: number };
 
-const LOCAL_STORAGE_KEY = 'boxel-sessions';
+const LOCAL_STORAGE_KEY = 'boxel-session';
 
 export default class SessionsService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
