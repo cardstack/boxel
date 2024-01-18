@@ -84,6 +84,7 @@ export default class AiAssistantPanel extends Component<Signature> {
               @size='small'
               {{on 'click' this.togglePastSessions}}
               data-test-past-sessions-button
+              class='past-sessions-button'
             >
               Past Sessions
 

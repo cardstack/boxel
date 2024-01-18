@@ -32,6 +32,13 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         margin-left: var(--boxel-sp-xs);
       }
 
+      li > button {
+        background-color: transparent;
+        border: none;
+        width: 100%;
+        text-align: left;
+      }
+
       li:hover {
         background-color: var(--boxel-200);
         cursor: pointer;
@@ -53,16 +60,15 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
     </style>
 
     <ul>
-      {{#each this.args.sessions as |session|}}
-        <li
-          {{on 'click' (fn this.args.onSessionSelect session.room.roomId)}}
-          data-test-enter-room={{session.room.name}}
-        >
-          <div class='top'>{{session.room.name}}</div>
-          <div class='bottom'>{{formatDate
-              session.member.membershipDateTime
-              'iiii MMM d, yyyy, h:mm aa'
-            }}</div>
+      {{#each @sessions as |session|}}
+        <li data-test-enter-room={{session.room.name}}>
+          <button {{on 'click' (fn @onSessionSelect session.room.roomId)}}>
+            <div class='top'>{{session.room.name}}</div>
+            <div class='bottom'>{{formatDate
+                session.member.membershipDateTime
+                'iiii MMM d, yyyy, h:mm aa'
+              }}</div>
+          </button>
         </li>
       {{/each}}
     </ul>
