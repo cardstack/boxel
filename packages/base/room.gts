@@ -369,7 +369,7 @@ export class RoomField extends FieldDef {
           userId,
           displayName: event.content.displayname,
           membership: event.content.membership,
-          membershipTs: event.origin_server_ts,
+          membershipTs: event.origin_server_ts || Date.now(),
           membershipInitiator: event.sender,
         });
       }
