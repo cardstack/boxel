@@ -643,7 +643,7 @@ export default class CodeSubmode extends Component<Signature> {
           @orientation='horizontal'
           @onListPanelContextChange={{this.onListPanelContextChange}}
           class='columns'
-          as |ResizablePanel|
+          as |ResizablePanel ResizeHandler|
         >
           <ResizablePanel
             @defaultLengthFraction={{defaultPanelWidths.leftPanel}}
@@ -654,7 +654,7 @@ export default class CodeSubmode extends Component<Signature> {
                 @orientation='vertical'
                 @onListPanelContextChange={{this.onFilePanelContextChange}}
                 @reverseCollapse={{true}}
-                as |VerticallyResizablePanel|
+                as |VerticallyResizablePanel VerticallyResizeHandler|
               >
                 <VerticallyResizablePanel
                   @defaultLengthFraction={{defaultPanelHeights.filePanel}}
@@ -686,6 +686,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </:browser>
                   </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
+                <VerticallyResizeHandler />
                 <VerticallyResizablePanel
                   @defaultLengthFraction={{defaultPanelHeights.recentPanel}}
                   @lengthPx={{this.panelHeights.recentPanel}}
@@ -706,6 +707,7 @@ export default class CodeSubmode extends Component<Signature> {
               </ResizablePanelGroup>
             </div>
           </ResizablePanel>
+          <ResizeHandler />
           {{#if this.codePath}}
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.codeEditorPanel}}
@@ -743,6 +745,7 @@ export default class CodeSubmode extends Component<Signature> {
                 </div>
               </InnerContainer>
             </ResizablePanel>
+            <ResizeHandler />
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.rightPanel}}
               @lengthPx={{this.panelWidths.rightPanel}}
