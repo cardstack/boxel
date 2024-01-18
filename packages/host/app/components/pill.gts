@@ -1,8 +1,14 @@
+import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+
+import { IconButton } from '@cardstack/boxel-ui/components';
+import { element, cn } from '@cardstack/boxel-ui/helpers';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 export interface PillSignature {
   Args: {
     inert?: boolean;
+    removeAction?: () => void;
   };
   Blocks: {
     default: [];
@@ -13,25 +19,34 @@ export interface PillSignature {
 
 export default class Pill extends Component<PillSignature> {
   <template>
-    <button
-      class='pill {{if @inert "inert"}}'
-      disabled={{@inert}}
-      ...attributes
-    >
-      <figure class='icon'>
-        {{yield to='icon'}}
-      </figure>
-      <section>
-        {{yield}}
-      </section>
-    </button>
+    {{#let (element (if @inert 'div' 'button')) as |Tag|}}
+      <Tag class={{cn 'pill' inert='inert'}} ...attributes>
+        <figure class='icon'>
+          {{yield to='icon'}}
+        </figure>
+        <span>
+          {{yield}}
+        </span>
+
+        {{#if @inert}}
+          {{#if @removeAction}}
+            <IconButton
+              class='remove-button'
+              @icon={{IconX}}
+              {{on 'click' @removeAction}}
+              data-test-remove-card-btn
+            />
+          {{/if}}
+        {{/if}}
+      </Tag>
+    {{/let}}
 
     <style>
       .pill {
         display: inline-flex;
         align-items: center;
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs) var(--boxel-sp-5xs)
-          var(--boxel-sp-5xs);
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-5xs);
         background-color: var(--boxel-light);
         border: 1px solid var(--boxel-400);
         border-radius: var(--boxel-border-radius-sm);
@@ -39,13 +54,13 @@ export default class Pill extends Component<PillSignature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      .pill.inert {
+      .inert {
         border: 0;
         background-color: var(--boxel-100);
         color: inherit;
       }
 
-      .pill:hover {
+      .pill:not(.inert):hover {
         background-color: var(--boxel-100);
       }
 
@@ -53,11 +68,21 @@ export default class Pill extends Component<PillSignature> {
         display: flex;
         margin-block: 0;
         margin-inline: 0;
-        margin-right: var(--boxel-sp-5xs);
       }
 
       .icon > :deep(*) {
         height: 20px;
+      }
+
+      .remove-button {
+        --boxel-icon-button-width: 25px;
+        --boxel-icon-button-height: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .remove-button:hover:not(:disabled) {
+        --icon-color: var(--boxel-highlight);
       }
     </style>
   </template>

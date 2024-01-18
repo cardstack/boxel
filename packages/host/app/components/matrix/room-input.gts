@@ -9,11 +9,11 @@ import { restartableTask } from 'ember-concurrency';
 import { TrackedMap } from 'tracked-built-ins';
 
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
-import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
 import AiAssistantChatInput from '@cardstack/host/components/ai-assistant/chat-input';
+import Pill from '@cardstack/host/components/pill';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -37,21 +37,17 @@ export default class RoomInput extends Component<RoomArgs> {
 
     <div class='attach-card'>
       {{#if this.cardtoSend}}
-        <div
-          class='selected-card pill'
+        <Pill
+          @inert={{true}}
+          @removeAction={{this.removeCard}}
+          class='selected-card'
           data-test-selected-card={{this.cardtoSend.id}}
         >
           <this.cardToSendComponent />
-          <IconButton
-            class='remove-button'
-            @icon={{IconX}}
-            {{on 'click' this.removeCard}}
-            data-test-remove-card-btn
-          />
-        </div>
+        </Pill>
       {{else}}
         <AddButton
-          class='attach-button pill'
+          class='attach-button'
           @variant='pill'
           {{on 'click' this.chooseCard}}
           @disabled={{this.doChooseCard.isRunning}}
@@ -72,7 +68,7 @@ export default class RoomInput extends Component<RoomArgs> {
 
     <style>
       .attach-card {
-        --attach-card-pill-height: 1.875rem;
+        --pill-height: 1.875rem;
         background-color: var(--boxel-100);
         color: var(--boxel-dark);
         display: flex;
@@ -80,46 +76,26 @@ export default class RoomInput extends Component<RoomArgs> {
         gap: var(--boxel-sp-xxs);
         padding: var(--boxel-sp);
       }
-      .pill {
-        height: var(--attach-card-pill-height);
-        display: flex;
-        align-items: center;
-        font: 700 var(--boxel-font-sm);
-        border-radius: var(--boxel-border-radius-sm);
-      }
       .attach-button {
+        --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
+        --boxel-add-button-pill-font: var(--boxel-font-sm);
+        height: var(--pill-height);
         padding: 0 var(--boxel-sp-xs);
       }
       .attach-button:hover:not(:disabled) {
         box-shadow: none;
         background-color: var(--boxel-highlight-hover);
       }
-      .attach-button:focus:not(:disabled) {
-        outline-offset: -2px;
-        outline: var(--boxel-outline);
-      }
-      .attach-button:focus:not(:focus-visible) {
-        outline-color: transparent;
-      }
       .selected-card {
-        padding: 0 0 0 var(--boxel-sp-xxs);
+        height: var(--pill-height);
         background-color: var(--boxel-light);
         border: 1px solid var(--boxel-400);
-        gap: var(--boxel-sp-5xs);
       }
       .selected-card :deep(.atom-format) {
+        background: none;
         box-shadow: none;
+        border: none;
         padding: 0;
-      }
-      .remove-button {
-        --boxel-icon-button-width: 25px;
-        --boxel-icon-button-height: 25px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .remove-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight);
       }
     </style>
   </template>
