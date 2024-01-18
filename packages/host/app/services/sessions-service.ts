@@ -34,9 +34,6 @@ export default class SessionsService extends Service {
     );
 
     if (!rawJWT) {
-      console.log(
-        `no token for ${this.operatorModeStateService.realmURL}, returning early`,
-      );
       return;
     }
 
@@ -47,7 +44,6 @@ export default class SessionsService extends Service {
   }
 
   setSession(realmURL: URL, rawToken: string) {
-    console.log('setting', realmURL, rawToken);
     this.realmURLToRawJWT.set(realmURL.href, rawToken);
     this.persistSessions();
   }

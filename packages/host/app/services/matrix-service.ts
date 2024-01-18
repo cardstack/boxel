@@ -253,26 +253,15 @@ export default class MatrixService extends Service {
     realmURL: URL,
   ): Promise<TokenClaims & { iat: number; exp: number }> {
     let tokenRefreshPeriod = 5 * 60; // 5 minutes
-    // let tokens = JSON.parse(localStorage.getItem('boxel-session') ?? '{}') as {
-    //   [realm: string]: string;
-    // };
-    // let token = tokens[realmURL.href];
 
     if (this.sessionsService.currentJWT) {
-      console.log('jwt exists!');
       let claims = this.sessionsService.currentJWT;
-      // let [_header, payload] = token.split('.');
-      // let claims = JSON.parse(atob(payload)) as TokenClaims & {
-      //   iat: number;
-      //   exp: number;
-      // };
-      console.log('claims', claims);
       let expiration = claims.exp;
       if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
         return claims;
       }
     }
-    console.log('no current JWT, creating one');
+
     await this.createRealmSession(realmURL);
     return await this.getRealmToken(realmURL);
   }
@@ -328,7 +317,6 @@ export default class MatrixService extends Service {
       );
     }
     let token = challengeResponse.headers.get('Authorization');
-    console.log('token?', token);
 
     if (token) {
       this.sessionsService.setSession(realmURL, token);
