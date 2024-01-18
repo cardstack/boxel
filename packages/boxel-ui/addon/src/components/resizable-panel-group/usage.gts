@@ -38,7 +38,10 @@ export default class ResizablePanelUsage extends Component {
   <template>
     <FreestyleUsage @name='Horizontal ResizablePanelGroup'>
       <:example>
-        <ResizablePanelGroup @orientation='horizontal' as |ResizablePanel|>
+        <ResizablePanelGroup
+          @orientation='horizontal'
+          as |ResizablePanel ResizeHandler|
+        >
           <ResizablePanel
             @defaultLengthFraction={{this.horizontalPanel1DefaultWidthFraction}}
             @minLengthPx={{this.horizontalPanel1MinWidthPx}}
@@ -50,6 +53,7 @@ export default class ResizablePanelUsage extends Component {
           >
             Panel 1
           </ResizablePanel>
+          <ResizeHandler />
           <ResizablePanel
             @defaultLengthFraction={{this.horizontalPanel2DefaultWidthFraction}}
             @minLengthPx={{this.horizontalPanel2MinWidthPx}}
@@ -61,6 +65,7 @@ export default class ResizablePanelUsage extends Component {
           >
             Panel 2
           </ResizablePanel>
+          <ResizeHandler />
           <ResizablePanel
             @defaultLengthFraction={{this.horizontalPanel3DefaultWidthFraction}}
             @minLengthPx={{this.horizontalPanel3MinWidthPx}}
@@ -153,7 +158,7 @@ export default class ResizablePanelUsage extends Component {
           <ResizablePanelGroup
             @orientation='vertical'
             @reverseCollapse={{this.verticalReverseCollapse}}
-            as |ResizablePanel|
+            as |ResizablePanel ResizeHandler|
           >
             <ResizablePanel
               @defaultLengthFraction={{this.verticalPanel1DefaultHeightFraction}}
@@ -166,6 +171,7 @@ export default class ResizablePanelUsage extends Component {
             >
               Panel 1
             </ResizablePanel>
+            <ResizeHandler />
             <ResizablePanel
               @defaultLengthFraction={{this.verticalPanel2DefaultHeightFraction}}
               @minLengthPx={{this.verticalPanel2MinHeightPx}}

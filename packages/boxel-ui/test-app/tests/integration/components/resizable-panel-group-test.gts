@@ -36,7 +36,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
         <ResizablePanelGroup
           @orientation='vertical'
           @reverseCollapse={{true}}
-          as |ResizablePanel|
+          as |ResizablePanel ResizeHandler|
         >
           <ResizablePanel
             @defaultLengthFraction={{0.6}}
@@ -51,6 +51,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
               </div>
             </div>
           </ResizablePanel>
+          <ResizeHandler />
           <ResizablePanel
             @defaultLengthFraction={{0.4}}
             @minLengthPx={{50}}
