@@ -8,7 +8,8 @@ import { restartableTask } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
@@ -36,31 +37,28 @@ export default class RoomInput extends Component<RoomArgs> {
 
     <div class='attach-card'>
       {{#if this.cardtoSend}}
-        <div class='selected-card'>
-          <div class='field'>Selected Card:</div>
-          <div
-            class='card-wrapper'
-            data-test-selected-card={{this.cardtoSend.id}}
-          >
-            <this.cardToSendComponent />
-          </div>
-        </div>
-        <Button
-          @kind='secondary'
-          {{on 'click' this.removeCard}}
-          data-test-remove-card-btn
+        <div
+          class='selected-card pill'
+          data-test-selected-card={{this.cardtoSend.id}}
         >
-          Remove Card
-        </Button>
+          <this.cardToSendComponent />
+          <IconButton
+            class='remove-button'
+            @icon={{IconX}}
+            {{on 'click' this.removeCard}}
+            data-test-remove-card-btn
+          />
+        </div>
       {{else}}
-        <Button
-          @kind='primary'
+        <AddButton
+          class='attach-button pill'
+          @variant='pill'
           {{on 'click' this.chooseCard}}
           @disabled={{this.doChooseCard.isRunning}}
           data-test-choose-card-btn
         >
-          Choose Card
-        </Button>
+          Attach Card
+        </AddButton>
       {{/if}}
       <label>
         <Input
@@ -74,32 +72,54 @@ export default class RoomInput extends Component<RoomArgs> {
 
     <style>
       .attach-card {
+        --attach-card-pill-height: 1.875rem;
         background-color: var(--boxel-100);
         color: var(--boxel-dark);
         display: flex;
-        justify-content: right;
         flex-wrap: wrap;
-        row-gap: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xxs);
         padding: var(--boxel-sp);
       }
-
+      .pill {
+        height: var(--attach-card-pill-height);
+        display: flex;
+        align-items: center;
+        font: 700 var(--boxel-font-sm);
+        border-radius: var(--boxel-border-radius-sm);
+      }
+      .attach-button {
+        padding: 0 var(--boxel-sp-xs);
+      }
+      .attach-button:hover:not(:disabled) {
+        box-shadow: none;
+        background-color: var(--boxel-highlight-hover);
+      }
+      .attach-button:focus:not(:disabled) {
+        outline-offset: -2px;
+        outline: var(--boxel-outline);
+      }
+      .attach-button:focus:not(:focus-visible) {
+        outline-color: transparent;
+      }
       .selected-card {
-        float: right;
+        padding: 0 0 0 var(--boxel-sp-xxs);
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-400);
+        gap: var(--boxel-sp-5xs);
       }
-
-      .selected-card::after {
-        content: '';
-        clear: both;
+      .selected-card :deep(.atom-format) {
+        box-shadow: none;
+        padding: 0;
       }
-
-      .field {
-        font-weight: bold;
+      .remove-button {
+        --boxel-icon-button-width: 25px;
+        --boxel-icon-button-height: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
-
-      .card-wrapper {
-        padding: var(--boxel-sp);
-        border: var(--boxel-border);
-        border-radius: var(--boxel-border-radius);
+      .remove-button:hover:not(:disabled) {
+        --icon-color: var(--boxel-highlight);
       }
     </style>
   </template>
@@ -123,10 +143,7 @@ export default class RoomInput extends Component<RoomArgs> {
 
   private get cardToSendComponent() {
     if (this.cardtoSend) {
-      return this.cardtoSend.constructor.getComponent(
-        this.cardtoSend,
-        'embedded',
-      );
+      return this.cardtoSend.constructor.getComponent(this.cardtoSend, 'atom');
     }
     return undefined;
   }
