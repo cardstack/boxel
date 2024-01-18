@@ -4,12 +4,12 @@ import { module, test } from 'qunit';
 module('user-permissions', function (_hooks) {
   test('can read user permissions for specified realm', function (assert) {
     let permissionsConfig = {
-      'public-realm': {
+      'https://cardstack.com/base/': {
         users: {
           '*': ['read', 'write'],
         },
       },
-      'hassans-realm': {
+      'https://realms.boxel.ai/drafts/': {
         users: {
           '@hassan:boxel.ai': ['read', 'write'],
         },
@@ -20,22 +20,65 @@ module('user-permissions', function (_hooks) {
 
     let permissions = new RealmPermissions();
 
-    assert.throws(() => {
-      permissions.can('user_x', 'read', 'nonexistent realm');
-    }, /Realm nonexistent realm does not exist in the permissions config/);
+    // TODO For the time being realms without configs default to being wide open. we need to change
+    // this once we get our infra established for this
+    assert.ok(permissions.can('user_x', 'read', 'nonexistent realm'));
+    assert.ok(permissions.can('user_x', 'write', 'nonexistent realm'));
 
-    assert.ok(permissions.can('any_user', 'read', 'public-realm'));
-    assert.ok(permissions.can('any_user', 'write', 'public-realm'));
-    assert.ok(permissions.can('@fadhlan:boxel.ai', 'read', 'public-realm'));
-    assert.ok(permissions.can('@fadhlan:boxel.ai', 'write', 'public-realm'));
-
-    assert.notOk(permissions.can('any_user', 'read', 'hassans-realm'));
-    assert.notOk(permissions.can('any_user', 'write', 'hassans-realm'));
-    assert.notOk(permissions.can('@fadhlan:boxel.ai', 'read', 'hassans-realm'));
-    assert.notOk(
-      permissions.can('@fadhlan:boxel.ai', 'write', 'hassans-realm'),
+    assert.ok(
+      permissions.can('any_user', 'read', 'https://cardstack.com/base/'),
     );
-    assert.ok(permissions.can('@hassan:boxel.ai', 'write', 'hassans-realm'));
-    assert.ok(permissions.can('@hassan:boxel.ai', 'write', 'hassans-realm'));
+    assert.ok(
+      permissions.can('any_user', 'write', 'https://cardstack.com/base/'),
+    );
+    assert.ok(
+      permissions.can(
+        '@fadhlan:boxel.ai',
+        'read',
+        'https://cardstack.com/base/',
+      ),
+    );
+    assert.ok(
+      permissions.can(
+        '@fadhlan:boxel.ai',
+        'write',
+        'https://cardstack.com/base/',
+      ),
+    );
+
+    assert.notOk(
+      permissions.can('any_user', 'read', 'https://realms.boxel.ai/drafts/'),
+    );
+    assert.notOk(
+      permissions.can('any_user', 'write', 'https://realms.boxel.ai/drafts/'),
+    );
+    assert.notOk(
+      permissions.can(
+        '@fadhlan:boxel.ai',
+        'read',
+        'https://realms.boxel.ai/drafts/',
+      ),
+    );
+    assert.notOk(
+      permissions.can(
+        '@fadhlan:boxel.ai',
+        'write',
+        'https://realms.boxel.ai/drafts/',
+      ),
+    );
+    assert.ok(
+      permissions.can(
+        '@hassan:boxel.ai',
+        'write',
+        'https://realms.boxel.ai/drafts/',
+      ),
+    );
+    assert.ok(
+      permissions.can(
+        '@hassan:boxel.ai',
+        'write',
+        'https://realms.boxel.ai/drafts/',
+      ),
+    );
   });
 });

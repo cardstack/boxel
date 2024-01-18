@@ -16,6 +16,11 @@ import { Server } from 'http';
 
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
+const testMatrix = {
+  url: new URL(`http://localhost:8008`),
+  username: 'node-test_realm',
+  password: 'password',
+};
 let distPath = resolve(__dirname, '..', '..', '..', 'host', 'dist');
 let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
@@ -41,14 +46,18 @@ export async function createRealm(
       writeJSONSync(join(dir, filename), contents);
     }
   }
-  return new Realm(
-    realmURL,
-    new NodeAdapter(dir),
+  return new Realm({
+    url: realmURL,
+    adapter: new NodeAdapter(dir),
     loader,
-    getRunner,
-    manager,
-    async () => readFileSync(join(distPath, 'index.html')).toString(),
-  );
+    indexRunner: getRunner,
+    runnerOptsMgr: manager,
+    getIndexHTML: async () =>
+      readFileSync(join(distPath, 'index.html')).toString(),
+    matrix: testMatrix,
+    permissions: { '*': ['read', 'write'] },
+    realmSecretSeed: "shhh! it's a secret",
+  });
 }
 
 export function setupBaseRealmServer(hooks: NestedHooks, loader: Loader) {
