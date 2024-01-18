@@ -57,6 +57,11 @@ export default class SessionsService extends Service {
     this.persistSessions();
   }
 
+  clearSessions() {
+    this.realmURLToRawJWT.clear();
+    this.persistSessions();
+  }
+
   private persistSessions() {
     window.localStorage.setItem(
       LOCAL_STORAGE_KEY,

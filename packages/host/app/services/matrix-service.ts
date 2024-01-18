@@ -155,6 +155,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
+      this.sessionsService.clearSessions();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -664,7 +665,6 @@ function saveAuth(auth: IAuthData) {
 
 function clearAuth() {
   localStorage.removeItem('auth');
-  this.sessionsService.clearSession(this.realmURL);
 }
 
 function getAuth(): IAuthData | undefined {
