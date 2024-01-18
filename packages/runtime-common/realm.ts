@@ -72,6 +72,8 @@ import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
+import { MatrixClient } from './matrix-client';
+import { Sha256 } from '@aws-crypto/sha256-js';
 
 export type RealmInfo = {
   name: string;
@@ -89,6 +91,18 @@ export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
 
+export interface TokenClaims {
+  user: string;
+  realm: string;
+  permissions: ('read' | 'write')[];
+}
+
+export interface RealmPermissions {
+  users: {
+    [username: string]: ('read' | 'write')[];
+  };
+}
+
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
@@ -104,6 +118,14 @@ export interface RealmAdapter {
   write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
 
   remove(path: LocalPath): Promise<void>;
+
+  createJWT(claims: TokenClaims, expiration: string, secret: string): string;
+
+  // throws if token cannot be verified or expired
+  verifyJWT(
+    token: string,
+    secret: string,
+  ): TokenClaims & { iat: number; exp: number };
 
   createStreamingResponse(
     unresolvedRealmURL: string,
@@ -200,6 +222,7 @@ interface DeleteOperation {
 
 export class Realm {
   #startedUp = new Deferred<void>();
+  #matrixClient: MatrixClient;
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
   #router: Router;
@@ -213,6 +236,8 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #flushOperations: Promise<void> | undefined;
   #operationQueue: Operation[] = [];
+  #realmSecretSeed: string;
+  #permissions: RealmPermissions['users'];
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -231,15 +256,34 @@ export class Realm {
   }
 
   constructor(
-    url: string,
-    adapter: RealmAdapter,
-    loader: Loader,
-    indexRunner: IndexRunner,
-    runnerOptsMgr: RunnerOptionsManager,
-    getIndexHTML: () => Promise<string>,
+    {
+      url,
+      adapter,
+      loader,
+      indexRunner,
+      runnerOptsMgr,
+      getIndexHTML,
+      matrix,
+      realmSecretSeed,
+      permissions,
+    }: {
+      url: string;
+      adapter: RealmAdapter;
+      loader: Loader;
+      indexRunner: IndexRunner;
+      runnerOptsMgr: RunnerOptionsManager;
+      getIndexHTML: () => Promise<string>;
+      matrix: { url: URL; username: string; password: string };
+      permissions: RealmPermissions['users'];
+      realmSecretSeed: string;
+    },
     opts?: Options,
   ) {
     this.paths = new RealmPaths(url);
+    let { username, password, url: matrixURL } = matrix;
+    this.#matrixClient = new MatrixClient(matrixURL, username, password);
+    this.#permissions = permissions;
+    this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.loaderTemplate = loader;
@@ -262,6 +306,11 @@ export class Realm {
       )
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .post(
+        '/_session',
+        SupportedMimeType.Session,
+        this.createSession.bind(this),
+      )
       .get(
         '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
@@ -534,6 +583,140 @@ export class Realm {
 
   async handle(request: Request): Promise<ResponseWithNodeStream> {
     return this.internalHandle(request, false);
+  }
+
+  private async createSession(request: Request) {
+    if (!(await this.#matrixClient.isTokenValid())) {
+      await this.#matrixClient.login();
+    }
+    let body = await request.text();
+    let json;
+    try {
+      json = JSON.parse(body);
+    } catch (e) {
+      return badRequest(this.url, `Request body is not valid JSON`);
+    }
+    let { user, challenge } = json as { user?: string; challenge?: string };
+    if (!user) {
+      return badRequest(this.url, `Request body missing 'user' property`);
+    }
+
+    if (!challenge) {
+      return await this.createChallenge(user);
+    } else {
+      return await this.verifyChallenge(user);
+    }
+  }
+
+  private async createChallenge(user: string) {
+    let dmRooms =
+      (await this.#matrixClient.getAccountData<Record<string, string>>(
+        'boxel.session-rooms',
+      )) ?? {};
+    let roomId = dmRooms[user];
+    if (!roomId) {
+      roomId = await this.#matrixClient.createDM(user);
+      dmRooms[user] = roomId;
+      await this.#matrixClient.setAccountData('boxel.session-rooms', dmRooms);
+    }
+
+    let challenge = uuidV4();
+    let hash = new Sha256();
+    hash.update(challenge);
+    hash.update(this.#realmSecretSeed);
+    let hashedChallenge = uint8ArrayToHex(await hash.digest());
+    await this.#matrixClient.sendRoomEvent(roomId, 'm.room.message', {
+      body: `auth-challenge: ${hashedChallenge}`,
+      msgtype: 'm.text',
+    });
+    return createResponse(
+      this.url,
+      JSON.stringify({
+        room: roomId,
+        challenge,
+      }),
+      {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+  }
+
+  private async verifyChallenge(user: string) {
+    let dmRooms =
+      (await this.#matrixClient.getAccountData<Record<string, string>>(
+        'boxel.session-rooms',
+      )) ?? {};
+    let roomId = dmRooms[user];
+    if (!roomId) {
+      return badRequest(
+        this.url,
+        `No challenge previously issued for user ${user}`,
+      );
+    }
+    let messages = await this.#matrixClient.roomMessages(roomId);
+    let latestChallenge = messages.find(
+      (m) =>
+        m.type === 'm.room.message' &&
+        m.sender === this.#matrixClient.userId &&
+        m.content.body.startsWith('auth-challenge:'),
+    );
+    if (!latestChallenge) {
+      return badRequest(
+        this.url,
+        `No challenge previously issued for user ${user}`,
+      );
+    }
+    let latestChallengeResponse = messages.find(
+      (m) =>
+        m.type === 'm.room.message' &&
+        m.sender === user &&
+        m.content.body.startsWith('auth-response:'),
+    );
+    if (!latestChallengeResponse) {
+      return badRequest(
+        this.url,
+        `No challenge response found for user ${user}`,
+      );
+    }
+
+    let challenge = latestChallenge.content.body.replace(
+      'auth-challenge: ',
+      '',
+    );
+    let response = latestChallengeResponse.content.body.replace(
+      'auth-response: ',
+      '',
+    );
+    let hash = new Sha256();
+    hash.update(response);
+    hash.update(this.#realmSecretSeed);
+    let hashedResponse = uint8ArrayToHex(await hash.digest());
+    if (hashedResponse === challenge) {
+      let permissions = this.#permissions[user] ?? this.#permissions['*'] ?? [];
+      let jwt = this.#adapter.createJWT(
+        {
+          user,
+          realm: this.url,
+          permissions,
+        },
+        '7d',
+        this.#realmSecretSeed,
+      );
+      return createResponse(this.url, null, {
+        status: 201,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: jwt,
+        },
+      });
+    } else {
+      return createResponse(this.url, `user ${user} failed auth challenge`, {
+        status: 401,
+      });
+    }
   }
 
   private async internalHandle(
@@ -1346,4 +1529,10 @@ function sseToChunkData(type: string, data: string, id?: string): string {
     info.push(`id: ${id}`);
   }
   return info.join('\n') + '\n\n';
+}
+
+function uint8ArrayToHex(uint8: Uint8Array) {
+  return Array.from(uint8)
+    .map((i) => i.toString(16).padStart(2, '0'))
+    .join('');
 }

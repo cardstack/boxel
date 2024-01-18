@@ -10,7 +10,7 @@ export function createResponse(
       ...init?.headers,
       'X-Boxel-Realm-Url': unresolvedRealmURL,
       vary: 'Accept',
-      'Access-Control-Expose-Headers': 'X-Boxel-Realm-Url',
+      'Access-Control-Expose-Headers': 'X-Boxel-Realm-Url,Authorization',
       ...(relaxDocumentDomain
         ? {
             // we use this header to permit cross origin communication to
