@@ -497,8 +497,7 @@ export default class RegisterUser extends Component<Signature> {
     if (!this.password) {
       this.passwordError = 'Password is missing';
     } else if (!isValidPassword(this.password)) {
-      this.passwordError =
-        'Password must be at least 8 characters long and include a number and a symbol';
+      this.passwordError = 'Password must be at least 8 characters long';
     }
   }
 

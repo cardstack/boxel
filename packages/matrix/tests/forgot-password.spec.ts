@@ -173,12 +173,10 @@ test.describe('Forgot password', () => {
     await expect(
       resetPasswordPage.locator('[data-test-reset-password-btn]'),
     ).toBeDisabled();
-    await resetPasswordPage
-      .locator('[data-test-password-field]')
-      .fill('mypassword');
+    await resetPasswordPage.locator('[data-test-password-field]').fill('short');
     await resetPasswordPage
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword');
+      .fill('short');
     await expect(
       resetPasswordPage.locator(
         '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
@@ -189,9 +187,7 @@ test.describe('Forgot password', () => {
       resetPasswordPage.locator(
         '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
       ),
-    ).toContainText(
-      'Password must be at least 8 characters long and include a number and a symbol',
-    );
+    ).toContainText('Password must be at least 8 characters long');
 
     await resetPasswordPage
       .locator('[data-test-password-field]')

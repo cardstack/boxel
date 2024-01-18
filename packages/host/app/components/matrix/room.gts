@@ -159,11 +159,6 @@ export default class Room extends Component<Signature> {
         margin-top: 0;
       }
 
-      .room-actions {
-        border-top: var(--boxel-border);
-        padding: var(--boxel-sp);
-      }
-
       .room-objective {
         margin-bottom: var(--boxel-sp-lg);
       }

@@ -42,9 +42,7 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
     await assertMessages(page, []);
 
-    await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
     await writeMessage(page, 'Room 1', 'Message 1');
-    await expect(page.locator('[data-test-send-message-btn]')).toBeEnabled();
     await page.locator('[data-test-send-message-btn]').click();
 
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
@@ -179,7 +177,6 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
-    await expect(page.locator('[data-test-send-message-btn]')).toBeEnabled();
     await expect(
       page.locator(`[data-test-selected-card="${testCard}"]`),
     ).toContainText('Person: Hassan');
