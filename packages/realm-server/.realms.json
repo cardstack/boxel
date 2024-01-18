@@ -4,9 +4,9 @@
       "*": ["read"]
     }
   },
-  "drafts": {
+  "http://localhost:4201/drafts/": {
     "users": {
-      "*": ["read", "write"]
+      "*": ["read"]
     }
   },
   "published": {

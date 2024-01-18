@@ -1208,7 +1208,7 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
-    // await this.checkPermission(request, 'read');
+    await this.checkPermission(request, 'read');
 
     let localPath = this.paths.local(request.url);
     if (localPath === '') {
@@ -1304,7 +1304,7 @@ export class Realm {
   }
 
   private async getDirectoryListing(request: Request): Promise<Response> {
-    // await this.checkPermission(request, 'read');
+    await this.checkPermission(request, 'read');
 
     // a LocalPath has no leading nor trailing slash
     let localPath: LocalPath = this.paths.local(request.url);
