@@ -1,19 +1,15 @@
 import { Input } from '@ember/component';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { restartableTask } from 'ember-concurrency';
-
 import { TrackedMap } from 'tracked-built-ins';
-
-import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
+import AiAssistantCardPicker from '@cardstack/host/components/ai-assistant/card-picker';
 import AiAssistantChatInput from '@cardstack/host/components/ai-assistant/chat-input';
-import Pill from '@cardstack/host/components/pill';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -35,27 +31,12 @@ export default class RoomInput extends Component<RoomArgs> {
       data-test-message-field={{@roomName}}
     />
 
-    <div class='attach-card'>
-      {{#if this.cardtoSend}}
-        <Pill
-          @inert={{true}}
-          @removeAction={{this.removeCard}}
-          class='selected-card'
-          data-test-selected-card={{this.cardtoSend.id}}
-        >
-          <this.cardToSendComponent />
-        </Pill>
-      {{else}}
-        <AddButton
-          class='attach-button'
-          @variant='pill'
-          {{on 'click' this.chooseCard}}
-          @disabled={{this.doChooseCard.isRunning}}
-          data-test-choose-card-btn
-        >
-          Attach Card
-        </AddButton>
-      {{/if}}
+    <AiAssistantCardPicker
+      @card={{this.cardtoSend}}
+      @chooseCard={{this.chooseCard}}
+      @removeCard={{this.removeCard}}
+      @isLoading={{this.doChooseCard.isRunning}}
+    >
       <label>
         <Input
           @type='checkbox'
@@ -64,40 +45,7 @@ export default class RoomInput extends Component<RoomArgs> {
         />
         Allow access to the cards you can see at the top of your stacks
       </label>
-    </div>
-
-    <style>
-      .attach-card {
-        --pill-height: 1.875rem;
-        background-color: var(--boxel-100);
-        color: var(--boxel-dark);
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xxs);
-        padding: var(--boxel-sp);
-      }
-      .attach-button {
-        --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
-        --boxel-add-button-pill-font: var(--boxel-font-sm);
-        height: var(--pill-height);
-        padding: 0 var(--boxel-sp-xs);
-      }
-      .attach-button:hover:not(:disabled) {
-        box-shadow: none;
-        background-color: var(--boxel-highlight-hover);
-      }
-      .selected-card {
-        height: var(--pill-height);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-400);
-      }
-      .selected-card :deep(.atom-format) {
-        background: none;
-        box-shadow: none;
-        border: none;
-        padding: 0;
-      }
-    </style>
+    </AiAssistantCardPicker>
   </template>
 
   @service private declare matrixService: MatrixService;
@@ -115,13 +63,6 @@ export default class RoomInput extends Component<RoomArgs> {
 
   private get cardtoSend() {
     return this.cardsToSend.get(this.args.roomId);
-  }
-
-  private get cardToSendComponent() {
-    if (this.cardtoSend) {
-      return this.cardtoSend.constructor.getComponent(this.cardtoSend, 'atom');
-    }
-    return undefined;
   }
 
   @action
