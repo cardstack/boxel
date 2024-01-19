@@ -168,8 +168,10 @@ export default class ResizablePanelGroup extends Component<Signature> {
       (node) => {
         return (
           node.nodeType === 1 &&
-          node.id &&
-          node.id.includes(resizeHandlerElIdPrefix)
+          node.children[0] &&
+          node.children[0].id.includes(
+            `${resizeHandlerElIdPrefix}-${this.args.orientation}`,
+          )
         );
       },
     ).length;
@@ -541,6 +543,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     let panelLengths: number[] = Array.from(this.listPanelContext.values()).map(
       (panelContext) => panelContext.lengthPx,
     );
+
     let newContainerSize = this.panelGroupLengthWithoutResizeHandlerPx;
     if (newContainerSize == undefined) {
       console.warn('Expected newContainerSize to be defined');
