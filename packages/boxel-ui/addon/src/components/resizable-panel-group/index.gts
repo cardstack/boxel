@@ -197,16 +197,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
   panelRatios: number[] = [];
 
   @action
-  registerPanel(
-    resizablePanel: ResizablePanel,
-    context: {
-      defaultLengthFraction: number | undefined;
-      lengthPx: number | undefined;
-      minLengthPx: number | undefined;
-    },
-  ) {
-    let id = this.resizablePanelIdCache.get(resizablePanel);
-    id = id ? id : Number(this.listPanelContext.size);
+  registerPanel(context: {
+    collapsible: boolean | undefined;
+    defaultLengthFraction: number | undefined;
+    lengthPx: number | undefined;
+    minLengthPx: number | undefined;
+  }) {
+    let id = Number(this.listPanelContext.size);
 
     if (context.lengthPx === undefined) {
       if (
@@ -225,8 +222,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
       lengthPx: context.lengthPx,
       initialMinLengthPx: context.minLengthPx,
       minLengthPx: context.minLengthPx,
+      collapsible:
+        context.collapsible == undefined ? true : context.collapsible,
     });
-    this.resizablePanelIdCache.set(resizablePanel, id);
 
     this.calculatePanelRatio();
 
@@ -378,12 +376,14 @@ export default class ResizablePanelGroup extends Component<Signature> {
       nextPanelElId,
       newPrevPanelElLength,
       newNextPanelElLength,
-      prevPanelElContext.initialMinLengthPx &&
-        newPrevPanelElLength >= prevPanelElContext.initialMinLengthPx
+      (prevPanelElContext.initialMinLengthPx &&
+        newPrevPanelElLength >= prevPanelElContext.initialMinLengthPx) ||
+        !prevPanelElContext.collapsible
         ? prevPanelElContext.initialMinLengthPx
         : 0,
-      nextPanelElContext.initialMinLengthPx &&
-        newNextPanelElLength >= nextPanelElContext.initialMinLengthPx
+      (nextPanelElContext.initialMinLengthPx &&
+        newNextPanelElLength >= nextPanelElContext.initialMinLengthPx) ||
+        !nextPanelElContext.collapsible
         ? nextPanelElContext.initialMinLengthPx
         : 0,
     );
@@ -431,7 +431,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
     }
     let prevPanelElLength = prevPanelElContext.lengthPx;
     let nextPanelElLength = nextPanelElContext.lengthPx;
-    if (isFirstButton && prevPanelElLength > 0 && !this.args.reverseCollapse) {
+
+    if (
+      isFirstButton &&
+      prevPanelElLength > 0 &&
+      !this.args.reverseCollapse &&
+      prevPanelElContext.collapsible
+    ) {
       this.setSiblingPanelContexts(
         this.panelId(prevPanelEl.id),
         this.panelId(nextPanelEl.id),
@@ -454,7 +460,11 @@ export default class ResizablePanelGroup extends Component<Signature> {
         prevPanelElContext.initialMinLengthPx,
         nextPanelElContext.initialMinLengthPx,
       );
-    } else if (isLastButton && nextPanelElLength > 0) {
+    } else if (
+      isLastButton &&
+      nextPanelElLength > 0 &&
+      nextPanelElContext.collapsible
+    ) {
       this.setSiblingPanelContexts(
         this.panelId(prevPanelEl.id),
         this.panelId(nextPanelEl.id),

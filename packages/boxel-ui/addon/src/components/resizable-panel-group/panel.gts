@@ -10,6 +10,7 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import type ResizablePanelGroup from './index.gts';
 
 export type PanelContext = {
+  collapsible: boolean;
   defaultLengthFraction?: number;
   id: number;
   initialMinLengthPx?: number;
@@ -19,6 +20,7 @@ export type PanelContext = {
 
 interface Signature {
   Args: {
+    collapsible?: boolean; //default true
     defaultLengthFraction: number;
     isLastPanel: (panelId: number) => boolean;
     lengthPx?: number;
@@ -26,14 +28,12 @@ interface Signature {
     orientation: 'horizontal' | 'vertical';
     panelContext: (panelId: number) => PanelContext | undefined;
     panelGroupComponent: ResizablePanelGroup;
-    registerPanel: (
-      resizablePanel: Panel,
-      context: {
-        defaultLengthFraction: number | undefined;
-        lengthPx: number | undefined;
-        minLengthPx: number | undefined;
-      },
-    ) => number;
+    registerPanel: (context: {
+      collapsible: boolean | undefined;
+      defaultLengthFraction: number | undefined;
+      lengthPx: number | undefined;
+      minLengthPx: number | undefined;
+    }) => number;
     resizablePanelElId: (id: number | undefined) => string;
     unRegisterPanel: (id: number) => void;
   };
@@ -101,10 +101,11 @@ export default class Panel extends Component<Signature> {
 
   private registerPanel() {
     if (this.id == undefined) {
-      this.id = this.args.registerPanel(this, {
+      this.id = this.args.registerPanel({
         lengthPx: this.args.lengthPx,
         defaultLengthFraction: this.args.defaultLengthFraction,
         minLengthPx: this.args.minLengthPx,
+        collapsible: this.args.collapsible,
       });
     }
   }

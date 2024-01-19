@@ -20,7 +20,7 @@ import {
   FieldContainer,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { ResizablePanel, ResizeHandler } from '@cardstack/boxel-ui/components';
+import { ResizeHandler } from '@cardstack/boxel-ui/components';
 import { not, eq } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
@@ -52,135 +52,130 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     onClose: () => void;
-    resizablePanel: ResizablePanel;
     resizeHandler: ResizeHandler;
   };
 }
 
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
-    <div class='ai-assistant-resizable-panel' data-test-ai-assistant-panel ...attributes>
+    <div class='ai-assistant-panel' data-test-ai-assistant-panel ...attributes>
       <@resizeHandler />
-      <@resizablePanel @defaultLengthFraction={{0.3}} @minLengthPx={{371}}>
-      <div class='ai-assistant-panel'>
-        <header>
-          <div class='header-buttons'>
+      <header>
+        <div class='header-buttons'>
+          <Button
+            @kind='secondary-dark'
+            @size='small'
+            class='new-session-button'
+            {{on 'click' this.displayCreateNew}}
+            @disabled={{this.isShowingCreateNew}}
+            data-test-create-room-mode-btn
+          >
+            New Session
+          </Button>
+
+          {{#if this.loadRooms.isRunning}}
+            <LoadingIndicator />
+          {{else}}
             <Button
               @kind='secondary-dark'
               @size='small'
-              class='new-session-button'
-              {{on 'click' this.displayCreateNew}}
-              @disabled={{this.isShowingCreateNew}}
-              data-test-create-room-mode-btn
+              {{on 'click' this.togglePastSessions}}
+              data-test-past-sessions-button
             >
-              New Session
+              Past Sessions
             </Button>
-
-            {{#if this.loadRooms.isRunning}}
-              <LoadingIndicator />
-            {{else}}
-              <Button
-                @kind='secondary-dark'
-                @size='small'
-                {{on 'click' this.togglePastSessions}}
-                data-test-past-sessions-button
-              >
-                Past Sessions
-              </Button>
-            {{/if}}
-
-            <IconButton
-              @variant='primary'
-              @icon={{IconX}}
-              @width='20px'
-              @height='20px'
-              class='close-ai-panel'
-              {{on 'click' @onClose}}
-              aria-label='Remove'
-              data-test-close-ai-panel
-            />
-          </div>
-
-          {{#if this.isShowingCreateNew}}
-            <div class='create-room'>
-              <FieldContainer
-                @label='Room Name'
-                @tag='label'
-                class='create-room__field'
-              >
-                <BoxelInput
-                  @state={{this.roomNameInputState}}
-                  @value={{this.newRoomName}}
-                  @errorMessage={{this.roomNameError}}
-                  @onInput={{this.setNewRoomName}}
-                  data-test-room-name-field
-                />
-              </FieldContainer>
-            </div>
-            <div class='create-button-wrapper'>
-              <Button
-                @kind='secondary-dark'
-                {{on 'click' this.closeCreateRoom}}
-                data-test-create-room-cancel-btn
-              >Cancel</Button>
-              <Button
-                @kind='primary'
-                @disabled={{not this.newRoomName.length}}
-                {{on 'click' this.createNewSession}}
-                data-test-create-room-btn
-              >Create</Button>
-            </div>
           {{/if}}
 
-          {{#if this.isShowingPastSessions}}
-            <RoomList
-              @rooms={{this.sortedJoinedAiSessions}}
-              @enterRoom={{this.enterRoom}}
-            />
-          {{/if}}
-
-          {{#if this.hasInvites}}
-            <ul class='room-list' data-test-invites-list>
-              <h3>Invites</h3>
-              {{#each this.sortedInvites as |invite|}}
-                <li class='room' data-test-invited-room={{invite.room.name}}>
-                  <span class='room-item'>
-                    {{invite.room.name}}
-                    (from:
-                    <span
-                      data-test-invite-sender={{niceName
-                        invite.member.membershipInitiator
-                      }}
-                    >{{niceName invite.member.membershipInitiator}})</span>
-                  </span>
-                  <Button
-                    @kind='secondary-dark'
-                    data-test-decline-room-btn={{invite.room.name}}
-                    {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
-                  >Decline</Button>
-                  <Button
-                    @kind='primary'
-                    data-test-join-room-btn={{invite.room.name}}
-                    {{on 'click' (fn this.joinRoom invite.room.roomId)}}
-                  >Join</Button>
-                  {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
-                    <LoadingIndicator />
-                  {{/if}}
-                </li>
-              {{/each}}
-            </ul>
-          {{/if}}
-        </header>
-
-        {{#unless this.isShowingCreateNew}}
-          {{#if this.doCreateRoom.isRunning}}
-            <LoadingIndicator />
-          {{else if this.currentRoomId}}
-            <Room @roomId={{this.currentRoomId}} @leaveRoom={{this.leaveRoom}} />
-          {{/if}}
-        {{/unless}}
+          <IconButton
+            @variant='primary'
+            @icon={{IconX}}
+            @width='20px'
+            @height='20px'
+            class='close-ai-panel'
+            {{on 'click' @onClose}}
+            aria-label='Remove'
+            data-test-close-ai-panel
+          />
         </div>
-      </@resizablePanel>
+
+        {{#if this.isShowingCreateNew}}
+          <div class='create-room'>
+            <FieldContainer
+              @label='Room Name'
+              @tag='label'
+              class='create-room__field'
+            >
+              <BoxelInput
+                @state={{this.roomNameInputState}}
+                @value={{this.newRoomName}}
+                @errorMessage={{this.roomNameError}}
+                @onInput={{this.setNewRoomName}}
+                data-test-room-name-field
+              />
+            </FieldContainer>
+          </div>
+          <div class='create-button-wrapper'>
+            <Button
+              @kind='secondary-dark'
+              {{on 'click' this.closeCreateRoom}}
+              data-test-create-room-cancel-btn
+            >Cancel</Button>
+            <Button
+              @kind='primary'
+              @disabled={{not this.newRoomName.length}}
+              {{on 'click' this.createNewSession}}
+              data-test-create-room-btn
+            >Create</Button>
+          </div>
+        {{/if}}
+
+        {{#if this.isShowingPastSessions}}
+          <RoomList
+            @rooms={{this.sortedJoinedAiSessions}}
+            @enterRoom={{this.enterRoom}}
+          />
+        {{/if}}
+
+        {{#if this.hasInvites}}
+          <ul class='room-list' data-test-invites-list>
+            <h3>Invites</h3>
+            {{#each this.sortedInvites as |invite|}}
+              <li class='room' data-test-invited-room={{invite.room.name}}>
+                <span class='room-item'>
+                  {{invite.room.name}}
+                  (from:
+                  <span
+                    data-test-invite-sender={{niceName
+                      invite.member.membershipInitiator
+                    }}
+                  >{{niceName invite.member.membershipInitiator}})</span>
+                </span>
+                <Button
+                  @kind='secondary-dark'
+                  data-test-decline-room-btn={{invite.room.name}}
+                  {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
+                >Decline</Button>
+                <Button
+                  @kind='primary'
+                  data-test-join-room-btn={{invite.room.name}}
+                  {{on 'click' (fn this.joinRoom invite.room.roomId)}}
+                >Join</Button>
+                {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
+                  <LoadingIndicator />
+                {{/if}}
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+      </header>
+
+      {{#unless this.isShowingCreateNew}}
+        {{#if this.doCreateRoom.isRunning}}
+          <LoadingIndicator />
+        {{else if this.currentRoomId}}
+          <Room @roomId={{this.currentRoomId}} @leaveRoom={{this.leaveRoom}} />
+        {{/if}}
+      {{/unless}}
     </div>
 
     <style>
@@ -190,10 +185,8 @@ export default class AiAssistantPanel extends Component<Signature> {
         background-color: var(--boxel-ai-purple);
         border: none;
         color: var(--boxel-light);
-      }
-      .ai-assistant-resizable-panel {
-        display: flex;
         height: 100%;
+        position: relative;
       }
       :deep(.arrow) {
         display: none;
@@ -203,15 +196,27 @@ export default class AiAssistantPanel extends Component<Signature> {
           var(--boxel-panel-resize-handler-width) +
             calc(var(--boxel-sp-xxxs) * 2)
         );
+        position: absolute;
+        left: 0;
+        height: 100%;
       }
       :deep(.separator-horizontal:not(:hover) > button) {
         display: none;
+      }
+      :deep(.room-info) {
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
+      }
+      :deep(.ai-assistant-conversation) {
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
+      }
+      :deep(.room-actions) {
+        z-index: 1;
       }
       .header-buttons {
         align-items: center;
         display: flex;
         padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
-          var(--boxel-sp);
+          var(--boxel-sp-lg);
       }
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);

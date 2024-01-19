@@ -154,16 +154,26 @@ export default class SubmodeLayout extends Component<Signature> {
         as |ResizablePanel ResizeHandler|
       >
         <ResizablePanel @defaultLengthFraction={{1}}>
+          <SubmodeSwitcher
+            @submode={{this.operatorModeStateService.state.submode}}
+            @onSubmodeSelect={{this.updateSubmode}}
+            class='submode-switcher'
+          />
           {{yield this.openSearchSheetToPrompt}}
         </ResizablePanel>
         {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
           {{#if this.isAiAssistantVisible}}
-            <AiAssistantPanel
-              @onClose={{this.toggleChat}}
-              @resizablePanel={{ResizablePanel}}
-              @resizeHandler={{ResizeHandler}}
-              class='ai-assistant-panel'
-            />
+            <ResizablePanel
+              @defaultLengthFraction={{0.3}}
+              @minLengthPx={{371}}
+              @collapsible={{false}}
+            >
+              <AiAssistantPanel
+                @onClose={{this.toggleChat}}
+                @resizeHandler={{ResizeHandler}}
+                class='ai-assistant-panel'
+              />
+            </ResizablePanel>
           {{else}}
             <AiAssistantButton
               class='chat-btn'
@@ -172,11 +182,6 @@ export default class SubmodeLayout extends Component<Signature> {
           {{/if}}
         {{/if}}
       </ResizablePanelGroup>
-      <SubmodeSwitcher
-        @submode={{this.operatorModeStateService.state.submode}}
-        @onSubmodeSelect={{this.updateSubmode}}
-        class='submode-switcher'
-      />
     </div>
 
     <div class='profile-icon-container'>
@@ -242,8 +247,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .ai-assistant-panel {
-        flex: 0;
-        height: 100%;
+        z-index: 2;
       }
 
       .submode-switcher {
@@ -251,6 +255,7 @@ export default class SubmodeLayout extends Component<Signature> {
         top: 0;
         left: 0;
         padding: var(--boxel-sp);
+        z-index: 1;
       }
 
       .profile-icon-container {
