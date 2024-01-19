@@ -85,6 +85,7 @@ test.describe('Room messages', () => {
 
     await logout(page);
     await login(page, 'user1', 'pass');
+    await reloadAndOpenAiAssistant(page);
     await openRoom(page, 'Room 1');
     await assertMessages(page, [
       { from: 'user1', message: 'first message' },

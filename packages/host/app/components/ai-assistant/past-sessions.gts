@@ -61,7 +61,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
 
     <ul>
       {{#each @sessions as |session|}}
-        <li>
+        <li data-test-joined-room={{session.room.name}}>
           <button
             {{on 'click' (fn @onSessionSelect session.room.roomId)}}
             data-test-enter-room={{session.room.name}}

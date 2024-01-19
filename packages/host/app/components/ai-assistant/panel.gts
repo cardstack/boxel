@@ -146,7 +146,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 Past Sessions
                 <button
                   {{on 'click' this.togglePastSessions}}
-                  data-test-open-past-sessions
+                  data-test-close-past-sessions
                 >
                   <DropdownArrowUp width={{20}} height={{20}} />
                 </button>
