@@ -40,7 +40,7 @@ const MATRIX_REGISTRATION_TYPES = {
   register: undefined,
 };
 
-const { matrixURL } = ENV;
+const { matrixServerName } = ENV;
 interface Signature {
   Args: {
     setMode: (mode: AuthMode) => void;
@@ -139,7 +139,7 @@ export default class RegisterUser extends Component<Signature> {
             <Accessories.Text class='username-prefix'>@</Accessories.Text>
           </:before>
           <:after as |Accessories|>
-            <Accessories.Text>{{this.usernameSuffix}}</Accessories.Text>
+            <Accessories.Text>{{matrixServerName}}</Accessories.Text>
           </:after>
         </BoxelInputGroup>
       </FieldContainer>
@@ -420,10 +420,6 @@ export default class RegisterUser extends Component<Signature> {
 
   private get emailInputState() {
     return this.emailError ? 'invalid' : 'initial';
-  }
-
-  private get usernameSuffix() {
-    return ':' + new URL(matrixURL).hostname;
   }
 
   @action

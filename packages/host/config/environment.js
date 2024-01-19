@@ -25,6 +25,7 @@ module.exports = function (environment) {
     },
     logLevels: process.env.LOG_LEVELS || '*=info,current-run=error',
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
+    matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
     monacoDebounceMs: 500,
     monacoCursorDebounceMs: 200,
