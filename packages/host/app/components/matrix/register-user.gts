@@ -175,6 +175,12 @@ export default class RegisterUser extends Component<Signature> {
           @onBlur={{this.checkConfirmPassword}}
         />
       </FieldContainer>
+      {{#if this.formError}}
+        <div
+          class='error-message'
+          data-test-register-user-error
+        >{{this.formError}}</div>
+      {{/if}}
       <div class='button-wrapper'>
         <Button
           data-test-register-btn
@@ -264,6 +270,10 @@ export default class RegisterUser extends Component<Signature> {
         width: fit-content;
         min-width: 148px;
       }
+      .error-message {
+        color: var(--boxel-error-100);
+        margin-top: var(--boxel-sp-lg);
+      }
     </style>
   </template>
   @tracked private email = '';
@@ -272,6 +282,7 @@ export default class RegisterUser extends Component<Signature> {
   @tracked private password = '';
   @tracked private confirmPassword = '';
   @tracked private token = '';
+  @tracked private formError: string | undefined;
   @tracked private emailError: string | undefined;
   @tracked private nameError: string | undefined;
   @tracked private usernameError: string | undefined;
@@ -518,7 +529,10 @@ export default class RegisterUser extends Component<Signature> {
       email: this.email,
       name: this.name,
     };
-    this.validateEmail.perform();
+    this.validateEmail.perform().catch((e) => {
+      console.log('Error registering', e);
+      this.formError = `There was an error registering: ${e.message}`;
+    });
   }
 
   @action
@@ -602,7 +616,7 @@ export default class RegisterUser extends Component<Signature> {
           sendAttempt,
         };
       }
-      this.doRegistrationFlow.perform();
+      return this.doRegistrationFlow.perform();
     },
   );
 
