@@ -291,7 +291,8 @@ jobs:
   deploy-ai-bot:
     needs:
       - ai-bot-test
-      - build-ai-bot
+      - change-check
+    if: ${{ needs.change-check.outputs.ai-bot == 'true' }}
     uses: ./.github/workflows/manual-ai-bot.yml
     secrets: inherit
     with:
