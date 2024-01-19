@@ -290,17 +290,6 @@ jobs:
       restore-mtime: true
       working-directory: "packages/realm-server"
 
-  build-ai-bot:
-    name: Build ai-bot
-    needs: [change-check]
-    if: ${{ needs.change-check.outputs.ai-bot == 'true' }}
-    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
-    secrets: inherit
-    with:
-      app: "boxel-ai-bot"
-      environment: "staging"
-      working-directory: "packages/ai-bot"
-
   deploy-host:
     name: Deploy host
     needs:
@@ -339,14 +328,11 @@ jobs:
       retain: "0"
 
   deploy-ai-bot:
-    name: Deploy ai-bot to staging
     needs:
       - ai-bot-test
-      - build-ai-bot
-    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
+      - change-check
+    if: ${{ needs.change-check.outputs.ai-bot == 'true' }}
+    uses: ./.github/workflows/manual-ai-bot.yml
     secrets: inherit
     with:
-      app: "boxel-ai-bot"
       environment: "staging"
-      working-directory: "packages/ai-bot"
-      retain: "0"
