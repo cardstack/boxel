@@ -29,7 +29,7 @@ export default class AiAssistantPanelPopover extends Component<Signature> {
 
       .body {
         overflow-y: auto;
-        max-height: calc(50vw - 60px);
+        max-height: calc(75vh - 60px);
       }
     </style>
 
