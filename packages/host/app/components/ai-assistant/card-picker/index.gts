@@ -1,58 +1,67 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
-
+import { restartableTask } from 'ember-concurrency';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import Pill from '@cardstack/host/components/pill';
+
+import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    card: CardDef | undefined;
-    chooseCard: () => void;
-    removeCard: () => void;
-    isLoading?: boolean;
+    autoAttachedCard?: CardDef;
+    cardsToAttach: Set<CardDef>;
+    chooseCard: (card: CardDef) => void;
+    removeCard: (card: CardDef) => void;
+    maxNumberOfCards?: number;
   };
-  Blocks: { default: [] };
 }
 
 export default class AiAssistantCardPicker extends Component<Signature> {
   <template>
     <div class='card-picker'>
-      {{#if @card}}
+      {{#each this.cardsToDisplay as |card i|}}
         <Pill
           @inert={{true}}
-          class='selected-card'
-          data-test-selected-card={{@card.id}}
+          class={{cn
+            'card-pill'
+            is-autoattached=(eq card.id @autoAttachedCard.id)
+          }}
+          data-test-pill-index={{i}}
+          data-test-selected-card={{card.id}}
         >
-          <this.cardComponent />
+          <div class='card-title'>{{getDisplayTitle card}}</div>
           <IconButton
             class='remove-button'
             @icon={{IconX}}
-            {{on 'click' @removeCard}}
-            data-test-remove-card-btn
+            {{on 'click' (fn @removeCard card)}}
+            data-test-remove-card-btn={{i}}
           />
         </Pill>
-      {{else}}
+      {{/each}}
+      {{#if this.canDisplayAddButton}}
         <AddButton
           class='attach-button'
           @variant='pill'
-          {{on 'click' @chooseCard}}
-          @disabled={{@isLoading}}
+          {{on 'click' this.chooseCard}}
+          @disabled={{this.doChooseCard.isRunning}}
           data-test-choose-card-btn
         >
           Attach Card
         </AddButton>
       {{/if}}
-
-      {{yield}}
     </div>
     <style>
       .card-picker {
         --pill-height: 1.875rem;
+        --pill-content-max-width: 10rem;
         background-color: var(--boxel-100);
         color: var(--boxel-dark);
         display: flex;
@@ -70,16 +79,16 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         box-shadow: none;
         background-color: var(--boxel-highlight-hover);
       }
-      .selected-card {
-        height: var(--pill-height);
+      .card-pill {
         background-color: var(--boxel-light);
         border: 1px solid var(--boxel-400);
+        height: var(--pill-height);
       }
-      .selected-card :deep(.atom-format) {
-        background: none;
-        box-shadow: none;
-        border: none;
-        padding: 0;
+      .card-title {
+        max-width: var(--pill-content-max-width);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .remove-button {
         --boxel-icon-button-width: 25px;
@@ -91,14 +100,45 @@ export default class AiAssistantCardPicker extends Component<Signature> {
       .remove-button:hover:not(:disabled) {
         --icon-color: var(--boxel-highlight);
       }
+      .is-autoattached {
+        border-style: dashed;
+      }
     </style>
   </template>
 
-  private get cardComponent() {
-    let card = this.args.card;
-    if (card) {
-      return card.constructor.getComponent(card, 'atom');
+  private get cardsToDisplay() {
+    let cards = [...this.args.cardsToAttach];
+    if (this.args.autoAttachedCard) {
+      cards = [
+        ...new Set([this.args.autoAttachedCard, ...this.args.cardsToAttach]),
+      ];
     }
-    return undefined;
+    return cards;
   }
+
+  private get canDisplayAddButton() {
+    if (!this.args.maxNumberOfCards) {
+      return true;
+    }
+    return this.args.cardsToAttach.size < this.args.maxNumberOfCards;
+  }
+
+  @action
+  private async chooseCard() {
+    let card = await this.doChooseCard.perform();
+    if (card) {
+      this.args.chooseCard(card);
+    }
+  }
+
+  private doChooseCard = restartableTask(async () => {
+    let chosenCard: CardDef | undefined = await chooseCard({
+      filter: { type: baseCardRef },
+    });
+    return chosenCard;
+  });
+}
+
+function getDisplayTitle(card: CardDef) {
+  return card.title || card.constructor.displayName || 'Untitled Card';
 }

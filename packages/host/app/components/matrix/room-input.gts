@@ -6,8 +6,6 @@ import Component from '@glimmer/component';
 import { restartableTask } from 'ember-concurrency';
 import { TrackedMap } from 'tracked-built-ins';
 
-import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
-
 import AiAssistantCardPicker from '@cardstack/host/components/ai-assistant/card-picker';
 import AiAssistantChatInput from '@cardstack/host/components/ai-assistant/chat-input';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -32,20 +30,19 @@ export default class RoomInput extends Component<RoomArgs> {
     />
 
     <AiAssistantCardPicker
-      @card={{this.cardtoSend}}
+      @maxNumberOfCards={{1}}
+      @cardsToAttach={{this.cardsToAttach}}
       @chooseCard={{this.chooseCard}}
       @removeCard={{this.removeCard}}
-      @isLoading={{this.doChooseCard.isRunning}}
-    >
-      <label>
-        <Input
-          @type='checkbox'
-          @checked={{this.shareCurrentContext}}
-          data-test-share-context
-        />
-        Allow access to the cards you can see at the top of your stacks
-      </label>
-    </AiAssistantCardPicker>
+    />
+    <label>
+      <Input
+        @type='checkbox'
+        @checked={{this.shareCurrentContext}}
+        data-test-share-context
+      />
+      Allow access to the cards you can see at the top of your stacks
+    </label>
   </template>
 
   @service private declare matrixService: MatrixService;
@@ -65,6 +62,10 @@ export default class RoomInput extends Component<RoomArgs> {
     return this.cardsToSend.get(this.args.roomId);
   }
 
+  private get cardsToAttach() {
+    return this.cardtoSend ? new Set([this.cardtoSend]) : new Set([]);
+  }
+
   @action
   private setMessage(message: string) {
     this.messagesToSend.set(this.args.roomId, message);
@@ -81,8 +82,8 @@ export default class RoomInput extends Component<RoomArgs> {
   }
 
   @action
-  private chooseCard() {
-    this.doChooseCard.perform();
+  private chooseCard(card: CardDef) {
+    this.cardsToSend.set(this.args.roomId, card);
   }
 
   @action
@@ -111,13 +112,4 @@ export default class RoomInput extends Component<RoomArgs> {
       );
     },
   );
-
-  private doChooseCard = restartableTask(async () => {
-    let chosenCard: CardDef | undefined = await chooseCard({
-      filter: { type: baseCardRef },
-    });
-    if (chosenCard) {
-      this.cardsToSend.set(this.args.roomId, chosenCard);
-    }
-  });
 }
