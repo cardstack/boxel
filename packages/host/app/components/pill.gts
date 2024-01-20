@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+
 import { element, cn } from '@cardstack/boxel-ui/helpers';
 
 export interface PillSignature {

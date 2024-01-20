@@ -2,10 +2,14 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { TrackedSet } from 'tracked-built-ins';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+import { TrackedSet } from 'tracked-built-ins';
+
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
+
+import { type CardDef } from 'https://cardstack.com/base/card-api';
+
 import AiAssistantCardPicker from './index';
 
 export default class AiAssistantCardPickerUsage extends Component {
