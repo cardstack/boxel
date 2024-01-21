@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { registerUser } from '../docker/synapse';
 import {
   login,
@@ -11,14 +11,25 @@ import {
   joinRoom,
   testHost,
   reloadAndOpenAiAssistant,
-  test,
   isInRoom,
+  registerRealmUsers,
 } from '../helpers';
+import {
+  synapseStart,
+  synapseStop,
+  type SynapseInstance,
+} from '../docker/synapse';
 
 test.describe('Room messages', () => {
-  test.beforeEach(async ({ synapse }) => {
+  let synapse: SynapseInstance;
+  test.beforeEach(async () => {
+    synapse = await synapseStart();
+    await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
+  });
+  test.afterEach(async () => {
+    await synapseStop(synapse.synapseId);
   });
   test(`it can send a message in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass');

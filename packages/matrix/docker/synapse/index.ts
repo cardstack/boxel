@@ -9,7 +9,6 @@ import {
   dockerLogs,
   dockerRun,
   dockerStop,
-  getHostPort,
 } from '../index';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
@@ -26,7 +25,6 @@ interface SynapseConfig {
 
 export interface SynapseInstance extends SynapseConfig {
   synapseId: string;
-  mappedPort: number;
 }
 
 const synapses = new Map<string, SynapseInstance>();
@@ -99,7 +97,6 @@ interface StartOptions {
   template?: string;
   dataDir?: string;
   containerName?: string;
-  hostPort?: number;
 }
 export async function synapseStart(
   opts?: StartOptions,
@@ -113,31 +110,28 @@ export async function synapseStart(
     `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
   );
   await dockerCreateNetwork({ networkName: 'boxel' });
-  const portMapping = opts?.hostPort
-    ? `${opts.hostPort}:${synCfg.port}/tcp`
-    : `${synCfg.port}/tcp`;
   const synapseId = await dockerRun({
     image: 'matrixdotorg/synapse:develop',
-    containerName: containerName,
+    containerName: 'boxel-synapse',
     dockerParams: [
       '--rm',
       '-v',
       `${synCfg.configDir}:/data`,
       '-v',
       `${path.join(__dirname, 'templates')}:/custom/templates/`,
+      `--ip=${synCfg.host}`,
+      /**
+       * When using -p flag with --ip, the docker internal port must be used to access from the host
+       */
       '-p',
-      portMapping,
+      `${synCfg.port}:8008/tcp`,
       '--network=boxel',
     ],
     applicationParams: ['run'],
     runAsUser: true,
   });
 
-  const port = await getHostPort(synapseId, synCfg.port);
-
-  console.log(
-    `Started synapse with id ${synapseId} on port ${synCfg.port} mapped to ${port}.`,
-  );
+  console.log(`Started synapse with id ${synapseId} on port ${synCfg.port}`);
 
   // Await Synapse healthcheck
   await dockerExec({
@@ -156,7 +150,7 @@ export async function synapseStart(
     ],
   });
 
-  const synapse: SynapseInstance = { synapseId, mappedPort: port, ...synCfg };
+  const synapse: SynapseInstance = { synapseId, ...synCfg };
   synapses.set(synapseId, synapse);
   return synapse;
 }
@@ -198,7 +192,7 @@ export async function registerUser(
   admin = false,
   displayName?: string,
 ): Promise<Credentials> {
-  const url = `http://localhost:${synapse.mappedPort}/_synapse/admin/v1/register`;
+  const url = `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
   const { nonce } = await (await context.get(url)).json();
   const mac = admin
@@ -231,22 +225,18 @@ export async function registerUser(
 }
 
 export async function loginUser(
-  synapse: SynapseInstance,
   username: string,
   password: string,
 ): Promise<Credentials> {
   let response = await (
-    await fetch(
-      `http://localhost:${synapse.mappedPort}/_matrix/client/r0/login`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          type: 'm.login.password',
-          user: username,
-          password,
-        }),
-      },
-    )
+    await fetch(`http://localhost:${SYNAPSE_PORT}/_matrix/client/r0/login`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'm.login.password',
+        user: username,
+        password,
+      }),
+    })
   ).json();
   return {
     homeServer: response.home_server,
@@ -257,13 +247,12 @@ export async function loginUser(
 }
 
 export async function updateDisplayName(
-  synapse: SynapseInstance,
   userId: string,
   accessToken: string,
   newDisplayName: string,
 ): Promise<void> {
   let response = await fetch(
-    `http://localhost:${synapse.mappedPort}/_matrix/client/v3/profile/${userId}/displayname`,
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/profile/${userId}/displayname`,
     {
       method: 'PUT',
       headers: {
@@ -283,13 +272,12 @@ export async function updateDisplayName(
 }
 
 export async function createRegistrationToken(
-  synapse: SynapseInstance,
   adminAccessToken: string,
   registrationToken: string,
   usesAllowed = 1000,
 ) {
   let res = await fetch(
-    `http://localhost:${synapse.mappedPort}/_synapse/admin/v1/registration_tokens/new`,
+    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/registration_tokens/new`,
     {
       method: 'POST',
       headers: {
@@ -311,7 +299,6 @@ export async function createRegistrationToken(
 }
 
 export async function updateUser(
-  synapse: SynapseInstance,
   adminAccessToken: string,
   userId: string,
   {
@@ -327,7 +314,7 @@ export async function updateUser(
   },
 ) {
   let res = await fetch(
-    `http://localhost:${synapse.mappedPort}/_synapse/admin/v2/users/${userId}`,
+    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v2/users/${userId}`,
     {
       method: 'PUT',
       headers: {

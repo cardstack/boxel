@@ -35,6 +35,9 @@ There exists a "dev" mode in which we can use ember-cli to host the card runtime
 
 ### ember-cli Hosted App
 
+Prerequisite:
+Make sure that you have created a matrix user for the base realm, drafts realm, and for the published realm. To make it easier, you can execute `pnpm register-realm-users` in `packages/matrix/`, this will create a matrix user for the base realm, drafts realm, and a matrix user for the published realm.
+
 In order to run the ember-cli hosted app:
 
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
@@ -77,6 +80,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4205 | qunit server mounting realms in iframes for testing       | ✅                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                     | ✅                  | 🚫                   |
+
 
 #### Using `start:development`
 
@@ -145,7 +149,7 @@ pnpm start:admin
 
 Then visit `http://localhost:8080`, and enter the admin user's username (`admin`) and the password, also enter in your matrix server url `http://localhost:8008` in the homeserver URL field, and click "Signin".
 
-Note you can use this same administrative interface to login to the staging and production matrix server. The credentials are available in AWS secrets manager.
+Note you can use this same administrative interface to login to the staging and production matrix server. The credentials are available in AWS SSM Parameter Store.
 
 To stop the admin console run the following in the packages/matrix workspace:
 
