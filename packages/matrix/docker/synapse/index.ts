@@ -133,6 +133,25 @@ export async function synapseStart(
 
   console.log(`Started synapse with id ${synapseId} on port ${synCfg.port}`);
 
+  const synapseLogsPath = path.join('playwright', 'synapselogs', synapseId);
+  await fse.ensureDir(synapseLogsPath);
+
+  await dockerLogs({
+    containerId: synapseId,
+    stdoutFile: path.join(synapseLogsPath, 'stdout.log'),
+    stderrFile: path.join(synapseLogsPath, 'stderr.log'),
+  });
+
+  console.log('stdout logs');
+  console.log(
+    await fse.readFile(path.join(synapseLogsPath, 'stdout.log'), 'utf8'),
+  );
+
+  console.log('stderr logs');
+  console.log(
+    await fse.readFile(path.join(synapseLogsPath, 'stderr.log'), 'utf8'),
+  );
+
   // Await Synapse healthcheck
   await dockerExec({
     containerId: synapseId,
