@@ -16,7 +16,7 @@ export interface PillSignature {
 export default class Pill extends Component<PillSignature> {
   <template>
     {{#let (element (if @inert 'div' 'button')) as |Tag|}}
-      <Tag class={{cn 'pill' inert='inert'}} ...attributes>
+      <Tag class={{cn 'pill' inert=@inert}} ...attributes>
         <figure class='icon'>
           {{yield to='icon'}}
         </figure>
@@ -29,7 +29,8 @@ export default class Pill extends Component<PillSignature> {
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-5xs);
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs) var(--boxel-sp-5xs)
+          var(--boxel-sp-5xs);
         background-color: var(--boxel-light);
         border: 1px solid var(--boxel-400);
         border-radius: var(--boxel-border-radius-sm);
