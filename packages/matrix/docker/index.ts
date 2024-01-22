@@ -50,8 +50,9 @@ export function dockerExec(args: {
       ['exec', args.containerId, ...args.params],
       { encoding: 'utf8' },
       (err, stdout, stderr) => {
+        // FIXME restore
+        console.log(stdout);
         if (err) {
-          console.log(stdout);
           console.log(stderr);
           reject(err);
           return;
