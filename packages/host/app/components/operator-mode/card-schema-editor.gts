@@ -6,8 +6,10 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
+
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { gt } from '@cardstack/boxel-ui/helpers';
+import { and, bool, gt } from '@cardstack/boxel-ui/helpers';
 
 import { ArrowTopLeft, IconLink, IconPlus } from '@cardstack/boxel-ui/icons';
 
@@ -419,23 +421,30 @@ export default class CardSchemaEditor extends Component<Signature> {
         </button>
 
         {{#if this.editFieldModalShown}}
-          <EditFieldModal
-            @file={{@file}}
-            @card={{@card}}
-            @moduleSyntax={{@moduleSyntax}}
-            @onClose={{this.toggleEditFieldModal}}
-            @field={{this.fieldBeingEdited}}
+          <ToElsewhere
+            @named='schema-editor-modal'
+            @send={{component
+              EditFieldModal
+              file=@file
+              card=@card
+              moduleSyntax=@moduleSyntax
+              onClose=(fn this.toggleEditFieldModal undefined)
+              field=this.fieldBeingEdited
+            }}
           />
         {{/if}}
 
-        {{#if this.removeFieldModalShown}}
-          <RemoveFieldModal
-            @file={{@file}}
-            @card={{@card}}
-            @field={{this.fieldForRemoval}}
-            @moduleSyntax={{@moduleSyntax}}
-            @onClose={{this.toggleRemoveFieldModalShown}}
-            data-test-remove-field-modal
+        {{#if (and this.removeFieldModalShown (bool this.fieldForRemoval))}}
+          <ToElsewhere
+            @named='schema-editor-modal'
+            @send={{component
+              RemoveFieldModal
+              file=@file
+              card=@card
+              moduleSyntax=@moduleSyntax
+              onClose=(fn this.toggleRemoveFieldModalShown undefined)
+              field=this.fieldForRemoval
+            }}
           />
         {{/if}}
       {{/if}}
@@ -448,7 +457,7 @@ export default class CardSchemaEditor extends Component<Signature> {
 
   @tracked editFieldModalShown = false;
   @tracked removeFieldModalShown = false;
-  @tracked private _fieldForRemoval?: FieldOfType = undefined;
+  @tracked private fieldForRemoval?: FieldOfType = undefined;
   @tracked private fieldBeingEdited?: FieldOfType = undefined;
 
   @action toggleEditFieldModal(field?: FieldOfType) {
@@ -457,7 +466,7 @@ export default class CardSchemaEditor extends Component<Signature> {
   }
 
   @action toggleRemoveFieldModalShown(field?: FieldOfType) {
-    this._fieldForRemoval = field;
+    this.fieldForRemoval = field;
     this.removeFieldModalShown = !this.removeFieldModalShown;
   }
 
@@ -541,13 +550,5 @@ export default class CardSchemaEditor extends Component<Signature> {
       block: 'end',
       inline: 'nearest',
     });
-  }
-
-  get fieldForRemoval(): FieldOfType {
-    if (!this._fieldForRemoval) {
-      throw new Error('fieldForRemoval should be set');
-    }
-
-    return this._fieldForRemoval;
   }
 }
