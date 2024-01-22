@@ -541,6 +541,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     await waitFor(
       '[data-test-stack-card="http://test-realm/test/Person/fadhlan"]',
     );
+    await waitFor('[data-test-address-with-no-embedded]');
+    await waitFor(
+      '[data-test-address-with-no-embedded] [data-test-open-code-submode]',
+    );
     await percySnapshot(assert);
     assert
       .dom(
@@ -576,6 +580,9 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
 
+    await waitFor(
+      '[data-test-address-with-no-embedded] [data-test-open-code-submode]',
+    );
     await click(
       '[data-test-country-with-no-embedded] [data-test-open-code-submode]',
     );
@@ -645,6 +652,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
 
       // Toggle back to interactive mode
+      await waitFor('[data-test-submode-switcher]');
       await click('[data-test-submode-switcher] button');
       await click('[data-test-boxel-menu-item-text="Interact"]');
 
