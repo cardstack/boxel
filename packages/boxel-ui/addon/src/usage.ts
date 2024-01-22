@@ -5,14 +5,15 @@ import AccordionUsage from './components/accordion/usage.gts';
 import AddButtonUsage from './components/add-button/usage.gts';
 import ButtonUsage from './components/button/usage.gts';
 import CardContainerUsage from './components/card-container/usage.gts';
+import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
 import DropdownUsage from './components/dropdown/usage.gts';
 import FieldContainerUsage from './components/field-container/usage.gts';
 import GridContainerUsage from './components/grid-container/usage.gts';
 import HeaderUsage from './components/header/usage.gts';
 import IconButtonUsage from './components/icon-button/usage.gts';
-import InputUsage from './components/input/usage.gts';
 import InputGroupUsage from './components/input-group/usage.gts';
+import InputUsage from './components/input/usage.gts';
 import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
 import MessageUsage from './components/message/usage.gts';
@@ -26,14 +27,15 @@ export const ALL_USAGE_COMPONENTS = [
   ['AddButton', AddButtonUsage],
   ['Button', ButtonUsage],
   ['CardContainer', CardContainerUsage],
+  ['CircleSpinner', CircleSpinnerUsage],
   ['DropdownTrigger', DropdownTriggerUsage],
   ['Dropdown', DropdownUsage],
   ['FieldContainer', FieldContainerUsage],
   ['GridContainer', GridContainerUsage],
   ['Header', HeaderUsage],
   ['IconButton', IconButtonUsage],
+  ['InputGroup', InputGroupUsage],
   ['Input', InputUsage],
-  ['InputGroupUsage', InputGroupUsage],
   ['LoadingIndicator', LoadingIndicatorUsage],
   ['Menu', MenuUsage],
   ['Message', MessageUsage],
