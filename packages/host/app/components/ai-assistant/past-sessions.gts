@@ -21,6 +21,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         list-style-type: none;
         padding: 0;
         margin: 0;
+        margin-bottom: var(--boxel-sp-xs);
       }
 
       li {
