@@ -394,6 +394,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       ctrlKey: true,
     });
 
+    await waitFor('[data-test-operator-mode-stack]');
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
 
@@ -571,6 +572,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     // Toggle back to interactive mode
+    await waitFor('[data-test-submode-switcher]');
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
 
@@ -613,6 +615,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
 
       // Toggle from interact (default) to code submode
+      await waitFor('[data-test-submode-switcher]');
       await click('[data-test-submode-switcher] button');
       await click('[data-test-boxel-menu-item-text="Code"]');
 

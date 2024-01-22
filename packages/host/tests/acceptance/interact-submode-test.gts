@@ -278,6 +278,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
 
+      await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
       await waitFor('[data-test-card-catalog]');
       await fillIn(
@@ -304,13 +305,17 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
 
+      await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
       await waitFor('[data-test-card-catalog]');
       await fillIn(
         '[data-test-card-catalog-modal] [data-test-search-field]',
         wrongURL,
       );
-      await waitFor('[data-test-boxel-input-error-message]');
+
+      await waitFor('[data-test-boxel-input-error-message]', {
+        timeout: 2000,
+      });
       assert
         .dom('[data-test-boxel-input-error-message]')
         .hasText(`Could not find card at ${wrongURL}`);

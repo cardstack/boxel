@@ -917,6 +917,7 @@ export default class CodeSubmode extends Component<Signature> {
         padding: var(--boxel-sp) var(--boxel-sp) 0
           var(--code-mode-top-bar-padding-left);
         display: flex;
+        z-index: 2;
       }
 
       .loading {
