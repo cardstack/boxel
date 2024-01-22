@@ -1,4 +1,4 @@
-import Modifier, { NamedArgs, PositionalArgs } from 'ember-modifier';
+import Modifier, { type NamedArgs, type PositionalArgs } from 'ember-modifier';
 
 interface SetCssVarModifierSignature {
   Args: {
