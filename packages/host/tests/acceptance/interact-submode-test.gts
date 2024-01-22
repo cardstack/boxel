@@ -37,6 +37,7 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
   setupAcceptanceTestRealm,
+  setupSessionsServiceMock,
   visitOperatorMode,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
@@ -50,6 +51,7 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupOnSave(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
+  setupSessionsServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');
@@ -744,6 +746,29 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       await deferred.promise;
+    });
+
+    module('when the user lacks write permissions', function (hooks) {
+      setupSessionsServiceMock(hooks, true, false);
+
+      test('the edit button is hidden when the user lacks permissions', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Person/fadhlan`,
+                format: 'isolated',
+              },
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert.dom('[data-test-edit-button]').doesNotExist();
+      });
     });
   });
 

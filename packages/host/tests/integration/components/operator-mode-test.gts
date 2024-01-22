@@ -35,6 +35,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupServerSentEvents,
+  setupSessionsServiceMock,
   setupOnSave,
   showSearchResult,
   type TestContextWithSave,
@@ -67,6 +68,7 @@ module('Integration | operator-mode', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
+  setupSessionsServiceMock(hooks);
   setupMatrixServiceMock(hooks);
   let noop = () => {};
 

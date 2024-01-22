@@ -48,6 +48,7 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
+import { setupSessionsServiceMock } from './mock-sessions-service';
 import percySnapshot from './percy-snapshot';
 
 import { renderComponent } from './render-component';
@@ -55,6 +56,7 @@ import { WebMessageStream, messageCloseHandler } from './stream';
 import visitOperatorMode from './visit-operator-mode';
 
 export { percySnapshot };
+export { setupSessionsServiceMock };
 export { visitOperatorMode };
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
