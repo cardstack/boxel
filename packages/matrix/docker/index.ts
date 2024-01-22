@@ -32,6 +32,8 @@ export function dockerRun(args: {
       ],
       (err, stdout) => {
         if (err) {
+          console.log('Error running docker container');
+          console.log(err);
           reject(err);
         }
         resolve(stdout.trim());
