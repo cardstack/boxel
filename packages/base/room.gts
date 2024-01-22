@@ -298,10 +298,6 @@ export class RoomField extends FieldDef {
           (a, b) => a.origin_server_ts - b.origin_server_ts,
         ) as RoomNameEvent[];
       if (events.length > 0) {
-        console.log(
-          'setting room name from new events',
-          events[0].content.name,
-        );
         roomState.name = events.pop()!.content.name;
       }
 
