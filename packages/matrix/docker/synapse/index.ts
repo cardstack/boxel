@@ -138,7 +138,9 @@ export async function synapseStart(
     containerId: synapseId,
     params: [
       'curl',
-      '---v',
+      '-v',
+      '-v',
+      '-v',
       '--connect-timeout',
       '30',
       '--retry',
