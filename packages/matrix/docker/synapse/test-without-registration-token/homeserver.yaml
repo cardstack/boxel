@@ -65,7 +65,7 @@ disable_msisdn_registration: false
 registration_shared_secret: "{{REGISTRATION_SECRET}}"
 registrations_require_3pid:
   - email
-registration_requires_token: true
+registration_requires_token: false
 report_stats: false
 macaroon_secret_key: "{{MACAROON_SECRET_KEY}}"
 form_secret: "{{FORM_SECRET}}"
