@@ -31,6 +31,8 @@ export function dockerRun(args: {
         ...appParams,
       ],
       (err, stdout) => {
+        console.log('Starting container, output');
+        console.log(stdout);
         if (err) {
           console.log('Error running docker container');
           console.log(err);
