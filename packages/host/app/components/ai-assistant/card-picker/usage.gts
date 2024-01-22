@@ -28,7 +28,7 @@ export default class AiAssistantCardPickerUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='AiAssistant::ChatInput'>
+    <FreestyleUsage @name='AiAssistant::CardPicker'>
       <:description>
         Card picker for AI Assistant chat input. It allows to pick a card from
         the card catalog. Selected card is attached to the message in atom
