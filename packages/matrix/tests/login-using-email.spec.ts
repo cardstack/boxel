@@ -1,17 +1,18 @@
-import { expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
+  updateUser,
   type SynapseInstance,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
+  openRoot,
+  toggleOperatorMode,
   clearLocalStorage,
   gotoRegistration,
   assertLoggedIn,
-  test,
-  setupMatrixOverride,
-  register,
+  registerRealmUsers,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -23,29 +24,19 @@ test.describe('Login using email', () => {
   test.beforeEach(async ({ page }) => {
     synapse = await synapseStart({
       template: 'test',
-      // user registration tests require a static synapse port in order for the
-      // link in the validation email to work
-      hostPort: 8008,
     });
     await smtpStart();
-    await setupMatrixOverride(page, synapse);
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(
-      synapse,
-      admin.accessToken,
-      REGISTRATION_TOKEN,
-    );
+    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
-    await register(
-      page,
-      'Test User',
-      'user1@example.com',
-      'user1',
-      'mypassword1!',
-      REGISTRATION_TOKEN,
-    );
+    await registerUser(synapse, 'user1', 'mypassword1!');
+    await updateUser(admin.accessToken, '@user1:localhost', {
+      emailAddresses: ['user1@example.com'],
+      displayname: 'Test User',
+    });
   });
 
   test.afterEach(async () => {
@@ -54,6 +45,8 @@ test.describe('Login using email', () => {
   });
 
   test('Login using email', async ({ page }) => {
+    await openRoot(page);
+    await toggleOperatorMode(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1@example.com');
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
