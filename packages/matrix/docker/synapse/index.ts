@@ -165,7 +165,7 @@ export async function synapseStart(
       '--retry',
       '30',
       '--retry-delay',
-      '1',
+      '10',
       '--retry-all-errors',
       '--silent',
       `http://localhost:8008/health`,
