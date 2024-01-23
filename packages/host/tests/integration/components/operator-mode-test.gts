@@ -708,7 +708,8 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
 
     await waitFor('[data-test-command-apply]');
@@ -766,7 +767,8 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
 
     await waitFor('[data-test-command-apply]');
@@ -794,7 +796,8 @@ module('Integration | operator-mode', function (hooks) {
 
     matrixService.createAndJoinRoom('testroom');
 
-    await waitFor('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
 
     // Add some text so that we can click the send button
@@ -828,7 +831,8 @@ module('Integration | operator-mode', function (hooks) {
 
     matrixService.createAndJoinRoom('testroom');
 
-    await waitFor('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
 
     // Add some text so that we can click the send button
@@ -899,7 +903,8 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
     await waitFor('[data-test-card-error]');
     assert
@@ -934,7 +939,8 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     matrixService.createAndJoinRoom('testroom');
 
-    await waitFor('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
     await waitFor('[data-test-objective-error]');
     assert
