@@ -59,7 +59,9 @@ export default class AiAssistantMessageUsage extends Component {
               }}
               @errorMessage={{this.errorMessage}}
               @retryAction={{this.retryAction}}
-            />
+            >
+              <em>Optional embedded content</em>
+            </AiAssistantMessage>
           </AiAssistantConversation>
         </div>
       </:example>
@@ -99,6 +101,7 @@ export default class AiAssistantMessageUsage extends Component {
           @description='Action to be called in error state'
           @value={{this.retryAction}}
         />
+        <Args.Yield @description='Message content' />
       </:api>
     </FreestyleUsage>
     <FreestyleUsage @name='AiAssistant::Message example conversation'>

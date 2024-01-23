@@ -12,7 +12,6 @@ import {
   validateEmail,
   assertLoggedOut,
   assertLoggedIn,
-  openAiAssistant,
   registerRealmUsers,
 } from '../helpers';
 
@@ -345,7 +344,6 @@ test.describe('Profile', () => {
     await page.locator('[data-test-password-field]').fill('newpass123!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 
@@ -377,9 +375,7 @@ test.describe('Profile', () => {
       page.locator(
         '[data-test-new-password-field] ~ [data-test-boxel-input-error-message]',
       ),
-    ).toContainText(
-      'Password must be at least 8 characters long and include a number and a symbol',
-    );
+    ).toContainText('Password must be at least 8 characters long');
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeDisabled();
@@ -428,7 +424,6 @@ test.describe('Profile', () => {
     await page.locator('[data-test-password-field]').fill('newpass123!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 
@@ -497,7 +492,6 @@ test.describe('Profile', () => {
     await page.locator('[data-test-password-field]').fill('newpass123!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await openAiAssistant(page);
     await assertLoggedIn(page);
   });
 });

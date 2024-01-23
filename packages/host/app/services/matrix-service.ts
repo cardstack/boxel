@@ -45,6 +45,7 @@ import { importResource } from '../resources/import';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
+import type SessionsService from './sessions-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -62,6 +63,7 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare sessionsService: SessionsService;
   @tracked private _client: MatrixClient | undefined;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
@@ -153,6 +155,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
+      this.sessionsService.clearSessions();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -250,21 +253,15 @@ export default class MatrixService extends Service {
     realmURL: URL,
   ): Promise<TokenClaims & { iat: number; exp: number }> {
     let tokenRefreshPeriod = 5 * 60; // 5 minutes
-    let tokens = JSON.parse(localStorage.getItem('boxel-session') ?? '{}') as {
-      [realm: string]: string;
-    };
-    let token = tokens[realmURL.href];
-    if (token) {
-      let [_header, payload] = token.split('.');
-      let claims = JSON.parse(atob(payload)) as TokenClaims & {
-        iat: number;
-        exp: number;
-      };
+
+    if (this.sessionsService.currentJWT) {
+      let claims = this.sessionsService.currentJWT;
       let expiration = claims.exp;
       if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
         return claims;
       }
     }
+
     await this.createRealmSession(realmURL);
     return await this.getRealmToken(realmURL);
   }
@@ -320,10 +317,12 @@ export default class MatrixService extends Service {
       );
     }
     let token = challengeResponse.headers.get('Authorization');
-    let sessionStr = localStorage.getItem('boxel-session') ?? '{}';
-    let session = JSON.parse(sessionStr);
-    session[realmURL.href] = token;
-    localStorage.setItem('boxel-session', JSON.stringify(session));
+
+    if (token) {
+      this.sessionsService.setSession(realmURL, token);
+    } else {
+      this.sessionsService.clearSession(realmURL);
+    }
   }
 
   async createRoom(
@@ -368,6 +367,17 @@ export default class MatrixService extends Service {
     );
   }
 
+  private async sendEvent(
+    roomId: string,
+    eventType: string,
+    content: MatrixSDK.IContent,
+  ) {
+    if (content.data) {
+      content.data = JSON.stringify(content.data);
+    }
+    await this.client.sendEvent(roomId, eventType, content);
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
@@ -375,7 +385,6 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
-
     if (context?.submode === 'interact') {
       // Serialize the top of all cards on all stacks
       let serializedCards = await Promise.all(
@@ -391,14 +400,16 @@ export default class MatrixService extends Service {
         this.cardAPI,
         mappings,
       );
-      await this.client.sendEvent(roomId, 'm.room.message', {
+      await this.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.message',
         body,
         formatted_body: html,
-        context: {
-          openCards: serializedCards,
-          cardSpec: patchSpec,
-          submode: context.submode,
+        data: {
+          context: {
+            openCards: serializedCards,
+            cardSpec: patchSpec,
+            submode: context.submode,
+          },
         },
       });
       return;
@@ -412,11 +423,13 @@ export default class MatrixService extends Service {
       })`.trim();
     }
     if (card) {
-      await this.client.sendEvent(roomId, 'm.room.message', {
+      await this.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.card',
         body,
         formatted_body: html,
-        instance: serializedCard,
+        data: {
+          instance: serializedCard!,
+        },
       });
     } else {
       await this.client.sendHtmlMessage(roomId, body ?? '', html);
@@ -640,7 +653,6 @@ function saveAuth(auth: IAuthData) {
 
 function clearAuth() {
   localStorage.removeItem('auth');
-  localStorage.removeItem('boxel-session');
 }
 
 function getAuth(): IAuthData | undefined {

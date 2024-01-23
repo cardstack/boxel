@@ -139,8 +139,20 @@ let realmPermissions = new RealmPermissions();
     let url = hrefs[i][0];
     let manager = new RunnerOptionsManager();
     let matrixURL = String(matrixURLs[i]);
+    if (matrixURL.length === 0) {
+      console.error(`missing matrix URL for realm ${url}`);
+      process.exit(-1);
+    }
     let username = String(usernames[i]);
+    if (username.length === 0) {
+      console.error(`missing username for realm ${url}`);
+      process.exit(-1);
+    }
     let password = String(passwords[i]);
+    if (password.length === 0) {
+      console.error(`missing password for realm ${url}`);
+      process.exit(-1);
+    }
     let { getRunner, distPath } = await makeFastBootIndexRunner(
       dist,
       manager.getOptions.bind(manager),

@@ -33,7 +33,6 @@ test.describe('Room objectives', () => {
   }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1', invites: ['user2'] });
-    await openRoom(page, 'Room 1');
     await setObjective(
       page,
       'https://cardstack.com/base/fields/room-objective-field',
@@ -65,7 +64,6 @@ test.describe('Room objectives', () => {
   test('room creator can set a room objective', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
-    await openRoom(page, 'Room 1');
 
     await setObjective(
       page,
@@ -75,7 +73,7 @@ test.describe('Room objectives', () => {
       'Objective: Make sure that all room members greet each other by saying "Hello"',
     );
     await assertMessages(page, [
-      { from: 'user1', message: 'Objective has been set by @user1:localhost' },
+      { from: 'user1', message: 'user1 has set the room objectives' },
     ]);
     await expect(
       page.locator(`[data-test-set-objective-btn]`),
@@ -102,7 +100,6 @@ test.describe('Room objectives', () => {
   }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1', invites: ['user2'] });
-    await openRoom(page, 'Room 1');
 
     await setObjective(
       page,
@@ -131,7 +128,6 @@ test.describe('Room objectives', () => {
   test('room objective can be completed', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
-    await openRoom(page, 'Room 1');
 
     await setObjective(
       page,
@@ -152,7 +148,6 @@ test.describe('Room objectives', () => {
   }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1', invites: ['user2'] });
-    await openRoom(page, 'Room 1');
 
     await setObjective(
       page,

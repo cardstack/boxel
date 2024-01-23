@@ -39,17 +39,17 @@
       },
       "products.6": {
         "links": {
-          "self": "../Product/03b3e910-a7ea-4881-b2cc-a1bb738530d9"
+          "self": "../Product/518dbfc8-a9fa-4403-8422-885edb64063f"
         }
       },
       "products.7": {
         "links": {
-          "self": "../Product/518dbfc8-a9fa-4403-8422-885edb64063f"
+          "self": "../Product/13e1dc95-e84d-4ddd-ad17-fa6b3c59cca5"
         }
       },
       "products.8": {
         "links": {
-          "self": "../Product/13e1dc95-e84d-4ddd-ad17-fa6b3c59cca5"
+          "self": "../VideoProduct/9d37cb15-f63a-4eb1-ba1b-f209a12fe1c8"
         }
       }
     },

@@ -119,7 +119,7 @@ export class MockMatrixService extends Service {
     });
 
     addRoomEvent(this, {
-      event_id: 'eventname',
+      event_id: 'eventcreate',
       room_id: roomId,
       type: 'm.room.create',
       origin_server_ts: 0,
@@ -138,8 +138,20 @@ export class MockMatrixService extends Service {
       content: {
         displayname: 'testuser',
         membership: 'join',
-        membershipTs: 1,
+        membershipTs: Date.now(),
         membershipInitiator: '@testuser:staging',
+      },
+    });
+
+    addRoomEvent(this, {
+      event_id: 'eventinvite',
+      room_id: roomId,
+      type: 'm.room.member',
+      sender: '@testuser:staging',
+      state_key: '@aibot:localhost',
+      content: {
+        displayname: 'aibot',
+        membership: 'invite',
       },
     });
   }

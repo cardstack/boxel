@@ -14,6 +14,7 @@ declare const config: {
   ownRealmURL: string;
   otherRealmURLs: string[];
   matrixURL: string;
+  matrixServerName: string;
   experimentalAIEnabled: boolean;
   resolvedBaseRealmURL: string;
   hostsOwnAssets: boolean;

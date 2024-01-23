@@ -212,7 +212,6 @@ export async function login(
     await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
   } else {
     await openAiAssistant(page);
-    await expect(page.locator('[data-test-rooms-list]')).toHaveCount(1);
   }
 }
 
@@ -228,13 +227,17 @@ export async function createRoom(
 ) {
   await page.locator('[data-test-create-room-mode-btn]').click();
   await page.locator('[data-test-room-name-field]').fill(roomDetails.name);
+  await page.locator('[data-test-create-room-btn]').click();
+  await isInRoom(page, roomDetails.name);
+
   if (roomDetails.invites && roomDetails.invites.length > 0) {
+    await page.locator('[data-test-invite-mode-btn]').click();
     await page
       .locator('[data-test-room-invite-field]')
       .fill(roomDetails.invites.join(', '));
+    await expect(page.locator('[data-test-room-invite-btn]')).toBeEnabled();
+    await page.locator('[data-test-room-invite-btn]').click();
   }
-  await page.locator('[data-test-create-room-btn]').click();
-  await isInRoom(page, roomDetails.name);
 }
 
 export async function isInRoom(page: Page, roomName: string) {
@@ -251,6 +254,7 @@ export async function leaveRoom(page: Page, roomName: string) {
 }
 
 export async function openRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
   await isInRoom(page, roomName);
 }
@@ -309,21 +313,21 @@ export async function assertMessages(
   messages: {
     from: string;
     message?: string;
-    card?: { id: string; text?: string };
+    card?: { id: string; title?: string };
   }[],
 ) {
-  await expect(page.locator('[data-test-message-idx]')).toHaveCount(
+  await expect(page.locator('[data-test-message-index]')).toHaveCount(
     messages.length,
   );
   for (let [index, { from, message, card }] of messages.entries()) {
     await expect(
       page.locator(
-        `[data-test-message-idx="${index}"] [data-test-boxel-message-name]`,
+        `[data-test-message-index="${index}"][data-test-boxel-message-from="${from}"]`,
       ),
-    ).toContainText(from);
+    ).toHaveCount(1);
     if (message != null) {
       await expect(
-        page.locator(`[data-test-message-idx="${index}"] .content`),
+        page.locator(`[data-test-message-index="${index}"] .content`),
       ).toContainText(message);
     }
     if (card) {
@@ -332,17 +336,18 @@ export async function assertMessages(
           `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`,
         ),
       ).toHaveCount(1);
-      if (card.text) {
-        if (message != null && card.text.includes(message)) {
+      if (card.title) {
+        if (message != null && card.title.includes(message)) {
           throw new Error(
-            `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.text}'`,
+            `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
           );
         }
+        // note: attached cards are in atom format (which display the title by default)
         await expect(
           page.locator(
-            `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`,
+            `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"] [data-test-card-format="atom"]`,
           ),
-        ).toContainText(card.text);
+        ).toContainText(card.title);
       }
     } else {
       await expect(
@@ -360,6 +365,7 @@ interface RoomAssertions {
 }
 
 export async function assertRooms(page: Page, rooms: RoomAssertions) {
+  await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
   if (rooms.joinedRooms && rooms.joinedRooms.length > 0) {
     await page.waitForFunction(
       (rooms: RoomAssertions) =>
@@ -400,9 +406,12 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
       `invited rooms are not displayed`,
     ).toHaveCount(0);
   }
+  await page.locator(`[data-test-close-past-sessions]`).click();
 }
 
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
+  await page.locator('[data-test-profile-icon-button]').click();
+
   await expect(
     page.locator('[data-test-username-field]'),
     'username field is not displayed',
@@ -411,16 +420,22 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
     page.locator('[data-test-password-field]'),
     'password field is not displayed',
   ).toHaveCount(0);
-  await expect(page.locator('[data-test-field-value="userId"]')).toContainText(
+
+  await expect(page.locator('[data-test-profile-display-name]')).toContainText(
+    opts?.displayName ?? 'user1',
+  );
+  await expect(page.locator('[data-test-profile-icon-handle]')).toContainText(
     opts?.userId ?? '@user1:localhost',
   );
-  await expect(
-    page.locator('[data-test-field-value="displayName"]'),
-  ).toContainText(opts?.displayName ?? 'user1');
+
   if (opts?.email) {
-    await expect(page.locator('[data-test-field-value="email"]')).toHaveText(
+    await page.locator('[data-test-settings-button]').click();
+    await expect(page.locator('[data-test-current-email]')).toContainText(
       opts.email,
     );
+    await page.locator('[data-test-confirm-cancel-button]').click(); // close settings modal + popover
+  } else {
+    await page.locator('[data-test-profile-icon-button]').click(); // close profile popover
   }
 }
 

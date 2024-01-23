@@ -11,9 +11,6 @@ import StringField from './string';
 import DateTimeField from './datetime';
 import NumberField from './number';
 import MarkdownField from './markdown';
-import { BoxelMessage } from '@cardstack/boxel-ui/components';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
 import {
   Loader,
@@ -93,14 +90,6 @@ class MatrixEventField extends FieldDef {
   static edit = class Edit extends JSONView {};
 }
 
-const messageStyle = {
-  boxelMessageAvatarSize: '2.5rem',
-  boxelMessageMetaHeight: '1.25rem',
-  boxelMessageGap: 'var(--boxel-sp)',
-  boxelMessageMarginLeft:
-    'calc( var(--boxel-message-avatar-size) + var(--boxel-message-gap) )',
-};
-
 class RoomMemberView extends Component<typeof RoomMemberField> {
   <template>
     <div class='container'>
@@ -150,7 +139,7 @@ export class RoomMemberField extends FieldDef {
   @field membershipInitiator = contains(StringField);
   @field name = contains(StringField, {
     computeVia: function (this: RoomMemberField) {
-      return this.displayName ?? this.userId.split(':')[0].substring(1);
+      return this.displayName ?? this.userId?.split(':')[0].substring(1);
     },
   });
   static embedded = class Embedded extends RoomMemberView {};
@@ -168,25 +157,11 @@ class ScrollIntoView extends Modifier {
 class EmbeddedMessageField extends Component<typeof MessageField> {
   // TODO need to add the message specific CSS here
   <template>
-    <BoxelMessage
+    <div
       {{ScrollIntoView}}
       data-test-message-idx={{@model.index}}
       data-test-message-card={{@model.attachedCardId}}
-      @name={{@model.author.displayName}}
-      @datetime={{formatRFC3339 this.timestamp}}
-      style={{cssVar
-        boxel-message-avatar-size=messageStyle.boxelMessageAvatarSize
-        boxel-message-meta-height=messageStyle.boxelMessageMetaHeight
-        boxel-message-gap=messageStyle.boxelMessageGap
-        boxel-message-margin-left=messageStyle.boxelMessageMarginLeft
-      }}
     >
-      {{! template-lint-disable no-triple-curlies }}
-
-      <div>
-        {{@fields.message}}
-      </div>
-
       {{#if this.attachedCardResource.cardError}}
         <div data-test-card-error class='error'>
           Error: cannot render card
@@ -196,7 +171,7 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       {{else if this.attachedCardResource.card}}
         <this.cardComponent />
       {{/if}}
-    </BoxelMessage>
+    </div>
 
     <style>
       .error {
@@ -222,7 +197,7 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
     if (!card) {
       return;
     }
-    return card.constructor.getComponent(card, 'isolated');
+    return card.constructor.getComponent(card, 'atom');
   }
 }
 
@@ -230,7 +205,7 @@ type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
 type JSONObject = { [x: string]: JSONValue };
 
-type PatchObject = { patch: { attributes: JSONObject }; id: string };
+export type PatchObject = { patch: { attributes: JSONObject }; id: string };
 
 class PatchObjectField extends FieldDef {
   static [primitive]: PatchObject;
@@ -314,17 +289,18 @@ export class RoomField extends FieldDef {
         roomState = {} as RoomState;
         roomStateCache.set(this, roomState);
       }
-      let name = roomState.name;
-      // room name can change so we need to check new
-      // events for a room name even if we already have one
-      let events = this.newEvents
+
+      // Read from this.events instead of this.newEvents to avoid a race condition bug where
+      // newEvents never returns the m.room.name while the event is present in events
+      let events = this.events
         .filter((e) => e.type === 'm.room.name')
         .sort(
           (a, b) => a.origin_server_ts - b.origin_server_ts,
         ) as RoomNameEvent[];
       if (events.length > 0) {
-        roomState.name = name ?? events.pop()!.content.name;
+        roomState.name = events.pop()!.content.name;
       }
+
       return roomState.name;
     },
   });
@@ -394,7 +370,7 @@ export class RoomField extends FieldDef {
           userId,
           displayName: event.content.displayname,
           membership: event.content.membership,
-          membershipTs: event.origin_server_ts,
+          membershipTs: event.origin_server_ts || Date.now(),
           membershipInitiator: event.sender,
         });
       }
@@ -455,7 +431,7 @@ export class RoomField extends FieldDef {
         };
         let messageField = undefined;
         if (event.content.msgtype === 'org.boxel.card') {
-          let cardDoc = event.content.instance;
+          let cardDoc = event.content.data.instance;
           let attachedCardId = cardDoc.data.id;
           if (attachedCardId == null) {
             throw new Error(`cannot handle cards in room without an ID`);
@@ -463,18 +439,18 @@ export class RoomField extends FieldDef {
           messageField = new MessageField({ ...cardArgs, attachedCardId });
         } else if (event.content.msgtype === 'org.boxel.command') {
           // We only handle patches for now
-          if (event.content.command.type !== 'patch') {
+          let command = event.content.data.command;
+          if (command.type !== 'patch') {
             throw new Error(
-              `cannot handle commands in room with type ${event.content.command.type}`,
+              `cannot handle commands in room with type ${command.type}`,
             );
           }
-          let command = new PatchField({
-            commandType: event.content.command.type,
-            payload: event.content.command,
-          });
           messageField = new MessageField({
             ...cardArgs,
-            command,
+            command: new PatchField({
+              commandType: command.type,
+              payload: command,
+            }),
           });
         } else {
           messageField = new MessageField(cardArgs);
@@ -607,7 +583,9 @@ interface MessageEvent extends BaseMatrixEvent {
 interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
-    command: any;
+    data: {
+      command: any;
+    };
     'm.relates_to'?: {
       rel_type: string;
       event_id: string;
@@ -636,7 +614,9 @@ interface CardMessageEvent extends BaseMatrixEvent {
     format: 'org.matrix.custom.html';
     body: string;
     formatted_body: string;
-    instance: LooseSingleCardDocument;
+    data: {
+      instance: LooseSingleCardDocument;
+    };
   };
   unsigned: {
     age: number;

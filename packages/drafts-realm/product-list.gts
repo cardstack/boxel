@@ -12,10 +12,9 @@ import {
 import GlimmerComponent from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-// @ts-ignore TS1206: Decorators are not valid here.
 import { action } from '@ember/object';
-// @ts-ignore TS1206: Decorators are not valid here.
 import { tracked } from '@glimmer/tracking';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 interface FeaturedProductComponentSignature {
   Args: {
@@ -94,94 +93,118 @@ class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponent
   </template>
 }
 
+class Isolated extends Component<typeof ProductList> {
+  get featuredProduct() {
+    return this.filteredProducts?.[0];
+  }
+
+  get productsForGrid() {
+    return this.filteredProducts?.slice(1) || [];
+  }
+
+  get filteredProducts() {
+    let allProducts = this.args.model.products || [];
+    let { filterText } = this;
+    if (!filterText) return allProducts;
+    return allProducts.filter((product) => {
+      return product.title.toLowerCase().includes(filterText);
+    });
+  }
+
+  // @ts-ignore TS1206: Decorators are not valid here.
+  @action
+  viewProduct(model: ProductCard | undefined) {
+    if (model && this.args.context?.actions?.viewCard) {
+      this.args.context.actions.viewCard(model);
+    } else {
+      console.warn('Product card opening functionality is not available here.');
+    }
+  }
+
+  @tracked filterText = '';
+
+  @action
+  updateFilterText(event: Event) {
+    this.filterText = (event.target as HTMLInputElement).value.toLowerCase();
+  }
+
+  <template>
+    <div>
+      <div class='search-container'>
+        <BoxelInput
+          @type='search'
+          class='search-input'
+          placeholder='Filter products...'
+          @value={{this.filterText}}
+          {{on 'input' this.updateFilterText}}
+        />
+      </div>
+      <div class='products-container'>
+        <div class='featured'>
+          <FeaturedProductComponent
+            @viewProduct={{this.viewProduct}}
+            @model={{this.featuredProduct}}
+          />
+        </div>
+        <div class='grid'>
+          {{#each this.productsForGrid as |product|}}
+            <div class='grid-item'>
+              <EmbeddedProductComponent
+                @model={{product}}
+                {{on 'click' (fn this.viewProduct product)}}
+                class='grid-item-product'
+              />
+            </div>
+          {{/each}}
+        </div>
+      </div>
+    </div>
+    <style>
+      .search-container {
+        background-image: url(https://i.imgur.com/PQuDAEo.jpg);
+        padding: var(--boxel-sp);
+      }
+      .search-input {
+        background-color: white;
+        color: black;
+      }
+      .search-input::placeholder {
+        color: var(--boxel-dark) !important;
+      }
+      .products-container {
+        padding: var(--boxel-sp);
+      }
+      .featured {
+        padding-bottom: var(--boxel-sp);
+        border-bottom: 2px solid black;
+        margin-bottom: var(--boxel-sp);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        grid-gap: 0;
+      }
+      .grid-item {
+        border-bottom: 1px solid var(--boxel-200);
+        padding-bottom: var(--boxel-sp-xxs);
+        margin-bottom: var(--boxel-sp-xs);
+        padding-right: var(--boxel-sp);
+      }
+      .grid-item:nth-child(4) {
+        padding-right: 0;
+      }
+      .grid-item-product {
+        cursor: pointer;
+      }
+    </style>
+  </template>
+}
+
 export class ProductList extends CardDef {
   @field products = linksToMany(ProductCard);
   static displayName = 'Product List';
 
-  static isolated = class Isolated extends Component<typeof this> {
-    get featuredProduct() {
-      return this.args.model.products?.[0];
-    }
-
-    get productsForGrid() {
-      return this.args.model.products?.slice(1) || [];
-    }
-
-    // @ts-ignore TS1206: Decorators are not valid here.
-    @action
-    viewProduct(model: ProductCard | undefined) {
-      if (model && this.args.context?.actions?.viewCard) {
-        this.args.context.actions.viewCard(model);
-      } else {
-        console.warn(
-          'Product card opening functionality is not available here.',
-        );
-      }
-    }
-
-    <template>
-      <div>
-        <div class='decorative-header'></div>
-        <div class='products-container'>
-          <div class='featured'>
-            <FeaturedProductComponent
-              @viewProduct={{this.viewProduct}}
-              @model={{this.featuredProduct}}
-            />
-          </div>
-          <div class='grid'>
-            {{#each this.productsForGrid as |product|}}
-              <div class='grid-item'>
-                <EmbeddedProductComponent
-                  @model={{product}}
-                  {{on 'click' (fn this.viewProduct product)}}
-                  class='grid-item-product'
-                />
-              </div>
-            {{/each}}
-          </div>
-        </div>
-      </div>
-      <style>
-        .decorative-header {
-          background-image: url(https://i.imgur.com/PQuDAEo.jpg);
-          height: var(--boxel-sp-xxl);
-        }
-        .search-input {
-          background-color: white;
-          color: black;
-        }
-        .search-input::placeholder {
-          color: var(--boxel-dark) !important;
-        }
-        .products-container {
-          padding: var(--boxel-sp);
-        }
-        .featured {
-          padding-bottom: var(--boxel-sp);
-          border-bottom: 2px solid black;
-          margin-bottom: var(--boxel-sp);
-        }
-        .grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr 1fr;
-          grid-gap: 0;
-        }
-        .grid-item {
-          border-bottom: 1px solid var(--boxel-200);
-          padding-bottom: var(--boxel-sp-xxs);
-          margin-bottom: var(--boxel-sp-xs);
-          padding-right: var(--boxel-sp);
-        }
-        .grid-item:nth-child(4) {
-          padding-right: 0;
-        }
-        .grid-item-product {
-          cursor: pointer;
-        }
-      </style>
-    </template>
-  };
+  static isolated = Isolated;
 
   /*
 
@@ -196,6 +219,9 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
 
 
 

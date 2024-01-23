@@ -56,6 +56,7 @@ import config from '@cardstack/host/config/environment';
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 
 import type EnvironmentService from '@cardstack/host/services/environment-service';
+import type SessionsService from '@cardstack/host/services/sessions-service';
 
 import type {
   CardDef,
@@ -100,6 +101,7 @@ export interface RenderedCardForOverlayActions {
 export default class OperatorModeStackItem extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare environmentService: EnvironmentService;
+  @service declare sessionsService: SessionsService;
   @tracked selectedCards = new TrackedArray<CardDef>([]);
   @tracked isHoverOnRealmIcon = false;
   @tracked isSaving = false;
@@ -383,40 +385,42 @@ export default class OperatorModeStackItem extends Component<Signature> {
               {{/if}}
             </:icon>
             <:actions>
-              {{#if (eq @item.format 'isolated')}}
-                <Tooltip @placement='top'>
-                  <:trigger>
-                    <IconButton
-                      @icon={{IconPencil}}
-                      @width='24px'
-                      @height='24px'
-                      class='icon-button'
-                      aria-label='Edit'
-                      {{on 'click' (fn @publicAPI.editCard this.card)}}
-                      data-test-edit-button
-                    />
-                  </:trigger>
-                  <:content>
-                    Edit
-                  </:content>
-                </Tooltip>
-              {{else}}
-                <Tooltip @placement='top'>
-                  <:trigger>
-                    <IconButton
-                      @icon={{IconPencil}}
-                      @width='24px'
-                      @height='24px'
-                      class='icon-save'
-                      aria-label='Finish Editing'
-                      {{on 'click' (fn @publicAPI.saveCard this.card true)}}
-                      data-test-edit-button
-                    />
-                  </:trigger>
-                  <:content>
-                    Finish Editing
-                  </:content>
-                </Tooltip>
+              {{#if this.sessionsService.canWrite}}
+                {{#if (eq @item.format 'isolated')}}
+                  <Tooltip @placement='top'>
+                    <:trigger>
+                      <IconButton
+                        @icon={{IconPencil}}
+                        @width='24px'
+                        @height='24px'
+                        class='icon-button'
+                        aria-label='Edit'
+                        {{on 'click' (fn @publicAPI.editCard this.card)}}
+                        data-test-edit-button
+                      />
+                    </:trigger>
+                    <:content>
+                      Edit
+                    </:content>
+                  </Tooltip>
+                {{else}}
+                  <Tooltip @placement='top'>
+                    <:trigger>
+                      <IconButton
+                        @icon={{IconPencil}}
+                        @width='24px'
+                        @height='24px'
+                        class='icon-save'
+                        aria-label='Finish Editing'
+                        {{on 'click' (fn @publicAPI.saveCard this.card true)}}
+                        data-test-edit-button
+                      />
+                    </:trigger>
+                    <:content>
+                      Finish Editing
+                    </:content>
+                  </Tooltip>
+                {{/if}}
               {{/if}}
               <div>
                 <BoxelDropdown>

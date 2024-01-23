@@ -265,6 +265,14 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(EmphasizedString);
       @field number = contains(StrongNumber);
       @field guest = contains(Guest);
+      @field specialGuest = contains(Guest, {
+        computeVia(this: Person) {
+          return new Guest({
+            name: 'Special',
+            additionalGuestCount: 1,
+          });
+        },
+      });
 
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -272,8 +280,13 @@ module('Integration | card-basics', function (hooks) {
             <@fields.firstName @format='atom' />
             <@fields.number />
           </div>
-          Guest:
-          <@fields.guest @format='atom' />
+          Guests:
+          <div class='guest'>
+            <@fields.guest @format='atom' />
+          </div>
+          <div class='special-guest'>
+            <@fields.specialGuest @format='atom' />
+          </div>
         </template>
       };
     }
@@ -295,8 +308,11 @@ module('Integration | card-basics', function (hooks) {
       .dom('[data-test-embedded="number"]')
       .containsText('10', 'field has default format');
     assert
-      .dom('[data-test-compound-field-format="atom"]')
+      .dom('.guest [data-test-compound-field-format="atom"]')
       .hasText('Madeleine - 3', 'can render compound field in atom format');
+    assert
+      .dom('.special-guest [data-test-compound-field-format="atom"]')
+      .hasText('Special - 1', 'can render compound field in atom format');
   });
 
   test('render a containsMany field in atom format', async function (assert) {
