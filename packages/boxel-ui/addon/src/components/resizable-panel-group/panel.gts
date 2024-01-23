@@ -35,7 +35,7 @@ interface Signature {
       minLengthPx: number | undefined;
     }) => number;
     resizablePanelElId: (id: number | undefined) => string;
-    unRegisterPanel: (id: number) => void;
+    unregisterPanel: (id: number) => void;
   };
   Blocks: {
     default: [];
@@ -94,7 +94,7 @@ export default class Panel extends Component<Signature> {
 
     registerDestructor(this, () => {
       if (this.id) {
-        this.args.unRegisterPanel(this.id);
+        this.args.unregisterPanel(this.id);
       }
     });
   }

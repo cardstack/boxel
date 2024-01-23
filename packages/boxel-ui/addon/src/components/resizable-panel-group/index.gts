@@ -37,7 +37,7 @@ interface Signature {
         | 'panelContext'
         | 'panelGroupComponent'
         | 'registerPanel'
-        | 'unRegisterPanel'
+        | 'unregisterPanel'
         | 'resizablePanelElId'
       >,
       WithBoundArgs<
@@ -72,7 +72,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
             ResizablePanel
             orientation=@orientation
             registerPanel=this.registerPanel
-            unRegisterPanel=this.unRegisterPanel
+            unregisterPanel=this.unregisterPanel
             panelContext=this.panelContext
             isLastPanel=this.isLastPanel
             panelGroupComponent=this
@@ -234,7 +234,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @action
-  unRegisterPanel(id: number) {
+  unregisterPanel(id: number) {
     this.listPanelContext.delete(id);
     this.calculatePanelRatio();
     this.onContainerResize();
