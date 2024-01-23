@@ -45,6 +45,7 @@ import { importResource } from '../resources/import';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
+import type SessionsService from './sessions-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -62,6 +63,7 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare sessionsService: SessionsService;
   @tracked private _client: MatrixClient | undefined;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
@@ -153,6 +155,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
+      this.sessionsService.clearSessions();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -250,21 +253,15 @@ export default class MatrixService extends Service {
     realmURL: URL,
   ): Promise<TokenClaims & { iat: number; exp: number }> {
     let tokenRefreshPeriod = 5 * 60; // 5 minutes
-    let tokens = JSON.parse(localStorage.getItem('boxel-session') ?? '{}') as {
-      [realm: string]: string;
-    };
-    let token = tokens[realmURL.href];
-    if (token) {
-      let [_header, payload] = token.split('.');
-      let claims = JSON.parse(atob(payload)) as TokenClaims & {
-        iat: number;
-        exp: number;
-      };
+
+    if (this.sessionsService.currentJWT) {
+      let claims = this.sessionsService.currentJWT;
       let expiration = claims.exp;
       if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
         return claims;
       }
     }
+
     await this.createRealmSession(realmURL);
     return await this.getRealmToken(realmURL);
   }
@@ -320,10 +317,12 @@ export default class MatrixService extends Service {
       );
     }
     let token = challengeResponse.headers.get('Authorization');
-    let sessionStr = localStorage.getItem('boxel-session') ?? '{}';
-    let session = JSON.parse(sessionStr);
-    session[realmURL.href] = token;
-    localStorage.setItem('boxel-session', JSON.stringify(session));
+
+    if (token) {
+      this.sessionsService.setSession(realmURL, token);
+    } else {
+      this.sessionsService.clearSession(realmURL);
+    }
   }
 
   async createRoom(
@@ -654,7 +653,6 @@ function saveAuth(auth: IAuthData) {
 
 function clearAuth() {
   localStorage.removeItem('auth');
-  localStorage.removeItem('boxel-session');
 }
 
 function getAuth(): IAuthData | undefined {

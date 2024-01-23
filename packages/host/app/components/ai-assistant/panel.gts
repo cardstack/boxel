@@ -20,13 +20,18 @@ import {
   FieldContainer,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { not, eq } from '@cardstack/boxel-ui/helpers';
+import { ResizeHandle } from '@cardstack/boxel-ui/components';
+import { not, eq, cssVar } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
+
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+import { DropdownArrowUp } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
+import AiAssistantPanelPopover from '@cardstack/host/components/ai-assistant/panel-popover';
+import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
 import Room from '@cardstack/host/components/matrix/room';
-import RoomList from '@cardstack/host/components/matrix/room-list';
 
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -47,16 +52,20 @@ import { getRoom, RoomResource } from '../../resources/room';
 const { matrixURL } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${new URL(matrixURL).hostname}`;
 
+export type AiSessionRoom = { room: RoomField; member: RoomMemberField };
+
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     onClose: () => void;
+    resizeHandle: ResizeHandle;
   };
 }
 
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
     <div class='ai-assistant-panel' data-test-ai-assistant-panel ...attributes>
+      <@resizeHandle />
       <header>
         <div class='header-buttons'>
           <Button
@@ -78,8 +87,15 @@ export default class AiAssistantPanel extends Component<Signature> {
               @size='small'
               {{on 'click' this.togglePastSessions}}
               data-test-past-sessions-button
+              class='past-sessions-button'
             >
               Past Sessions
+
+              <DropdownArrowDown
+                width={{20}}
+                height={{20}}
+                style={{cssVar icon-color='#fff'}}
+              />
             </Button>
           {{/if}}
 
@@ -127,10 +143,25 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{/if}}
 
         {{#if this.isShowingPastSessions}}
-          <RoomList
-            @rooms={{this.sortedJoinedAiSessions}}
-            @enterRoom={{this.enterRoom}}
-          />
+          <AiAssistantPanelPopover>
+            <:header>
+              <div class='past-sessions-header'>
+                Past Sessions
+                <button
+                  {{on 'click' this.togglePastSessions}}
+                  data-test-close-past-sessions
+                >
+                  <DropdownArrowUp width={{20}} height={{20}} />
+                </button>
+              </div>
+            </:header>
+            <:body>
+              <AiAssistantPastSessionsList
+                @sessions={{this.sortedJoinedAiSessions}}
+                @onSessionSelect={{this.enterRoom}}
+              />
+            </:body>
+          </AiAssistantPanelPopover>
         {{/if}}
 
         {{#if this.hasInvites}}
@@ -182,16 +213,43 @@ export default class AiAssistantPanel extends Component<Signature> {
         background-color: var(--boxel-ai-purple);
         border: none;
         color: var(--boxel-light);
+        height: 100%;
+        position: relative;
+      }
+      :deep(.arrow) {
+        display: none;
+      }
+      :deep(.separator-horizontal) {
+        min-width: calc(
+          var(--boxel-panel-resize-handler-width) +
+            calc(var(--boxel-sp-xxxs) * 2)
+        );
+        position: absolute;
+        left: 0;
+        height: 100%;
+      }
+      :deep(.separator-horizontal:not(:hover) > button) {
+        display: none;
+      }
+      :deep(.room-info) {
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
+      }
+      :deep(.ai-assistant-conversation) {
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
+      }
+      :deep(.room-actions) {
+        z-index: 1;
       }
       .header-buttons {
         align-items: center;
         display: flex;
         padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
-          var(--boxel-sp);
+          var(--boxel-sp-lg);
       }
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);
       }
+
       .close-ai-panel {
         --icon-color: var(--boxel-highlight);
         margin-left: auto;
@@ -207,6 +265,20 @@ export default class AiAssistantPanel extends Component<Signature> {
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
       }
+      .past-sessions-header {
+        display: flex;
+        justify-content: space-between;
+        margin-right: var(--boxel-sp);
+      }
+
+      .past-sessions-header button {
+        border: 0;
+        background: inherit;
+      }
+
+      .past-sessions-button svg {
+        margin-left: var(--boxel-sp-xs);
+      }
     </style>
   </template>
 
@@ -215,7 +287,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @service private declare router: RouterService;
 
   @tracked private currentRoomId: string | undefined;
-  @tracked private isShowingPastSessions = true;
+  @tracked private isShowingPastSessions = false;
   @tracked private isShowingCreateNew = false;
   @tracked private newRoomName = '';
   @tracked private roomNameError: string | undefined;
@@ -309,8 +381,8 @@ export default class AiAssistantPanel extends Component<Signature> {
   @cached
   private get aiSessionRooms() {
     let rooms: {
-      joined: { room: RoomField; member: RoomMemberField }[];
-      invited: { room: RoomField; member: RoomMemberField }[];
+      joined: AiSessionRoom[];
+      invited: AiSessionRoom[];
     } = { joined: [], invited: [] };
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
@@ -336,13 +408,11 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get sortedJoinedAiSessions() {
-    return this.aiSessionRooms.joined
-      .sort(
-        (a, b) =>
-          a.member.membershipDateTime.getTime() -
-          b.member.membershipDateTime.getTime(),
-      )
-      .map((r) => r.room);
+    return this.aiSessionRooms.joined.sort(
+      (a, b) =>
+        a.member.membershipDateTime.getTime() -
+        b.member.membershipDateTime.getTime(),
+    );
   }
 
   @cached
