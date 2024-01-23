@@ -267,9 +267,6 @@ export default class ProfileEmail extends Component<Signature> {
       .buttons > :not(:first-child) {
         margin-left: var(--boxel-sp-xs);
       }
-      .profile-settings-modal {
-        height: 70vh;
-      }
       .error-message {
         color: var(--boxel-error-100);
         margin-top: var(--boxel-sp-lg);
