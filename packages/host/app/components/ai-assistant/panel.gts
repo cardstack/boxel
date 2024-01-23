@@ -20,6 +20,7 @@ import {
   FieldContainer,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
+import { ResizeHandle } from '@cardstack/boxel-ui/components';
 import { not, eq, cssVar } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
@@ -57,12 +58,14 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     onClose: () => void;
+    resizeHandle: ResizeHandle;
   };
 }
 
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
     <div class='ai-assistant-panel' data-test-ai-assistant-panel ...attributes>
+      <@resizeHandle />
       <header>
         <div class='header-buttons'>
           <Button
@@ -210,12 +213,38 @@ export default class AiAssistantPanel extends Component<Signature> {
         background-color: var(--boxel-ai-purple);
         border: none;
         color: var(--boxel-light);
+        height: 100%;
+        position: relative;
+      }
+      :deep(.arrow) {
+        display: none;
+      }
+      :deep(.separator-horizontal) {
+        min-width: calc(
+          var(--boxel-panel-resize-handler-width) +
+            calc(var(--boxel-sp-xxxs) * 2)
+        );
+        position: absolute;
+        left: 0;
+        height: 100%;
+      }
+      :deep(.separator-horizontal:not(:hover) > button) {
+        display: none;
+      }
+      :deep(.room-info) {
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
+      }
+      :deep(.ai-assistant-conversation) {
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
+      }
+      :deep(.room-actions) {
+        z-index: 1;
       }
       .header-buttons {
         align-items: center;
         display: flex;
         padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
-          var(--boxel-sp);
+          var(--boxel-sp-lg);
       }
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);
