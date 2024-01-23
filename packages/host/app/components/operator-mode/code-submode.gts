@@ -13,6 +13,8 @@ import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
+import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
+
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import {
@@ -847,6 +849,7 @@ export default class CodeSubmode extends Component<Signature> {
         />
       {{/if}}
       <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
+      <FromElseWhere @name='schema-editor-modal' />
     </SubmodeLayout>
 
     <style>

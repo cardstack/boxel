@@ -35,8 +35,6 @@ export async function openAiAssistant(page: Page) {
   await page.waitForFunction(() =>
     document.querySelector('[data-test-close-ai-panel]'),
   );
-  await expect(page.locator('[data-test-rooms-list]')).toHaveCount(1);
-  await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions off
 }
 
 export async function openRoot(page: Page) {
@@ -408,7 +406,7 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
       `invited rooms are not displayed`,
     ).toHaveCount(0);
   }
-  await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions off
+  await page.locator(`[data-test-close-past-sessions]`).click();
 }
 
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {

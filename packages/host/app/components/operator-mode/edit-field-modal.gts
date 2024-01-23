@@ -295,6 +295,12 @@ export default class EditFieldModal extends Component<Signature> {
 
   <template>
     <style>
+      .edit-field-modal > :deep(.boxel-modal__inner) {
+        display: flex;
+      }
+      :deep(.edit-field) {
+        height: 530px;
+      }
       .footer-buttons {
         display: flex;
         height: 100%;
@@ -341,7 +347,7 @@ export default class EditFieldModal extends Component<Signature> {
         height: auto;
       }
 
-      :global(.add-field-modal .boxel-field.horizontal) {
+      :global(.edit-field-modal .boxel-field.horizontal) {
         margin-bottom: var(--boxel-sp-lg);
       }
     </style>
@@ -352,11 +358,11 @@ export default class EditFieldModal extends Component<Signature> {
       @size='medium'
       @centered={{true}}
       {{focusTrap
-        focusTrapOptions=(hash initialFocus='.add-field-modal input')
+        focusTrapOptions=(hash initialFocus='.edit-field-modal input')
       }}
-      class='add-field-modal'
-      data-test-add-field-modal
-      style={{cssVar boxel-modal-offset-top='40vh'}}
+      @cardContainerClass='edit-field'
+      class='edit-field-modal'
+      data-test-edit-field-modal
     >
       <:content>
         <FieldContainer @label='Field Type'>
