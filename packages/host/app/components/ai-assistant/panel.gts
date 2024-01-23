@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -21,7 +20,7 @@ import {
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
 import { ResizeHandle } from '@cardstack/boxel-ui/components';
-import { not, eq, cssVar } from '@cardstack/boxel-ui/helpers';
+import { not, cssVar } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
@@ -157,43 +156,11 @@ export default class AiAssistantPanel extends Component<Signature> {
             </:header>
             <:body>
               <AiAssistantPastSessionsList
-                @sessions={{this.sortedJoinedAiSessions}}
+                @sessions={{this.sortedAiSessionRooms}}
                 @onSessionSelect={{this.enterRoom}}
               />
             </:body>
           </AiAssistantPanelPopover>
-        {{/if}}
-
-        {{#if this.hasInvites}}
-          <ul class='room-list' data-test-invites-list>
-            <h3>Invites</h3>
-            {{#each this.sortedInvites as |invite|}}
-              <li class='room' data-test-invited-room={{invite.room.name}}>
-                <span class='room-item'>
-                  {{invite.room.name}}
-                  (from:
-                  <span
-                    data-test-invite-sender={{niceName
-                      invite.member.membershipInitiator
-                    }}
-                  >{{niceName invite.member.membershipInitiator}})</span>
-                </span>
-                <Button
-                  @kind='secondary-dark'
-                  data-test-decline-room-btn={{invite.room.name}}
-                  {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
-                >Decline</Button>
-                <Button
-                  @kind='primary'
-                  data-test-join-room-btn={{invite.room.name}}
-                  {{on 'click' (fn this.joinRoom invite.room.roomId)}}
-                >Join</Button>
-                {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
-                  <LoadingIndicator />
-                {{/if}}
-              </li>
-            {{/each}}
-          </ul>
         {{/if}}
       </header>
 
@@ -291,7 +258,6 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private isShowingCreateNew = false;
   @tracked private newRoomName = '';
   @tracked private roomNameError: string | undefined;
-  @tracked private roomIdForCurrentAction: string | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -380,10 +346,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get aiSessionRooms() {
-    let rooms: {
-      joined: AiSessionRoom[];
-      invited: AiSessionRoom[];
-    } = { joined: [], invited: [] };
+    let rooms: AiSessionRoom[] = [];
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
         continue;
@@ -393,31 +356,16 @@ export default class AiAssistantPanel extends Component<Signature> {
           (m) => this.matrixService.userId === m.userId,
         );
         if (roomMember) {
-          rooms.joined.push({ room: resource.room, member: roomMember });
+          rooms.push({ room: resource.room, member: roomMember });
         }
-      }
-      let invitedMember = resource.room.invitedMembers.find(
-        (m) => this.matrixService.userId === m.userId,
-      );
-      if (invitedMember) {
-        rooms.invited.push({ room: resource.room, member: invitedMember });
       }
     }
     return rooms;
   }
 
   @cached
-  private get sortedJoinedAiSessions() {
-    return this.aiSessionRooms.joined.sort(
-      (a, b) =>
-        a.member.membershipDateTime.getTime() -
-        b.member.membershipDateTime.getTime(),
-    );
-  }
-
-  @cached
-  private get sortedInvites() {
-    return this.aiSessionRooms.invited.sort(
+  private get sortedAiSessionRooms() {
+    return this.aiSessionRooms.sort(
       (a, b) =>
         a.member.membershipDateTime.getTime() -
         b.member.membershipDateTime.getTime(),
@@ -430,38 +378,16 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.isShowingPastSessions = false;
   }
 
-  private get hasInvites() {
-    return this.aiSessionRooms.invited.length > 0;
-  }
-
   @action
   private leaveRoom(roomId: string) {
     this.doLeaveRoom.perform(roomId);
   }
 
-  @action
-  private joinRoom(roomId: string) {
-    this.doJoinRoom.perform(roomId);
-  }
-
   private doLeaveRoom = restartableTask(async (roomId: string) => {
-    this.roomIdForCurrentAction = roomId;
     await this.matrixService.client.leave(roomId);
     await timeout(eventDebounceMs); // this makes it feel a bit more responsive
-    this.roomIdForCurrentAction = undefined;
     if (this.currentRoomId === roomId) {
       this.currentRoomId = undefined;
     }
   });
-
-  private doJoinRoom = restartableTask(async (roomId: string) => {
-    this.roomIdForCurrentAction = roomId;
-    await this.matrixService.client.joinRoom(roomId);
-    await timeout(eventDebounceMs); // this makes it feel a bit more responsive
-    this.roomIdForCurrentAction = undefined;
-  });
-}
-
-function niceName(userId: string): string {
-  return userId.split(':')[0].substring(1);
 }
