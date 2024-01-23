@@ -552,7 +552,10 @@ export default class RegisterUser extends Component<Signature> {
         token: this.token,
         type: 'sendToken',
       };
-      this.doRegistrationFlow.perform();
+      this.doRegistrationFlow.perform().catch((e) => {
+        console.log('Error verifying token', e);
+        this.tokenError = `There was an error verifying token: ${e.message}`;
+      });
     }
   }
 
