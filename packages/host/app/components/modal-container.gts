@@ -89,7 +89,7 @@ export default class ModalContainer extends Component<Signature> {
           'content'
           'footer';
         grid-template-rows: auto 1fr auto;
-        box-shadow: 0 0 0 1px var(--boxel-deep-box-shadow);
+        box-shadow: var(--boxel-deep-box-shadow);
       }
 
       .dialog-box--with-sidebar {
