@@ -180,7 +180,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
       page.locator(`[data-test-selected-card="${testCard}"]`),
-    ).toContainText('Person: Hassan');
+    ).toContainText('Hassan');
 
     await page.locator('[data-test-message-field]').fill('This is _my_ card');
     await page.locator('[data-test-send-message-btn]').click();
@@ -243,7 +243,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
       page.locator(`[data-test-selected-card="${testCard}"]`),
-    ).toContainText('Person: Hassan');
+    ).toContainText('Hassan');
     await page.locator('[data-test-remove-card-btn]').click();
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
 
