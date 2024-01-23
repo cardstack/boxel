@@ -20,7 +20,7 @@ import {
   FieldContainer,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { ResizeHandler } from '@cardstack/boxel-ui/components';
+import { ResizeHandle } from '@cardstack/boxel-ui/components';
 import { not, eq } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
@@ -52,14 +52,14 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     onClose: () => void;
-    resizeHandler: ResizeHandler;
+    resizeHandle: ResizeHandle;
   };
 }
 
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
     <div class='ai-assistant-panel' data-test-ai-assistant-panel ...attributes>
-      <@resizeHandler />
+      <@resizeHandle />
       <header>
         <div class='header-buttons'>
           <Button

@@ -643,7 +643,7 @@ export default class CodeSubmode extends Component<Signature> {
           @orientation='horizontal'
           @onListPanelContextChange={{this.onListPanelContextChange}}
           class='columns'
-          as |ResizablePanel ResizeHandler|
+          as |ResizablePanel ResizeHandle|
         >
           <ResizablePanel
             @defaultLengthFraction={{defaultPanelWidths.leftPanel}}
@@ -654,7 +654,7 @@ export default class CodeSubmode extends Component<Signature> {
                 @orientation='vertical'
                 @onListPanelContextChange={{this.onFilePanelContextChange}}
                 @reverseCollapse={{true}}
-                as |VerticallyResizablePanel VerticallyResizeHandler|
+                as |VerticallyResizablePanel VerticallyResizeHandle|
               >
                 <VerticallyResizablePanel
                   @defaultLengthFraction={{defaultPanelHeights.filePanel}}
@@ -686,7 +686,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </:browser>
                   </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
-                <VerticallyResizeHandler />
+                <VerticallyResizeHandle />
                 <VerticallyResizablePanel
                   @defaultLengthFraction={{defaultPanelHeights.recentPanel}}
                   @lengthPx={{this.panelHeights.recentPanel}}
@@ -707,7 +707,7 @@ export default class CodeSubmode extends Component<Signature> {
               </ResizablePanelGroup>
             </div>
           </ResizablePanel>
-          <ResizeHandler />
+          <ResizeHandle />
           {{#if this.codePath}}
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.codeEditorPanel}}
@@ -745,7 +745,7 @@ export default class CodeSubmode extends Component<Signature> {
                 </div>
               </InnerContainer>
             </ResizablePanel>
-            <ResizeHandler />
+            <ResizeHandle />
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.rightPanel}}
               @lengthPx={{this.panelWidths.rightPanel}}
@@ -917,7 +917,6 @@ export default class CodeSubmode extends Component<Signature> {
         padding: var(--boxel-sp) var(--boxel-sp) 0
           var(--code-mode-top-bar-padding-left);
         display: flex;
-        z-index: 2;
       }
 
       .loading {

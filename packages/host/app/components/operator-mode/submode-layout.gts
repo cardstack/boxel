@@ -151,9 +151,13 @@ export default class SubmodeLayout extends Component<Signature> {
         @orientation='horizontal'
         @onListPanelContextChange={{this.onListPanelContextChange}}
         class='columns'
-        as |ResizablePanel ResizeHandler|
+        as |ResizablePanel ResizeHandle|
       >
-        <ResizablePanel @defaultLengthFraction={{1}}>
+        <ResizablePanel
+          @defaultLengthFraction={{1}}
+          @minLengthPx={{371}}
+          @collapsible={{false}}
+        >
           <SubmodeSwitcher
             @submode={{this.operatorModeStateService.state.submode}}
             @onSubmodeSelect={{this.updateSubmode}}
@@ -170,7 +174,7 @@ export default class SubmodeLayout extends Component<Signature> {
             >
               <AiAssistantPanel
                 @onClose={{this.toggleChat}}
-                @resizeHandler={{ResizeHandler}}
+                @resizeHandle={{ResizeHandle}}
                 class='ai-assistant-panel'
               />
             </ResizablePanel>
@@ -223,10 +227,6 @@ export default class SubmodeLayout extends Component<Signature> {
       .operator-mode-with-ai-assistant {
         display: flex;
         height: 100%;
-      }
-
-      .operator-mode-with-ai-assistant > * {
-        z-index: 1;
       }
 
       .operator-mode-with-ai-assistant > .boxel-panel-group {

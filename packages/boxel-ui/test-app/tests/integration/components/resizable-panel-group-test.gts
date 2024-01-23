@@ -36,7 +36,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
         <ResizablePanelGroup
           @orientation='vertical'
           @reverseCollapse={{true}}
-          as |ResizablePanel ResizeHandler|
+          as |ResizablePanel ResizeHandle|
         >
           <ResizablePanel
             @defaultLengthFraction={{0.6}}
@@ -51,7 +51,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
               </div>
             </div>
           </ResizablePanel>
-          <ResizeHandler />
+          <ResizeHandle />
           <ResizablePanel
             @defaultLengthFraction={{0.4}}
             @minLengthPx={{50}}
@@ -191,7 +191,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     this.renderController.panel2LengthPx = 550;
     await sleep(100); // let didResizeModifier run
     await doubleClick('[data-test-resize-handler]'); // Double-click to hide recent
-    await sleep(100); // let onResizeHandlerDblClick run
+    await sleep(100); // let onResizeHandleDblClick run
     assert.hasNumericStyle('.panel-1-content', 'height', 600, 1);
     assert.hasNumericStyle('.panel-2-content', 'height', 0, 2);
     this.renderController.containerStyle =
@@ -200,7 +200,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 300, 1);
     assert.hasNumericStyle('.panel-2-content', 'height', 0, 2);
     await doubleClick('[data-test-resize-handler]'); // Double-click to unhide recent
-    await sleep(100); // let onResizeHandlerDblClick run
+    await sleep(100); // let onResizeHandleDblClick run
     assert.hasNumericStyle('.panel-1-content', 'height', 180, 1);
     assert.hasNumericStyle('.panel-2-content', 'height', 120, 1);
     this.renderController.containerStyle =

@@ -25,7 +25,7 @@ import Modal from './components/modal/index.gts';
 import RadioInput from './components/radio-input/index.gts';
 import ResizablePanelGroup, {
   ResizablePanel,
-  ResizeHandler,
+  ResizeHandle,
 } from './components/resizable-panel-group/index.gts';
 import type { PanelContext } from './components/resizable-panel-group/panel.gts';
 import Tooltip from './components/tooltip/index.gts';
@@ -58,6 +58,6 @@ export {
   RadioInput,
   ResizablePanel,
   ResizablePanelGroup,
-  ResizeHandler,
+  ResizeHandle,
   Tooltip,
 };

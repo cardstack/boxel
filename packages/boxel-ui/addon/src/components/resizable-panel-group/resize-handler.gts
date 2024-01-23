@@ -19,15 +19,15 @@ interface Signature {
   Args: {
     hideHandle: boolean;
     isLastPanel: (panelId: number) => boolean;
-    onResizeHandlerDblClick: (event: MouseEvent) => void;
-    onResizeHandlerMouseDown: (event: MouseEvent) => void;
+    onResizeHandleDblClick: (event: MouseEvent) => void;
+    onResizeHandleMouseDown: (event: MouseEvent) => void;
     orientation: 'horizontal' | 'vertical';
     panelContext: (panelId: number) => PanelContext | undefined;
     panelGroupComponent: ResizablePanelGroup;
-    registerResizeHandler: () => number;
-    resizeHandlerElId: (id: number | undefined) => string;
+    registerResizeHandle: () => number;
+    resizeHandleElId: (id: number | undefined) => string;
     reverseHandlerArrow: boolean;
-    unRegisterResizeHandler: () => void;
+    unRegisterResizeHandle: () => void;
   };
   Blocks: {
     default: [];
@@ -35,18 +35,18 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-export default class ResizeHandler extends Component<Signature> {
+export default class ResizeHandle extends Component<Signature> {
   <template>
     <div class='separator-{{@orientation}}' ...attributes>
       <button
-        id={{(@resizeHandlerElId this.id)}}
+        id={{(@resizeHandleElId this.id)}}
         class='resize-handler {{@orientation}} {{if @hideHandle "hidden"}}'
-        aria-label={{(@resizeHandlerElId this.id)}}
-        data-test-resize-handler={{(@resizeHandlerElId this.id)}}
-        {{on 'mousedown' @onResizeHandlerMouseDown}}
-        {{on 'dblclick' @onResizeHandlerDblClick}}
-        {{createRef (@resizeHandlerElId this.id) bucket=@panelGroupComponent}}
-      ><div class={{this.arrowResizeHandlerClass}} /></button>
+        aria-label={{(@resizeHandleElId this.id)}}
+        data-test-resize-handler={{(@resizeHandleElId this.id)}}
+        {{on 'mousedown' @onResizeHandleMouseDown}}
+        {{on 'dblclick' @onResizeHandleDblClick}}
+        {{createRef (@resizeHandleElId this.id) bucket=@panelGroupComponent}}
+      ><div class={{this.arrowResizeHandleClass}} /></button>
     </div>
     <style>
       .separator-horizontal {
@@ -183,15 +183,15 @@ export default class ResizeHandler extends Component<Signature> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    scheduleOnce('afterRender', this, this.registerResizeHandler);
-    registerDestructor(this, this.args.unRegisterResizeHandler);
+    scheduleOnce('afterRender', this, this.registerResizeHandle);
+    registerDestructor(this, this.args.unRegisterResizeHandle);
   }
 
-  private registerResizeHandler() {
-    this.id = this.args.registerResizeHandler();
+  private registerResizeHandle() {
+    this.id = this.args.registerResizeHandle();
   }
 
-  get arrowResizeHandlerClass() {
+  get arrowResizeHandleClass() {
     let horizontal = this.args.orientation === 'horizontal';
     let reverse = this.args.reverseHandlerArrow;
 
