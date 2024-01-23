@@ -47,7 +47,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
       }
 
       li:hover + li {
-        border-top: none;
+        border-top-color: transparent;
       }
 
       .top {
@@ -56,7 +56,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
 
       .bottom {
         margin-top: var(--boxel-sp-4xs);
-        color: #7e7c8d;
+        color: var(--boxel-450);
       }
     </style>
 
