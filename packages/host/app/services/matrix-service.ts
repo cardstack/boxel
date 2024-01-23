@@ -381,7 +381,7 @@ export default class MatrixService extends Service {
   async sendMessage(
     roomId: string,
     body: string | undefined,
-    card?: CardDef,
+    cards?: CardDef[],
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
@@ -415,21 +415,21 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let serializedCard: LooseSingleCardDocument | undefined;
-    if (card) {
-      serializedCard = await this.cardService.serializeCard(card);
-      body = `${body ?? ''} (Card: ${card.title ?? 'Untitled'}, ${
-        card.id
-      })`.trim();
+    let serializedCards: LooseSingleCardDocument[] = [];
+    if (cards?.length) {
+      serializedCards = await Promise.all(
+        cards.map(async (c) => await this.cardService.serializeCard(c)),
+      );
+
+      body = body ?? '';
+      body += cards.map((c) => `Card: ${c.title ?? 'Untitled'}, ${c.id}`);
     }
-    if (card) {
+    if (cards?.length) {
       await this.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.card',
         body,
         formatted_body: html,
-        data: {
-          instance: serializedCard!,
-        },
+        data: { instances: serializedCards },
       });
     } else {
       await this.client.sendHtmlMessage(roomId, body ?? '', html);

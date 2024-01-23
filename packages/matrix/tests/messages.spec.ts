@@ -189,7 +189,7 @@ test.describe('Room messages', () => {
       {
         from: 'user1',
         message: 'This is my card',
-        card: { id: testCard, title: 'Hassan' },
+        cards: [{ id: testCard, title: 'Hassan' }],
       },
     ]);
     await expect(
@@ -202,11 +202,11 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
 
-    await sendMessage(page, 'Room 1', undefined, testCard);
+    await sendMessage(page, 'Room 1', undefined, [testCard]);
     await assertMessages(page, [
       {
         from: 'user1',
-        card: { id: testCard, title: 'Hassan' },
+        cards: [{ id: testCard, title: 'Hassan' }],
       },
     ]);
   });
@@ -217,7 +217,7 @@ test.describe('Room messages', () => {
     await createRoom(page, { name: 'Room 1', invites: ['user2'] });
 
     // Send a card that contains a type that matrix doesn't support
-    await sendMessage(page, 'Room 1', undefined, testCard);
+    await sendMessage(page, 'Room 1', undefined, [testCard]);
 
     // To avoid seeing a pending message, login as the other user
     await logout(page);
@@ -228,7 +228,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [
       {
         from: 'user1',
-        card: { id: testCard, title: 'Type Examples' },
+        cards: [{ id: testCard, title: 'Type Examples' }],
       },
     ]);
   });
@@ -263,83 +263,61 @@ test.describe('Room messages', () => {
 
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
+    const message1 = {
+      from: 'user1',
+      message: 'message 1',
+      cards: [{ id: testCard1, title: 'Hassan' }],
+    };
+    const message2 = {
+      from: 'user1',
+      message: 'message 2',
+      cards: [{ id: testCard2, title: 'Mango' }],
+    };
 
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
 
-    await sendMessage(page, 'Room 1', 'message 1', testCard1);
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        message: 'message 1',
-        card: {
-          id: testCard1,
-          title: 'Hassan',
-        },
-      },
-    ]);
+    await sendMessage(page, 'Room 1', 'message 1', [testCard1]);
+    await assertMessages(page, [message1]);
 
-    await sendMessage(page, 'Room 1', 'message 2', testCard2);
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        message: 'message 1',
-        card: {
-          id: testCard1,
-          title: 'Hassan',
-        },
-      },
-      {
-        from: 'user1',
-        message: 'message 2',
-        card: {
-          id: testCard2,
-          title: 'Mango',
-        },
-      },
-    ]);
+    await sendMessage(page, 'Room 1', 'message 2', [testCard2]);
+    await assertMessages(page, [message1, message2]);
 
     await reloadAndOpenAiAssistant(page);
     await openRoom(page, 'Room 1');
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        message: 'message 1',
-        card: {
-          id: testCard1,
-          title: 'Hassan',
-        },
-      },
-      {
-        from: 'user1',
-        message: 'message 2',
-        card: {
-          id: testCard2,
-          title: 'Mango',
-        },
-      },
-    ]);
+    await assertMessages(page, [message1, message2]);
 
     await logout(page);
     await login(page, 'user1', 'pass');
     await openRoom(page, 'Room 1');
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        message: 'message 1',
-        card: {
-          id: testCard1,
-          title: 'Hassan',
-        },
-      },
-      {
-        from: 'user1',
-        message: 'message 2',
-        card: {
-          id: testCard2,
-          title: 'Mango',
-        },
-      },
-    ]);
+    await assertMessages(page, [message1, message2]);
+  });
+
+  test('can attach and send multiple cards in a message', async ({ page }) => {
+    const testCard1 = `${testHost}/hassan`;
+    const testCard2 = `${testHost}/mango`;
+    const message = {
+      from: 'user1',
+      message: 'message 1',
+      cards: [
+        { id: testCard1, title: 'Hassan' },
+        { id: testCard2, title: 'Mango' },
+      ],
+    };
+
+    await login(page, 'user1', 'pass');
+    await createRoom(page, { name: 'Room 1' });
+
+    await sendMessage(page, 'Room 1', 'message 1', [testCard1, testCard2]);
+    await assertMessages(page, [message]);
+
+    await reloadAndOpenAiAssistant(page);
+    await openRoom(page, 'Room 1');
+    await assertMessages(page, [message]);
+
+    await logout(page);
+    await login(page, 'user1', 'pass');
+    await openRoom(page, 'Room 1');
+    await assertMessages(page, [message]);
   });
 });

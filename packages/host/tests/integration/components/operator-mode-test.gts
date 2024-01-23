@@ -886,21 +886,23 @@ module('Integration | operator-mode', function (hooks) {
         formatted_body: 'card with error',
         msgtype: 'org.boxel.card',
         data: JSON.stringify({
-          instance: {
-            data: {
-              id: 'http://this-is-not-a-real-card.com',
-              type: 'card',
-              attributes: {
-                firstName: 'Boom',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'http://not-a-real-card.com',
-                  name: 'Boom',
+          instances: [
+            {
+              data: {
+                id: 'http://this-is-not-a-real-card.com',
+                type: 'card',
+                attributes: {
+                  firstName: 'Boom',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://not-a-real-card.com',
+                    name: 'Boom',
+                  },
                 },
               },
             },
-          },
+          ],
         }),
       },
     });

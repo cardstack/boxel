@@ -10,7 +10,11 @@ import {
   IRoomEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import { logger, aiBotUsername } from '@cardstack/runtime-common';
+import {
+  logger,
+  aiBotUsername,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import {
   constructHistory,
   getModifyPrompt,
@@ -91,8 +95,8 @@ async function sendOption(client: MatrixClient, room: Room, patch: any) {
 function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
   for (let event of history.slice().reverse()) {
     if (event.content.msgtype === 'org.boxel.card') {
-      const cardInstance = event.content.data.instance;
-      return cardInstance.data.id;
+      const cardInstances = event.content.data.instances;
+      return cardInstances.map((c: LooseSingleCardDocument) => c.data.id);
     }
   }
   return undefined;

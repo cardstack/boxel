@@ -278,13 +278,20 @@ export async function setObjective(page: Page, objectiveURI: string) {
   await expect(page.locator(`[data-test-objective]`)).toHaveCount(1);
 }
 
+async function selectCardFromCatalog(page: Page, cardId: string) {
+  await page.locator('[data-test-choose-card-btn]').click();
+  await expect(page.locator(`[data-test-card-catalog]`)).toHaveCount(1);
+  await page.locator(`[data-test-select="${cardId}"]`).click();
+  await page.locator('[data-test-card-catalog-go-button]').click();
+}
+
 export async function sendMessage(
   page: Page,
   roomName: string,
   message: string | undefined,
-  cardId?: string,
+  cardIds?: string[],
 ) {
-  if (message == null && cardId == null) {
+  if (message == null && cardIds == null) {
     throw new Error(
       `sendMessage requires at least a message or a card ID be specified`,
     );
@@ -292,10 +299,10 @@ export async function sendMessage(
   if (message != null) {
     await writeMessage(page, roomName, message);
   }
-  if (cardId != null) {
-    await page.locator('[data-test-choose-card-btn]').click();
-    await page.locator(`[data-test-select="${cardId}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+  if (cardIds?.length) {
+    await Promise.all(
+      cardIds.map(async (cardId) => await selectCardFromCatalog(page, cardId)),
+    );
   }
   // can we check it's higher than before?
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
@@ -313,13 +320,13 @@ export async function assertMessages(
   messages: {
     from: string;
     message?: string;
-    card?: { id: string; title?: string };
+    cards?: { id: string; title?: string }[];
   }[],
 ) {
   await expect(page.locator('[data-test-message-index]')).toHaveCount(
     messages.length,
   );
-  for (let [index, { from, message, card }] of messages.entries()) {
+  for (let [index, { from, message, cards }] of messages.entries()) {
     await expect(
       page.locator(
         `[data-test-message-index="${index}"][data-test-boxel-message-from="${from}"]`,
@@ -330,29 +337,36 @@ export async function assertMessages(
         page.locator(`[data-test-message-index="${index}"] .content`),
       ).toContainText(message);
     }
-    if (card) {
+    if (cards?.length) {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`,
+          `[data-test-message-idx="${index}"][data-test-message-cards]`,
         ),
       ).toHaveCount(1);
-      if (card.title) {
-        if (message != null && card.title.includes(message)) {
-          throw new Error(
-            `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
-          );
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] [data-test-message-card]`,
+        ),
+      ).toHaveCount(cards.length);
+      cards.map(async (card) => {
+        if (card.title) {
+          if (message != null && card.title.includes(message)) {
+            throw new Error(
+              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
+            );
+          }
+          // note: attached cards are in atom format (which display the title by default)
+          await expect(
+            page.locator(
+              `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"] [data-test-card-format="atom"]`,
+            ),
+          ).toContainText(card.title);
         }
-        // note: attached cards are in atom format (which display the title by default)
-        await expect(
-          page.locator(
-            `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"] [data-test-card-format="atom"]`,
-          ),
-        ).toContainText(card.title);
-      }
+      });
     } else {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"][data-test-message-card]`,
+          `[data-test-message-idx="${index}"][data-test-message-cards]`,
         ),
       ).toHaveCount(0);
     }
