@@ -730,17 +730,32 @@ export class Realm {
     request: Request,
     isLocal: boolean,
   ): Promise<ResponseWithNodeStream> {
-    // local requests are allowed to query the realm as the index is being built up
-    if (!isLocal) {
-      await this.ready;
-    }
-    if (!this.searchIndex) {
-      return systemError(this.url, 'search index is not available');
-    }
-    if (this.#router.handles(request)) {
-      return this.#router.handle(request);
-    } else {
-      return this.fallbackHandle(request);
+    try {
+      // local requests are allowed to query the realm as the index is being built up
+      if (!isLocal) {
+        await this.ready;
+
+        let isWrite = ['PUT', 'PATCH', 'POST'].includes(request.method);
+        await this.checkPermission(request, isWrite ? 'write' : 'read');
+      }
+      if (!this.searchIndex) {
+        return systemError(this.url, 'search index is not available');
+      }
+      if (this.#router.handles(request)) {
+        return this.#router.handle(request);
+      } else {
+        return this.fallbackHandle(request);
+      }
+    } catch (e) {
+      if (e instanceof AuthorizationError) {
+        return new Response(`Unauthorized: ${e.message}`, { status: 401 });
+      }
+
+      if (e instanceof PermissionError) {
+        return new Response(`Not allowed: ${e.message}`, { status: 403 });
+      }
+
+      throw e;
     }
   }
 

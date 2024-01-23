@@ -98,12 +98,6 @@ export class Router {
     try {
       return await handler(request);
     } catch (err) {
-      if (err instanceof AuthorizationError) {
-        return new Response('Unauthorized', { status: 401 });
-      }
-      if (err instanceof PermissionError) {
-        return new Response('Not allowed', { status: 403 });
-      }
       if (err instanceof CardError) {
         return responseWithError(this.#paths.url, err);
       }
