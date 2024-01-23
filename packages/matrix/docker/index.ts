@@ -31,11 +31,7 @@ export function dockerRun(args: {
         ...appParams,
       ],
       (err, stdout) => {
-        console.log('Starting container, output');
-        console.log(stdout);
         if (err) {
-          console.log('Error running docker container');
-          console.log(err);
           reject(err);
         }
         resolve(stdout.trim());
@@ -54,10 +50,8 @@ export function dockerExec(args: {
       ['exec', args.containerId, ...args.params],
       { encoding: 'utf8' },
       (err, stdout, stderr) => {
-        // FIXME restore
-        console.log('Output of docker exec');
-        console.log(stdout);
         if (err) {
+          console.log(stdout);
           console.log(stderr);
           reject(err);
           return;
