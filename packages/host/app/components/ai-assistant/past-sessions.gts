@@ -4,6 +4,8 @@ import Component from '@glimmer/component';
 
 import { format as formatDate } from 'date-fns';
 
+import { eq } from '@cardstack/boxel-ui/helpers';
+
 import { AiSessionRoom } from '@cardstack/host/components/ai-assistant/panel';
 
 interface Signature {
@@ -58,23 +60,35 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         margin-top: var(--boxel-sp-4xs);
         color: var(--boxel-450);
       }
+
+      .empty-collection {
+        padding: var(--boxel-sp-sm);
+        text-align: center;
+        color: var(--boxel-450);
+      }
     </style>
 
-    <ul>
-      {{#each @sessions as |session|}}
-        <li data-test-joined-room={{session.room.name}}>
-          <button
-            {{on 'click' (fn @onSessionSelect session.room.roomId)}}
-            data-test-enter-room={{session.room.name}}
-          >
-            <div class='top'>{{session.room.name}}</div>
-            <div class='bottom'>{{formatDate
-                session.member.membershipDateTime
-                'iiii MMM d, yyyy, h:mm aa'
-              }}</div>
-          </button>
-        </li>
-      {{/each}}
-    </ul>
+    {{#if (eq @sessions.length 0)}}
+      <div class='empty-collection'>
+        No past sessions to show.
+      </div>
+    {{else}}
+      <ul>
+        {{#each @sessions as |session|}}
+          <li data-test-joined-room={{session.room.name}}>
+            <button
+              {{on 'click' (fn @onSessionSelect session.room.roomId)}}
+              data-test-enter-room={{session.room.name}}
+            >
+              <div class='top'>{{session.room.name}}</div>
+              <div class='bottom'>{{formatDate
+                  session.member.membershipDateTime
+                  'iiii MMM d, yyyy, h:mm aa'
+                }}</div>
+            </button>
+          </li>
+        {{/each}}
+      </ul>
+    {{/if}}
   </template>
 }
