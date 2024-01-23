@@ -1,6 +1,6 @@
 import * as childProcess from 'child_process';
 
-import { cfgDirFromTemplate, loginUser } from '../docker/synapse';
+import { loginUser } from '../docker/synapse';
 
 export const adminUsername = 'admin';
 export const adminPassword = 'password';
@@ -15,13 +15,7 @@ let password = process.env.PASSWORD || adminPassword;
       async (err, stdout) => {
         if (err) {
           if (stdout.includes('User ID already taken')) {
-            let synapseCofig = await cfgDirFromTemplate('dev');
-            let synapseInstance = {
-              mappedPort: 8008,
-              synapseId: '',
-              ...synapseCofig,
-            };
-            let cred = await loginUser(synapseInstance, username, password);
+            let cred = await loginUser(username, password);
             if (!cred.userId) {
               reject(
                 `User ${username} already exists, but the password does not match`,
