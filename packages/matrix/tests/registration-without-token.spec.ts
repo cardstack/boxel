@@ -52,7 +52,7 @@ test.describe('User Registration w/o Token', () => {
     await assertLoggedIn(page);
   });
 
-  test('it shows an error when registering', async ({ page }) => {
+  test('it shows an error encountered when registering', async ({ page }) => {
     await clearLocalStorage(page);
     await gotoRegistration(page);
 
