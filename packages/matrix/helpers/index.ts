@@ -221,32 +221,23 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function createRoom(
-  page: Page,
-  roomDetails: { name: string; invites?: string[] },
-) {
+export async function createRoom(page: Page, name?: string) {
+  let roomName: string;
   await page.locator('[data-test-create-room-mode-btn]').click();
-  await page.locator('[data-test-room-name-field]').fill(roomDetails.name);
-  await page.locator('[data-test-create-room-btn]').click();
-  await isInRoom(page, roomDetails.name);
-
-  if (roomDetails.invites && roomDetails.invites.length > 0) {
-    await page.locator('[data-test-invite-mode-btn]').click();
-    await page
-      .locator('[data-test-room-invite-field]')
-      .fill(roomDetails.invites.join(', '));
-    await expect(page.locator('[data-test-room-invite-btn]')).toBeEnabled();
-    await page.locator('[data-test-room-invite-btn]').click();
+  if (name) {
+    roomName = name;
+    await page.locator('[data-test-room-name-field]').fill(name);
+  } else {
+    roomName = await page.locator('[data-test-room-name-field]').inputValue();
   }
+  await page.locator('[data-test-create-room-btn]').click();
+  await isInRoom(page, roomName);
+  return roomName;
 }
 
 export async function isInRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-room-name="${roomName}"]`).waitFor();
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
-}
-
-export async function joinRoom(page: Page, roomName: string) {
-  await page.locator(`[data-test-join-room-btn="${roomName}"]`).click();
 }
 
 export async function leaveRoom(page: Page, roomName: string) {
@@ -309,12 +300,6 @@ export async function sendMessage(
   await page.locator('[data-test-send-message-btn]').click();
 }
 
-export async function inviteToRoom(page: Page, invites: string[]) {
-  await page.locator(`[data-test-invite-mode-btn]`).click();
-  await page.locator('[data-test-room-invite-field]').fill(invites.join(', '));
-  await page.locator('[data-test-room-invite-btn]').click();
-}
-
 export async function assertMessages(
   page: Page,
   messages: {
@@ -373,51 +358,26 @@ export async function assertMessages(
   }
 }
 
-interface RoomAssertions {
-  joinedRooms?: { name: string }[];
-  invitedRooms?: { name: string; sender: string }[];
-}
-
-export async function assertRooms(page: Page, rooms: RoomAssertions) {
+export async function assertRooms(page: Page, rooms: string[]) {
   await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
-  if (rooms.joinedRooms && rooms.joinedRooms.length > 0) {
+  if (rooms && rooms.length > 0) {
     await page.waitForFunction(
-      (rooms: RoomAssertions) =>
+      (rooms) =>
         document.querySelectorAll('[data-test-joined-room]').length ===
-        rooms.joinedRooms!.length,
+        rooms.length,
       rooms,
     );
-    for (let { name } of rooms.joinedRooms) {
-      await expect(
-        page.locator(`[data-test-joined-room="${name}"]`),
-        `the joined room '${name}' is displayed`,
-      ).toHaveCount(1);
-    }
+    rooms.map(
+      async (name) =>
+        await expect(
+          page.locator(`[data-test-joined-room="${name}"]`),
+          `the joined room '${name}' is displayed`,
+        ).toHaveCount(1),
+    );
   } else {
     await expect(
       page.locator('[data-test-joined-room]'),
       `joined rooms are not displayed`,
-    ).toHaveCount(0);
-  }
-  if (rooms.invitedRooms && rooms.invitedRooms.length > 0) {
-    await page.waitForFunction(
-      (rooms: RoomAssertions) =>
-        document.querySelectorAll('[data-test-invited-room]').length ===
-        rooms.invitedRooms!.length,
-      rooms,
-    );
-    for (let { name, sender } of rooms.invitedRooms) {
-      await expect(
-        page.locator(
-          `[data-test-invited-room="${name}"] [data-test-invite-sender="${sender}"]`,
-        ),
-        `the invited room '${name}' from '${sender}' is displayed`,
-      ).toHaveCount(1);
-    }
-  } else {
-    await expect(
-      page.locator('[data-test-invited-room]'),
-      `invited rooms are not displayed`,
     ).toHaveCount(0);
   }
   await page.locator(`[data-test-close-past-sessions]`).click();
