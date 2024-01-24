@@ -67,7 +67,21 @@ export default class AiAssistantPanel extends Component<Signature> {
     <div class='ai-assistant-panel' data-test-ai-assistant-panel ...attributes>
       <@resizeHandle />
       <header>
-        <div class='header-buttons'>
+        <img src='/images/ai-assist-icon.webp' />
+        <span>Assistant</span>
+        <IconButton
+          @variant='primary'
+          @icon={{IconX}}
+          @width='20px'
+          @height='20px'
+          class='close-ai-panel'
+          {{on 'click' @onClose}}
+          aria-label='Remove'
+          data-test-close-ai-panel
+        />
+      </header>
+      <div class='menu'>
+        <div class='buttons'>
           <Button
             @kind='secondary-dark'
             @size='small'
@@ -98,17 +112,6 @@ export default class AiAssistantPanel extends Component<Signature> {
               />
             </Button>
           {{/if}}
-
-          <IconButton
-            @variant='primary'
-            @icon={{IconX}}
-            @width='20px'
-            @height='20px'
-            class='close-ai-panel'
-            {{on 'click' @onClose}}
-            aria-label='Remove'
-            data-test-close-ai-panel
-          />
         </div>
 
         {{#if this.isShowingCreateNew}}
@@ -195,7 +198,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             {{/each}}
           </ul>
         {{/if}}
-      </header>
+      </div>
 
       {{#unless this.isShowingCreateNew}}
         {{#if this.doCreateRoom.isRunning}}
@@ -209,7 +212,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     <style>
       .ai-assistant-panel {
         display: grid;
-        grid-template-rows: auto 1fr;
+        grid-template-rows: auto auto 1fr;
         background-color: var(--boxel-ai-purple);
         border: none;
         color: var(--boxel-light);
@@ -240,11 +243,27 @@ export default class AiAssistantPanel extends Component<Signature> {
       :deep(.room-actions) {
         z-index: 1;
       }
-      .header-buttons {
+      .ai-assistant-panel header {
         align-items: center;
         display: flex;
-        padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
+        padding: var(--boxel-sp-xs) calc(var(--boxel-sp) / 2) var(--boxel-sp-xs)
           var(--boxel-sp-lg);
+        gap: var(--boxel-sp);
+      }
+      .ai-assistant-panel header img {
+        height: 20px;
+        width: 20px;
+      }
+      .ai-assistant-panel header span {
+        font: 700 var(--boxel-font);
+      }
+      .menu {
+        padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
+        position: relative;
+      }
+      .buttons {
+        align-items: center;
+        display: flex;
       }
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);
@@ -255,7 +274,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         margin-left: auto;
       }
       .create-room {
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp) 0;
       }
       .create-room :deep(.boxel-label) {
         color: var(--boxel-light);
@@ -278,6 +297,9 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .past-sessions-button svg {
         margin-left: var(--boxel-sp-xs);
+      }
+      .room-list {
+        padding: 0;
       }
     </style>
   </template>
