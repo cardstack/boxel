@@ -33,10 +33,17 @@ async function sendEvent(
   client: MatrixClient,
   room: Room,
   eventType: string,
-  content: any,
+  content: IContent,
+  eventToUpdate: string | undefined,
 ) {
   if (content.data) {
     content.data = JSON.stringify(content.data);
+  }
+  if (eventToUpdate) {
+    content['m.relates_to'] = {
+      rel_type: 'm.replace',
+      event_id: eventToUpdate,
+    };
   }
   log.info('Sending', content);
   return await client.sendEvent(room.roomId, eventType, content);
@@ -46,7 +53,7 @@ async function sendMessage(
   client: MatrixClient,
   room: Room,
   content: string,
-  previous: string | undefined,
+  eventToUpdate: string | undefined,
 ) {
   log.info('Sending', content);
   let messageObject: IContent = {
@@ -61,22 +68,28 @@ async function sendMessage(
       format: 'org.matrix.custom.html',
     },
   };
-  if (previous) {
-    messageObject['m.relates_to'] = {
-      rel_type: 'm.replace',
-      event_id: previous,
-    };
-  }
-  return await sendEvent(client, room, 'm.room.message', messageObject);
+  return await sendEvent(
+    client,
+    room,
+    'm.room.message',
+    messageObject,
+    eventToUpdate,
+  );
 }
 
-async function sendOption(client: MatrixClient, room: Room, patch: any) {
+async function sendOption(
+  client: MatrixClient,
+  room: Room,
+  patch: any,
+  eventToUpdate: string | undefined,
+) {
   log.info('sending option', patch);
-  let id = patch['card_id'];
+  const id = patch['card_id'];
+  const body = patch['description'];
   let messageObject = {
-    body: 'patch',
+    body: body,
     msgtype: 'org.boxel.command',
-    formatted_body: 'A patch',
+    formatted_body: body,
     format: 'org.matrix.custom.html',
     data: {
       command: {
@@ -89,7 +102,13 @@ async function sendOption(client: MatrixClient, room: Room, patch: any) {
     },
   };
   log.info(JSON.stringify(messageObject, null, 2));
-  return await sendEvent(client, room, 'm.room.message', messageObject);
+  return await sendEvent(
+    client,
+    room,
+    'm.room.message',
+    messageObject,
+    eventToUpdate,
+  );
 }
 
 function getLastUploadedCardID(history: IRoomEvent[]): string | undefined {
@@ -255,7 +274,7 @@ Common issues are:
             attributes: attributes,
           },
         };
-        return await sendOption(client, room, command);
+        return await sendOption(client, room, command, initialMessage.event_id);
       }
 
       let unsent = 0;
@@ -286,13 +305,12 @@ Common issues are:
             );
           }
           if (functionCall.name === 'patchCard') {
-            await sendMessage(
+            return await sendOption(
               client,
               room,
-              args.description,
+              args,
               initialMessage.event_id,
             );
-            return await sendOption(client, room, args);
           }
           return;
         })

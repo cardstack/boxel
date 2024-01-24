@@ -160,6 +160,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let offsetPx = 40; // Every new card on the stack is 40px lower than the previous one
 
     return htmlSafe(`
+      height: calc(100% - ${offsetPx}px * ${this.args.index});
       width: ${100 - invertedIndex * widthReductionPercent}%;
       z-index: ${itemsOnStackCount - invertedIndex};
       margin-top: calc(${offsetPx}px * ${this.args.index});

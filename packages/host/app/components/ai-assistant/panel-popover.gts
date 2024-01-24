@@ -22,7 +22,7 @@ export default class AiAssistantPanelPopover extends Component<Signature> {
         border-radius: var(--boxel-border-radius-xl);
         color: var(--boxel-dark);
         box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.5);
-        z-index: 10;
+        z-index: 20;
       }
 
       .header {

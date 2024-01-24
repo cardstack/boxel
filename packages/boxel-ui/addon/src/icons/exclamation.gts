@@ -4,22 +4,12 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { Signature } from './types.ts';
 
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
-  <svg
-    xmlns='http://www.w3.org/2000/svg'
-    viewBox='0 0 50 50'
-    ...attributes
-  ><circle
-      cx='25'
-      cy='25'
-      r='20'
+  <svg class='exclamation' viewBox='0 0 6 16' ...attributes><path
       fill='var(--icon-color, #000)'
-      stroke='var(--icon-color, #000)'
-      stroke-linecap='round'
-      stroke-linejoin='round'
-      stroke-width='var(--icon-stroke-width, 5)'
-    /><circle cx='25' cy='25' r='8' fill='var(--icon-fill-color, #FFF)' /></svg>
+      d='M4.505 9.037H1.693L1.11.729h3.983zM1.06 12.978a1.932 1.932 0 0 1 .518-1.459 2.1 2.1 0 0 1 1.51-.5 2.045 2.045 0 0 1 1.481.507c.369.39.559.916.524 1.452a1.927 1.927 0 0 1-.53 1.435c-.4.367-.933.556-1.475.524a2.066 2.066 0 0 1-1.5-.513 1.917 1.917 0 0 1-.528-1.446z'
+    /></svg>
 </template>;
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently
-IconComponent.name = 'IconCircleSelected';
+IconComponent.name = 'Exclamation';
 export default IconComponent;
