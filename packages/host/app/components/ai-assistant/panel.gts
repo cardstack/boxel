@@ -235,7 +235,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       .past-sessions-header {
         display: flex;
         justify-content: space-between;
-        margin-right: var(--boxel-sp);
       }
 
       .past-sessions-header button {
