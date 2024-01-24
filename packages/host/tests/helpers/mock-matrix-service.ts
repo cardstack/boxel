@@ -138,7 +138,7 @@ export class MockMatrixService extends Service {
       content: {
         displayname: 'testuser',
         membership: 'join',
-        membershipTs: 1,
+        membershipTs: Date.now(),
         membershipInitiator: '@testuser:staging',
       },
     });

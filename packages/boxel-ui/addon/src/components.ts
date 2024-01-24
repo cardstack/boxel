@@ -24,7 +24,10 @@ import BoxelMessage from './components/message/index.gts';
 import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
 import RadioInput from './components/radio-input/index.gts';
-import ResizablePanelGroup from './components/resizable-panel-group/index.gts';
+import ResizablePanelGroup, {
+  ResizablePanel,
+  ResizeHandle,
+} from './components/resizable-panel-group/index.gts';
 import type { PanelContext } from './components/resizable-panel-group/panel.gts';
 import Tooltip from './components/tooltip/index.gts';
 
@@ -55,6 +58,8 @@ export {
   Modal,
   PanelContext,
   RadioInput,
+  ResizablePanel,
   ResizablePanelGroup,
+  ResizeHandle,
   Tooltip,
 };

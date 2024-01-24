@@ -289,17 +289,18 @@ export class RoomField extends FieldDef {
         roomState = {} as RoomState;
         roomStateCache.set(this, roomState);
       }
-      let name = roomState.name;
-      // room name can change so we need to check new
-      // events for a room name even if we already have one
-      let events = this.newEvents
+
+      // Read from this.events instead of this.newEvents to avoid a race condition bug where
+      // newEvents never returns the m.room.name while the event is present in events
+      let events = this.events
         .filter((e) => e.type === 'm.room.name')
         .sort(
           (a, b) => a.origin_server_ts - b.origin_server_ts,
         ) as RoomNameEvent[];
       if (events.length > 0) {
-        roomState.name = name ?? events.pop()!.content.name;
+        roomState.name = events.pop()!.content.name;
       }
+
       return roomState.name;
     },
   });
@@ -369,7 +370,7 @@ export class RoomField extends FieldDef {
           userId,
           displayName: event.content.displayname,
           membership: event.content.membership,
-          membershipTs: event.origin_server_ts,
+          membershipTs: event.origin_server_ts || Date.now(),
           membershipInitiator: event.sender,
         });
       }
