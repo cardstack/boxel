@@ -165,38 +165,6 @@ export default class AiAssistantPanel extends Component<Signature> {
             </:body>
           </AiAssistantPanelPopover>
         {{/if}}
-
-        {{#if this.hasInvites}}
-          <ul class='room-list' data-test-invites-list>
-            <h3>Invites</h3>
-            {{#each this.sortedInvites as |invite|}}
-              <li class='room' data-test-invited-room={{invite.room.name}}>
-                <span class='room-item'>
-                  {{invite.room.name}}
-                  (from:
-                  <span
-                    data-test-invite-sender={{niceName
-                      invite.member.membershipInitiator
-                    }}
-                  >{{niceName invite.member.membershipInitiator}})</span>
-                </span>
-                <Button
-                  @kind='secondary-dark'
-                  data-test-decline-room-btn={{invite.room.name}}
-                  {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
-                >Decline</Button>
-                <Button
-                  @kind='primary'
-                  data-test-join-room-btn={{invite.room.name}}
-                  {{on 'click' (fn this.joinRoom invite.room.roomId)}}
-                >Join</Button>
-                {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
-                  <LoadingIndicator />
-                {{/if}}
-              </li>
-            {{/each}}
-          </ul>
-        {{/if}}
       </div>
 
       {{#unless this.isShowingCreateNew}}
