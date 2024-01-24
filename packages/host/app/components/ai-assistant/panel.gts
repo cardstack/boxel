@@ -66,7 +66,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     <div class='ai-assistant-panel' data-test-ai-assistant-panel ...attributes>
       <@resizeHandle />
       <header>
-        <img src='/images/ai-assist-icon.webp' />
+        <img alt='' src='/images/ai-assist-icon.webp' />
         <span>Assistant</span>
         <IconButton
           @variant='primary'
