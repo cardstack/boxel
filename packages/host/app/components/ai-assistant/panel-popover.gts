@@ -19,6 +19,7 @@ export default class AiAssistantPanelPopover extends Component<Signature> {
         color: black;
         max-height: 75%;
         margin-top: -60px;
+        z-index: 20;
       }
 
       .header {
