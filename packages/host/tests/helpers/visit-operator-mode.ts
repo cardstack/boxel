@@ -1,4 +1,4 @@
-import { visit } from '@ember/test-helpers';
+import { visit, waitFor } from '@ember/test-helpers';
 
 import stringify from 'safe-stable-stringify';
 
@@ -26,4 +26,7 @@ export default async function visitOperatorMode({
       operatorModeStateParam,
     )}`,
   );
+  if (stacks && stacks.length > 0 && (!submode || submode === 'interact')) {
+    await waitFor('[data-test-operator-mode-stack]');
+  }
 }

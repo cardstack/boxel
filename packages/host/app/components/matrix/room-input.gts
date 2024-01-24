@@ -1,17 +1,12 @@
 import { Input } from '@ember/component';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { restartableTask } from 'ember-concurrency';
-
 import { TrackedMap } from 'tracked-built-ins';
 
-import { Button } from '@cardstack/boxel-ui/components';
-
-import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
-
+import AiAssistantCardPicker from '@cardstack/host/components/ai-assistant/card-picker';
 import AiAssistantChatInput from '@cardstack/host/components/ai-assistant/chat-input';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -34,74 +29,20 @@ export default class RoomInput extends Component<RoomArgs> {
       data-test-message-field={{@roomName}}
     />
 
-    <div class='attach-card'>
-      {{#if this.cardtoSend}}
-        <div class='selected-card'>
-          <div class='field'>Selected Card:</div>
-          <div
-            class='card-wrapper'
-            data-test-selected-card={{this.cardtoSend.id}}
-          >
-            <this.cardToSendComponent />
-          </div>
-        </div>
-        <Button
-          @kind='secondary'
-          {{on 'click' this.removeCard}}
-          data-test-remove-card-btn
-        >
-          Remove Card
-        </Button>
-      {{else}}
-        <Button
-          @kind='primary'
-          {{on 'click' this.chooseCard}}
-          @disabled={{this.doChooseCard.isRunning}}
-          data-test-choose-card-btn
-        >
-          Choose Card
-        </Button>
-      {{/if}}
-      <label>
-        <Input
-          @type='checkbox'
-          @checked={{this.shareCurrentContext}}
-          data-test-share-context
-        />
-        Allow access to the cards you can see at the top of your stacks
-      </label>
-    </div>
-
-    <style>
-      .attach-card {
-        background-color: var(--boxel-100);
-        color: var(--boxel-dark);
-        display: flex;
-        justify-content: right;
-        flex-wrap: wrap;
-        row-gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp);
-      }
-
-      .selected-card {
-        float: right;
-      }
-
-      .selected-card::after {
-        content: '';
-        clear: both;
-      }
-
-      .field {
-        font-weight: bold;
-      }
-
-      .card-wrapper {
-        padding: var(--boxel-sp);
-        border: var(--boxel-border);
-        border-radius: var(--boxel-border-radius);
-      }
-    </style>
+    <AiAssistantCardPicker
+      @maxNumberOfCards={{1}}
+      @cardsToAttach={{this.cardsToAttach}}
+      @chooseCard={{this.chooseCard}}
+      @removeCard={{this.removeCard}}
+    />
+    <label>
+      <Input
+        @type='checkbox'
+        @checked={{this.shareCurrentContext}}
+        data-test-share-context
+      />
+      Allow access to the cards you can see at the top of your stacks
+    </label>
   </template>
 
   @service private declare matrixService: MatrixService;
@@ -121,14 +62,8 @@ export default class RoomInput extends Component<RoomArgs> {
     return this.cardsToSend.get(this.args.roomId);
   }
 
-  private get cardToSendComponent() {
-    if (this.cardtoSend) {
-      return this.cardtoSend.constructor.getComponent(
-        this.cardtoSend,
-        'embedded',
-      );
-    }
-    return undefined;
+  private get cardsToAttach() {
+    return this.cardtoSend ? new Set([this.cardtoSend]) : new Set([]);
   }
 
   @action
@@ -147,8 +82,8 @@ export default class RoomInput extends Component<RoomArgs> {
   }
 
   @action
-  private chooseCard() {
-    this.doChooseCard.perform();
+  private chooseCard(card: CardDef) {
+    this.cardsToSend.set(this.args.roomId, card);
   }
 
   @action
@@ -177,13 +112,4 @@ export default class RoomInput extends Component<RoomArgs> {
       );
     },
   );
-
-  private doChooseCard = restartableTask(async () => {
-    let chosenCard: CardDef | undefined = await chooseCard({
-      filter: { type: baseCardRef },
-    });
-    if (chosenCard) {
-      this.cardsToSend.set(this.args.roomId, chosenCard);
-    }
-  });
 }

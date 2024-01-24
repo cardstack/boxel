@@ -826,6 +826,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-boxel-header-title]');
     assert.dom('[data-test-boxel-header-title]').hasText('Pet');
     await click('[data-test-open-ai-assistant]');
 
@@ -871,6 +872,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-open-ai-assistant]');
     await click('[data-test-open-ai-assistant]');
     matrixService.createAndJoinRoom('testroom');
     addRoomEvent(matrixService, {
@@ -936,6 +938,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-open-ai-assistant]');
     await click('[data-test-open-ai-assistant]');
     matrixService.createAndJoinRoom('testroom');
 
@@ -1961,6 +1964,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     assert.dom(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`).exists();
     await click(
       `[data-test-stack-card="${testRealmURL}BlogPost/2"] [data-test-edit-button]`,
@@ -2333,6 +2337,7 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
+    await waitFor('[data-test-more-options-button]');
     await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
@@ -2350,6 +2355,7 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     // Linked cards have the realm's icon in the overlaid header title
+    await waitFor('[data-test-overlay-card-display-name="Author"]');
     assert
       .dom('[data-test-overlay-card-display-name="Author"] .header-title img')
       .hasAttribute('src', 'https://example-icon.test');
@@ -2373,17 +2379,20 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
 
     await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
     assert.dom('[data-test-submode-arrow-direction="down"]').exists();
 
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
     assert.dom('[data-test-submode-arrow-direction="down"]').exists();
   });
@@ -2399,6 +2408,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
@@ -2406,6 +2416,7 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
     await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
     await waitUntil(() =>
       document
@@ -2450,6 +2461,7 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
+    await waitFor('[data-test-submode-switcher]');
     await click(
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
@@ -2504,10 +2516,12 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-submode-switcher]');
     await click(
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
     await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
 
     await waitUntil(() =>
@@ -2563,13 +2577,16 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
     await click(
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
+    await waitFor('[data-test-boxel-menu-item-text]');
     await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
     await waitUntil(() =>
       document
@@ -2609,6 +2626,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
@@ -2616,6 +2634,7 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
     await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
     await waitUntil(() =>
       document

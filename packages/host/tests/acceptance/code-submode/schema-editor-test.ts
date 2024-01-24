@@ -568,10 +568,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.dom('[data-test-save-field-button]').hasAttribute('disabled');
 
     await click('[data-test-cancel-adding-field-button]');
-    assert.dom('[data-test-add-field-modal]').doesNotExist();
+    assert.dom('[data-test-edit-field-modal]').doesNotExist();
 
     await click('[data-test-add-field-button]');
-    assert.dom('[data-test-add-field-modal]').exists();
+    assert.dom('[data-test-edit-field-modal]').exists();
 
     await waitFor('[data-test-selected-field-display-name]');
     assert.dom('[data-test-selected-field-display-name]').hasText('String'); // String field selected by default

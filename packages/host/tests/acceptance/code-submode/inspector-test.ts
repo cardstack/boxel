@@ -965,8 +965,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         ],
       ],
     });
-    assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"`).exists();
-    assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`).exists();
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"]`);
+    assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"]`).exists();
+    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/vangogh"]`);
+    assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"]`).exists();
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
@@ -998,6 +1000,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"]`);
     assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"`).exists();
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
@@ -1049,8 +1052,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         ],
       ],
     });
-    assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"`).exists();
-    assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`).exists();
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"]`);
+    assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"]`).exists();
+    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/vangogh"]`);
+    assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"]`).exists();
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
@@ -1093,6 +1098,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     });
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"`);
     assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"`).exists();
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)

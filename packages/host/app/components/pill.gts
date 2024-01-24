@@ -1,5 +1,7 @@
 import Component from '@glimmer/component';
 
+import { element, cn } from '@cardstack/boxel-ui/helpers';
+
 export interface PillSignature {
   Args: {
     inert?: boolean;
@@ -13,23 +15,20 @@ export interface PillSignature {
 
 export default class Pill extends Component<PillSignature> {
   <template>
-    <button
-      class='pill {{if @inert "inert"}}'
-      disabled={{@inert}}
-      ...attributes
-    >
-      <figure class='icon'>
-        {{yield to='icon'}}
-      </figure>
-      <section>
+    {{#let (element (if @inert 'div' 'button')) as |Tag|}}
+      <Tag class={{cn 'pill' inert=@inert}} ...attributes>
+        <figure class='icon'>
+          {{yield to='icon'}}
+        </figure>
         {{yield}}
-      </section>
-    </button>
+      </Tag>
+    {{/let}}
 
     <style>
       .pill {
         display: inline-flex;
         align-items: center;
+        gap: var(--boxel-sp-5xs);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs) var(--boxel-sp-5xs)
           var(--boxel-sp-5xs);
         background-color: var(--boxel-light);
@@ -39,13 +38,13 @@ export default class Pill extends Component<PillSignature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      .pill.inert {
+      .inert {
         border: 0;
         background-color: var(--boxel-100);
         color: inherit;
       }
 
-      .pill:hover {
+      .pill:not(.inert):hover {
         background-color: var(--boxel-100);
       }
 
@@ -53,7 +52,6 @@ export default class Pill extends Component<PillSignature> {
         display: flex;
         margin-block: 0;
         margin-inline: 0;
-        margin-right: var(--boxel-sp-5xs);
       }
 
       .icon > :deep(*) {

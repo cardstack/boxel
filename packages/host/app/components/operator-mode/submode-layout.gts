@@ -7,6 +7,8 @@ import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
+import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
+import type { PanelContext } from '@cardstack/boxel-ui/components';
 import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
@@ -30,6 +32,11 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 
 const { APP } = ENV;
 
+type PanelWidths = {
+  submodePanel: number;
+  aiAssistantPanel: number;
+};
+
 interface Signature {
   Element: HTMLDivElement;
   Args: {
@@ -48,6 +55,10 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
+  private panelWidths: PanelWidths = {
+    submodePanel: 500,
+    aiAssistantPanel: 200,
+  };
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
 
@@ -125,28 +136,56 @@ export default class SubmodeLayout extends Component<Signature> {
     this.profileSummaryOpened = !this.profileSummaryOpened;
   }
 
+  @action
+  private onListPanelContextChange(listPanelContext: PanelContext[]) {
+    this.panelWidths.submodePanel = listPanelContext[0]?.lengthPx;
+    this.panelWidths.aiAssistantPanel = listPanelContext[1]?.lengthPx;
+  }
+
   <template>
     <div
       class='operator-mode-with-ai-assistant
         {{this.aiAssistantVisibilityClass}}'
     >
-      <SubmodeSwitcher
-        @submode={{this.operatorModeStateService.state.submode}}
-        @onSubmodeSelect={{this.updateSubmode}}
-        class='submode-switcher'
-      />
-      {{yield this.openSearchSheetToPrompt}}
-
-      {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
-        {{#if this.isAiAssistantVisible}}
-          <AiAssistantPanel
-            @onClose={{this.toggleChat}}
-            class='ai-assistant-panel'
+      <ResizablePanelGroup
+        @orientation='horizontal'
+        @onListPanelContextChange={{this.onListPanelContextChange}}
+        class='columns'
+        as |ResizablePanel ResizeHandle|
+      >
+        <ResizablePanel
+          @defaultLengthFraction={{1}}
+          @minLengthPx={{371}}
+          @collapsible={{false}}
+        >
+          <SubmodeSwitcher
+            @submode={{this.operatorModeStateService.state.submode}}
+            @onSubmodeSelect={{this.updateSubmode}}
+            class='submode-switcher'
           />
-        {{else}}
-          <AiAssistantButton class='chat-btn' {{on 'click' this.toggleChat}} />
+          {{yield this.openSearchSheetToPrompt}}
+        </ResizablePanel>
+        {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
+          {{#if this.isAiAssistantVisible}}
+            <ResizablePanel
+              @defaultLengthFraction={{0.3}}
+              @minLengthPx={{371}}
+              @collapsible={{false}}
+            >
+              <AiAssistantPanel
+                @onClose={{this.toggleChat}}
+                @resizeHandle={{ResizeHandle}}
+                class='ai-assistant-panel'
+              />
+            </ResizablePanel>
+          {{else}}
+            <AiAssistantButton
+              class='chat-btn'
+              {{on 'click' this.toggleChat}}
+            />
+          {{/if}}
         {{/if}}
-      {{/if}}
+      </ResizablePanelGroup>
     </div>
 
     <div class='profile-icon-container'>
@@ -190,8 +229,8 @@ export default class SubmodeLayout extends Component<Signature> {
         height: 100%;
       }
 
-      .operator-mode-with-ai-assistant > * {
-        z-index: 1;
+      .operator-mode-with-ai-assistant > .boxel-panel-group {
+        width: 100%;
       }
 
       .ai-assistant-open {
@@ -208,9 +247,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .ai-assistant-panel {
-        flex: 0;
-        flex-basis: 371px;
-        height: 100%;
+        z-index: 2;
       }
 
       .submode-switcher {
@@ -218,6 +255,7 @@ export default class SubmodeLayout extends Component<Signature> {
         top: 0;
         left: 0;
         padding: var(--boxel-sp);
+        z-index: 1;
       }
 
       .profile-icon-container {
