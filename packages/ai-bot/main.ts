@@ -92,11 +92,12 @@ async function sendOption(client: MatrixClient, room: Room, patch: any) {
   return await sendEvent(client, room, 'm.room.message', messageObject);
 }
 
-function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
+function getLastUploadedCardID(history: IRoomEvent[]): string | undefined {
   for (let event of history.slice().reverse()) {
     if (event.content.msgtype === 'org.boxel.card') {
-      const cardInstances = event.content.data.instances;
-      return cardInstances.map((c: LooseSingleCardDocument) => c.data.id);
+      const cardInstances: LooseSingleCardDocument[] =
+        event.content.data.instances;
+      return cardInstances[0].data.id;
     }
   }
   return undefined;
@@ -258,7 +259,7 @@ Common issues are:
       }
 
       let unsent = 0;
-      const runner = await getResponse(history, userId)
+      const runner = getResponse(history, userId)
         .on('content', async (_delta, snapshot) => {
           unsent += 1;
           if (unsent > 5) {

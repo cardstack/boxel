@@ -59,8 +59,7 @@ export default class RoomInput extends Component<RoomArgs> {
   }
 
   private get cardsToAttach() {
-    let cards = this.cardsToSend.get(this.args.roomId);
-    return cards?.length ? new Set([...cards]) : new Set([]);
+    return this.cardsToSend.get(this.args.roomId);
   }
 
   @action
@@ -70,22 +69,21 @@ export default class RoomInput extends Component<RoomArgs> {
 
   @action
   private sendMessage() {
-    if (this.messageToSend == null && !this.cardsToAttach) {
-      throw new Error(
-        `bug: should never get here, send button is disabled when there is no message nor card`,
-      );
-    }
-    this.doSendMessage.perform(this.messageToSend, [...this.cardsToAttach]);
+    this.doSendMessage.perform(this.messageToSend, this.cardsToAttach);
   }
 
   @action
   private chooseCard(card: CardDef) {
-    this.cardsToSend.set(this.args.roomId, [...this.cardsToAttach.add(card)]);
+    let cards = this.cardsToAttach ?? [];
+    if (!cards?.find((c) => c.id === card.id)) {
+      this.cardsToSend.set(this.args.roomId, [...cards, card]);
+    }
   }
 
   @action
-  private removeCard() {
-    this.cardsToSend.set(this.args.roomId, undefined);
+  private removeCard(card: CardDef) {
+    let cards = this.cardsToAttach?.filter((c) => c.id !== card.id);
+    this.cardsToSend.set(this.args.roomId, cards?.length ? cards : undefined);
   }
 
   private doSendMessage = restartableTask(

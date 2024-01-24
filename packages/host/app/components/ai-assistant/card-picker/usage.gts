@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import { TrackedSet } from 'tracked-built-ins';
+import { TrackedArray } from 'tracked-built-ins';
 
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
@@ -13,18 +13,19 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import AiAssistantCardPicker from './index';
 
 export default class AiAssistantCardPickerUsage extends Component {
-  cards = new TrackedSet<CardDef>();
+  cards: TrackedArray<CardDef> = new TrackedArray([]);
   @tracked maxNumberOfCards: number | undefined = undefined;
   @tracked autoAttachedCard: CardDef | undefined = undefined;
 
   @action chooseCard(card: CardDef) {
-    if (![...this.cards].find((c) => c.id === card.id)) {
-      this.cards.add(card);
+    if (!this.cards?.find((c) => c.id === card.id)) {
+      this.cards.push(card);
     }
   }
 
   @action removeCard(card: CardDef) {
-    this.cards.delete(card);
+    let index = this.cards.findIndex((c) => c.id === card.id);
+    this.cards.splice(index, 1);
   }
 
   <template>
@@ -47,7 +48,7 @@ export default class AiAssistantCardPickerUsage extends Component {
       <:api as |Args|>
         <Args.Object
           @name='cardsToAttach'
-          @description='A Set of CardDefs or undefined. Cards that are attached to the message.'
+          @description='An array of cards to attach to the message.'
           @value={{this.cards}}
         />
         <Args.Object

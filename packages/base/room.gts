@@ -199,9 +199,9 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
 
   attachedCardResources: string[] | undefined = this.args.model.attachedCardIds;
 
-  get attachedResources(): AttachedCardResource[] | [] {
+  get attachedResources(): AttachedCardResource[] | undefined {
     if (!this.attachedCardResources?.length) {
-      return [];
+      return undefined;
     }
     let cards = this.attachedCardResources.map((id) => {
       let card = getCard(new URL(id));

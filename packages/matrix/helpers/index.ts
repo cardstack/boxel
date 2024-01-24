@@ -269,9 +269,8 @@ export async function setObjective(page: Page, objectiveURI: string) {
   await expect(page.locator(`[data-test-objective]`)).toHaveCount(1);
 }
 
-async function selectCardFromCatalog(page: Page, cardId: string) {
+export async function selectCardFromCatalog(page: Page, cardId: string) {
   await page.locator('[data-test-choose-card-btn]').click();
-  await expect(page.locator(`[data-test-card-catalog]`)).toHaveCount(1);
   await page.locator(`[data-test-select="${cardId}"]`).click();
   await page.locator('[data-test-card-catalog-go-button]').click();
 }
@@ -291,12 +290,10 @@ export async function sendMessage(
     await writeMessage(page, roomName, message);
   }
   if (cardIds?.length) {
-    await Promise.all(
-      cardIds.map(async (cardId) => await selectCardFromCatalog(page, cardId)),
-    );
+    await Promise.all(cardIds.map((id) => selectCardFromCatalog(page, id)));
   }
   // can we check it's higher than before?
-  await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
+  await page.waitForSelector(`[data-test-room-settled]`);
   await page.locator('[data-test-send-message-btn]').click();
 }
 

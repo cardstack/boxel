@@ -809,7 +809,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-send-message-btn]');
     assert.deepEqual(matrixService.lastMessageSent, {
       body: 'hello',
-      card: undefined,
+      cards: undefined,
       context: undefined,
       roomId: 'testroom',
     });
