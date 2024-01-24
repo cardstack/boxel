@@ -1,7 +1,7 @@
-import { type RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common';
+import { RealmPermissions } from '@cardstack/runtime-common';
 
-export default class RealmPermissions {
-  private config: Record<string, RealmPermissionsInterface> = {};
+export default class RealmPermissionChecker {
+  private config: Record<string, RealmPermissions> = {};
 
   constructor() {
     let jsonContent = process.env.REALM_USER_PERMISSIONS;
@@ -41,7 +41,7 @@ export default class RealmPermissions {
           users: {
             '*': ['read', 'write'],
           },
-        } as RealmPermissionsInterface
+        } as RealmPermissions
       ).users;
     }
 

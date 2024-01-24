@@ -79,7 +79,7 @@ import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 import { MatrixClient } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
-import { default as RealmPermissionsUtil } from '../realm-server/lib/realm-permissions';
+import RealmPermissionChecker from '../realm-server/lib/realm-permission-checker';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 
 export type RealmInfo = {
@@ -905,19 +905,31 @@ export class Realm {
     request: Request,
     neededPermission: 'read' | 'write',
   ) {
+    // If the realm is public readable or writable, do not require a JWT
+    if (
+      (neededPermission === 'read' &&
+        this.#permissions['*']?.includes('read')) ||
+      (neededPermission === 'write' &&
+        this.#permissions['*']?.includes('write'))
+    ) {
+      return;
+    }
+
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
       throw new AuthorizationError("Missing 'Authorization' header");
     }
-    let tokenString = authorizationString.replace('Bearer ', '');
+    let tokenString = authorizationString.replace('Bearer ', ''); // Parse the JWT
 
     let token: TokenClaims;
 
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
-      let realmPermissions = new RealmPermissionsUtil();
+      let realmPermissionChecker = new RealmPermissionChecker();
 
-      if (!realmPermissions.can(token.user, neededPermission, token.realm)) {
+      if (
+        !realmPermissionChecker.can(token.user, neededPermission, token.realm)
+      ) {
         throw new PermissionError(
           'Insufficient permissions to perform this action',
         );
@@ -936,8 +948,6 @@ export class Realm {
   }
 
   private async upsertCardSource(request: Request): Promise<Response> {
-    await this.checkPermission(request, 'write');
-
     let { lastModified } = await this.write(
       this.paths.local(request.url),
       await request.text(),
@@ -951,8 +961,6 @@ export class Realm {
   private async getCardSourceOrRedirect(
     request: Request,
   ): Promise<ResponseWithNodeStream> {
-    // await this.checkPermission(request, 'read');
-
     let localName = this.paths.local(request.url);
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
@@ -972,8 +980,6 @@ export class Realm {
   }
 
   private async removeCardSource(request: Request): Promise<Response> {
-    await this.checkPermission(request, 'write');
-
     let localName = this.paths.local(request.url);
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
@@ -1065,8 +1071,6 @@ export class Realm {
   }
 
   private async createCard(request: Request): Promise<Response> {
-    await this.checkPermission(request, 'write');
-
     let body = await request.text();
     let json;
     try {
@@ -1132,8 +1136,6 @@ export class Realm {
   }
 
   private async patchCard(request: Request): Promise<Response> {
-    await this.checkPermission(request, 'write');
-
     let localPath = this.paths.local(request.url);
     if (localPath.startsWith('_')) {
       return methodNotAllowed(this.url, request);
@@ -1223,8 +1225,6 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
-    await this.checkPermission(request, 'read');
-
     let localPath = this.paths.local(request.url);
     if (localPath === '') {
       localPath = 'index';
@@ -1319,8 +1319,6 @@ export class Realm {
   }
 
   private async getDirectoryListing(request: Request): Promise<Response> {
-    await this.checkPermission(request, 'read');
-
     // a LocalPath has no leading nor trailing slash
     let localPath: LocalPath = this.paths.local(request.url);
     let url = this.paths.directoryURL(localPath);
@@ -1381,8 +1379,6 @@ export class Realm {
   }
 
   private async search(request: Request): Promise<Response> {
-    // await this.checkPermission(request, 'read');
-
     let doc = await this.#searchIndex.search(
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true },

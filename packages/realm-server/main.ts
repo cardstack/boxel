@@ -9,7 +9,7 @@ import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
-import RealmPermissions from './lib/realm-permissions';
+import RealmPermissions from './lib/realm-permission-checker';
 import fs from 'fs';
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;

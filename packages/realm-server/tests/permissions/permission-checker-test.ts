@@ -1,4 +1,4 @@
-import RealmPermissions from '../../lib/realm-permissions';
+import RealmPermissionChecker from '../../lib/realm-permission-checker';
 import { module, test } from 'qunit';
 
 module('user-permissions', function (_hooks) {
@@ -18,7 +18,7 @@ module('user-permissions', function (_hooks) {
 
     process.env.REALM_USER_PERMISSIONS = JSON.stringify(permissionsConfig);
 
-    let permissions = new RealmPermissions();
+    let permissions = new RealmPermissionChecker();
 
     // TODO For the time being realms without configs default to being wide open. we need to change
     // this once we get our infra established for this
