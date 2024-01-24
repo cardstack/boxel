@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { getOwner } from '@ember/owner';
 import type { MiddlewareState } from '@floating-ui/dom';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -20,12 +21,14 @@ export default class Tooltip extends Component<Signature> {
   @tracked isHoverOnTrigger = false;
 
   get tooltipOverlay() {
+    // @ts-expect-error rootElement is present but not in the type
+    let applicationElement = getOwner(this)?.rootElement ?? document.body;
     let container = document.querySelector('#tooltip-overlay') as HTMLElement;
 
     if (!container) {
       container = document.createElement('div');
       container.id = 'tooltip-overlay';
-      document.body.appendChild(container);
+      document.querySelector(applicationElement).appendChild(container);
     }
 
     return container;
