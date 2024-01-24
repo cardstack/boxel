@@ -1,15 +1,15 @@
 {
-  "base": {
+  "http://localhost:4201/base/": {
     "users": {
-      "*": ["read"]
+      "*": ["read", "write"]
     }
   },
   "http://localhost:4201/drafts/": {
     "users": {
-      "*": ["read"]
+      "*": ["read", "write"]
     }
   },
-  "published": {
+  "http://localhost:4201/published/": {
     "users": {
       "*": ["read", "write"]
     }
