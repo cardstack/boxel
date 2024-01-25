@@ -59,10 +59,5 @@
   "peerDependencies": {
     "@babel/core": "^7.22.11",
     "ember-cli-htmlbars": "^6.3.0"
-  },
-  "dependenciesMeta": {
-    "@cardstack/ember-template-imports": {
-      "injected": true
-    }
   }
 }

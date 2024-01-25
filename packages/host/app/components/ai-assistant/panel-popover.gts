@@ -13,6 +13,8 @@ export default class AiAssistantPanelPopover extends Component<Signature> {
     <style>
       .panel-popover {
         position: absolute;
+        top: 0;
+        left: 0;
         width: 24.5rem;
         min-height: 12.5rem;
         max-height: 75%;

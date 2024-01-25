@@ -23,10 +23,5 @@
   "peerDependencies": {
     "ember-source": "~4.12.0"
   },
-  "dependenciesMeta": {
-    "@cardstack/runtime-common": {
-      "injected": true
-    }
-  },
   "scripts": {}
 }
