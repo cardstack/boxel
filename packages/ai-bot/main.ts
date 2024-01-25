@@ -10,7 +10,11 @@ import {
   IRoomEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import { logger, aiBotUsername } from '@cardstack/runtime-common';
+import {
+  logger,
+  aiBotUsername,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import {
   constructHistory,
   getModifyPrompt,
@@ -107,11 +111,12 @@ async function sendOption(
   );
 }
 
-function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
+function getLastUploadedCardID(history: IRoomEvent[]): string | undefined {
   for (let event of history.slice().reverse()) {
     if (event.content.msgtype === 'org.boxel.card') {
-      const cardInstance = event.content.data.instance;
-      return cardInstance.data.id;
+      const cardInstances: LooseSingleCardDocument[] =
+        event.content.data.instances;
+      return cardInstances[0].data.id;
     }
   }
   return undefined;
@@ -273,7 +278,7 @@ Common issues are:
       }
 
       let unsent = 0;
-      const runner = await getResponse(history, userId)
+      const runner = getResponse(history, userId)
         .on('content', async (_delta, snapshot) => {
           unsent += 1;
           if (unsent > 5) {

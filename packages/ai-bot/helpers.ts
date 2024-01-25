@@ -87,7 +87,7 @@ export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
       // If a user has uploaded a card, add it to the context
       // It's the best we have
       if (content.msgtype === 'org.boxel.card') {
-        cards.push(content.data.instance);
+        cards.push(content.data.instances);
       } else if (content.msgtype === 'org.boxel.message') {
         // If a user has switched to sharing their current context
         // and they have open cards then use those

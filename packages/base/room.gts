@@ -6,6 +6,7 @@ import {
   primitive,
   useIndexBasedKey,
   FieldDef,
+  type CardDef,
 } from './card-api';
 import StringField from './string';
 import DateTimeField from './datetime';
@@ -130,6 +131,12 @@ class RoomMembershipField extends FieldDef {
   };
 }
 
+type AttachedCardResource = {
+  card: CardDef | undefined;
+  loaded?: Promise<void>;
+  cardError?: { id: string; error: Error };
+};
+
 export class RoomMemberField extends FieldDef {
   @field userId = contains(StringField);
   @field roomId = contains(StringField);
@@ -154,23 +161,32 @@ class ScrollIntoView extends Modifier {
   }
 }
 
+function getCardComponent(card: CardDef) {
+  return card.constructor.getComponent(card, 'atom');
+}
+
 class EmbeddedMessageField extends Component<typeof MessageField> {
-  // TODO need to add the message specific CSS here
   <template>
     <div
       {{ScrollIntoView}}
       data-test-message-idx={{@model.index}}
-      data-test-message-card={{@model.attachedCardId}}
+      data-test-message-cards
     >
-      {{#if this.attachedCardResource.cardError}}
-        <div data-test-card-error class='error'>
-          Error: cannot render card
-          {{this.attachedCardResource.cardError.id}}:
-          {{this.attachedCardResource.cardError.error.message}}
-        </div>
-      {{else if this.attachedCardResource.card}}
-        <this.cardComponent />
-      {{/if}}
+      {{#each this.attachedResources as |cardResource|}}
+        {{#if cardResource.cardError}}
+          <div data-test-card-error={{cardResource.cardError.id}} class='error'>
+            Error: cannot render card
+            {{cardResource.cardError.id}}:
+            {{cardResource.cardError.error.message}}
+          </div>
+        {{else if cardResource.card}}
+          {{#let (getCardComponent cardResource.card) as |CardComponent|}}
+            <div data-test-message-card={{cardResource.card.id}}>
+              <CardComponent />
+            </div>
+          {{/let}}
+        {{/if}}
+      {{/each}}
     </div>
 
     <style>
@@ -181,23 +197,33 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
     </style>
   </template>
 
-  attachedCardResource = this.args.model.attachedCardId
-    ? getCard(new URL(this.args.model.attachedCardId))
-    : undefined;
+  attachedCardResources: string[] | undefined = this.args.model.attachedCardIds;
+
+  get attachedResources(): AttachedCardResource[] | undefined {
+    if (!this.attachedCardResources?.length) {
+      return undefined;
+    }
+    let cards = this.attachedCardResources.map((id) => {
+      let card = getCard(new URL(id));
+      if (!card) {
+        return {
+          card: undefined,
+          cardError: {
+            id,
+            error: new Error(`cannot find card for id "${id}"`),
+          },
+        };
+      }
+      return card;
+    });
+    return cards;
+  }
 
   get timestamp() {
     if (!this.args.model.created) {
       throw new Error(`message created time is undefined`);
     }
     return this.args.model.created.getTime();
-  }
-
-  get cardComponent() {
-    let card = this.attachedCardResource?.card;
-    if (!card) {
-      return;
-    }
-    return card.constructor.getComponent(card, 'atom');
   }
 }
 
@@ -226,7 +252,7 @@ export class MessageField extends FieldDef {
   @field message = contains(MarkdownField);
   @field formattedMessage = contains(StringField);
   @field created = contains(DateTimeField);
-  @field attachedCardId = contains(StringField);
+  @field attachedCardIds = containsMany(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
   @field command = contains(PatchField);
@@ -431,12 +457,17 @@ export class RoomField extends FieldDef {
         };
         let messageField = undefined;
         if (event.content.msgtype === 'org.boxel.card') {
-          let cardDoc = event.content.data.instance;
-          let attachedCardId = cardDoc.data.id;
-          if (attachedCardId == null) {
+          let cardDocs = event.content.data.instances;
+          let attachedCardIds: string[] = [];
+          cardDocs.map((c) => {
+            if (c.data.id) {
+              attachedCardIds.push(c.data.id);
+            }
+          });
+          if (attachedCardIds.length === 0) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
-          messageField = new MessageField({ ...cardArgs, attachedCardId });
+          messageField = new MessageField({ ...cardArgs, attachedCardIds });
         } else if (event.content.msgtype === 'org.boxel.command') {
           // We only handle patches for now
           let command = event.content.data.command;
@@ -615,7 +646,7 @@ interface CardMessageEvent extends BaseMatrixEvent {
     body: string;
     formatted_body: string;
     data: {
-      instance: LooseSingleCardDocument;
+      instances: LooseSingleCardDocument[];
     };
   };
   unsigned: {

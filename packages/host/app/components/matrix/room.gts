@@ -89,7 +89,7 @@ export default class Room extends Component<Signature> {
             data-test-message-index={{i}}
             data-test-boxel-message-from={{Message.card.author.name}}
           >
-            {{#if Message.card.attachedCardId}}
+            {{#if Message.card.attachedCardIds}}
               <Message.component />
             {{/if}}
           </AiAssistantMessage>
@@ -114,7 +114,6 @@ export default class Room extends Component<Signature> {
               {{/let}}
             </div>
           {{/if}}
-
         {{else}}
           <div data-test-no-messages>
             (No messages)

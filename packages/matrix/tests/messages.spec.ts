@@ -12,6 +12,7 @@ import {
   reloadAndOpenAiAssistant,
   isInRoom,
   registerRealmUsers,
+  selectCardFromCatalog,
 } from '../helpers';
 import {
   synapseStart,
@@ -144,7 +145,7 @@ test.describe('Room messages', () => {
       {
         from: 'user1',
         message: 'This is my card',
-        card: { id: testCard, title: 'Hassan' },
+        cards: [{ id: testCard, title: 'Hassan' }],
       },
     ]);
     await expect(
@@ -157,11 +158,11 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     let room1 = await createRoom(page);
 
-    await sendMessage(page, room1, undefined, testCard);
+    await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
       {
         from: 'user1',
-        card: { id: testCard, title: 'Hassan' },
+        cards: [{ id: testCard, title: 'Hassan' }],
       },
     ]);
   });
@@ -172,33 +173,60 @@ test.describe('Room messages', () => {
     let room1 = await createRoom(page);
 
     // Send a card that contains a type that matrix doesn't support
-    await sendMessage(page, room1, undefined, testCard);
+    await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
       {
         from: 'user1',
-        card: { id: testCard, title: 'Type Examples' },
+        cards: [{ id: testCard, title: 'Type Examples' }],
       },
     ]);
   });
 
   test('can remove a card from a pending message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
+    const testCard2 = `${testHost}/mango`;
     await login(page, 'user1', 'pass');
     await createRoom(page);
 
-    await page.locator('[data-test-choose-card-btn]').click();
-    await page.locator(`[data-test-select="${testCard}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await selectCardFromCatalog(page, testCard);
+    await selectCardFromCatalog(page, testCard2);
     await expect(
       page.locator(`[data-test-selected-card="${testCard}"]`),
     ).toContainText('Hassan');
-    await page.locator('[data-test-remove-card-btn]').click();
+    await expect(
+      page.locator(`[data-test-selected-card="${testCard2}"]`),
+    ).toContainText('Mango');
+
+    await page
+      .locator(
+        `[data-test-selected-card="${testCard}"] [data-test-remove-card-btn]`,
+      )
+      .click();
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
+
+    await page.locator('[data-test-message-field]').fill('1 card');
+    await page.locator('[data-test-send-message-btn]').click();
+
+    await selectCardFromCatalog(page, testCard);
+    await expect(
+      page.locator(`[data-test-selected-card="${testCard}"]`),
+    ).toContainText('Hassan');
+    await page
+      .locator(
+        `[data-test-selected-card="${testCard}"] [data-test-remove-card-btn]`,
+      )
+      .click();
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
 
     await page.locator('[data-test-message-field]').fill('no card');
     await page.locator('[data-test-send-message-btn]').click();
 
     await assertMessages(page, [
+      {
+        from: 'user1',
+        message: '1 card',
+        cards: [{ id: testCard2, title: 'Mango' }],
+      },
       {
         from: 'user1',
         message: 'no card',
@@ -211,82 +239,89 @@ test.describe('Room messages', () => {
 
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
+    const message1 = {
+      from: 'user1',
+      message: 'message 1',
+      cards: [{ id: testCard1, title: 'Hassan' }],
+    };
+    const message2 = {
+      from: 'user1',
+      message: 'message 2',
+      cards: [{ id: testCard2, title: 'Mango' }],
+    };
 
     await login(page, 'user1', 'pass');
     let room1 = await createRoom(page);
 
-    await sendMessage(page, room1, 'message 1', testCard1);
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        message: 'message 1',
-        card: {
-          id: testCard1,
-          title: 'Hassan',
-        },
-      },
-    ]);
+    await sendMessage(page, room1, 'message 1', [testCard1]);
+    await assertMessages(page, [message1]);
 
-    await sendMessage(page, room1, 'message 2', testCard2);
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        message: 'message 1',
-        card: {
-          id: testCard1,
-          title: 'Hassan',
-        },
-      },
-      {
-        from: 'user1',
-        message: 'message 2',
-        card: {
-          id: testCard2,
-          title: 'Mango',
-        },
-      },
-    ]);
+    await sendMessage(page, room1, 'message 2', [testCard2]);
+    await assertMessages(page, [message1, message2]);
 
     await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        message: 'message 1',
-        card: {
-          id: testCard1,
-          title: 'Hassan',
-        },
-      },
-      {
-        from: 'user1',
-        message: 'message 2',
-        card: {
-          id: testCard2,
-          title: 'Mango',
-        },
-      },
-    ]);
+    await assertMessages(page, [message1, message2]);
 
     await logout(page);
     await login(page, 'user1', 'pass');
     await openRoom(page, room1);
+    await assertMessages(page, [message1, message2]);
+  });
+
+  test('can send multiple cards in a message', async ({ page }) => {
+    const testCard1 = `${testHost}/hassan`;
+    const testCard2 = `${testHost}/mango`;
+    const message = {
+      from: 'user1',
+      message: 'message 1',
+      cards: [
+        { id: testCard1, title: 'Hassan' },
+        { id: testCard2, title: 'Mango' },
+      ],
+    };
+
+    await login(page, 'user1', 'pass');
+    let room1 = await createRoom(page);
+
+    await selectCardFromCatalog(page, testCard1);
+    await selectCardFromCatalog(page, testCard2);
+    await sendMessage(page, room1, 'message 1');
+    await assertMessages(page, [message]);
+
+    await reloadAndOpenAiAssistant(page);
+    await openRoom(page, room1);
+    await assertMessages(page, [message]);
+
+    await logout(page);
+    await login(page, 'user1', 'pass');
+    await openRoom(page, room1);
+    await assertMessages(page, [message]);
+  });
+
+  test('attached cards are not duplicated', async ({ page }) => {
+    const testCard1 = `${testHost}/hassan`;
+    const testCard2 = `${testHost}/mango`;
+    const testCard3 = `${testHost}/type-examples`;
+
+    await login(page, 'user1', 'pass');
+    await createRoom(page);
+
+    await selectCardFromCatalog(page, testCard2);
+    await selectCardFromCatalog(page, testCard1);
+    await selectCardFromCatalog(page, testCard2);
+    await selectCardFromCatalog(page, testCard3);
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(3);
+
+    await page.locator('[data-test-send-message-btn]').click();
     await assertMessages(page, [
       {
         from: 'user1',
-        message: 'message 1',
-        card: {
-          id: testCard1,
-          title: 'Hassan',
-        },
-      },
-      {
-        from: 'user1',
-        message: 'message 2',
-        card: {
-          id: testCard2,
-          title: 'Mango',
-        },
+        cards: [
+          { id: testCard2, title: 'Mango' },
+          { id: testCard1, title: 'Hassan' },
+          { id: testCard3, title: 'Type Examples' },
+        ],
       },
     ]);
   });
