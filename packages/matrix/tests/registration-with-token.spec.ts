@@ -1,9 +1,5 @@
 import { expect, test } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
+import { synapseStop, type SynapseInstance } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   clearLocalStorage,
@@ -13,6 +9,7 @@ import {
   assertLoggedOut,
   logout,
   registerRealmUsers,
+  startTestingSynapse,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -22,9 +19,7 @@ test.describe('User Registration w/ Token', () => {
   let synapse: SynapseInstance;
 
   test.beforeEach(async () => {
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await startTestingSynapse();
     await smtpStart();
   });
 
@@ -36,7 +31,11 @@ test.describe('User Registration w/ Token', () => {
   test('it can register a user with a registration token', async ({ page }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await clearLocalStorage(page);
     await gotoRegistration(page);
 

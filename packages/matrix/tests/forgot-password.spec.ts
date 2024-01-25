@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 import {
-  synapseStart,
   synapseStop,
   updateUser,
   type SynapseInstance,
@@ -14,6 +13,7 @@ import {
   validateEmailForResetPassword,
   login,
   registerRealmUsers,
+  startTestingSynapse,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -27,18 +27,22 @@ test.describe('Forgot password', () => {
   let synapse: SynapseInstance;
 
   test.beforeEach(async ({ page }) => {
-    synapse = await synapseStart({
+    synapse = await startTestingSynapse({
       template: 'test',
     });
     await smtpStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
     await registerUser(synapse, username, password);
-    await updateUser(admin.accessToken, '@user1:localhost', {
+    await updateUser(synapse, admin.accessToken, '@user1:localhost', {
       emailAddresses: [email],
       displayname: name,
     });

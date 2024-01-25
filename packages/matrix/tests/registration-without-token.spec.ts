@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
+import { synapseStop, type SynapseInstance } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   clearLocalStorage,
@@ -11,13 +7,14 @@ import {
   gotoRegistration,
   assertLoggedIn,
   registerRealmUsers,
+  startTestingSynapse,
 } from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
   let synapse: SynapseInstance;
 
   test.beforeEach(async () => {
-    synapse = await synapseStart({
+    synapse = await startTestingSynapse({
       template: 'test-without-registration-token',
     });
     await smtpStart();

@@ -1,7 +1,7 @@
-import { expect, type Page } from '@playwright/test';
-import { type SynapseInstance } from '../docker/synapse';
-import { registerUser } from '../docker/synapse';
-export const testHost = 'http://localhost:4202/test';
+import { expect, type Page, test as base } from '@playwright/test';
+import { type SynapseInstance, StartOptions } from '../docker/synapse';
+import { registerUser, synapseStart } from '../docker/synapse';
+export const testHost = 'http://localhost:4206/test';
 export const mailHost = 'http://localhost:5001';
 
 interface ProfileAssertions {
@@ -11,6 +11,54 @@ interface ProfileAssertions {
 }
 interface LoginOptions {
   expectFailure?: true;
+}
+
+export const test = base.extend<{ synapse: SynapseInstance }>({
+  page: async ({ page }, use) => {
+    // Setup overrides
+    await setupMatrixOverride(page, 9009);
+    await use(page);
+  },
+});
+
+export async function startTestingSynapse(opts?: {
+  template?: string;
+  port?: number;
+}) {
+  opts = opts ?? {};
+  const defaults: StartOptions = {
+    template: 'test',
+    port: 9009,
+  };
+
+  const mergedOpts = { ...defaults, ...opts };
+
+  return await synapseStart(mergedOpts);
+}
+
+export async function setupMatrixOverride(page: Page, port: number) {
+  // Save the original goto function keeping mind this override function may be
+  // called more than once
+  const originalGoto = (page as any).originalGoto ?? page.goto.bind(page);
+  (page as any).originalGoto = originalGoto;
+
+  // Patch the goto function
+  page.goto = async (url, options) => {
+    const newUrl = new URL(url);
+    const params = new URLSearchParams(newUrl.search);
+
+    // Override the matrixURL
+    params.set('matrixURL', `http://localhost:${port}`);
+    newUrl.search = params.toString();
+
+    // Call the original goto function with the new URL
+    return await originalGoto(newUrl.href, options);
+  };
+
+  // Patch the reload function
+  page.reload = async (options) => {
+    return await page.goto(page.url(), options);
+  };
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { registerUser } from '../docker/synapse';
 import {
   login,
@@ -13,17 +13,15 @@ import {
   reloadAndOpenAiAssistant,
   isInRoom,
   registerRealmUsers,
+  startTestingSynapse,
+  test,
 } from '../helpers';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
+import { synapseStop, type SynapseInstance } from '../docker/synapse';
 
 test.describe('Room messages', () => {
   let synapse: SynapseInstance;
   test.beforeEach(async () => {
-    synapse = await synapseStart();
+    synapse = await startTestingSynapse();
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');

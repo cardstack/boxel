@@ -1,6 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
 import {
-  synapseStart,
   synapseStop,
   type SynapseInstance,
   registerUser,
@@ -13,24 +12,23 @@ import {
   assertLoggedOut,
   assertLoggedIn,
   registerRealmUsers,
+  startTestingSynapse,
 } from '../helpers';
 
 test.describe('Profile', () => {
   let synapse: SynapseInstance;
   test.beforeEach(async () => {
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await startTestingSynapse();
     await smtpStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user0', 'pass');
-    await updateUser(admin.accessToken, '@user1:localhost', {
+    await updateUser(synapse, admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@localhost'],
     });
-    await updateUser(admin.accessToken, '@user0:localhost', {
+    await updateUser(synapse, admin.accessToken, '@user0:localhost', {
       emailAddresses: ['user0@localhost'],
     });
   });

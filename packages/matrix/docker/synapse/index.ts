@@ -11,8 +11,7 @@ import {
   dockerStop,
 } from '../index';
 
-export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
-export const SYNAPSE_PORT = 8008;
+export const SYNAPSE_IP_ADDRESS = '172.20.1.5';
 
 interface SynapseConfig {
   configDir: string;
@@ -33,8 +32,9 @@ function randB64Bytes(numBytes: number): string {
   return crypto.randomBytes(numBytes).toString('base64').replace(/=*$/, '');
 }
 
-export async function cfgDirFromTemplate(
+async function cfgDirFromTemplate(
   template: string,
+  port: number,
   dataDir?: string,
 ): Promise<SynapseConfig> {
   const templateDir = path.join(__dirname, template);
@@ -57,7 +57,7 @@ export async function cfgDirFromTemplate(
   const macaroonSecret = randB64Bytes(16);
   const formSecret = randB64Bytes(16);
 
-  const baseUrl = `http://${SYNAPSE_IP_ADDRESS}:${SYNAPSE_PORT}`;
+  const baseUrl = `http://${SYNAPSE_IP_ADDRESS}:${port}`;
 
   // now copy homeserver.yaml, applying substitutions
   console.log(`Gen ${path.join(templateDir, 'homeserver.yaml')}`);
@@ -83,7 +83,7 @@ export async function cfgDirFromTemplate(
   );
 
   return {
-    port: SYNAPSE_PORT,
+    port: port,
     host: SYNAPSE_IP_ADDRESS,
     baseUrl,
     configDir,
@@ -93,17 +93,19 @@ export async function cfgDirFromTemplate(
 
 // Start a synapse instance: the template must be the name of one of the
 // templates in the docker/synapse directory
-interface StartOptions {
-  template?: string;
+export interface StartOptions {
+  template: string;
   dataDir?: string;
   containerName?: string;
+  port: number;
 }
 export async function synapseStart(
-  opts?: StartOptions,
+  opts: StartOptions,
 ): Promise<SynapseInstance> {
   const synCfg = await cfgDirFromTemplate(
-    opts?.template ?? 'test',
-    opts?.dataDir,
+    opts.template,
+    opts.port,
+    opts.dataDir,
   );
   let containerName = opts?.containerName || path.basename(synCfg.configDir);
   console.log(
@@ -112,7 +114,6 @@ export async function synapseStart(
   await dockerCreateNetwork({ networkName: 'boxel' });
   const synapseId = await dockerRun({
     image: 'matrixdotorg/synapse:develop',
-    containerName: 'boxel-synapse',
     dockerParams: [
       '--rm',
       '-v',
@@ -192,7 +193,7 @@ export async function registerUser(
   admin = false,
   displayName?: string,
 ): Promise<Credentials> {
-  const url = `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/register`;
+  const url = `http://localhost:${synapse.port}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
   const { nonce } = await (await context.get(url)).json();
   const mac = admin
@@ -225,11 +226,12 @@ export async function registerUser(
 }
 
 export async function loginUser(
+  synapse: SynapseInstance,
   username: string,
   password: string,
 ): Promise<Credentials> {
   let response = await (
-    await fetch(`http://localhost:${SYNAPSE_PORT}/_matrix/client/r0/login`, {
+    await fetch(`http://localhost:${synapse.port}/_matrix/client/r0/login`, {
       method: 'POST',
       body: JSON.stringify({
         type: 'm.login.password',
@@ -247,12 +249,13 @@ export async function loginUser(
 }
 
 export async function updateDisplayName(
+  synapse: SynapseInstance,
   userId: string,
   accessToken: string,
   newDisplayName: string,
 ): Promise<void> {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/profile/${userId}/displayname`,
+    `http://localhost:${synapse.port}/_matrix/client/v3/profile/${userId}/displayname`,
     {
       method: 'PUT',
       headers: {
@@ -272,12 +275,13 @@ export async function updateDisplayName(
 }
 
 export async function createRegistrationToken(
+  synapse: SynapseInstance,
   adminAccessToken: string,
   registrationToken: string,
   usesAllowed = 1000,
 ) {
   let res = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/registration_tokens/new`,
+    `http://localhost:${synapse.port}/_synapse/admin/v1/registration_tokens/new`,
     {
       method: 'POST',
       headers: {
@@ -299,6 +303,7 @@ export async function createRegistrationToken(
 }
 
 export async function updateUser(
+  synapse: SynapseInstance,
   adminAccessToken: string,
   userId: string,
   {
@@ -314,7 +319,7 @@ export async function updateUser(
   },
 ) {
   let res = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v2/users/${userId}`,
+    `http://localhost:${synapse.port}/_synapse/admin/v2/users/${userId}`,
     {
       method: 'PUT',
       headers: {

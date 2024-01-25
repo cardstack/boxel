@@ -1,10 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { registerUser } from '../docker/synapse';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
+import { synapseStop, type SynapseInstance } from '../docker/synapse';
 import {
   clearLocalStorage,
   assertLoggedIn,
@@ -14,6 +10,7 @@ import {
   openRoot,
   toggleOperatorMode,
   registerRealmUsers,
+  startTestingSynapse,
   testHost,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
@@ -23,7 +20,7 @@ const REALM_SECRET_SEED = "shhh! it's a secret";
 test.describe('Login', () => {
   let synapse: SynapseInstance;
   test.beforeEach(async ({ page }) => {
-    synapse = await synapseStart();
+    synapse = await startTestingSynapse();
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await clearLocalStorage(page);

@@ -4,7 +4,7 @@ import * as fse from 'fs-extra';
 
 export function dockerRun(args: {
   image: string;
-  containerName: string;
+  containerName?: string;
   dockerParams?: string[];
   applicationParams?: string[];
   runAsUser?: true;
@@ -19,6 +19,9 @@ export function dockerRun(args: {
   }
 
   return new Promise<string>((resolve, reject) => {
+    if (!args.containerName) {
+      args.containerName = `boxel-test-${Date.now()}`;
+    }
     childProcess.execFile(
       'docker',
       [
