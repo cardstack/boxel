@@ -13,12 +13,11 @@ export default class AiAssistantPanelPopover extends Component<Signature> {
     <style>
       .panel-popover {
         background: white;
-        width: 370px;
         position: absolute;
+        top: 0;
+        left: 0;
         border-radius: var(--boxel-border-radius);
         color: black;
-        max-height: 75%;
-        margin-top: -60px;
         z-index: 20;
       }
 
