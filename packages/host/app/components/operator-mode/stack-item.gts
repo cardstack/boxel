@@ -157,7 +157,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let itemsOnStackCount = this.args.stackItems.length;
     let invertedIndex = itemsOnStackCount - this.args.index - 1;
     let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
-    let offsetPx = 40; // Every new card on the stack is 40px lower than the previous one
+    let offsetPx = 28; // Every new card on the stack is 40px lower than the previous one
 
     return htmlSafe(`
       height: calc(100% - ${offsetPx}px * ${this.args.index});
@@ -659,6 +659,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .header-icon {
         width: var(--boxel-header-icon-width);
         height: var(--boxel-header-icon-height);
+      }
+
+      .buried .header-icon {
+        width: calc(0.8 * var(--boxel-header-icon-width));
+        height: calc(0.8 * var(--boxel-header-icon-height));
       }
     </style>
   </template>
