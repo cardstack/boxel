@@ -358,7 +358,7 @@ test.describe('User Registration w/ Token', () => {
     await page.locator('[data-test-register-btn]').click();
 
     await expect(page.locator('[data-test-register-user-error]')).toContainText(
-      'There was an error registering: Unable to parse email address',
+      'There was an error registering: Email address is invalid',
     );
   });
 
@@ -399,7 +399,7 @@ test.describe('User Registration w/ Token', () => {
         '[data-test-token-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText(
-      'There was an error verifying token: fetch failed: Failed to fetch',
+      'There was an error verifying token: Could not connect to server',
     );
   });
 });

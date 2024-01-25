@@ -531,7 +531,15 @@ export default class RegisterUser extends Component<Signature> {
     };
     this.validateEmail.perform().catch((e) => {
       console.log('Error registering', e);
-      this.formError = `There was an error registering: ${e.message}`;
+
+      let extractedError = extractRegistrationErrorMessage(e);
+      let errorText = extractedError || e.message;
+
+      this.formError = `There was an error registering: ${errorText}`;
+
+      if (!extractedError) {
+        throw e;
+      }
     });
   }
 
@@ -554,7 +562,15 @@ export default class RegisterUser extends Component<Signature> {
       };
       this.doRegistrationFlow.perform().catch((e) => {
         console.log('Error verifying token', e);
-        this.tokenError = `There was an error verifying token: ${e.message}`;
+
+        let extractedError = extractTokenErrorMessage(e);
+        let errorText = extractedError || e.message;
+
+        this.tokenError = `There was an error verifying token: ${errorText}`;
+
+        if (!extractedError) {
+          throw e;
+        }
       });
     }
   }
@@ -734,6 +750,29 @@ export default class RegisterUser extends Component<Signature> {
         );
     }
   }
+}
+
+const NO_NETWORK_ERROR_RAW = 'Failed to fetch';
+const NO_NETWORK_ERROR = 'Could not connect to server';
+
+function extractRegistrationErrorMessage(error: Error) {
+  if (error.message.includes('Registration has been disabled')) {
+    return 'Registration has been disabled';
+  } else if (error.message.includes('Unable to parse email address')) {
+    return 'Email address is invalid';
+  } else if (error.message.includes(NO_NETWORK_ERROR_RAW)) {
+    return NO_NETWORK_ERROR;
+  }
+
+  return false;
+}
+
+function extractTokenErrorMessage(error: Error) {
+  if (error.message.includes(NO_NETWORK_ERROR_RAW)) {
+    return NO_NETWORK_ERROR;
+  }
+
+  return false;
 }
 
 declare module '@glint/environment-ember-loose/registry' {
