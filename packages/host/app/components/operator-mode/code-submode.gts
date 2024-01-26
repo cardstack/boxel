@@ -319,7 +319,23 @@ export default class CodeSubmode extends Component<Signature> {
               )
               .map((e: SerializedError) => e.detail);
 
-            return allDetails;
+            // There’s often a pair of errors where one has an unhelpful prefix like this:
+            // cannot return card from index: Not Found - http://test-realm/test/non-card not found
+            // http://test-realm/test/non-card not found
+
+            let detailsWithoutDuplicateSuffixes = allDetails.reduce(
+              (details: string[], currentDetail: string) => {
+                return [
+                  ...details.filter(
+                    (existingDetail) => !existingDetail.endsWith(currentDetail),
+                  ),
+                  currentDetail,
+                ];
+              },
+              [],
+            );
+
+            return detailsWithoutDuplicateSuffixes;
           }
         } catch (e) {
           return [];

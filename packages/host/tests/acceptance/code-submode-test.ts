@@ -718,6 +718,7 @@ module('Acceptance | code submode tests', function (hooks) {
 
     assert
       .dom('[data-test-card-preview-error]')
+      .exists({ count: 1 })
       .includesText(`${testRealmURL}non-card not found`);
 
     await visitOperatorMode({
