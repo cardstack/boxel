@@ -338,6 +338,7 @@ export default class CodeSubmode extends Component<Signature> {
             return detailsWithoutDuplicateSuffixes;
           }
         } catch (e) {
+          console.log('Error extracting card preview errors', e);
           return [];
         }
       }
