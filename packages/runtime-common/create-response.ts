@@ -1,4 +1,4 @@
-import { RealmPermissions } from "realm";
+import { RealmPermissions } from "./realm";
 
 export function createResponse(
   unresolvedRealmURL: string,
