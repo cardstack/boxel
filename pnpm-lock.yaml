@@ -1,5 +1,9 @@
 lockfileVersion: '6.0'
 
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
 overrides:
   '@types/eslint': 8.4.1
   '@embroider/util': 1.12.0
@@ -1725,6 +1729,9 @@ importers:
       '@types/flat':
         specifier: ^5.0.2
         version: 5.0.2
+      '@types/jsonwebtoken':
+        specifier: ^9.0.5
+        version: 9.0.5
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.182
@@ -4542,7 +4549,7 @@ packages:
       '@types/ember__object': ^4.0.4
       '@types/ember__routing': ^4.0.11
       ember-cli-htmlbars: ^6.0.1
-      ember-modifier: ^3.2.7 || ^4.0.0
+      ember-modifier: ^4.1.0
     peerDependenciesMeta:
       '@types/ember__array':
         optional: true
@@ -5173,7 +5180,7 @@ packages:
   /@prettier/sync@0.2.1(prettier@3.1.0-dev):
     resolution: {integrity: sha512-7ls1R6//+GPYD9vof1XaL5psViv83CwpdwlS8oUkWldYgbPhzZ3WgxIQMWqGyBmWPmoBfQg8C7jj7KI/ZuDHhQ==}
     peerDependencies:
-      prettier: ^3.0.0
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     dependencies:
       prettier: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
     dev: true
@@ -5716,7 +5723,6 @@ packages:
     resolution: {integrity: sha512-VRLSGzik+Unrup6BsouBeHsf4d1hOEgYWTm/7Nmw1sXoN1+tRly/Gy/po3yeahnP4jfnQWWAhQAqcNfH7ngOkA==}
     dependencies:
       '@types/node': 18.18.5
-    dev: true
 
   /@types/keygrip@1.0.4:
     resolution: {integrity: sha512-/tjWYD8StMrINelsrHNmpXceo9s3/Y22AzePH1qCvXIgmz/aQp2YFFr6HqhNQVIOdcvaVyp5GS+yjHGuF7Rwsg==}
@@ -12593,7 +12599,7 @@ packages:
     engines: {node: ^16.0.0 || ^18.0.0 || >=20.0.0}
     peerDependencies:
       ember-template-lint: '>= 4.0.0'
-      prettier: '>= 3.0.0'
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     dependencies:
       '@prettier/sync': 0.2.1(prettier@3.1.0-dev)
       ember-template-lint: 5.11.2
@@ -13414,7 +13420,7 @@ packages:
     peerDependencies:
       eslint: '>=5.0.0'
       eslint-config-prettier: '*'
-      prettier: '>=1.13.0'
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     peerDependenciesMeta:
       eslint-config-prettier:
         optional: true
@@ -13429,10 +13435,10 @@ packages:
     resolution: {integrity: sha512-AgaZCVuYDXHUGxj/ZGu1u8H8CYgDY3iG6w5kUFw4AzMVXzB7VvbKgYR4nATIN+OvUrghMbiDLeimVjVY5ilq3w==}
     engines: {node: ^14.18.0 || >=16.0.0}
     peerDependencies:
-      '@types/eslint': '>=8.0.0'
+      '@types/eslint': 8.4.1
       eslint: '>=8.0.0'
       eslint-config-prettier: '*'
-      prettier: '>=3.0.0'
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     peerDependenciesMeta:
       '@types/eslint':
         optional: true
@@ -13450,10 +13456,10 @@ packages:
     resolution: {integrity: sha512-AgaZCVuYDXHUGxj/ZGu1u8H8CYgDY3iG6w5kUFw4AzMVXzB7VvbKgYR4nATIN+OvUrghMbiDLeimVjVY5ilq3w==}
     engines: {node: ^14.18.0 || >=16.0.0}
     peerDependencies:
-      '@types/eslint': '>=8.0.0'
+      '@types/eslint': 8.4.1
       eslint: '>=8.0.0'
       eslint-config-prettier: '*'
-      prettier: '>=3.0.0'
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     peerDependenciesMeta:
       '@types/eslint':
         optional: true
@@ -19977,7 +19983,7 @@ packages:
     resolution: {integrity: sha512-zJTC+NhEU0kHNnVh7OtcvMmkJmYTgFTist76FP9q07m9+WCvcaunR1sTFIOlGE9TH/5UGm6rlF86Umt9ouorAg==}
     engines: {node: 16.* || 18.* || >= 20}
     peerDependencies:
-      prettier: '>= 3.0.0'
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     dependencies:
       '@babel/core': 7.22.11(supports-color@8.1.1)
       '@glimmer/syntax': 0.84.3
@@ -24711,7 +24717,6 @@ packages:
     resolution: {directory: packages/base, type: directory}
     id: file:packages/base
     name: '@cardstack/base'
-    version: 1.0.0
     peerDependencies:
       ember-source: ~4.12.0
     dependencies:
@@ -24722,7 +24727,6 @@ packages:
     resolution: {directory: packages/runtime-common, type: directory}
     id: file:packages/runtime-common
     name: '@cardstack/runtime-common'
-    version: 1.0.0
     peerDependencies:
       '@babel/core': ^7.22.11
       ember-cli-htmlbars: ^6.3.0
@@ -24747,6 +24751,7 @@ packages:
       '@types/babel__traverse': 7.14.2
       '@types/diff': 5.0.2
       '@types/flat': 5.0.2
+      '@types/jsonwebtoken': 9.0.5
       '@types/lodash': 4.14.182
       '@types/pluralize': 0.0.30
       '@types/qs': 6.9.7
@@ -24785,7 +24790,6 @@ packages:
     resolution: {directory: vendor/ember-template-imports, type: directory}
     id: file:vendor/ember-template-imports
     name: '@cardstack/ember-template-imports'
-    version: 2.0.1
     engines: {node: 12.* || >= 14}
     peerDependencies:
       ember-cli-htmlbars: ^6.3.0
@@ -24931,7 +24935,3 @@ packages:
     dependencies:
       eslint: 8.37.0
     dev: true
-
-settings:
-  autoInstallPeers: true
-  excludeLinksFromLockfile: false
