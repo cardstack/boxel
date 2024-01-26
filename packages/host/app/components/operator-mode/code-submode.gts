@@ -1047,6 +1047,7 @@ export default class CodeSubmode extends Component<Signature> {
 
       pre.error {
         white-space: pre-wrap;
+        text-align: left;
       }
     </style>
   </template>
