@@ -1,14 +1,23 @@
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
-import type { ComponentLike } from '@glint/template';
-import Modifier from 'ember-modifier';
+import { tracked } from '@glimmer/tracking';
 
 import { format as formatDate, formatISO } from 'date-fns';
+import { restartableTask } from 'ember-concurrency';
+import Modifier from 'ember-modifier';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
+
+import Pill from '@cardstack/host/components/pill';
+import { getCard } from '@cardstack/host/resources/card-resource';
+
+import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import type { ComponentLike } from '@glint/template';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -19,6 +28,7 @@ interface Signature {
     profileAvatar?: ComponentLike;
     errorMessage?: string;
     retryAction?: () => void;
+    attachedCardIds?: string[];
   };
   Blocks: { default: [] };
 }
@@ -52,10 +62,10 @@ export default class AiAssistantMessage extends Component<Signature> {
         </time>
       </div>
       <div class='content-container'>
-        {{#if @errorMessage}}
+        {{#if this.errorMessage}}
           <div class='error-container'>
             <FailureBordered class='error-icon' />
-            <div class='error-message'>{{@errorMessage}}</div>
+            <div class='error-message'>{{this.errorMessage}}</div>
             {{#if @retryAction}}
               <Button
                 {{on 'click' @retryAction}}
@@ -71,9 +81,26 @@ export default class AiAssistantMessage extends Component<Signature> {
         <div class='content'>
           {{@formattedMessage}}
 
+          {{#if this.cards}}
+            <div class='card-picker' data-test-message-cards>
+              {{#each this.cards as |card i|}}
+                <Pill
+                  @inert={{true}}
+                  class='card-pill'
+                  data-test-pill-index={{i}}
+                  data-test-selected-card={{card.id}}
+                >
+                  <div class='card-title'>{{getDisplayTitle card}}</div>
+                </Pill>
+              {{/each}}
+            </div>
+          {{else if this.getCards.isRunning}}
+            <div class='loading'>Loading...</div>
+          {{/if}}
         </div>
       </div>
     </div>
+
     <style>
       .ai-assistant-message {
         --ai-assistant-message-avatar-size: 1.25rem; /* 20px. */
@@ -162,8 +189,73 @@ export default class AiAssistantMessage extends Component<Signature> {
         --boxel-button-min-width: max-content;
         border-color: var(--boxel-light);
       }
+
+      .card-picker {
+        --pill-height: 1.875rem;
+        --pill-content-max-width: 10rem;
+        color: var(--boxel-dark);
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxs);
+      }
+      .card-pill {
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-400);
+        height: var(--pill-height);
+      }
+      .card-title {
+        max-width: var(--pill-content-max-width);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
     </style>
   </template>
+
+  @tracked cards: CardDef[] | undefined = [];
+  @tracked errors: { id?: string; error: string }[] | undefined = undefined;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    if (!this.args.attachedCardIds?.length) {
+      return;
+    }
+    this.getCards.perform(this.args.attachedCardIds);
+  }
+
+  private getCards = restartableTask(async (cardIds: string[]) => {
+    let cards: CardDef[] = [];
+    let errors: { id?: string; error: string }[] = [];
+    await Promise.all(
+      cardIds.map(async (id) => {
+        try {
+          let cardResource = getCard(this, () => id);
+          await cardResource.loaded;
+          if (!cardResource.card) {
+            errors.push({ id, error: `cannot find card for id "${id}"` });
+            return;
+          }
+          cards.push(cardResource.card);
+        } catch (e) {
+          errors.push({ id, error: `cannot find card for id "${id}"` });
+        }
+      }),
+    );
+    this.cards = cards.length ? cards : undefined;
+    this.errors = errors.length ? errors : undefined;
+    console.log(this.cards, this.errors);
+  });
+
+  private get errorMessage() {
+    if (!this.errors && !this.args.errorMessage) {
+      return undefined;
+    }
+    let errors = this.errors || [];
+    if (this.args.errorMessage) {
+      errors.push({ error: this.args.errorMessage });
+    }
+    return errors.map((e) => e.error).join(', ');
+  }
 }
 
 interface AiAssistantConversationSignature {
@@ -186,4 +278,8 @@ export class AiAssistantConversation extends Component<AiAssistantConversationSi
       }
     </style>
   </template>
+}
+
+function getDisplayTitle(card: CardDef) {
+  return card.title || card.constructor.displayName || 'Untitled Card';
 }

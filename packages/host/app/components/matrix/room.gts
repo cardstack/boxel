@@ -77,28 +77,25 @@ export default class Room extends Component<Signature> {
         <div class='timeline-start' data-test-timeline-start>
           - Beginning of conversation -
         </div>
-        {{#each this.messageCardComponents as |Message i|}}
+        {{#each this.room.messages as |message i|}}
           <AiAssistantMessage
-            @formattedMessage={{htmlSafe Message.card.formattedMessage}}
-            @datetime={{Message.card.created}}
-            @isFromAssistant={{eq Message.card.author.userId aiBotUserId}}
+            @formattedMessage={{htmlSafe message.formattedMessage}}
+            @datetime={{message.created}}
+            @isFromAssistant={{eq message.author.userId aiBotUserId}}
             @profileAvatar={{component
               ProfileAvatarIcon
-              userId=Message.card.author.userId
+              userId=message.author.userId
             }}
+            @attachedCardIds={{message.attachedCardIds}}
             data-test-message-idx={{i}}
-            data-test-boxel-message-from={{Message.card.author.name}}
-          >
-            {{#if Message.card.attachedCardIds}}
-              <Message.component />
-            {{/if}}
-          </AiAssistantMessage>
+            data-test-boxel-message-from={{message.author.name}}
+          />
 
-          {{#if (eq Message.card.command.commandType 'patch')}}
+          {{#if (eq message.command.commandType 'patch')}}
             <div
               data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
             >
-              {{#let Message.card.command.payload as |payload|}}
+              {{#let message.command.payload as |payload|}}
                 <Button
                   @kind='secondary-dark'
                   data-test-command-apply
@@ -218,20 +215,6 @@ export default class Room extends Component<Signature> {
       return this.objective;
     }
     return undefined;
-  }
-
-  private get messageCardComponents() {
-    return this.room
-      ? this.room.messages.map((messageCard) => {
-          return {
-            component: messageCard.constructor.getComponent(
-              messageCard,
-              'embedded',
-            ),
-            card: messageCard,
-          };
-        })
-      : [];
   }
 
   private patchCard = (cardId: string, attributes: any) => {
