@@ -257,7 +257,7 @@ export default class CodeSubmode extends Component<Signature> {
   private get fileIncompatibilityMessage() {
     if (this.isCard) {
       if (this.cardResource.cardError) {
-        return `Card preview failed. Make sure both the card instance data and card definition files have no syntax errors and that their data schema matches. `;
+        return `Card preview failed. Make sure both the card instance data and card definition files have no errors and that their data schema matches. `;
       }
     }
 
