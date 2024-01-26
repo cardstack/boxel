@@ -164,14 +164,6 @@
     "uuid": "^9.0.1",
     "webpack": "^5.89.0"
   },
-  "dependenciesMeta": {
-    "@cardstack/base": {
-      "injected": true
-    },
-    "@cardstack/runtime-common": {
-      "injected": true
-    }
-  },
   "engines": {
     "node": "18"
   },

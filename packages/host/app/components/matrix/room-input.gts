@@ -30,7 +30,7 @@ export default class RoomInput extends Component<RoomArgs> {
     />
 
     <AiAssistantCardPicker
-      @maxNumberOfCards={{1}}
+      @maxNumberOfCards={{5}}
       @cardsToAttach={{this.cardsToAttach}}
       @chooseCard={{this.chooseCard}}
       @removeCard={{this.removeCard}}
@@ -51,19 +51,15 @@ export default class RoomInput extends Component<RoomArgs> {
   private shareCurrentContext = false;
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
-  private cardsToSend: TrackedMap<string, CardDef | undefined> =
+  private cardsToSend: TrackedMap<string, CardDef[] | undefined> =
     new TrackedMap();
 
   private get messageToSend() {
     return this.messagesToSend.get(this.args.roomId) ?? '';
   }
 
-  private get cardtoSend() {
-    return this.cardsToSend.get(this.args.roomId);
-  }
-
   private get cardsToAttach() {
-    return this.cardtoSend ? new Set([this.cardtoSend]) : new Set([]);
+    return this.cardsToSend.get(this.args.roomId);
   }
 
   @action
@@ -73,26 +69,25 @@ export default class RoomInput extends Component<RoomArgs> {
 
   @action
   private sendMessage() {
-    if (this.messageToSend == null && !this.cardtoSend) {
-      throw new Error(
-        `bug: should never get here, send button is disabled when there is no message nor card`,
-      );
-    }
-    this.doSendMessage.perform(this.messageToSend, this.cardtoSend);
+    this.doSendMessage.perform(this.messageToSend, this.cardsToAttach);
   }
 
   @action
   private chooseCard(card: CardDef) {
-    this.cardsToSend.set(this.args.roomId, card);
+    let cards = this.cardsToAttach ?? [];
+    if (!cards?.find((c) => c.id === card.id)) {
+      this.cardsToSend.set(this.args.roomId, [...cards, card]);
+    }
   }
 
   @action
-  private removeCard() {
-    this.cardsToSend.set(this.args.roomId, undefined);
+  private removeCard(card: CardDef) {
+    let cards = this.cardsToAttach?.filter((c) => c.id !== card.id);
+    this.cardsToSend.set(this.args.roomId, cards?.length ? cards : undefined);
   }
 
   private doSendMessage = restartableTask(
-    async (message: string | undefined, card?: CardDef) => {
+    async (message: string | undefined, cards?: CardDef[]) => {
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
       let context = undefined;
@@ -107,7 +102,7 @@ export default class RoomInput extends Component<RoomArgs> {
       await this.matrixService.sendMessage(
         this.args.roomId,
         message,
-        card,
+        cards,
         context,
       );
     },

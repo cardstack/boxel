@@ -5,8 +5,7 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-//@ts-expect-error the types don't recognize the cached export
-import { tracked, cached } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, /* task, */ timeout, all } from 'ember-concurrency';
 
@@ -34,7 +33,6 @@ import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 
 import RoomInput from './room-input';
-import RoomMembers from './room-members';
 
 interface Signature {
   Args: {
@@ -52,7 +50,6 @@ export default class Room extends Component<Signature> {
     >
       <header class='room-info'>
         <h3 class='room-name'>{{this.room.name}}</h3>
-        <RoomMembers @roomId={{@roomId}} @memberNames={{this.memberNames}} />
         <Button
           @kind='secondary-dark'
           @size='extra-small'
@@ -92,7 +89,7 @@ export default class Room extends Component<Signature> {
             data-test-message-index={{i}}
             data-test-boxel-message-from={{Message.card.author.name}}
           >
-            {{#if Message.card.attachedCardId}}
+            {{#if Message.card.attachedCardIds}}
               <Message.component />
             {{/if}}
           </AiAssistantMessage>
@@ -117,7 +114,6 @@ export default class Room extends Component<Signature> {
               {{/let}}
             </div>
           {{/if}}
-
         {{else}}
           <div data-test-no-messages>
             (No messages)
@@ -201,21 +197,6 @@ export default class Room extends Component<Signature> {
 
   private get room() {
     return this.roomResource.room;
-  }
-
-  @cached
-  private get memberNames() {
-    if (!this.room) {
-      return 'None';
-    }
-    return [
-      ...this.room.joinedMembers.map((m) => m.name),
-      ...this.room.invitedMembers
-        .map((m) =>
-          m.userId !== aiBotUserId ? `${m.name} (invited)` : undefined,
-        )
-        .filter(Boolean),
-    ].join(', ');
   }
 
   private get objective() {

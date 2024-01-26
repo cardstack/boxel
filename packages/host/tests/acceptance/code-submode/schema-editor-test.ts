@@ -1010,11 +1010,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       'mouseenter',
     );
 
-    await waitFor(
-      '[data-test-card-schema="Blog Post"] [data-test-tooltip-content]',
-    );
+    await waitFor('[data-test-tooltip-content]');
     assert
-      .dom('[data-test-card-schema="Blog Post"] [data-test-tooltip-content]')
+      .dom('[data-test-tooltip-content]')
       .hasText('http://test-realm/test/ambiguous-display-names (BlogPost)');
     await triggerEvent(
       '[data-test-card-schema="Blog Post"] [data-test-card-schema-navigational-button]',
@@ -1028,9 +1026,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-card-schema="Base"] [data-test-card-schema-navigational-button]',
       'mouseenter',
     );
-    await waitFor('[data-test-card-schema="Base"] [data-test-tooltip-content]');
+    await waitFor('[data-test-tooltip-content]');
     assert
-      .dom('[data-test-card-schema="Base"] [data-test-tooltip-content]')
+      .dom('[data-test-tooltip-content]')
       .hasText('https://cardstack.com/base/card-api (BaseDef)');
 
     await triggerEvent(
@@ -1046,13 +1044,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-card-schema="Blog Post"] [data-test-field-name="authorBio"] [data-test-card-display-name="Author Bio"]',
       'mouseenter',
     );
-    await waitFor(
-      '[data-test-card-schema="Blog Post"] [data-test-field-name="authorBio"] [data-test-tooltip-content]',
-    );
+    await waitFor('[data-test-tooltip-content]');
     assert
-      .dom(
-        '[data-test-card-schema="Blog Post"] [data-test-field-name="authorBio"] [data-test-tooltip-content]',
-      )
+      .dom('[data-test-tooltip-content]')
       .hasText('http://test-realm/test/ambiguous-display-names (Author)'); //shows Author
     await triggerEvent(
       '[data-test-card-schema="Blog Post"] [data-test-field-name="authorBio"] [data-test-card-display-name="Author Bio"]',
@@ -1066,13 +1060,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-card-display-name="Author Bio"]',
       'mouseenter',
     );
-    await waitFor(
-      '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-tooltip-content]',
-    );
+    await waitFor('[data-test-tooltip-content]');
     assert
-      .dom(
-        '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-tooltip-content]',
-      )
+      .dom('[data-test-tooltip-content]')
       .hasText('http://test-realm/test/ambiguous-display-names (Editor)'); //shows Editor
     await triggerEvent(
       '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-card-display-name="Author Bio"]',

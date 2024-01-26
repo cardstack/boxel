@@ -33,11 +33,6 @@
     "wait": "sleep 10000000",
     "lint": "glint"
   },
-  "dependenciesMeta": {
-    "@cardstack/runtime-common": {
-      "injected": true
-    }
-  },
   "volta": {
     "extends": "../../package.json"
   }

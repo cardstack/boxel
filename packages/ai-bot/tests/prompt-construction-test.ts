@@ -25,7 +25,7 @@ module('getModifyPrompt', () => {
     assert.equal(result[1].content, 'Hey');
   });
 
-  test('should generate a more strucutred response if the user uploads a card', () => {
+  test('should generate a more structured response if the user uploads a card', () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
@@ -35,22 +35,24 @@ module('getModifyPrompt', () => {
           msgtype: 'org.boxel.card',
           body: 'Hey',
           data: {
-            instance: {
-              data: {
-                type: 'card',
-                id: 'http://localhost:4201/drafts/Author/1',
-                attributes: {
-                  firstName: 'Terry',
-                  lastName: 'Pratchett',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../author',
-                    name: 'Author',
+            instances: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Terry',
+                    lastName: 'Pratchett',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
                   },
                 },
               },
-            },
+            ],
           },
         },
         sender: '@user:localhost',
@@ -66,7 +68,7 @@ module('getModifyPrompt', () => {
     assert.true(result[1].content?.includes('Hey'));
     assert.true(
       result[0].content?.includes(
-        JSON.stringify(history[0].content.data.instance.data),
+        JSON.stringify(history[0].content.data.instances[0].data),
       ),
     );
   });
@@ -246,22 +248,24 @@ module('getModifyPrompt', () => {
           msgtype: 'org.boxel.card',
           body: 'Hey',
           data: {
-            instance: {
-              data: {
-                type: 'card',
-                id: 'http://localhost:4201/drafts/Author/1',
-                attributes: {
-                  firstName: 'Terry',
-                  lastName: 'Pratchett',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../author',
-                    name: 'Author',
+            instances: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Terry',
+                    lastName: 'Pratchett',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
                   },
                 },
               },
-            },
+            ],
           },
         },
         sender: '@user:localhost',
@@ -281,22 +285,24 @@ module('getModifyPrompt', () => {
           msgtype: 'org.boxel.card',
           body: 'Hey',
           data: {
-            instance: {
-              data: {
-                type: 'card',
-                id: 'http://localhost:4201/drafts/Author/1',
-                attributes: {
-                  firstName: 'Terry',
-                  lastName: 'Pratchett',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../author',
-                    name: 'Author',
+            instances: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Terry',
+                    lastName: 'Pratchett',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
                   },
                 },
               },
-            },
+            ],
           },
         },
         sender: '@user:localhost',
@@ -309,22 +315,24 @@ module('getModifyPrompt', () => {
           msgtype: 'org.boxel.card',
           body: 'Hey',
           data: {
-            instance: {
-              data: {
-                type: 'card',
-                id: 'http://localhost:4201/drafts/Author/2',
-                attributes: {
-                  firstName: 'Mr',
-                  lastName: 'T',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../author',
-                    name: 'Author',
+            instances: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/2',
+                  attributes: {
+                    firstName: 'Mr',
+                    lastName: 'T',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
                   },
                 },
               },
-            },
+            ],
           },
         },
         sender: '@user:localhost',
@@ -344,22 +352,24 @@ module('getModifyPrompt', () => {
           msgtype: 'org.boxel.card',
           body: 'Hey',
           data: {
-            instance: {
-              data: {
-                type: 'card',
-                id: 'http://localhost:4201/drafts/Author/1',
-                attributes: {
-                  firstName: 'Terry',
-                  lastName: 'Pratchett',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../author',
-                    name: 'Author',
+            instances: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Terry',
+                    lastName: 'Pratchett',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
                   },
                 },
               },
-            },
+            ],
           },
         },
         sender: '@user:localhost',
@@ -372,22 +382,24 @@ module('getModifyPrompt', () => {
           msgtype: 'org.boxel.card',
           body: 'Hey',
           data: {
-            instance: {
-              data: {
-                type: 'card',
-                id: 'http://localhost:4201/drafts/Author/2',
-                attributes: {
-                  firstName: 'Mr',
-                  lastName: 'T',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../author',
-                    name: 'Author',
+            instances: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/2',
+                  attributes: {
+                    firstName: 'Mr',
+                    lastName: 'T',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
                   },
                 },
               },
-            },
+            ],
           },
         },
         sender: '@user:localhost',

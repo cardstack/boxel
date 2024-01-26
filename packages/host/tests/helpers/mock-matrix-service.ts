@@ -89,10 +89,10 @@ export class MockMatrixService extends Service {
   async sendMessage(
     roomId: string,
     body: string | undefined,
-    card?: CardDef,
+    cards?: CardDef[],
     context?: OperatorModeContext,
   ) {
-    this.lastMessageSent = { roomId, body, card, context };
+    this.lastMessageSent = { roomId, body, cards, context };
   }
 
   async logout() {
