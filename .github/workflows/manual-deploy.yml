@@ -37,7 +37,7 @@ jobs:
       environment: ${{ inputs.environment }}
       dockerfile: "packages/realm-server/Dockerfile"
       build-args: |
-        "realm_server_script=start:staging"
+        "realm_server_script=start:${{ inputs.environment }}"
 
   deploy-realm-server:
     name: Deploy realm server
