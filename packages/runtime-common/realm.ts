@@ -79,8 +79,9 @@ import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 import { MatrixClient } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
-import RealmPermissionChecker from '../realm-server/lib/realm-permission-checker';
+
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
+import RealmPermissionChecker from './realm-permission-checker';
 
 export type RealmInfo = {
   name: string;
@@ -105,9 +106,7 @@ export interface TokenClaims {
 }
 
 export interface RealmPermissions {
-  users: {
-    [username: string]: ('read' | 'write')[];
-  };
+  [username: string]: ('read' | 'write')[];
 }
 
 export interface RealmAdapter {
@@ -244,7 +243,7 @@ export class Realm {
   #flushOperations: Promise<void> | undefined;
   #operationQueue: Operation[] = [];
   #realmSecretSeed: string;
-  #permissions: RealmPermissions['users'];
+  #permissions: RealmPermissions;
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -281,7 +280,7 @@ export class Realm {
       runnerOptsMgr: RunnerOptionsManager;
       getIndexHTML: () => Promise<string>;
       matrix: { url: URL; username: string; password: string };
-      permissions: RealmPermissions['users'];
+      permissions: RealmPermissions;
       realmSecretSeed: string;
     },
     opts?: Options,
@@ -925,11 +924,11 @@ export class Realm {
 
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
-      let realmPermissionChecker = new RealmPermissionChecker();
+      let realmPermissionChecker = new RealmPermissionChecker(
+        this.#permissions,
+      );
 
-      if (
-        !realmPermissionChecker.can(token.user, neededPermission, token.realm)
-      ) {
+      if (!realmPermissionChecker.can(token.user, neededPermission)) {
         throw new PermissionError(
           'Insufficient permissions to perform this action',
         );

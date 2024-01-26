@@ -13,5 +13,10 @@
     "users": {
       "*": ["read", "write"]
     }
+  },
+  "https://cardstack.com/base/": {
+    "users": {
+      "*": ["read", "write"]
+    }
   }
 }

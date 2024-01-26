@@ -1,84 +1,41 @@
-import RealmPermissionChecker from '../../lib/realm-permission-checker';
+import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import { module, test } from 'qunit';
 
-module('user-permissions', function (_hooks) {
-  test('can read user permissions for specified realm', function (assert) {
-    let permissionsConfig = {
-      'https://cardstack.com/base/': {
-        users: {
-          '*': ['read', 'write'],
-        },
-      },
-      'https://realms.boxel.ai/drafts/': {
-        users: {
-          '@hassan:boxel.ai': ['read', 'write'],
-        },
-      },
-    };
+module('realm-user-permissions', function (_hooks) {
+  module('world-readable realm', function () {
+    let permissionsChecker = new RealmPermissionChecker({
+      '*': ['read'],
+    });
 
-    process.env.REALM_USER_PERMISSIONS = JSON.stringify(permissionsConfig);
+    test('anyone can read but not write', function (assert) {
+      assert.ok(permissionsChecker.can('anyone', 'read'));
+      assert.notOk(permissionsChecker.can('anyone', 'write'));
+    });
+  });
 
-    let permissions = new RealmPermissionChecker();
+  module('world-writable realm', function () {
+    let permissionsChecker = new RealmPermissionChecker({
+      '*': ['read', 'write'],
+    });
 
-    // TODO For the time being realms without configs default to being wide open. we need to change
-    // this once we get our infra established for this
-    assert.ok(permissions.can('user_x', 'read', 'nonexistent realm'));
-    assert.ok(permissions.can('user_x', 'write', 'nonexistent realm'));
+    test('anyone can read and write', function (assert) {
+      assert.ok(permissionsChecker.can('anyone', 'read'));
+      assert.ok(permissionsChecker.can('anyone', 'write'));
+    });
+  });
 
-    assert.ok(
-      permissions.can('any_user', 'read', 'https://cardstack.com/base/'),
-    );
-    assert.ok(
-      permissions.can('any_user', 'write', 'https://cardstack.com/base/'),
-    );
-    assert.ok(
-      permissions.can(
-        '@fadhlan:boxel.ai',
-        'read',
-        'https://cardstack.com/base/',
-      ),
-    );
-    assert.ok(
-      permissions.can(
-        '@fadhlan:boxel.ai',
-        'write',
-        'https://cardstack.com/base/',
-      ),
-    );
+  module('user permissioned realm', function () {
+    let permissionsChecker = new RealmPermissionChecker({
+      '*': ['read'],
+      '@matic:boxel-ai': ['read', 'write'],
+    });
 
-    assert.notOk(
-      permissions.can('any_user', 'read', 'https://realms.boxel.ai/drafts/'),
-    );
-    assert.notOk(
-      permissions.can('any_user', 'write', 'https://realms.boxel.ai/drafts/'),
-    );
-    assert.notOk(
-      permissions.can(
-        '@fadhlan:boxel.ai',
-        'read',
-        'https://realms.boxel.ai/drafts/',
-      ),
-    );
-    assert.notOk(
-      permissions.can(
-        '@fadhlan:boxel.ai',
-        'write',
-        'https://realms.boxel.ai/drafts/',
-      ),
-    );
-    assert.ok(
-      permissions.can(
-        '@hassan:boxel.ai',
-        'write',
-        'https://realms.boxel.ai/drafts/',
-      ),
-    );
-    assert.ok(
-      permissions.can(
-        '@hassan:boxel.ai',
-        'write',
-        'https://realms.boxel.ai/drafts/',
-      ),
-    );
+    test('user with permission can do permitted actions', function (assert) {
+      assert.ok(permissionsChecker.can('@matic:boxel-ai', 'read'));
+      assert.ok(permissionsChecker.can('anyone', 'read'));
+
+      assert.ok(permissionsChecker.can('@matic:boxel-ai', 'write'));
+      assert.notOk(permissionsChecker.can('anyone', 'write'));
+    });
   });
 });
