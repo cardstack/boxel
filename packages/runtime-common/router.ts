@@ -1,5 +1,5 @@
 import { notFound, CardError, responseWithError } from './error';
-import { logger } from './index';
+import { RealmPermissions, logger } from './index';
 import { RealmPaths } from './paths';
 
 type Handler = (request: Request) => Promise<Response>;
@@ -43,8 +43,10 @@ export class Router {
   #routeTable = new Map<SupportedMimeType, Map<Method, Map<string, Handler>>>();
   log = logger('realm:router');
   #paths: RealmPaths;
-  constructor(mountURL: URL) {
+  #permissions: RealmPermissions['users'];
+  constructor(mountURL: URL, permissions: RealmPermissions['users']) {
     this.#paths = new RealmPaths(mountURL);
+    this.#permissions = permissions;
   }
 
   get(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
@@ -90,13 +92,13 @@ export class Router {
   async handle(request: Request): Promise<Response> {
     let handler = this.lookupHandler(request);
     if (!handler) {
-      return notFound(this.#paths.url, request);
+      return notFound(this.#paths.url, this.#permissions, request);
     }
     try {
       return await handler(request);
     } catch (err) {
       if (err instanceof CardError) {
-        return responseWithError(this.#paths.url, err);
+        return responseWithError(this.#paths.url, this.#permissions, err);
       }
       this.log.error(err);
       return new Response(`unexpected exception in realm ${err}`, {

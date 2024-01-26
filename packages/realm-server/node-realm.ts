@@ -23,7 +23,7 @@ import {
 } from 'fs-extra';
 import { join } from 'path';
 import { Duplex } from 'node:stream';
-import type { UpdateEventData } from '@cardstack/runtime-common/realm';
+import type { UpdateEventData, RealmPermissions } from '@cardstack/runtime-common/realm';
 import jwt from 'jsonwebtoken';
 
 export class NodeAdapter implements RealmAdapter {
@@ -133,6 +133,7 @@ export class NodeAdapter implements RealmAdapter {
 
   createStreamingResponse(
     unresolvedRealmURL: string,
+    permissions: RealmPermissions['users'],
     request: Request,
     responseInit: ResponseInit,
     cleanup: () => void,
@@ -140,6 +141,7 @@ export class NodeAdapter implements RealmAdapter {
     let s = new MessageStream();
     let response = createResponse(
       unresolvedRealmURL,
+      permissions,
       null,
       responseInit,
     ) as ResponseWithNodeStream;

@@ -11,6 +11,7 @@ import ms from 'ms';
 import {
   Kind,
   RealmAdapter,
+  RealmPermissions,
   FileRef,
   LooseSingleCardDocument,
   baseRealm,
@@ -523,6 +524,7 @@ async function setupTestRealm({
     });
   }
 
+  let permissions: RealmPermissions['users'] = { '*': ['read', 'write'] };
   realm = new Realm({
     url: realmURL,
     adapter,
@@ -535,11 +537,11 @@ async function setupTestRealm({
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
-    permissions: { '*': ['read', 'write'] },
+    permissions,
     realmSecretSeed: "shhh! it's a secret",
   });
   loader.prependURLHandlers([
-    (req) => sourceFetchRedirectHandle(req, adapter, realmURL!),
+    (req) => sourceFetchRedirectHandle(req, adapter, realmURL!, permissions),
     (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
   ]);
 
@@ -806,12 +808,18 @@ export class TestRealmAdapter implements RealmAdapter {
 
   createStreamingResponse(
     unresolvedRealmURL: string,
+    permissions: RealmPermissions['users'],
     _request: Request,
     responseInit: ResponseInit,
     cleanup: () => void,
   ) {
     let s = new WebMessageStream();
-    let response = createResponse(unresolvedRealmURL, s.readable, responseInit);
+    let response = createResponse(
+      unresolvedRealmURL,
+      permissions,
+      s.readable,
+      responseInit,
+    );
     messageCloseHandler(s.readable, cleanup);
     return { response, writable: s.writable };
   }
@@ -888,6 +896,7 @@ export async function sourceFetchRedirectHandle(
   request: Request,
   adapter: RealmAdapter,
   realmURL: string,
+  permissions: RealmPermissions['users'],
 ) {
   let urlParts = new URL(request.url).pathname.split('.');
   if (
@@ -912,7 +921,7 @@ export async function sourceFetchRedirectHandle(
         ref.content instanceof Uint8Array ||
         typeof ref.content === 'string')
     ) {
-      let r = createResponse(realmURL, ref.content, {
+      let r = createResponse(realmURL, permissions, ref.content, {
         headers: {
           'last-modified': formatRFC7231(ref.lastModified),
         },
