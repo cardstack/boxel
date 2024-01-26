@@ -62,6 +62,9 @@ export default class OperatorModeStack extends Component<Signature> {
         --stack-padding-top: calc(
           var(--submode-switcher-trigger-height) + (2 * (var(--boxel-sp)))
         );
+        --stack-padding-bottom: calc(
+          var(--search-sheet-closed-height) + (var(--boxel-sp))
+        );
       }
       .operator-mode-stack {
         z-index: 0;
@@ -69,7 +72,8 @@ export default class OperatorModeStack extends Component<Signature> {
         width: 100%;
         background-position: center;
         background-size: cover;
-        padding: var(--stack-padding-top) var(--boxel-sp) 0;
+        padding: var(--stack-padding-top) var(--boxel-sp)
+          var(--stack-padding-bottom);
         position: relative;
       }
       .operator-mode-stack.with-bg-image:before {
@@ -104,14 +108,12 @@ export default class OperatorModeStack extends Component<Signature> {
       }
 
       .inner {
-        height: calc(
-          100% - var(--search-sheet-closed-height) - var(--boxel-sp)
-        );
+        height: 100%;
         position: relative;
         display: flex;
         justify-content: center;
         max-width: 50rem;
-        margin: var(--boxel-sp-xxl) auto 0;
+        margin: 0 auto;
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
       }

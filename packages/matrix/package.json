@@ -5,8 +5,10 @@
   "devDependencies": {
     "@playwright/test": "^1.35.0",
     "@types/fs-extra": "^9.0.13",
+    "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^18.18.5",
     "fs-extra": "^10.1.0",
+    "jsonwebtoken": "^9.0.2",
     "start-server-and-test": "^1.14.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.1.6"
@@ -14,7 +16,6 @@
   "scripts": {
     "start:synapse": "mkdir -p ./synapse-data/db && SYNAPSE_DATA_DIR=./synapse-data ts-node --transpileOnly ./scripts/synapse.ts start",
     "stop:synapse": "ts-node --transpileOnly ./scripts/synapse.ts stop",
-    "stop:synapse:tests": "docker container kill $(docker container ls -q --filter name=synapsedocker-*)",
     "assert-synapse-running": "if [ \"`docker ps -f name='boxel-synapse' --format '{{.Names}}'`\" = 'boxel-synapse' ]; then echo 'synapse is already running'; else pnpm run start:synapse; fi",
     "start:smtp": "ts-node --transpileOnly ./scripts/smtp.ts start",
     "stop:smtp": "ts-node --transpileOnly ./scripts/smtp.ts stop",
@@ -24,16 +25,13 @@
     "stop:admin": "docker stop synapse-admin",
     "register-bot-user": "USERNAME=aibot PASSWORD=pass ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-test-user": "USERNAME=user PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
+    "register-realm-users": "./scripts/register-realm-users.sh",
     "register-test-admin": "ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-test-token": "pnpm run register-test-admin && ts-node --transpileOnly ./scripts/register-test-token.ts",
-    "test": "start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.card%2Bjson|http-get://localhost:4202/test/hassan?acceptHeader=application%2Fvnd.card%2Bjson' 'pnpm run start:host-pre-built' 'http://127.0.0.1:4200' 'pnpm playwright test'",
+    "test": "./scripts/test.sh all",
+    "test:group": "./scripts/test.sh",
     "wait": "sleep 10000000",
     "lint": "glint"
-  },
-  "dependenciesMeta": {
-    "@cardstack/runtime-common": {
-      "injected": true
-    }
   },
   "volta": {
     "extends": "../../package.json"

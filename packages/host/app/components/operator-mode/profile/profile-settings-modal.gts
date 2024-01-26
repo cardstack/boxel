@@ -43,6 +43,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
       @size='large'
       @centered={{true}}
       @isOpen={{true}}
+      @cardContainerClass='profile-settings'
       class='profile-settings-modal'
       data-test-settings-modal
     >
@@ -185,7 +186,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
       .right-buttons > :not(:first-child) {
         margin-left: var(--boxel-sp-xs);
       }
-      .profile-settings-modal {
+      .profile-settings-modal > :deep(.boxel-modal__inner) {
+        display: flex;
+      }
+      :deep(.profile-settings) {
         height: 70vh;
       }
       .error-message {
@@ -342,8 +346,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
     if (!this.newPassword) {
       this.newPasswordError = 'Password is missing';
     } else if (!isValidPassword(this.newPassword)) {
-      this.newPasswordError =
-        'Password must be at least 8 characters long and include a number and a symbol';
+      this.newPasswordError = 'Password must be at least 8 characters long';
     }
   }
 

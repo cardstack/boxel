@@ -35,6 +35,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupServerSentEvents,
+  setupSessionsServiceMock,
   setupOnSave,
   showSearchResult,
   type TestContextWithSave,
@@ -67,6 +68,7 @@ module('Integration | operator-mode', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
+  setupSessionsServiceMock(hooks);
   setupMatrixServiceMock(hooks);
   let noop = () => {};
 
@@ -687,6 +689,8 @@ module('Integration | operator-mode', function (hooks) {
       room_id: 'testroom',
       state_key: 'state',
       type: 'm.room.message',
+      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
       content: {
         body: 'i am the body',
         msgtype: 'org.boxel.command',
@@ -704,7 +708,8 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
 
     await waitFor('[data-test-command-apply]');
@@ -743,6 +748,8 @@ module('Integration | operator-mode', function (hooks) {
       room_id: 'testroom',
       state_key: 'state',
       type: 'm.room.message',
+      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
       content: {
         body: 'i am the body',
         msgtype: 'org.boxel.command',
@@ -760,7 +767,8 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
 
     await waitFor('[data-test-command-apply]');
@@ -788,7 +796,8 @@ module('Integration | operator-mode', function (hooks) {
 
     matrixService.createAndJoinRoom('testroom');
 
-    await waitFor('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
 
     // Add some text so that we can click the send button
@@ -800,7 +809,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-send-message-btn]');
     assert.deepEqual(matrixService.lastMessageSent, {
       body: 'hello',
-      card: undefined,
+      cards: undefined,
       context: undefined,
       roomId: 'testroom',
     });
@@ -817,12 +826,14 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-boxel-header-title]');
     assert.dom('[data-test-boxel-header-title]').hasText('Pet');
     await click('[data-test-open-ai-assistant]');
 
     matrixService.createAndJoinRoom('testroom');
 
-    await waitFor('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
 
     // Add some text so that we can click the send button
@@ -861,6 +872,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-open-ai-assistant]');
     await click('[data-test-open-ai-assistant]');
     matrixService.createAndJoinRoom('testroom');
     addRoomEvent(matrixService, {
@@ -874,25 +886,29 @@ module('Integration | operator-mode', function (hooks) {
         formatted_body: 'card with error',
         msgtype: 'org.boxel.card',
         data: JSON.stringify({
-          instance: {
-            data: {
-              id: 'http://this-is-not-a-real-card.com',
-              type: 'card',
-              attributes: {
-                firstName: 'Boom',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'http://not-a-real-card.com',
-                  name: 'Boom',
+          instances: [
+            {
+              data: {
+                id: 'http://this-is-not-a-real-card.com',
+                type: 'card',
+                attributes: {
+                  firstName: 'Boom',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://not-a-real-card.com',
+                    name: 'Boom',
+                  },
                 },
               },
             },
-          },
+          ],
         }),
       },
     });
-    await waitFor('[data-test-enter-room="test_a"]');
+
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
     await waitFor('[data-test-card-error]');
     assert
@@ -924,9 +940,12 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-open-ai-assistant]');
     await click('[data-test-open-ai-assistant]');
     matrixService.createAndJoinRoom('testroom');
-    await waitFor('[data-test-enter-room="test_a"]');
+
+    await waitFor('[data-test-past-sessions-button]');
+    await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
     await waitFor('[data-test-objective-error]');
     assert
@@ -1947,6 +1966,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     assert.dom(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`).exists();
     await click(
       `[data-test-stack-card="${testRealmURL}BlogPost/2"] [data-test-edit-button]`,
@@ -2319,6 +2339,7 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
+    await waitFor('[data-test-more-options-button]');
     await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
@@ -2336,6 +2357,7 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     // Linked cards have the realm's icon in the overlaid header title
+    await waitFor('[data-test-overlay-card-display-name="Author"]');
     assert
       .dom('[data-test-overlay-card-display-name="Author"] .header-title img')
       .hasAttribute('src', 'https://example-icon.test');
@@ -2359,17 +2381,20 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
 
     await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
     assert.dom('[data-test-submode-arrow-direction="down"]').exists();
 
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
     assert.dom('[data-test-submode-arrow-direction="down"]').exists();
   });
@@ -2385,6 +2410,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
@@ -2392,6 +2418,7 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
     await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
     await waitUntil(() =>
       document
@@ -2436,6 +2463,7 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
+    await waitFor('[data-test-submode-switcher]');
     await click(
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
@@ -2490,10 +2518,12 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-submode-switcher]');
     await click(
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
     await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
 
     await waitUntil(() =>
@@ -2549,13 +2579,16 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
     await click(
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
+    await waitFor('[data-test-boxel-menu-item-text]');
     await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
     await waitUntil(() =>
       document
@@ -2595,6 +2628,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
@@ -2602,6 +2636,7 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
     await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
     await waitUntil(() =>
       document

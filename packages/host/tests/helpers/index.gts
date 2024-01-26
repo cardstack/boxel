@@ -6,6 +6,8 @@ import GlimmerComponent from '@glimmer/component';
 
 import { formatRFC7231, parse } from 'date-fns';
 
+import ms from 'ms';
+
 import {
   Kind,
   RealmAdapter,
@@ -17,6 +19,7 @@ import {
   Deferred,
   executableExtensions,
   SupportedMimeType,
+  type TokenClaims,
 } from '@cardstack/runtime-common';
 
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -45,6 +48,7 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
+import { setupSessionsServiceMock } from './mock-sessions-service';
 import percySnapshot from './percy-snapshot';
 
 import { renderComponent } from './render-component';
@@ -52,11 +56,17 @@ import { WebMessageStream, messageCloseHandler } from './stream';
 import visitOperatorMode from './visit-operator-mode';
 
 export { percySnapshot };
+export { setupSessionsServiceMock };
 export { visitOperatorMode };
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
+const testMatrix = {
+  url: new URL(`http://localhost:8008`),
+  username: 'test_realm',
+  password: 'password',
+};
 
 export function cleanWhiteSpace(text: string) {
   // this also normalizes non-breaking space characters which seem
@@ -513,18 +523,21 @@ async function setupTestRealm({
     });
   }
 
-  realm = new Realm(
-    realmURL,
+  realm = new Realm({
+    url: realmURL,
     adapter,
     loader,
-    async (optsId) => {
+    indexRunner: async (optsId) => {
       let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
       await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
     },
     runnerOptsMgr,
-    async () =>
+    getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
-  );
+    matrix: testMatrix,
+    permissions: { '*': ['read', 'write'] },
+    realmSecretSeed: "shhh! it's a secret",
+  });
   loader.prependURLHandlers([
     (req) => sourceFetchRedirectHandle(req, adapter, realmURL!),
     (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
@@ -572,6 +585,9 @@ type FilesForTestAdapter = Record<
   string | LooseSingleCardDocument | CardDocFiles | RealmInfo
 >;
 
+class TokenExpiredError extends Error {}
+class JsonWebTokenError extends Error {}
+
 export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
   #lastModified: Map<string, number> = new Map();
@@ -598,6 +614,44 @@ export class TestRealmAdapter implements RealmAdapter {
         dir[last] = JSON.stringify(content);
       }
     }
+  }
+
+  createJWT(claims: TokenClaims, expiration: string, secret: string) {
+    let nowInSeconds = Math.floor(Date.now() / 1000);
+    let expires = nowInSeconds + ms(expiration) / 1000;
+    let header = { alg: 'none', typ: 'JWT' };
+    let payload = {
+      iat: nowInSeconds,
+      exp: expires,
+      ...claims,
+    };
+    let stringifiedHeader = JSON.stringify(header);
+    let stringifiedPayload = JSON.stringify(payload);
+    let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
+      stringifiedPayload,
+    )}`;
+    // this is our silly JWT--we don't sign with crypto since we are running in the
+    // browser so the secret is the signature
+    return `${headerAndPayload}.${secret}`;
+  }
+
+  verifyJWT(
+    token: string,
+    secret: string,
+  ): TokenClaims & { iat: number; exp: number } {
+    let [_header, payload, signature] = token.split('.');
+    if (signature === secret) {
+      let claims = JSON.parse(atob(payload)) as {
+        iat: number;
+        exp: number;
+      } & TokenClaims;
+      let expiration = claims.exp;
+      if (expiration > Date.now() / 1000) {
+        throw new TokenExpiredError(`JWT token expired at ${expiration}`);
+      }
+      return claims;
+    }
+    throw new JsonWebTokenError(`unable to verify JWT: ${token}`);
   }
 
   get lastModified() {

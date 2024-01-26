@@ -19,6 +19,7 @@ import {
   type LooseSingleCardDocument,
   type CodeRef,
   type MatrixCardError,
+  type TokenClaims,
   sanitizeHtml,
   aiBotUsername,
 } from '@cardstack/runtime-common';
@@ -45,10 +46,11 @@ import { importResource } from '../resources/import';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
+import type SessionsService from './sessions-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-const { matrixURL } = ENV;
+const { matrixURL, ownRealmURL } = ENV;
 const SET_OBJECTIVE_POWER_LEVEL = 50;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const DEFAULT_PAGE_SIZE = 50;
@@ -63,6 +65,7 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare sessionsService: SessionsService;
   @tracked private _client: MatrixClient | undefined;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
@@ -154,6 +157,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
+      this.sessionsService.clearSessions();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -230,10 +234,96 @@ export default class MatrixService extends Service {
       try {
         await this._client.startClient();
         await this.initializeRooms();
+
+        // TODO this is a temporary measure to prove that we can obtain a realm session.
+        // ultimately we need to figure out a better approach in terms of when/where we
+        // obtain sessions for realms that we care about. wrapping this in an inner
+        // try/catch so token issues don't trigger a logout
+        try {
+          await this.getRealmToken(new URL(ownRealmURL));
+        } catch (tokenError) {
+          console.error(`could not obtain realm token`, tokenError);
+        }
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
       }
+    }
+  }
+
+  async getRealmToken(
+    realmURL: URL,
+  ): Promise<TokenClaims & { iat: number; exp: number }> {
+    let tokenRefreshPeriod = 5 * 60; // 5 minutes
+
+    if (this.sessionsService.currentJWT) {
+      let claims = this.sessionsService.currentJWT;
+      let expiration = claims.exp;
+      if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
+        return claims;
+      }
+    }
+
+    await this.createRealmSession(realmURL);
+    return await this.getRealmToken(realmURL);
+  }
+
+  private async createRealmSession(realmURL: URL) {
+    await this.ready;
+    if (!this.isLoggedIn) {
+      throw new Error(
+        `must be logged in to matrix before a realm session can be created`,
+      );
+    }
+
+    let initialResponse = await fetch(`${realmURL.href}_session`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        user: this.userId,
+      }),
+    });
+    let initialJSON = (await initialResponse.json()) as {
+      room: string;
+      challenge: string;
+    };
+    if (initialResponse.status !== 401) {
+      throw new Error(
+        `unexpected response from POST ${realmURL.href}_session: ${
+          initialResponse.status
+        } - ${JSON.stringify(initialJSON)}`,
+      );
+    }
+    let { room, challenge } = initialJSON;
+    if (!this.rooms.has(room)) {
+      await this.client.joinRoom(room);
+    }
+    await this.sendMessage(room, `auth-response: ${challenge}`);
+    let challengeResponse = await fetch(`${realmURL.href}_session`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        user: this.userId,
+        challenge,
+      }),
+    });
+    if (!challengeResponse.ok) {
+      throw new Error(
+        `Could not authenticate with realm ${realmURL.href} - ${
+          challengeResponse.status
+        }: ${JSON.stringify(await challengeResponse.json())}`,
+      );
+    }
+    let token = challengeResponse.headers.get('Authorization');
+
+    if (token) {
+      this.sessionsService.setSession(realmURL, token);
+    } else {
+      this.sessionsService.clearSession(realmURL);
     }
   }
 
@@ -299,7 +389,7 @@ export default class MatrixService extends Service {
   async sendMessage(
     roomId: string,
     body: string | undefined,
-    card?: CardDef,
+    cards?: CardDef[],
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
@@ -333,21 +423,21 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let serializedCard: LooseSingleCardDocument | undefined;
-    if (card) {
-      serializedCard = await this.cardService.serializeCard(card);
-      body = `${body ?? ''} (Card: ${card.title ?? 'Untitled'}, ${
-        card.id
-      })`.trim();
+    let serializedCards: LooseSingleCardDocument[] = [];
+    if (cards?.length) {
+      serializedCards = await Promise.all(
+        cards.map(async (c) => await this.cardService.serializeCard(c)),
+      );
+
+      body = body ?? '';
+      body += cards.map((c) => `Card: ${c.title ?? 'Untitled'}, ${c.id}`);
     }
-    if (card) {
+    if (cards?.length) {
       await this.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.card',
         body,
         formatted_body: html,
-        data: {
-          instance: serializedCard!,
-        },
+        data: { instances: serializedCards },
       });
     } else {
       await this.client.sendHtmlMessage(roomId, body ?? '', html);

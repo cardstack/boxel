@@ -1,9 +1,6 @@
-import { expect, type Page, test as base } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
+import { expect, type Page } from '@playwright/test';
+import { type SynapseInstance } from '../docker/synapse';
+import { registerUser } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
 
@@ -16,47 +13,12 @@ interface LoginOptions {
   expectFailure?: true;
 }
 
-export const test = base.extend<{ synapse: SynapseInstance }>({
-  // eslint-disable-next-line no-empty-pattern
-  synapse: async ({}, use) => {
-    let synapseInstance = await synapseStart();
-    await use(synapseInstance);
-    await synapseStop(synapseInstance.synapseId);
-  },
-
-  page: async ({ page, synapse }, use) => {
-    // Setup overrides
-    await setupMatrixOverride(page, synapse);
-    await use(page);
-  },
-});
-
-export async function setupMatrixOverride(
-  page: Page,
-  synapse: SynapseInstance,
-) {
-  // Save the original goto function keeping mind this override function may be
-  // called more than once
-  const originalGoto = (page as any).originalGoto ?? page.goto.bind(page);
-  (page as any).originalGoto = originalGoto;
-
-  // Patch the goto function
-  page.goto = async (url, options) => {
-    const newUrl = new URL(url);
-    const params = new URLSearchParams(newUrl.search);
-
-    // Override the matrixURL
-    params.set('matrixURL', `http://localhost:${synapse.mappedPort}`);
-    newUrl.search = params.toString();
-
-    // Call the original goto function with the new URL
-    return await originalGoto(newUrl.href, options);
-  };
-
-  // Patch the reload function
-  page.reload = async (options) => {
-    return await page.goto(page.url(), options);
-  };
+export async function registerRealmUsers(synapse: SynapseInstance) {
+  await registerUser(synapse, 'base_realm', 'password');
+  await registerUser(synapse, 'drafts_realm', 'password');
+  await registerUser(synapse, 'published_realm', 'password');
+  await registerUser(synapse, 'test_realm', 'password');
+  await registerUser(synapse, 'node-test_realm', 'password');
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {
@@ -181,9 +143,9 @@ export async function validateEmailForResetPassword(
   await expect(
     emailPage.frameLocator('.messageview iframe').locator('body'),
   ).toContainText('Reset Password');
-  await expect(emailPage.locator('.messageview .messageviewheader')).toContainText(
-    `To:${email}`,
-  );
+  await expect(
+    emailPage.locator('.messageview .messageviewheader'),
+  ).toContainText(`To:${email}`);
 
   if (opts?.onEmailPage) {
     await opts.onEmailPage(emailPage);
@@ -191,20 +153,21 @@ export async function validateEmailForResetPassword(
 
   const pagePromise = context.waitForEvent('page');
   let btn = emailPage
-      .frameLocator('.messageview iframe')
-      .getByText('Reset Password')
-      .last();
+    .frameLocator('.messageview iframe')
+    .getByText('Reset Password')
+    .last();
   // We have to delay before going to validation window
   // to avoid the validation window won't open
   await emailPage.waitForTimeout(500);
   await btn.click();
-  
+
   const validationPage = await pagePromise;
   await validationPage.waitForLoadState();
   if (opts?.onValidationPage) {
     await opts.onValidationPage(validationPage);
   }
-  let validationBtn = validationPage.locator('body')
+  let validationBtn = validationPage
+    .locator('body')
     .getByText('Confirm changing my password');
   await validationPage.waitForTimeout(500);
   await validationBtn.click();
@@ -225,7 +188,9 @@ export async function gotoForgotPassword(page: Page) {
   await openRoot(page);
   await toggleOperatorMode(page);
   await page.locator('[data-test-forgot-password]').click();
-  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(1);
+  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(
+    1,
+  );
 }
 
 export async function login(
@@ -247,7 +212,6 @@ export async function login(
     await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
   } else {
     await openAiAssistant(page);
-    await expect(page.locator('[data-test-rooms-list]')).toHaveCount(1);
   }
 }
 
@@ -257,61 +221,18 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function register(page: Page, name: string,
-  email: string,
-  username: string,
-  password: string,
-  registrationToken?: string) {
-  await expect(
-    page.locator('[data-test-token-field]'),
-    'token field is not displayed',
-  ).toHaveCount(0);
-  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-  await page.locator('[data-test-name-field]').fill(name);
-  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-  await page.locator('[data-test-email-field]').fill(email);
-  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-  await page.locator('[data-test-username-field]').fill(username);
-  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-  await page.locator('[data-test-password-field]').fill(password);
-  await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-  await page.locator('[data-test-confirm-password-field]').fill(password);
-  await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
-  await page.locator('[data-test-register-btn]').click();
-
-  if(registrationToken) {
-    await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
-    await expect(
-      page.locator('[data-test-username-field]'),
-      'username field is not displayed',
-    ).toHaveCount(0);
-    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
-    await page.locator('[data-test-token-field]').fill(registrationToken);
-    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
-    await page.locator('[data-test-next-btn]').click();
-  }
-
-  await validateEmail(page, email);
-  
-  await openAiAssistant(page);
-  await assertLoggedIn(page, { email, displayName: name});
-  await logout(page);
-  await assertLoggedOut(page);
-}
-
-export async function createRoom(
-  page: Page,
-  roomDetails: { name: string; invites?: string[] },
-) {
+export async function createRoom(page: Page, name?: string) {
+  let roomName: string;
   await page.locator('[data-test-create-room-mode-btn]').click();
-  await page.locator('[data-test-room-name-field]').fill(roomDetails.name);
-  if (roomDetails.invites && roomDetails.invites.length > 0) {
-    await page
-      .locator('[data-test-room-invite-field]')
-      .fill(roomDetails.invites.join(', '));
+  if (name) {
+    roomName = name;
+    await page.locator('[data-test-room-name-field]').fill(name);
+  } else {
+    roomName = await page.locator('[data-test-room-name-field]').inputValue();
   }
   await page.locator('[data-test-create-room-btn]').click();
-  await isInRoom(page, roomDetails.name);
+  await isInRoom(page, roomName);
+  return roomName;
 }
 
 export async function isInRoom(page: Page, roomName: string) {
@@ -319,15 +240,12 @@ export async function isInRoom(page: Page, roomName: string) {
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
 }
 
-export async function joinRoom(page: Page, roomName: string) {
-  await page.locator(`[data-test-join-room-btn="${roomName}"]`).click();
-}
-
 export async function leaveRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-leave-room-btn="${roomName}"]`).click();
 }
 
 export async function openRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
   await isInRoom(page, roomName);
 }
@@ -351,13 +269,19 @@ export async function setObjective(page: Page, objectiveURI: string) {
   await expect(page.locator(`[data-test-objective]`)).toHaveCount(1);
 }
 
+export async function selectCardFromCatalog(page: Page, cardId: string) {
+  await page.locator('[data-test-choose-card-btn]').click();
+  await page.locator(`[data-test-select="${cardId}"]`).click();
+  await page.locator('[data-test-card-catalog-go-button]').click();
+}
+
 export async function sendMessage(
   page: Page,
   roomName: string,
   message: string | undefined,
-  cardId?: string,
+  cardIds?: string[],
 ) {
-  if (message == null && cardId == null) {
+  if (message == null && cardIds == null) {
     throw new Error(
       `sendMessage requires at least a message or a card ID be specified`,
     );
@@ -365,20 +289,12 @@ export async function sendMessage(
   if (message != null) {
     await writeMessage(page, roomName, message);
   }
-  if (cardId != null) {
-    await page.locator('[data-test-choose-card-btn]').click();
-    await page.locator(`[data-test-select="${cardId}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+  if (cardIds?.length) {
+    await Promise.all(cardIds.map((id) => selectCardFromCatalog(page, id)));
   }
   // can we check it's higher than before?
-  await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
+  await page.waitForSelector(`[data-test-room-settled]`);
   await page.locator('[data-test-send-message-btn]').click();
-}
-
-export async function inviteToRoom(page: Page, invites: string[]) {
-  await page.locator(`[data-test-invite-mode-btn]`).click();
-  await page.locator('[data-test-room-invite-field]').fill(invites.join(', '));
-  await page.locator('[data-test-room-invite-btn]').click();
 }
 
 export async function assertMessages(
@@ -386,100 +302,87 @@ export async function assertMessages(
   messages: {
     from: string;
     message?: string;
-    card?: { id: string; text?: string };
+    cards?: { id: string; title?: string }[];
   }[],
 ) {
-  await expect(page.locator('[data-test-message-idx]')).toHaveCount(
+  await expect(page.locator('[data-test-message-index]')).toHaveCount(
     messages.length,
   );
-  for (let [index, { from, message, card }] of messages.entries()) {
+  for (let [index, { from, message, cards }] of messages.entries()) {
     await expect(
       page.locator(
-        `[data-test-message-idx="${index}"] [data-test-boxel-message-name]`,
+        `[data-test-message-index="${index}"][data-test-boxel-message-from="${from}"]`,
       ),
-    ).toContainText(from);
+    ).toHaveCount(1);
     if (message != null) {
       await expect(
-        page.locator(`[data-test-message-idx="${index}"] .content`),
+        page.locator(`[data-test-message-index="${index}"] .content`),
       ).toContainText(message);
     }
-    if (card) {
+    if (cards?.length) {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`,
+          `[data-test-message-idx="${index}"][data-test-message-cards]`,
         ),
       ).toHaveCount(1);
-      if (card.text) {
-        if (message != null && card.text.includes(message)) {
-          throw new Error(
-            `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.text}'`,
-          );
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] [data-test-message-card]`,
+        ),
+      ).toHaveCount(cards.length);
+      cards.map(async (card) => {
+        if (card.title) {
+          if (message != null && card.title.includes(message)) {
+            throw new Error(
+              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
+            );
+          }
+          // note: attached cards are in atom format (which display the title by default)
+          await expect(
+            page.locator(
+              `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"] [data-test-card-format="atom"]`,
+            ),
+          ).toContainText(card.title);
         }
-        await expect(
-          page.locator(
-            `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`,
-          ),
-        ).toContainText(card.text);
-      }
+      });
     } else {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"][data-test-message-card]`,
+          `[data-test-message-idx="${index}"][data-test-message-cards]`,
         ),
       ).toHaveCount(0);
     }
   }
 }
 
-interface RoomAssertions {
-  joinedRooms?: { name: string }[];
-  invitedRooms?: { name: string; sender: string }[];
-}
-
-export async function assertRooms(page: Page, rooms: RoomAssertions) {
-  if (rooms.joinedRooms && rooms.joinedRooms.length > 0) {
+export async function assertRooms(page: Page, rooms: string[]) {
+  await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
+  if (rooms && rooms.length > 0) {
     await page.waitForFunction(
-      (rooms: RoomAssertions) =>
+      (rooms) =>
         document.querySelectorAll('[data-test-joined-room]').length ===
-        rooms.joinedRooms!.length,
+        rooms.length,
       rooms,
     );
-    for (let { name } of rooms.joinedRooms) {
-      await expect(
-        page.locator(`[data-test-joined-room="${name}"]`),
-        `the joined room '${name}' is displayed`,
-      ).toHaveCount(1);
-    }
+    rooms.map(
+      async (name) =>
+        await expect(
+          page.locator(`[data-test-joined-room="${name}"]`),
+          `the joined room '${name}' is displayed`,
+        ).toHaveCount(1),
+    );
   } else {
     await expect(
       page.locator('[data-test-joined-room]'),
       `joined rooms are not displayed`,
     ).toHaveCount(0);
   }
-  if (rooms.invitedRooms && rooms.invitedRooms.length > 0) {
-    await page.waitForFunction(
-      (rooms: RoomAssertions) =>
-        document.querySelectorAll('[data-test-invited-room]').length ===
-        rooms.invitedRooms!.length,
-      rooms,
-    );
-    for (let { name, sender } of rooms.invitedRooms) {
-      await expect(
-        page.locator(
-          `[data-test-invited-room="${name}"] [data-test-invite-sender="${sender}"]`,
-        ),
-        `the invited room '${name}' from '${sender}' is displayed`,
-      ).toHaveCount(1);
-    }
-  } else {
-    await expect(
-      page.locator('[data-test-invited-room]'),
-      `invited rooms are not displayed`,
-    ).toHaveCount(0);
-  }
+  await page.locator(`[data-test-close-past-sessions]`).click();
 }
 
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
+  await page.locator('[data-test-profile-icon-button]').click();
+
   await expect(
     page.locator('[data-test-username-field]'),
     'username field is not displayed',
@@ -488,16 +391,22 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
     page.locator('[data-test-password-field]'),
     'password field is not displayed',
   ).toHaveCount(0);
-  await expect(page.locator('[data-test-field-value="userId"]')).toContainText(
+
+  await expect(page.locator('[data-test-profile-display-name]')).toContainText(
+    opts?.displayName ?? 'user1',
+  );
+  await expect(page.locator('[data-test-profile-icon-handle]')).toContainText(
     opts?.userId ?? '@user1:localhost',
   );
-  await expect(
-    page.locator('[data-test-field-value="displayName"]'),
-  ).toContainText(opts?.displayName ?? 'user1');
+
   if (opts?.email) {
-    await expect(page.locator('[data-test-field-value="email"]')).toHaveText(
+    await page.locator('[data-test-settings-button]').click();
+    await expect(page.locator('[data-test-current-email]')).toContainText(
       opts.email,
     );
+    await page.locator('[data-test-confirm-cancel-button]').click(); // close settings modal + popover
+  } else {
+    await page.locator('[data-test-profile-icon-button]').click(); // close profile popover
   }
 }
 

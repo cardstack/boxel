@@ -126,6 +126,9 @@ jobs:
       - name: Start realm servers
         run: pnpm start:all &
         working-directory: packages/realm-server
+      - name: create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
       - name: host test suite
         run: pnpm test-with-percy
         env:
@@ -137,11 +140,11 @@ jobs:
         with:
           junit_files: junit/host.xml
 
-  matrix-client-test:
-    name: Matrix Client Tests
+  matrix-client-test-1:
+    name: Matrix Client Tests - Group 1
     runs-on: ubuntu-latest
     concurrency:
-      group: matrix-client-test-${{ github.head_ref || github.run_id }}
+      group: matrix-client-test-1-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
@@ -161,7 +164,40 @@ jobs:
         run: pnpm start:without-matrix &
         working-directory: packages/realm-server
       - name: Run Playwright tests
-        run: pnpm test
+        run: pnpm test:group group1
+        working-directory: packages/matrix
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: playwright-report
+          path: packages/matrix/playwright-report/
+          retention-days: 30
+
+  matrix-client-test-2:
+    name: Matrix Client Tests - Group 2
+    runs-on: ubuntu-latest
+    concurrency:
+      group: matrix-client-test-2-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+        working-directory: packages/matrix
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+      - name: Build host dist/ for fastboot
+        run: pnpm build
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+        working-directory: packages/host
+      - name: Start realm servers
+        run: pnpm start:without-matrix &
+        working-directory: packages/realm-server
+      - name: Run Playwright tests
+        run: pnpm test:group group2
         working-directory: packages/matrix
       - uses: actions/upload-artifact@v3
         if: always()
@@ -187,9 +223,12 @@ jobs:
         env:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
-      - name: Start base realm server
+      - name: Start realm servers
         run: pnpm start:all &
         working-directory: packages/realm-server
+      - name: create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
       - name: realm server test suite
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
@@ -213,8 +252,7 @@ jobs:
             boxel:
               - '.github/workflows/build-host.yml'
               - '.github/workflows/deploy-host.yml'
-              - '.github/workflows/waypoint-build.yml'
-              - '.github/workflows/waypoint-deploy.yml'
+              - '.github/workflows/manual-deploy.yml'
               - '.github/workflows/ci.yaml'
               - 'packages/base/**'
               - 'packages/boxel-ui/**'
@@ -223,91 +261,31 @@ jobs:
               - 'packages/runtime-common/**'
               - 'pnpm-lock.yaml'
             ai-bot:
-              - '.github/workflows/waypoint-build.yml'
-              - '.github/workflows/waypoint-deploy.yml'
+              - '.github/workflows/manual-ai-bot.yml'
               - '.github/workflows/ci.yaml'
               - 'packages/runtime-common/**'
               - 'packages/ai-bot/**'
               - 'pnpm-lock.yaml'
 
-  build-host:
-    name: Build host
-    needs: [change-check]
+  deploy:
+    name: Deploy boxel to staging
     if: ${{ needs.change-check.outputs.boxel == 'true' }}
-    uses: ./.github/workflows/build-host.yml
-    secrets: inherit
-    with:
-      environment: "staging"
-
-  build-realm-server:
-    name: Build realm-server
-    needs: [change-check]
-    if: ${{ needs.change-check.outputs.boxel == 'true' }}
-    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
-    secrets: inherit
-    with:
-      app: "boxel-realm-server"
-      environment: "staging"
-      restore-mtime: true
-      working-directory: "packages/realm-server"
-
-  build-ai-bot:
-    name: Build ai-bot
-    needs: [change-check]
-    if: ${{ needs.change-check.outputs.ai-bot == 'true' }}
-    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
-    secrets: inherit
-    with:
-      app: "boxel-ai-bot"
-      environment: "staging"
-      working-directory: "packages/ai-bot"
-
-  deploy-host:
-    name: Deploy host
     needs:
+      - change-check
       - boxel-ui-test
       - host-test
       - realm-server-test
-      - build-host
-      - build-realm-server
-    uses: ./.github/workflows/deploy-host.yml
+    uses: ./.github/workflows/manual-deploy.yml
     secrets: inherit
     with:
       environment: "staging"
-
-  realm-server-efs-config:
-    needs: [build-realm-server]
-    name: EFS Config
-    uses: ./.github/workflows/realm-server-efs-config.yml
-    with:
-      environment: "staging"
-
-  deploy-realm-server:
-    name: Deploy realm server to staging
-    needs:
-      - boxel-ui-test
-      - host-test
-      - realm-server-test
-      - build-host
-      - realm-server-efs-config
-    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
-    secrets: inherit
-    with:
-      app: "boxel-realm-server"
-      environment: "staging"
-      working-directory: "packages/realm-server"
-      efs-config: ${{ needs.realm-server-efs-config.outputs.config }}
-      retain: "0"
 
   deploy-ai-bot:
-    name: Deploy ai-bot to staging
     needs:
       - ai-bot-test
-      - build-ai-bot
-    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
+      - change-check
+    if: ${{ needs.change-check.outputs.ai-bot == 'true' }}
+    uses: ./.github/workflows/manual-ai-bot.yml
     secrets: inherit
     with:
-      app: "boxel-ai-bot"
       environment: "staging"
-      working-directory: "packages/ai-bot"
-      retain: "0"

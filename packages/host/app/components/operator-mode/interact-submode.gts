@@ -630,7 +630,7 @@ export default class InteractSubmode extends Component<Signature> {
         position: relative;
         background-position: center;
         background-size: cover;
-        flex: 1;
+        height: 100%;
       }
       .no-cards {
         height: calc(100% -var(--search-sheet-closed-height));
