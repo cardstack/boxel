@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   restart:
-    uses: cardstack/gh-actions/.githu/workflows/ecs-force-new-deployment.yml@main
+    uses: cardstack/gh-actions/.github/workflows/ecs-force-new-deployment.yml@main
     secrets: inherit
     with:
       environment: ${{ inputs.environment }}
