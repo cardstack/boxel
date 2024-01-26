@@ -1,11 +1,8 @@
 import { on } from '@ember/modifier';
-import type Owner from '@ember/owner';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { format as formatDate, formatISO } from 'date-fns';
-import { restartableTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 
 import { Button } from '@cardstack/boxel-ui/components';
@@ -13,7 +10,6 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import Pill from '@cardstack/host/components/pill';
-import { getCard } from '@cardstack/host/resources/card-resource';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -26,9 +22,9 @@ interface Signature {
     datetime: Date;
     isFromAssistant: boolean;
     profileAvatar?: ComponentLike;
+    attachedCards?: CardDef[];
     errorMessage?: string;
     retryAction?: () => void;
-    attachedCardIds?: string[];
   };
   Blocks: { default: [] };
 }
@@ -62,28 +58,34 @@ export default class AiAssistantMessage extends Component<Signature> {
         </time>
       </div>
       <div class='content-container'>
-        {{#if this.errorMessage}}
+        {{#if @errorMessage}}
           <div class='error-container'>
             <FailureBordered class='error-icon' />
-            <div class='error-message'>{{this.errorMessage}}</div>
+            <div class='error-message' data-test-card-error>
+              Error:
+              {{@errorMessage}}
+            </div>
             {{#if @retryAction}}
               <Button
                 {{on 'click' @retryAction}}
                 class='retry-button'
                 @size='small'
                 @kind='secondary-dark'
+                @isLoading={{true}}
+                @isDisabled={{true}}
               >
                 Retry
               </Button>
             {{/if}}
           </div>
         {{/if}}
+
         <div class='content'>
           {{@formattedMessage}}
 
-          {{#if this.cards}}
-            <div class='card-picker' data-test-message-cards>
-              {{#each this.cards as |card i|}}
+          {{#if @attachedCards}}
+            <div class='cards' data-test-message-cards>
+              {{#each @attachedCards as |card i|}}
                 <Pill
                   @inert={{true}}
                   class='card-pill'
@@ -94,9 +96,9 @@ export default class AiAssistantMessage extends Component<Signature> {
                 </Pill>
               {{/each}}
             </div>
-          {{else if this.getCards.isRunning}}
-            <div class='loading'>Loading...</div>
           {{/if}}
+
+          <div>{{yield}}</div>
         </div>
       </div>
     </div>
@@ -190,7 +192,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         border-color: var(--boxel-light);
       }
 
-      .card-picker {
+      .cards {
         --pill-height: 1.875rem;
         --pill-content-max-width: 10rem;
         color: var(--boxel-dark);
@@ -211,51 +213,6 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
     </style>
   </template>
-
-  @tracked cards: CardDef[] | undefined = [];
-  @tracked errors: { id?: string; error: string }[] | undefined = undefined;
-
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    if (!this.args.attachedCardIds?.length) {
-      return;
-    }
-    this.getCards.perform(this.args.attachedCardIds);
-  }
-
-  private getCards = restartableTask(async (cardIds: string[]) => {
-    let cards: CardDef[] = [];
-    let errors: { id?: string; error: string }[] = [];
-    await Promise.all(
-      cardIds.map(async (id) => {
-        try {
-          let cardResource = getCard(this, () => id);
-          await cardResource.loaded;
-          if (!cardResource.card) {
-            errors.push({ id, error: `cannot find card for id "${id}"` });
-            return;
-          }
-          cards.push(cardResource.card);
-        } catch (e) {
-          errors.push({ id, error: `cannot find card for id "${id}"` });
-        }
-      }),
-    );
-    this.cards = cards.length ? cards : undefined;
-    this.errors = errors.length ? errors : undefined;
-    console.log(this.cards, this.errors);
-  });
-
-  private get errorMessage() {
-    if (!this.errors && !this.args.errorMessage) {
-      return undefined;
-    }
-    let errors = this.errors || [];
-    if (this.args.errorMessage) {
-      errors.push({ error: this.args.errorMessage });
-    }
-    return errors.map((e) => e.error).join(', ');
-  }
 }
 
 interface AiAssistantConversationSignature {

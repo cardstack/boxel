@@ -3,14 +3,12 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, /* task, */ timeout, all } from 'ember-concurrency';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   catalogEntryRef,
@@ -22,17 +20,13 @@ import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
-import AiAssistantMessage, {
-  AiAssistantConversation,
-} from '../ai-assistant/message';
-import { aiBotUserId } from '../ai-assistant/panel';
-import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
+import { AiAssistantConversation } from '../ai-assistant/message';
 
 import RoomInput from './room-input';
+import RoomMessage from './room-message';
 
 interface Signature {
   Args: {
@@ -78,39 +72,7 @@ export default class Room extends Component<Signature> {
           - Beginning of conversation -
         </div>
         {{#each this.room.messages as |message i|}}
-          <AiAssistantMessage
-            @formattedMessage={{htmlSafe message.formattedMessage}}
-            @datetime={{message.created}}
-            @isFromAssistant={{eq message.author.userId aiBotUserId}}
-            @profileAvatar={{component
-              ProfileAvatarIcon
-              userId=message.author.userId
-            }}
-            @attachedCardIds={{message.attachedCardIds}}
-            data-test-message-idx={{i}}
-            data-test-boxel-message-from={{message.author.name}}
-          />
-
-          {{#if (eq message.command.commandType 'patch')}}
-            <div
-              data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
-            >
-              {{#let message.command.payload as |payload|}}
-                <Button
-                  @kind='secondary-dark'
-                  data-test-command-apply
-                  {{on
-                    'click'
-                    (fn this.patchCard payload.id payload.patch.attributes)
-                  }}
-                  @loading={{this.operatorModeStateService.patchCard.isRunning}}
-                  @disabled={{this.operatorModeStateService.patchCard.isRunning}}
-                >
-                  Apply
-                </Button>
-              {{/let}}
-            </div>
-          {{/if}}
+          <RoomMessage @message={{message}} data-test-message-idx={{i}} />
         {{else}}
           <div data-test-no-messages>
             (No messages)
@@ -175,7 +137,6 @@ export default class Room extends Component<Signature> {
 
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
 
   @tracked private isAllowedToSetObjective: boolean | undefined;
 
@@ -216,10 +177,6 @@ export default class Room extends Component<Signature> {
     }
     return undefined;
   }
-
-  private patchCard = (cardId: string, attributes: any) => {
-    this.operatorModeStateService.patchCard.perform(cardId, attributes);
-  };
 
   private doWhenRoomChanges = restartableTask(async () => {
     await all([this.cardService.cardsSettled(), timeout(500)]);

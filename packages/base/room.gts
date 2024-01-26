@@ -19,6 +19,8 @@ import {
   type LooseSingleCardDocument,
   type CodeRef,
 } from '@cardstack/runtime-common';
+//@ts-expect-error cached type not available yet
+import { cached } from '@glimmer/tracking';
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -172,7 +174,7 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       data-test-message-idx={{@model.index}}
       data-test-message-cards
     >
-      {{#each this.attachedResources as |cardResource|}}
+      {{#each @model.attachedResources as |cardResource|}}
         {{#if cardResource.cardError}}
           <div data-test-card-error={{cardResource.cardError.id}} class='error'>
             Error: cannot render card
@@ -196,28 +198,6 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       }
     </style>
   </template>
-
-  attachedCardResources: string[] | undefined = this.args.model.attachedCardIds;
-
-  get attachedResources(): AttachedCardResource[] | undefined {
-    if (!this.attachedCardResources?.length) {
-      return undefined;
-    }
-    let cards = this.attachedCardResources.map((id) => {
-      let card = getCard(new URL(id));
-      if (!card) {
-        return {
-          card: undefined,
-          cardError: {
-            id,
-            error: new Error(`cannot find card for id "${id}"`),
-          },
-        };
-      }
-      return card;
-    });
-    return cards;
-  }
 
   get timestamp() {
     if (!this.args.model.created) {
@@ -260,6 +240,27 @@ export class MessageField extends FieldDef {
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
   static edit = class Edit extends JSONView {};
+
+  @cached
+  get attachedResources(): AttachedCardResource[] | undefined {
+    if (!this.attachedCardIds?.length) {
+      return undefined;
+    }
+    let cards = this.attachedCardIds.map((id) => {
+      let card = getCard(new URL(id));
+      if (!card) {
+        return {
+          card: undefined,
+          cardError: {
+            id,
+            error: new Error(`cannot find card for id "${id}"`),
+          },
+        };
+      }
+      return card;
+    });
+    return cards;
+  }
 }
 
 interface RoomState {
@@ -467,7 +468,10 @@ export class RoomField extends FieldDef {
           if (attachedCardIds.length === 0) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
-          messageField = new MessageField({ ...cardArgs, attachedCardIds });
+          messageField = new MessageField({
+            ...cardArgs,
+            attachedCardIds,
+          });
         } else if (event.content.msgtype === 'org.boxel.command') {
           // We only handle patches for now
           let command = event.content.data.command;

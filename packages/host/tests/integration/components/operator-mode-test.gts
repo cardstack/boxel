@@ -910,6 +910,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-past-sessions-button]');
     await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
+    await this.pauseTest();
     await waitFor('[data-test-card-error]');
     assert
       .dom('[data-test-card-error]')
