@@ -1,4 +1,4 @@
-import { RealmPermissions } from 'realm';
+import { RealmPermissions } from './realm';
 
 export default class RealmPermissionChecker {
   private realmPermissions: RealmPermissions = {};
