@@ -734,7 +734,9 @@ export class Realm {
       if (!isLocal) {
         await this.ready;
 
-        let isWrite = ['PUT', 'PATCH', 'POST'].includes(request.method);
+        let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
+          request.method,
+        );
         await this.checkPermission(request, isWrite ? 'write' : 'read');
       }
       if (!this.searchIndex) {
