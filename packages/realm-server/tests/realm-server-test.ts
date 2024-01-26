@@ -24,6 +24,8 @@ import {
   Deferred,
   RealmPaths,
   type LooseSingleCardDocument,
+  Realm,
+  RealmPermissions,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -47,7 +49,10 @@ const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
 
-module('Realm Server', function (hooks) {
+module.only('Realm Server', function (hooks) {
+  // @ts-ignore
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  let testRealm: Realm;
   let testRealmServer: Server;
   let testRealmServer2: Server;
   let request: SuperTest<Test>;
@@ -133,20 +138,23 @@ module('Realm Server', function (hooks) {
     );
     shimExternals(testRealmServer2Loader);
 
-    testRealmServer = await runTestRealmServer(
+    ({ testRealm, testRealmServer } = await runTestRealmServer(
       testRealmServerLoader,
       dir.name,
       undefined,
       testRealmURL,
-    );
+    ));
+
     request = supertest(testRealmServer);
 
-    testRealmServer2 = await runTestRealmServer(
-      testRealmServer2Loader,
-      dir.name,
-      undefined,
-      testRealm2URL,
-    );
+    testRealmServer2 = (
+      await runTestRealmServer(
+        testRealmServer2Loader,
+        dir.name,
+        undefined,
+        testRealm2URL,
+      )
+    ).testRealmServer;
   });
 
   hooks.afterEach(function () {
@@ -1255,12 +1263,14 @@ module('Realm Server serving from root', function (hooks) {
       new URL(localBaseRealm),
     );
 
-    testRealmServer = await runTestRealmServer(
-      testRealmServerLoader,
-      dir.name,
-      undefined,
-      testRealmURL,
-    );
+    testRealmServer = (
+      await runTestRealmServer(
+        testRealmServerLoader,
+        dir.name,
+        undefined,
+        testRealmURL,
+      )
+    ).testRealmServer;
     request = supertest(testRealmServer);
   });
 
@@ -1454,12 +1464,14 @@ module('Realm Server serving from a subdirectory', function (hooks) {
       new URL(localBaseRealm),
     );
 
-    testRealmServer = await runTestRealmServer(
-      testRealmServerLoader,
-      dir.name,
-      undefined,
-      new URL('http://127.0.0.1:4446/demo/'),
-    );
+    testRealmServer = (
+      await runTestRealmServer(
+        testRealmServerLoader,
+        dir.name,
+        undefined,
+        new URL('http://127.0.0.1:4446/demo/'),
+      )
+    ).testRealmServer;
 
     request = supertest(testRealmServer);
   });
@@ -1488,5 +1500,166 @@ module('Realm Server serving from a subdirectory', function (hooks) {
       response.headers['location'],
       'http://127.0.0.1:4446/demo/?operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%7B%22items%22%3A%5B%7B%22card%22%3A%7B%22id%22%3A%22http%3A%2F%2Flocalhost%3A4204%2Findex%22%7D%2C%22format%22%3A%22isolated%22%7D%5D%7D%5D%7D',
     );
+  });
+});
+
+async function setupPermissionedRealm(permissions: RealmPermissions) {
+  let testRealm: Realm;
+  let testRealmServer: Server;
+  let request: SuperTest<Test>;
+
+  let dir = dirSync();
+  copySync(join(__dirname, 'cards'), dir.name);
+
+  let testRealmServerLoader = new Loader();
+  testRealmServerLoader.addURLMapping(
+    new URL(baseRealm.url),
+    new URL(localBaseRealm),
+  );
+
+  ({ testRealm, testRealmServer } = await runTestRealmServer(
+    testRealmServerLoader,
+    dir.name,
+    undefined,
+    testRealmURL,
+    permissions,
+  ));
+
+  request = supertest(testRealmServer);
+
+  return { testRealm, testRealmServer, request };
+}
+
+module('Permissioned realm', function (hooks) {
+  let testRealm: Realm;
+  let testRealmServer: Server;
+  let request: SuperTest<Test>;
+
+  let loader = new Loader();
+  loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  shimExternals(loader);
+  setupBaseRealmServer(hooks, loader);
+
+  let createJWT = (user: string, realm: string, permissions = []) => {
+    return testRealm.createJWT(
+      { user, realm, permissions },
+      '7d',
+      "shhh! it's a secret",
+    );
+  };
+  // Public readabla
+  // Public writable
+  // Readable for user (test the case where JWT is missing)
+  // Writable for user
+
+  module('public readable', function (hooks) {
+    hooks.beforeEach(async function () {
+      ({ testRealm, testRealmServer, request } = await setupPermissionedRealm({
+        '*': ['read'],
+      }));
+    });
+    hooks.afterEach(function () {
+      testRealmServer.close();
+    });
+
+    module('without JWT', function () {
+      test('can GET card', async function (assert) {
+        let response = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+    });
+
+    module('with valid JWT', function () {
+      test('can GET card', async function (assert) {
+        let response = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT('testuser', testRealmHref)}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+
+      test('can not PATCH card', async function (assert) {
+        let response = await request
+          .patch('/person-1')
+          .send({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person.gts',
+                  name: 'Person',
+                },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT('testuser', testRealmHref)}`,
+          );
+
+        assert.strictEqual(response.status, 403, 'HTTP 200 status');
+      });
+
+      test('can not POST card', async function (assert) {
+        let response = await request
+          .post('/')
+          .send({
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT('testuser', testRealmHref)}`,
+          );
+
+        assert.strictEqual(response.status, 403, 'HTTP 200 status');
+      });
+
+      test('can not DELETE card', async function (assert) {
+        let response = await request
+          .delete('/person-1')
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT('testuser', testRealmHref)}`,
+          );
+
+        assert.strictEqual(response.status, 403, 'HTTP 200 status');
+      });
+    });
+  });
+
+  module('read only for user', function (hooks) {
+    hooks.beforeEach(async function () {
+      ({ testRealm, testRealmServer, request } = await setupPermissionedRealm({
+        testuser: ['read'],
+      }));
+    });
+
+    hooks.afterEach(function () {
+      testRealmServer.close();
+    });
+
+    // TODO Add tests
   });
 });

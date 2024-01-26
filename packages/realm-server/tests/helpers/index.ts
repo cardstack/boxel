@@ -6,6 +6,7 @@ import {
   LooseSingleCardDocument,
   Loader,
   baseRealm,
+  RealmPermissions,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
@@ -32,6 +33,7 @@ export async function createRealm(
   dir: string,
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   realmURL = testRealm,
+  permissions: RealmPermissions = { '*': ['read', 'write'] },
 ): Promise<Realm> {
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
@@ -55,7 +57,7 @@ export async function createRealm(
     getIndexHTML: async () =>
       readFileSync(join(distPath, 'index.html')).toString(),
     matrix: testMatrix,
-    permissions: { '*': ['read', 'write'] },
+    permissions,
     realmSecretSeed: "shhh! it's a secret",
   });
 }
@@ -87,6 +89,30 @@ export async function runBaseRealmServer(loader: Loader) {
 }
 
 export async function runTestRealmServer(
+  loader: Loader,
+  dir: string,
+  flatFiles: Record<string, string | LooseSingleCardDocument> = {},
+  testRealmURL: URL,
+  permissions?: RealmPermissions,
+) {
+  let testRealm = await createRealm(
+    loader,
+    dir,
+    flatFiles,
+    testRealmURL.href,
+    permissions,
+  );
+  await testRealm.ready;
+  let testRealmServer = await new RealmServer([testRealm]).listen(
+    parseInt(testRealmURL.port),
+  );
+  return {
+    testRealm,
+    testRealmServer,
+  };
+}
+
+export async function runTestRealmServer_old(
   loader: Loader,
   dir: string,
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
