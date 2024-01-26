@@ -31,6 +31,7 @@ import {
   RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
@@ -299,6 +300,34 @@ export default class CodeSubmode extends Component<Signature> {
     }
 
     return null;
+  }
+
+  private get fileIncompatibilityErrors() {
+    if (this.isCard) {
+      if (this.cardResource.cardError) {
+        try {
+          let error = this.cardResource.cardError.error;
+
+          if (error.responseText) {
+            let parsedError = JSON.parse(error.responseText);
+
+            let allDetails = parsedError.errors
+              .concat(
+                ...parsedError.errors.map(
+                  (e: SerializedError) => e.additionalErrors,
+                ),
+              )
+              .map((e: SerializedError) => e.detail);
+
+            return allDetails;
+          }
+        } catch (e) {
+          return [];
+        }
+      }
+    }
+
+    return [];
   }
 
   private get currentOpenFile() {
@@ -760,6 +789,12 @@ export default class CodeSubmode extends Component<Signature> {
                       data-test-file-incompatibility-message
                     >
                       {{this.fileIncompatibilityMessage}}
+                      {{#each this.fileIncompatibilityErrors as |error|}}
+                        <pre
+                          class='error'
+                          data-test-card-preview-error
+                        >{{error}}</pre>
+                      {{/each}}
                     </div>
                   {{else if this.selectedCardOrField.cardOrField}}
                     <Accordion as |A|>
@@ -992,6 +1027,10 @@ export default class CodeSubmode extends Component<Signature> {
       }
       .accordion-content {
         padding: var(--boxel-sp-sm);
+      }
+
+      pre.error {
+        white-space: pre-wrap;
       }
     </style>
   </template>

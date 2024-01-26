@@ -366,6 +366,45 @@ const txtSource = `
 
 const brokenSource = 'some text to make the code broken' + friendCardSource;
 
+const brokenCountryCardSource = countryCardSource.replace(
+  'return this.name',
+  'return formatName(this.name)',
+);
+
+const brokenAdoptionInstance = `{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "El Campo"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./broken-country",
+        "name": "Country"
+      }
+    }
+  }
+}
+`;
+
+const notFoundAdoptionInstance = `{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Alice",
+      "lastName": "Enwunder",
+      "body": "xyz"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./non-card",
+        "name": "Author"
+      }
+    }
+  }
+}
+`;
+
 module('Acceptance | code submode tests', function (hooks) {
   let realm: Realm;
   let monacoService: MonacoService;
@@ -406,6 +445,9 @@ module('Acceptance | code submode tests', function (hooks) {
         'country.gts': countryCardSource,
         'trips.gts': tripsFieldSource,
         'broken.gts': brokenSource,
+        'broken-country.gts': brokenCountryCardSource,
+        'broken-adoption-instance.json': brokenAdoptionInstance,
+        'not-found-adoption-instance.json': notFoundAdoptionInstance,
         'person-entry.json': {
           data: {
             type: 'card',
@@ -664,6 +706,34 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-syntax-error]')
       .includesText('/broken.gts: Missing semicolon. (1:4)');
+  });
+
+  test('it shows card preview errors', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}not-found-adoption-instance.json`,
+    });
+
+    await waitFor('[data-test-card-preview-error]');
+
+    assert
+      .dom('[data-test-card-preview-error]')
+      .includesText(`${testRealmURL}non-card not found`);
+
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}broken-adoption-instance.json`,
+    });
+
+    await waitFor('[data-test-card-preview-error]');
+
+    assert
+      .dom('[data-test-card-preview-error]')
+      .includesText(
+        'Encountered error rendering HTML for card: formatName is not defined',
+      );
+
+    await percySnapshot(assert);
   });
 
   test('empty state displays default realm info', async function (assert) {
