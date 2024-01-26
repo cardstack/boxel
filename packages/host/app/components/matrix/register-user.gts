@@ -175,6 +175,12 @@ export default class RegisterUser extends Component<Signature> {
           @onBlur={{this.checkConfirmPassword}}
         />
       </FieldContainer>
+      {{#if this.formError}}
+        <div
+          class='error-message'
+          data-test-register-user-error
+        >{{this.formError}}</div>
+      {{/if}}
       <div class='button-wrapper'>
         <Button
           data-test-register-btn
@@ -264,6 +270,10 @@ export default class RegisterUser extends Component<Signature> {
         width: fit-content;
         min-width: 148px;
       }
+      .error-message {
+        color: var(--boxel-error-100);
+        margin-top: var(--boxel-sp-lg);
+      }
     </style>
   </template>
   @tracked private email = '';
@@ -272,6 +282,7 @@ export default class RegisterUser extends Component<Signature> {
   @tracked private password = '';
   @tracked private confirmPassword = '';
   @tracked private token = '';
+  @tracked private formError: string | undefined;
   @tracked private emailError: string | undefined;
   @tracked private nameError: string | undefined;
   @tracked private usernameError: string | undefined;
@@ -518,7 +529,18 @@ export default class RegisterUser extends Component<Signature> {
       email: this.email,
       name: this.name,
     };
-    this.validateEmail.perform();
+    this.validateEmail.perform().catch((e) => {
+      console.log('Error registering', e);
+
+      let extractedError = extractRegistrationErrorMessage(e);
+      let errorText = extractedError || e.message;
+
+      this.formError = `There was an error registering: ${errorText}`;
+
+      if (!extractedError) {
+        throw e;
+      }
+    });
   }
 
   @action
@@ -538,7 +560,18 @@ export default class RegisterUser extends Component<Signature> {
         token: this.token,
         type: 'sendToken',
       };
-      this.doRegistrationFlow.perform();
+      this.doRegistrationFlow.perform().catch((e) => {
+        console.log('Error verifying token', e);
+
+        let extractedError = extractTokenErrorMessage(e);
+        let errorText = extractedError || e.message;
+
+        this.tokenError = `There was an error verifying token: ${errorText}`;
+
+        if (!extractedError) {
+          throw e;
+        }
+      });
     }
   }
 
@@ -602,7 +635,7 @@ export default class RegisterUser extends Component<Signature> {
           sendAttempt,
         };
       }
-      this.doRegistrationFlow.perform();
+      return this.doRegistrationFlow.perform();
     },
   );
 
@@ -717,6 +750,29 @@ export default class RegisterUser extends Component<Signature> {
         );
     }
   }
+}
+
+const NO_NETWORK_ERROR_RAW = 'Failed to fetch';
+const NO_NETWORK_ERROR = 'Could not connect to server';
+
+function extractRegistrationErrorMessage(error: Error) {
+  if (error.message.includes('Registration has been disabled')) {
+    return 'Registration has been disabled';
+  } else if (error.message.includes('Unable to parse email address')) {
+    return 'Email address is invalid';
+  } else if (error.message.includes(NO_NETWORK_ERROR_RAW)) {
+    return NO_NETWORK_ERROR;
+  }
+
+  return false;
+}
+
+function extractTokenErrorMessage(error: Error) {
+  if (error.message.includes(NO_NETWORK_ERROR_RAW)) {
+    return NO_NETWORK_ERROR;
+  }
+
+  return false;
 }
 
 declare module '@glint/environment-ember-loose/registry' {
