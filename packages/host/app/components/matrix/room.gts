@@ -86,7 +86,7 @@ export default class Room extends Component<Signature> {
               ProfileAvatarIcon
               userId=Message.card.author.userId
             }}
-            data-test-message-index={{i}}
+            data-test-message-idx={{i}}
             data-test-boxel-message-from={{Message.card.author.name}}
           >
             {{#if Message.card.attachedCardIds}}

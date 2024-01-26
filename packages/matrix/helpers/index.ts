@@ -305,18 +305,18 @@ export async function assertMessages(
     cards?: { id: string; title?: string }[];
   }[],
 ) {
-  await expect(page.locator('[data-test-message-index]')).toHaveCount(
+  await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messages.length,
   );
   for (let [index, { from, message, cards }] of messages.entries()) {
     await expect(
       page.locator(
-        `[data-test-message-index="${index}"][data-test-boxel-message-from="${from}"]`,
+        `[data-test-message-idx="${index}"][data-test-boxel-message-from="${from}"]`,
       ),
     ).toHaveCount(1);
     if (message != null) {
       await expect(
-        page.locator(`[data-test-message-index="${index}"] .content`),
+        page.locator(`[data-test-message-idx="${index}"] .content`),
       ).toContainText(message);
     }
     if (cards?.length) {

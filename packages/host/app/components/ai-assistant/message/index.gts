@@ -1,14 +1,14 @@
 import { on } from '@ember/modifier';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
+import Modifier from 'ember-modifier';
 
 import { format as formatDate, formatISO } from 'date-fns';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
-
-import type { ComponentLike } from '@glint/template';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -23,11 +23,17 @@ interface Signature {
   Blocks: { default: [] };
 }
 
-// TODO: Update Boxel::Message component
+class ScrollIntoView extends Modifier {
+  modify(element: HTMLElement) {
+    element.scrollIntoView();
+  }
+}
+
 export default class AiAssistantMessage extends Component<Signature> {
   <template>
     <div
       class={{cn 'ai-assistant-message' is-from-assistant=@isFromAssistant}}
+      {{ScrollIntoView}}
       data-test-ai-assistant-message
       ...attributes
     >
@@ -65,7 +71,6 @@ export default class AiAssistantMessage extends Component<Signature> {
         <div class='content'>
           {{@formattedMessage}}
 
-          <div>{{yield}}</div>
         </div>
       </div>
     </div>
