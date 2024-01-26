@@ -7,10 +7,11 @@ on:
         description: Deployment environment
         required: false
         default: staging
-
-permissions:
-  contents: read
-  id-token: write
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
 
 jobs:
   build-host:
