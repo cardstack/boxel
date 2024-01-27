@@ -15,7 +15,10 @@ import {
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
 
-import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
+import {
+  isMatrixError,
+  type MatrixError,
+} from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { AuthMode } from './auth';
@@ -139,6 +142,12 @@ export default class Login extends Component<Signature> {
   @service private declare matrixService: MatrixService;
 
   private get isLoginButtonDisabled() {
+    console.log(
+      `button disabled? !this.username ${!this
+        .username} || !this.password ${!this.password} || this.error ${
+        this.error
+      } || this.doLogin.isRunning ${this.doLogin.isRunning}`,
+    );
     return (
       !this.username || !this.password || this.error || this.doLogin.isRunning
     );
@@ -182,9 +191,12 @@ export default class Login extends Component<Signature> {
       auth = await this.matrixService.login(this.username, this.password);
     } catch (e: any) {
       if (isMatrixError(e)) {
-        this.error =
-          'Sign in failed. Please check your credentials and try again.';
+        this.error = `Sign in failed. ${extractMatrixErrorMessage(e)}`;
+      } else {
+        this.error = `Sign in failed: ${e.message}`;
       }
+
+      console.log('throwing', e);
 
       throw e;
     }
@@ -196,6 +208,18 @@ export default class Login extends Component<Signature> {
       );
     }
   });
+}
+
+function extractMatrixErrorMessage(e: MatrixError) {
+  console.log('matrix error', e, JSON.stringify(e));
+
+  if (e.httpStatus === 403) {
+    return 'Please check your credentials and try again.';
+  } else if (e.httpStatus === 429) {
+    return 'Too many failed attempts, try again later.';
+  } else {
+    return `Unknown error ${e.httpStatus}: ${e.data.error}`;
+  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {
