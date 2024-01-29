@@ -405,8 +405,8 @@ export class Realm {
     operationsDrained!();
   }
 
-  createJWT(claims: TokenClaims, expiration: string, secret: string): string {
-    return this.#adapter.createJWT(claims, expiration, secret);
+  createJWT(claims: TokenClaims, expiration: string): string {
+    return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
   async write(

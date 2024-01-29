@@ -55,11 +55,7 @@ let createJWT = (
   realmUrl: string,
   permissions = [],
 ) => {
-  return realm.createJWT(
-    { user, realm: realmUrl, permissions },
-    '7d',
-    "shhh! it's a secret",
-  );
+  return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
 };
 
 module('Realm Server', function (hooks) {
