@@ -129,7 +129,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         padding: var(--boxel-sp);
       }
       .is-from-assistant .content {
-        background: #433358;
+        background: #3b394b;
         color: var(--boxel-light);
       }
 
