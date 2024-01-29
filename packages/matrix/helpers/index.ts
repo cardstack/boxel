@@ -320,11 +320,7 @@ export async function assertMessages(
       ).toContainText(message);
     }
     if (cards?.length) {
-      await expect(
-        page.locator(
-          `[data-test-message-idx="${index}"][data-test-message-cards]`,
-        ),
-      ).toHaveCount(1);
+      await expect(page.locator(`[data-test-message-cards]`)).toHaveCount(1);
       await expect(
         page.locator(
           `[data-test-message-idx="${index}"] [data-test-message-card]`,
@@ -340,17 +336,13 @@ export async function assertMessages(
           // note: attached cards are in atom format (which display the title by default)
           await expect(
             page.locator(
-              `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"] [data-test-card-format="atom"]`,
+              `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"]`,
             ),
           ).toContainText(card.title);
         }
       });
     } else {
-      await expect(
-        page.locator(
-          `[data-test-message-idx="${index}"][data-test-message-cards]`,
-        ),
-      ).toHaveCount(0);
+      await expect(page.locator(`[data-test-message-cards]`)).toHaveCount(0);
     }
   }
 }

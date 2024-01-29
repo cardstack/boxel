@@ -89,7 +89,7 @@ export default class AiAssistantMessage extends Component<Signature> {
                 <CardPill
                   @card={{card}}
                   data-test-pill-index={{i}}
-                  data-test-card-attachment={{card.id}}
+                  data-test-message-card={{card.id}}
                 />
               {{/each}}
             </div>
