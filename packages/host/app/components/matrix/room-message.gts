@@ -89,7 +89,9 @@ export default class Room extends Component<Signature> {
       return undefined;
     }
     return this.resources.errors
-      .map((e: { id: string; error: Error }) => e.error.message)
+      .map((e: { id: string; error: Error }) =>
+        'responseText' in e.error ? e.error.responseText : e.error.message,
+      )
       .join(', ');
   }
 

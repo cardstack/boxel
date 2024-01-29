@@ -910,12 +910,11 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-past-sessions-button]');
     await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test_a"]');
-    await this.pauseTest();
     await waitFor('[data-test-card-error]');
     assert
       .dom('[data-test-card-error]')
       .containsText(
-        'Error: cannot render card http://this-is-not-a-real-card.com/: status: 500 - Failed to fetch.',
+        'Error: fetch failed for http://this-is-not-a-real-card.com/',
       );
   });
 
