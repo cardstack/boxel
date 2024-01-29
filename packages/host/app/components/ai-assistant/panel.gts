@@ -9,7 +9,6 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 import { restartableTask, timeout } from 'ember-concurrency';
-
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -92,7 +91,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             New Session
           </Button>
 
-          {{#if this.loadRooms.isRunning}}
+          {{#if this.loadRoomsTask.isRunning}}
             <LoadingIndicator />
           {{else}}
             <Button
@@ -282,7 +281,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    this.loadRooms.perform();
+    this.loadRoomsTask.perform();
   }
 
   @cached
@@ -297,10 +296,14 @@ export default class AiAssistantPanel extends Component<Signature> {
     return resources;
   }
 
-  private loadRooms = restartableTask(async () => {
+  private loadRoomsTask = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
     await Promise.all([...this.roomResources.values()].map((r) => r.loading));
+    if (!this.currentRoomId) {
+      let lastestRoom = this.sortedAiSessionRooms[0];
+      this.enterRoom(lastestRoom?.room.roomId);
+    }
   });
 
   @action private displayCreateNew() {
@@ -386,10 +389,11 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get sortedAiSessionRooms() {
+    // reverse chronological order
     return this.aiSessionRooms.sort(
       (a, b) =>
-        a.member.membershipDateTime.getTime() -
-        b.member.membershipDateTime.getTime(),
+        b.member.membershipDateTime.getTime() -
+        a.member.membershipDateTime.getTime(),
     );
   }
 
