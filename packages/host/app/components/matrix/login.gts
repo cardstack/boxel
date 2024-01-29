@@ -210,7 +210,7 @@ export default class Login extends Component<Signature> {
   });
 }
 
-function extractMatrixErrorMessage(e: MatrixError) {
+export function extractMatrixErrorMessage(e: MatrixError) {
   console.log('matrix error', e, JSON.stringify(e));
 
   if (e.httpStatus === 403) {
