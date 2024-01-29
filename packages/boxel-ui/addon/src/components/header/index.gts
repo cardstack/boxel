@@ -72,8 +72,12 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
         min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
         color: var(--boxel-header-text-color, var(--boxel-dark));
-        border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
-        border-top-left-radius: calc(var(--boxel-border-radius) - 1px);
+        border-top-right-radius: calc(
+          var(--boxel-header-border-radius, var(--boxel-border-radius)) - 1px
+        );
+        border-top-left-radius: calc(
+          var(--boxel-header-border-radius, var(--boxel-border-radius)) - 1px
+        );
         font: 600 var(--boxel-header-text-size, var(--boxel-font-xs));
         letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
@@ -116,6 +120,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         display: flex;
         align-items: center;
         margin-left: auto;
+        gap: var(--boxel-sp-xxs);
       }
       .detail {
         margin-left: var(--boxel-header-detail-margin-left, 0);
