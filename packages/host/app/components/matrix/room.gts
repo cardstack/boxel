@@ -39,6 +39,7 @@ export default class Room extends Component<Signature> {
   <template>
     <section
       class='room'
+      data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-name={{this.room.name}}
     >

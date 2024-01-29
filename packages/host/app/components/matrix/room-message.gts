@@ -4,8 +4,6 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-
-import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -13,6 +11,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type MessageField } from 'https://cardstack.com/base/room';
 
+import ApplyButton from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
@@ -41,25 +40,34 @@ export default class Room extends Component<Signature> {
     >
       {{#if (eq @message.command.commandType 'patch')}}
         <div
+          class='patch-button-bar'
           data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
         >
           {{#let @message.command.payload as |payload|}}
-            <Button
-              @kind='secondary-dark'
+            <ApplyButton
+              @state={{if
+                this.operatorModeStateService.patchCard.isRunning
+                'applying'
+                'ready'
+              }}
               data-test-command-apply
               {{on
                 'click'
                 (fn this.patchCard payload.id payload.patch.attributes)
               }}
-              @loading={{this.operatorModeStateService.patchCard.isRunning}}
-              @disabled={{this.operatorModeStateService.patchCard.isRunning}}
-            >
-              Apply
-            </Button>
+            />
           {{/let}}
         </div>
       {{/if}}
     </AiAssistantMessage>
+
+    <style>
+      .patch-button-bar {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: var(--boxel-sp);
+      }
+    </style>
   </template>
 
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -97,6 +105,9 @@ export default class Room extends Component<Signature> {
   }
 
   @action patchCard(cardId: string, attributes: Record<string, unknown>) {
+    if (this.operatorModeStateService.patchCard.isRunning) {
+      return;
+    }
     this.operatorModeStateService.patchCard.perform(cardId, attributes);
   }
 }
