@@ -9,6 +9,7 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 import { restartableTask, timeout } from 'ember-concurrency';
+import { Velcro } from 'ember-velcro';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -62,118 +63,128 @@ interface Signature {
 
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
-    <div class='ai-assistant-panel' data-test-ai-assistant-panel ...attributes>
-      <@resizeHandle />
-      <header>
-        <img alt='AI Assistant' src='/images/ai-assist-icon.webp' />
-        <span>Assistant</span>
-        <IconButton
-          @variant='primary'
-          @icon={{IconX}}
-          @width='20px'
-          @height='20px'
-          class='close-ai-panel'
-          {{on 'click' @onClose}}
-          aria-label='Remove'
-          data-test-close-ai-panel
-        />
-      </header>
-      <div class='menu'>
-        <div class='buttons'>
-          <Button
-            @kind='secondary-dark'
-            @size='small'
-            class='new-session-button'
-            {{on 'click' this.displayCreateNew}}
-            @disabled={{this.isShowingCreateNew}}
-            data-test-create-room-mode-btn
-          >
-            New Session
-          </Button>
-
-          {{#if this.loadRoomsTask.isRunning}}
-            <LoadingIndicator />
-          {{else}}
+    <Velcro @placement='bottom' @offsetOptions={{-50}} as |pastSessionsVelcro|>
+      <div
+        class='ai-assistant-panel'
+        data-test-ai-assistant-panel
+        ...attributes
+      >
+        <@resizeHandle />
+        <header>
+          <img alt='AI Assistant' src='/images/ai-assist-icon.webp' />
+          <span>Assistant</span>
+          <IconButton
+            @variant='primary'
+            @icon={{IconX}}
+            @width='20px'
+            @height='20px'
+            class='close-ai-panel'
+            {{on 'click' @onClose}}
+            aria-label='Remove'
+            data-test-close-ai-panel
+          />
+        </header>
+        <div class='menu'>
+          <div class='buttons'>
             <Button
               @kind='secondary-dark'
               @size='small'
-              {{on 'click' this.togglePastSessions}}
-              data-test-past-sessions-button
-              class='past-sessions-button'
+              class='new-session-button'
+              {{on 'click' this.displayCreateNew}}
+              @disabled={{this.isShowingCreateNew}}
+              data-test-create-room-mode-btn
             >
-              Past Sessions
-
-              <DropdownArrowDown
-                width={{20}}
-                height={{20}}
-                style={{cssVar icon-color='#fff'}}
-              />
+              New Session
             </Button>
+
+            {{#if this.loadRoomsTask.isRunning}}
+              <LoadingIndicator />
+            {{else}}
+              <Button
+                @kind='secondary-dark'
+                @size='small'
+                {{on 'click' this.togglePastSessions}}
+                data-test-past-sessions-button
+                class='past-sessions-button'
+                {{pastSessionsVelcro.hook}}
+              >
+                Past Sessions
+
+                <DropdownArrowDown
+                  width={{20}}
+                  height={{20}}
+                  style={{cssVar icon-color='#fff'}}
+                />
+              </Button>
+            {{/if}}
+          </div>
+
+          {{#if this.isShowingCreateNew}}
+            <div class='create-room'>
+              <FieldContainer
+                @label='Room Name'
+                @tag='label'
+                class='create-room__field'
+              >
+                <BoxelInput
+                  @state={{this.roomNameInputState}}
+                  @value={{this.newRoomName}}
+                  @errorMessage={{this.roomNameError}}
+                  @onInput={{this.setNewRoomName}}
+                  data-test-room-name-field
+                />
+              </FieldContainer>
+            </div>
+            <div class='create-button-wrapper'>
+              <Button
+                @kind='secondary-dark'
+                {{on 'click' this.closeCreateRoom}}
+                data-test-create-room-cancel-btn
+              >Cancel</Button>
+              <Button
+                @kind='primary'
+                @disabled={{not this.newRoomName.length}}
+                {{on 'click' this.createNewSession}}
+                data-test-create-room-btn
+              >Create</Button>
+            </div>
+          {{/if}}
+
+          {{#if this.isShowingPastSessions}}
+            <AiAssistantPanelPopover {{pastSessionsVelcro.loop}}>
+              <:header>
+                <div class='past-sessions-header'>
+                  Past Sessions
+                  <button
+                    {{on 'click' this.togglePastSessions}}
+                    data-test-close-past-sessions
+                  >
+                    <DropdownArrowUp width={{20}} height={{20}} />
+                  </button>
+                </div>
+              </:header>
+              <:body>
+                <AiAssistantPastSessionsList
+                  @sessions={{this.sortedAiSessionRooms}}
+                  @onSessionSelect={{this.enterRoom}}
+                />
+              </:body>
+            </AiAssistantPanelPopover>
           {{/if}}
         </div>
 
-        {{#if this.isShowingCreateNew}}
-          <div class='create-room'>
-            <FieldContainer
-              @label='Room Name'
-              @tag='label'
-              class='create-room__field'
-            >
-              <BoxelInput
-                @state={{this.roomNameInputState}}
-                @value={{this.newRoomName}}
-                @errorMessage={{this.roomNameError}}
-                @onInput={{this.setNewRoomName}}
-                data-test-room-name-field
-              />
-            </FieldContainer>
-          </div>
-          <div class='create-button-wrapper'>
-            <Button
-              @kind='secondary-dark'
-              {{on 'click' this.closeCreateRoom}}
-              data-test-create-room-cancel-btn
-            >Cancel</Button>
-            <Button
-              @kind='primary'
-              @disabled={{not this.newRoomName.length}}
-              {{on 'click' this.createNewSession}}
-              data-test-create-room-btn
-            >Create</Button>
-          </div>
-        {{/if}}
-
-        {{#if this.isShowingPastSessions}}
-          <AiAssistantPanelPopover>
-            <:header>
-              <div class='past-sessions-header'>
-                Past Sessions
-                <button
-                  {{on 'click' this.togglePastSessions}}
-                  data-test-close-past-sessions
-                >
-                  <DropdownArrowUp width={{20}} height={{20}} />
-                </button>
-              </div>
-            </:header>
-            <:body>
-              <AiAssistantPastSessionsList
-                @sessions={{this.sortedAiSessionRooms}}
-                @onSessionSelect={{this.enterRoom}}
-              />
-            </:body>
-          </AiAssistantPanelPopover>
-        {{/if}}
+        {{#unless this.isShowingCreateNew}}
+          {{#if this.doCreateRoom.isRunning}}
+            <LoadingIndicator />
+          {{else if this.currentRoomId}}
+            <Room
+              @roomId={{this.currentRoomId}}
+              @leaveRoom={{this.leaveRoom}}
+            />
+          {{/if}}
+        {{/unless}}
       </div>
-
-      {{#unless this.isShowingCreateNew}}
-        {{#if this.doCreateRoom.isRunning}}
-          <LoadingIndicator />
-        {{else if this.currentRoomId}}
-          <Room @roomId={{this.currentRoomId}} @leaveRoom={{this.leaveRoom}} />
-        {{/if}}
-      {{/unless}}
-    </div>
+    </Velcro>
 
     <style>
       .ai-assistant-panel {
