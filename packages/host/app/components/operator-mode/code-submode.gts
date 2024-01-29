@@ -31,6 +31,7 @@ import {
   RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
@@ -253,10 +254,14 @@ export default class CodeSubmode extends Component<Signature> {
     return !!(this.codePath && this.currentOpenFile?.state !== 'not-found');
   }
 
+  private get isCardPreviewError() {
+    return this.isCard && this.cardResource.cardError;
+  }
+
   private get fileIncompatibilityMessage() {
     if (this.isCard) {
       if (this.cardResource.cardError) {
-        return `Card preview failed. Make sure both the card instance data and card definition files have no syntax errors and that their data schema matches. `;
+        return `Card preview failed. Make sure both the card instance data and card definition files have no errors and that their data schema matches. `;
       }
     }
 
@@ -299,6 +304,51 @@ export default class CodeSubmode extends Component<Signature> {
     }
 
     return null;
+  }
+
+  private get fileIncompatibilityErrors() {
+    if (this.isCard) {
+      if (this.cardResource.cardError) {
+        try {
+          let error = this.cardResource.cardError.error;
+
+          if (error.responseText) {
+            let parsedError = JSON.parse(error.responseText);
+
+            let allDetails = parsedError.errors
+              .concat(
+                ...parsedError.errors.map(
+                  (e: SerializedError) => e.additionalErrors,
+                ),
+              )
+              .map((e: SerializedError) => e.detail);
+
+            // There’s often a pair of errors where one has an unhelpful prefix like this:
+            // cannot return card from index: Not Found - http://test-realm/test/non-card not found
+            // http://test-realm/test/non-card not found
+
+            let detailsWithoutDuplicateSuffixes = allDetails.reduce(
+              (details: string[], currentDetail: string) => {
+                return [
+                  ...details.filter(
+                    (existingDetail) => !existingDetail.endsWith(currentDetail),
+                  ),
+                  currentDetail,
+                ];
+              },
+              [],
+            );
+
+            return detailsWithoutDuplicateSuffixes;
+          }
+        } catch (e) {
+          console.log('Error extracting card preview errors', e);
+          return [];
+        }
+      }
+    }
+
+    return [];
   }
 
   private get currentOpenFile() {
@@ -754,7 +804,30 @@ export default class CodeSubmode extends Component<Signature> {
             >
               <InnerContainer>
                 {{#if this.isReady}}
-                  {{#if this.fileIncompatibilityMessage}}
+                  {{#if this.isCardPreviewError}}
+                    <div
+                      class='preview-error-container'
+                      data-test-file-incompatibility-message
+                    >
+                      <div class='preview-error-box'>
+                        <div class='preview-error-text'>
+                          Card Preview Error
+                        </div>
+                        <p>
+                          {{this.fileIncompatibilityMessage}}
+                        </p>
+
+                        <hr class='preview-error' />
+
+                        {{#each this.fileIncompatibilityErrors as |error|}}
+                          <pre
+                            class='preview-error'
+                            data-test-card-preview-error
+                          >{{error}}</pre>
+                        {{/each}}
+                      </div>
+                    </div>
+                  {{else if this.fileIncompatibilityMessage}}
                     <div
                       class='file-incompatible-message'
                       data-test-file-incompatibility-message
@@ -992,6 +1065,35 @@ export default class CodeSubmode extends Component<Signature> {
       }
       .accordion-content {
         padding: var(--boxel-sp-sm);
+      }
+
+      .preview-error-container {
+        background: var(--boxel-100);
+        padding: var(--boxel-sp);
+        border-radius: var(--boxel-radius);
+        height: 100%;
+      }
+
+      .preview-error-box {
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp);
+        background: var(--boxel-200);
+      }
+
+      .preview-error-text {
+        color: red;
+        font-weight: 600;
+      }
+
+      hr.preview-error {
+        width: calc(100% + var(--boxel-sp) * 2);
+        margin-left: calc(var(--boxel-sp) * -1);
+        margin-top: calc(var(--boxel-sp-sm) + 1px);
+      }
+
+      pre.preview-error {
+        white-space: pre-wrap;
+        text-align: left;
       }
     </style>
   </template>

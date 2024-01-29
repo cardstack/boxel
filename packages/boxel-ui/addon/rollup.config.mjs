@@ -69,6 +69,16 @@ export default {
     }),
     scopedCSS('src'),
   ],
+
+  onLog(level, log, handler) {
+    if (log.code === 'UNUSED_EXTERNAL_IMPORT') {
+      // Turn unused external imports from warnings to errors. Warnings
+      // accumulate and just generate noise. And this is an easily-fixable issue
+      // usually caused by failing to declare a type import correctly.
+      level = 'error';
+    }
+    handler(level, log);
+  },
 };
 
 function scopedCSS(srcDir) {
