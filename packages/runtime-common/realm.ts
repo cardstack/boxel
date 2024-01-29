@@ -1497,10 +1497,6 @@ export class Realm {
   get isPublicReadable() {
     return this.#permissions['*'].includes('read');
   }
-
-  get isPublicWritable() {
-    return this.#permissions['*'].includes('write');
-  }
 }
 
 export type Kind = 'file' | 'directory';

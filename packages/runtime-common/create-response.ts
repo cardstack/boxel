@@ -12,7 +12,6 @@ export function createResponse(
       ...init?.headers,
       'X-Boxel-Realm-Url': realm.url,
       ...(realm.isPublicReadable && { 'X-Boxel-Realm-Public-Readable': 'true' }),
-      ...(realm.isPublicWritable && { 'X-Boxel-Realm-Public-Writable': 'true' }),
       vary: 'Accept',
       'Access-Control-Expose-Headers': 'X-Boxel-Realm-Url,Authorization',
       ...(relaxDocumentDomain
