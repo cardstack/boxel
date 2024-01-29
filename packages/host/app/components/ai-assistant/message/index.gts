@@ -81,6 +81,8 @@ export default class AiAssistantMessage extends Component<Signature> {
         <div class='content'>
           {{@formattedMessage}}
 
+          <div>{{yield}}</div>
+
           {{#if @attachedCards}}
             <div class='cards' data-test-message-cards>
               {{#each @attachedCards as |card i|}}
@@ -92,8 +94,6 @@ export default class AiAssistantMessage extends Component<Signature> {
               {{/each}}
             </div>
           {{/if}}
-
-          <div>{{yield}}</div>
         </div>
       </div>
     </div>

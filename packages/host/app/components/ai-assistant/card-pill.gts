@@ -12,10 +12,12 @@ interface Signature {
 
 export default class AiAssistantCardPill extends Component<Signature> {
   <template>
-    <Pill @inert={{true}} class='card-pill' ...attributes>
-      <div class='card-title'>{{getDisplayTitle @card}}</div>
-      {{yield}}
-    </Pill>
+    {{#if @card.id}}
+      <Pill @inert={{true}} class='card-pill' ...attributes>
+        <div class='card-title'>{{getDisplayTitle @card}}</div>
+        {{yield}}
+      </Pill>
+    {{/if}}
 
     <style>
       .card-pill {
