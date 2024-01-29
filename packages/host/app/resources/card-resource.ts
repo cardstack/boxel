@@ -20,6 +20,8 @@ import {
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
+import { ErrorDetails } from '@cardstack/runtime-common/error';
+
 import type MessageService from '@cardstack/host/services/message-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -31,7 +33,7 @@ import type LoaderService from '../services/loader-service';
 
 interface CardError {
   id: string;
-  error: Error;
+  error: ErrorDetails;
 }
 
 interface Args {
