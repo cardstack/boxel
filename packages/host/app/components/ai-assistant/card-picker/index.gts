@@ -6,14 +6,14 @@ import Component from '@glimmer/component';
 import { restartableTask } from 'ember-concurrency';
 
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
-import Pill from '@cardstack/host/components/pill';
-
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import CardPill from '../card-pill';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -30,23 +30,19 @@ export default class AiAssistantCardPicker extends Component<Signature> {
   <template>
     <div class='card-picker'>
       {{#each this.cardsToDisplay as |card i|}}
-        <Pill
-          @inert={{true}}
-          class={{cn
-            'card-pill'
-            is-autoattached=(eq card.id @autoAttachedCard.id)
-          }}
+        <CardPill
+          @card={{card}}
+          class={{if (eq card.id @autoAttachedCard.id) 'is-autoattached'}}
           data-test-pill-index={{i}}
           data-test-selected-card={{card.id}}
         >
-          <div class='card-title'>{{getDisplayTitle card}}</div>
           <IconButton
             class='remove-button'
             @icon={{IconX}}
             {{on 'click' (fn @removeCard card)}}
             data-test-remove-card-btn={{i}}
           />
-        </Pill>
+        </CardPill>
       {{/each}}
       {{#if this.canDisplayAddButton}}
         <AddButton
@@ -80,17 +76,6 @@ export default class AiAssistantCardPicker extends Component<Signature> {
       .attach-button:hover:not(:disabled) {
         box-shadow: none;
         background-color: var(--boxel-highlight-hover);
-      }
-      .card-pill {
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-400);
-        height: var(--pill-height);
-      }
-      .card-title {
-        max-width: var(--pill-content-max-width);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
       .remove-button {
         --boxel-icon-button-width: 25px;
@@ -137,8 +122,4 @@ export default class AiAssistantCardPicker extends Component<Signature> {
     });
     return chosenCard;
   });
-}
-
-function getDisplayTitle(card: CardDef) {
-  return card.title || card.constructor.displayName || 'Untitled Card';
 }

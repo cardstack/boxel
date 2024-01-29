@@ -9,9 +9,9 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
-import Pill from '@cardstack/host/components/pill';
-
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import CardPill from '../card-pill';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -84,14 +84,11 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{#if @attachedCards}}
             <div class='cards' data-test-message-cards>
               {{#each @attachedCards as |card i|}}
-                <Pill
-                  @inert={{true}}
-                  class='card-pill'
+                <CardPill
+                  @card={{card}}
                   data-test-pill-index={{i}}
-                  data-test-selected-card={{card.id}}
-                >
-                  <div class='card-title'>{{getDisplayTitle card}}</div>
-                </Pill>
+                  data-test-card-attachment={{card.id}}
+                />
               {{/each}}
             </div>
           {{/if}}
@@ -198,17 +195,6 @@ export default class AiAssistantMessage extends Component<Signature> {
         flex-wrap: wrap;
         gap: var(--boxel-sp-xxs);
       }
-      .card-pill {
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-400);
-        height: var(--pill-height);
-      }
-      .card-title {
-        max-width: var(--pill-content-max-width);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
     </style>
   </template>
 }
@@ -233,8 +219,4 @@ export class AiAssistantConversation extends Component<AiAssistantConversationSi
       }
     </style>
   </template>
-}
-
-function getDisplayTitle(card: CardDef) {
-  return card.title || card.constructor.displayName || 'Untitled Card';
 }
