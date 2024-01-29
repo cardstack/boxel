@@ -914,7 +914,7 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-error]')
       .containsText(
-        'Error: fetch failed for http://this-is-not-a-real-card.com/',
+        'Error: cannot render card http://this-is-not-a-real-card.com/: status: 500 - Failed to fetch.',
       );
   });
 
