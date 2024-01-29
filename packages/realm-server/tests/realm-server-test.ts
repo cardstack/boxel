@@ -47,7 +47,7 @@ const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
 
-module.only('Realm Server', function (hooks) {
+module('Realm Server', function (hooks) {
   let testRealmServer: Server;
   let testRealmServer2: Server;
   let request: SuperTest<Test>;

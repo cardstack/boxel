@@ -541,14 +541,7 @@ async function setupTestRealm({
     realmSecretSeed: "shhh! it's a secret",
   });
   loader.prependURLHandlers([
-    (req) =>
-      sourceFetchRedirectHandle(
-        req,
-        adapter,
-        realmURL!,
-        permissions['*'].includes('read'),
-        permissions['*'].includes('write'),
-      ),
+    (req) => sourceFetchRedirectHandle(req, adapter, realm),
     (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
   ]);
 
@@ -814,21 +807,13 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   createStreamingResponse(
-    unresolvedRealmURL: string,
-    isPublicReadableRealm: boolean,
-    isPublicWritableRealm: boolean,
+    realm: Realm,
     _request: Request,
     responseInit: ResponseInit,
     cleanup: () => void,
   ) {
     let s = new WebMessageStream();
-    let response = createResponse(
-      unresolvedRealmURL,
-      isPublicReadableRealm,
-      isPublicWritableRealm,
-      s.readable,
-      responseInit,
-    );
+    let response = createResponse(realm, s.readable, responseInit);
     messageCloseHandler(s.readable, cleanup);
     return { response, writable: s.writable };
   }
@@ -904,16 +889,14 @@ export async function sourceFetchReturnUrlHandle(
 export async function sourceFetchRedirectHandle(
   request: Request,
   adapter: RealmAdapter,
-  realmURL: string,
-  isPublicReadableRealm: boolean,
-  isPublicWritableRealm: boolean,
+  realm: Realm,
 ) {
   let urlParts = new URL(request.url).pathname.split('.');
   if (
     isCardSourceFetch(request) &&
     urlParts.length === 1 //has no extension
   ) {
-    const realmPaths = new RealmPaths(realmURL);
+    const realmPaths = new RealmPaths(realm.url);
     const localPath = realmPaths.local(request.url);
     const ref = await getFileWithFallbacks(
       localPath,
@@ -931,17 +914,11 @@ export async function sourceFetchRedirectHandle(
         ref.content instanceof Uint8Array ||
         typeof ref.content === 'string')
     ) {
-      let r = createResponse(
-        realmURL,
-        isPublicReadableRealm,
-        isPublicWritableRealm,
-        ref.content,
-        {
-          headers: {
-            'last-modified': formatRFC7231(ref.lastModified),
-          },
+      let r = createResponse(realm, ref.content, {
+        headers: {
+          'last-modified': formatRFC7231(ref.lastModified),
         },
-      );
+      });
       return new MockRedirectedResponse(r.body, r, responseUrl) as Response;
     }
   }

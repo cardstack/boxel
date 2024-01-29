@@ -1,7 +1,7 @@
+import { Realm } from './realm';
+
 export function createResponse(
-  unresolvedRealmURL: string,
-  isPublicReadableRealm: boolean,
-  isPublicWritableRealm: boolean,
+  realm: Realm,
   body?: BodyInit | null | undefined,
   init?: ResponseInit | undefined,
   relaxDocumentDomain?: boolean, // only use for CI!
@@ -10,9 +10,9 @@ export function createResponse(
     ...init,
     headers: {
       ...init?.headers,
-      'X-Boxel-Realm-Url': unresolvedRealmURL,
-      ...(isPublicReadableRealm && { 'X-Boxel-Realm-Public-Readable': 'true' }),
-      ...(isPublicWritableRealm && { 'X-Boxel-Realm-Public-Writable': 'true' }),
+      'X-Boxel-Realm-Url': realm.url,
+      ...(realm.isPublicReadable && { 'X-Boxel-Realm-Public-Readable': 'true' }),
+      ...(realm.isPublicWritable && { 'X-Boxel-Realm-Public-Writable': 'true' }),
       vary: 'Accept',
       'Access-Control-Expose-Headers': 'X-Boxel-Realm-Url,Authorization',
       ...(relaxDocumentDomain
