@@ -800,18 +800,35 @@ export default class CodeSubmode extends Component<Signature> {
             >
               <InnerContainer>
                 {{#if this.isReady}}
-                  {{#if this.fileIncompatibilityMessage}}
+                  {{#if this.cardResource.cardError}}
+                    <div
+                      class='preview-error-container'
+                      data-test-file-incompatibility-message
+                    >
+                      <div class='preview-error-box'>
+                        <div class='preview-error-text'>
+                          Card Preview Error
+                        </div>
+                        <p>
+                          {{this.fileIncompatibilityMessage}}
+                        </p>
+
+                        <hr class='preview-error' />
+
+                        {{#each this.fileIncompatibilityErrors as |error|}}
+                          <pre
+                            class='preview-error'
+                            data-test-card-preview-error
+                          >{{error}}</pre>
+                        {{/each}}
+                      </div>
+                    </div>
+                  {{else if this.fileIncompatibilityMessage}}
                     <div
                       class='file-incompatible-message'
                       data-test-file-incompatibility-message
                     >
                       {{this.fileIncompatibilityMessage}}
-                      {{#each this.fileIncompatibilityErrors as |error|}}
-                        <pre
-                          class='error'
-                          data-test-card-preview-error
-                        >{{error}}</pre>
-                      {{/each}}
                     </div>
                   {{else if this.selectedCardOrField.cardOrField}}
                     <Accordion as |A|>
@@ -1046,7 +1063,31 @@ export default class CodeSubmode extends Component<Signature> {
         padding: var(--boxel-sp-sm);
       }
 
-      pre.error {
+      .preview-error-container {
+        background: var(--boxel-100);
+        padding: var(--boxel-sp);
+        border-radius: var(--boxel-radius);
+        height: 100%;
+      }
+
+      .preview-error-box {
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp);
+        background: var(--boxel-200);
+      }
+
+      .preview-error-text {
+        color: red;
+        font-weight: 600;
+      }
+
+      hr.preview-error {
+        width: calc(100% + var(--boxel-sp) * 2);
+        margin-left: calc(var(--boxel-sp) * -1);
+        margin-top: calc(var(--boxel-sp-sm) + 1px);
+      }
+
+      pre.preview-error {
         white-space: pre-wrap;
         text-align: left;
       }
