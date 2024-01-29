@@ -1,6 +1,6 @@
 import { getReasonPhrase } from 'http-status-codes';
 import { createResponse } from './create-response';
-import { RealmPermissions } from 'realm';
+import { RealmPermissions } from './realm';
 export interface ErrorDetails {
   status?: number;
   title?: string;
