@@ -47,7 +47,7 @@ const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
 
-module('Realm Server', function (hooks) {
+module.only('Realm Server', function (hooks) {
   let testRealmServer: Server;
   let testRealmServer2: Server;
   let request: SuperTest<Test>;
@@ -168,12 +168,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     assert.deepEqual(json, {
@@ -254,12 +256,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     let json = response.body;
@@ -338,12 +342,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
 
@@ -428,12 +434,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     let cardFile = join(dir.name, entry);
@@ -465,12 +473,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     let cardFile = join(dir.name, entry);
@@ -488,12 +498,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     let result = response.body.toString().trim();
@@ -512,12 +524,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     assert.strictEqual(response.headers['location'], '/person.gts');
@@ -534,12 +548,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     assert.strictEqual(response.headers['location'], '/person-1.json');
@@ -556,12 +572,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     assert.strictEqual(response.headers['location'], '/person');
@@ -591,12 +609,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     let cardFile = join(dir.name, entry);
@@ -631,12 +651,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     let cardFile = join(dir.name, entry);
@@ -673,12 +695,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
 
@@ -845,12 +869,14 @@ module('Realm Server', function (hooks) {
         testRealmURL.href,
         'realm url header is correct',
       );
-      assert.true(
-        response.get('X-realm-public-readable') != undefined,
+      assert.strictEqual(
+        response.get('X-boxel-realm-public-readable'),
+        'true',
         'realm is public readable',
       );
-      assert.true(
-        response.get('X-realm-public-readable') != undefined,
+      assert.strictEqual(
+        response.get('X-boxel-realm-public-writable'),
+        'true',
         'realm is public writable',
       );
 
@@ -922,12 +948,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm URL header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     let body = response.text.trim();
@@ -956,12 +984,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     let json = response.body;
@@ -1026,12 +1056,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     let json = response.body;
@@ -1058,12 +1090,14 @@ module('Realm Server', function (hooks) {
       testRealmURL.href,
       'realm url header is correct',
     );
-    assert.true(
-      response.get('X-realm-public-readable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-readable'),
+      'true',
       'realm is public readable',
     );
-    assert.true(
-      response.get('X-realm-public-writable') != undefined,
+    assert.strictEqual(
+      response.get('X-boxel-realm-public-writable'),
+      'true',
       'realm is public writable',
     );
     let json = response.body;
@@ -1203,12 +1237,14 @@ module('Realm Server', function (hooks) {
         testRealmURL.href,
         'realm url header is correct',
       );
-      assert.true(
-        response.get('X-realm-public-readable') != undefined,
+      assert.strictEqual(
+        response.get('X-boxel-realm-public-readable'),
+        'true',
         'realm is public readable',
       );
-      assert.true(
-        response.get('X-realm-public-writable') != undefined,
+      assert.strictEqual(
+        response.get('X-boxel-realm-public-writable'),
+        'true',
         'realm is public writable',
       );
       assert.deepEqual(json, {

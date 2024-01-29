@@ -1,5 +1,5 @@
 import { notFound, CardError, responseWithError } from './error';
-import { RealmPermissions, logger } from './index';
+import { logger } from './index';
 import { RealmPaths } from './paths';
 
 type Handler = (request: Request) => Promise<Response>;
@@ -43,10 +43,12 @@ export class Router {
   #routeTable = new Map<SupportedMimeType, Map<Method, Map<string, Handler>>>();
   log = logger('realm:router');
   #paths: RealmPaths;
-  #permissions: RealmPermissions['users'];
-  constructor(mountURL: URL, permissions: RealmPermissions['users']) {
+  #isPublicReadableRealm: boolean;
+  #isPublicWritableRealm: boolean;
+  constructor(mountURL: URL, isPublicReadableRealm: boolean, isPublicWritableRealm: boolean) {
     this.#paths = new RealmPaths(mountURL);
-    this.#permissions = permissions;
+    this.#isPublicReadableRealm = isPublicReadableRealm;
+    this.#isPublicWritableRealm = isPublicWritableRealm;
   }
 
   get(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
@@ -92,13 +94,13 @@ export class Router {
   async handle(request: Request): Promise<Response> {
     let handler = this.lookupHandler(request);
     if (!handler) {
-      return notFound(this.#paths.url, this.#permissions, request);
+      return notFound(this.#paths.url, this.#isPublicReadableRealm, this.#isPublicWritableRealm, request);
     }
     try {
       return await handler(request);
     } catch (err) {
       if (err instanceof CardError) {
-        return responseWithError(this.#paths.url, this.#permissions, err);
+        return responseWithError(this.#paths.url, this.#isPublicReadableRealm, this.#isPublicWritableRealm, err);
       }
       this.log.error(err);
       return new Response(`unexpected exception in realm ${err}`, {

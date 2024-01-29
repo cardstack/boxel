@@ -541,7 +541,14 @@ async function setupTestRealm({
     realmSecretSeed: "shhh! it's a secret",
   });
   loader.prependURLHandlers([
-    (req) => sourceFetchRedirectHandle(req, adapter, realmURL!, permissions),
+    (req) =>
+      sourceFetchRedirectHandle(
+        req,
+        adapter,
+        realmURL!,
+        permissions['*'].includes('read'),
+        permissions['*'].includes('write'),
+      ),
     (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
   ]);
 
@@ -808,7 +815,8 @@ export class TestRealmAdapter implements RealmAdapter {
 
   createStreamingResponse(
     unresolvedRealmURL: string,
-    permissions: RealmPermissions['users'],
+    isPublicReadableRealm: boolean,
+    isPublicWritableRealm: boolean,
     _request: Request,
     responseInit: ResponseInit,
     cleanup: () => void,
@@ -816,7 +824,8 @@ export class TestRealmAdapter implements RealmAdapter {
     let s = new WebMessageStream();
     let response = createResponse(
       unresolvedRealmURL,
-      permissions,
+      isPublicReadableRealm,
+      isPublicWritableRealm,
       s.readable,
       responseInit,
     );
@@ -896,7 +905,8 @@ export async function sourceFetchRedirectHandle(
   request: Request,
   adapter: RealmAdapter,
   realmURL: string,
-  permissions: RealmPermissions['users'],
+  isPublicReadableRealm: boolean,
+  isPublicWritableRealm: boolean,
 ) {
   let urlParts = new URL(request.url).pathname.split('.');
   if (
@@ -921,11 +931,17 @@ export async function sourceFetchRedirectHandle(
         ref.content instanceof Uint8Array ||
         typeof ref.content === 'string')
     ) {
-      let r = createResponse(realmURL, permissions, ref.content, {
-        headers: {
-          'last-modified': formatRFC7231(ref.lastModified),
+      let r = createResponse(
+        realmURL,
+        isPublicReadableRealm,
+        isPublicWritableRealm,
+        ref.content,
+        {
+          headers: {
+            'last-modified': formatRFC7231(ref.lastModified),
+          },
         },
-      });
+      );
       return new MockRedirectedResponse(r.body, r, responseUrl) as Response;
     }
   }

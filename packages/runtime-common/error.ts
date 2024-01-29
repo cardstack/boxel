@@ -1,6 +1,5 @@
 import { getReasonPhrase } from 'http-status-codes';
 import { createResponse } from './create-response';
-import { RealmPermissions } from './realm';
 export interface ErrorDetails {
   status?: number;
   title?: string;
@@ -141,12 +140,14 @@ export function serializableError(err: any): any {
 
 export function responseWithError(
   unresolvedRealmURL: string,
-  permissions: RealmPermissions['users'],
+  isPublicReadableRealm: boolean,
+  isPublicWritableRealm: boolean,
   error: CardError,
 ): Response {
   return createResponse(
     unresolvedRealmURL,
-    permissions,
+    isPublicReadableRealm,
+    isPublicWritableRealm,
     JSON.stringify({ errors: [serializableError(error)] }),
     {
       status: error.status,
@@ -158,12 +159,14 @@ export function responseWithError(
 
 export function methodNotAllowed(
   unresolvedRealmURL: string,
-  permissions: RealmPermissions['users'],
+  isPublicReadableRealm: boolean,
+  isPublicWritableRealm: boolean,
   request: Request,
 ): Response {
   return responseWithError(
     unresolvedRealmURL,
-    permissions,
+    isPublicReadableRealm,
+    isPublicWritableRealm,
     new CardError(`${request.method} not allowed for ${request.url}`, {
       status: 405,
     }),
@@ -172,44 +175,51 @@ export function methodNotAllowed(
 
 export function notFound(
   unresolvedRealmURL: string,
-  permissions: RealmPermissions['users'],
+  isPublicReadableRealm: boolean,
+  isPublicWritableRealm: boolean,
   request: Request,
   message = `Could not find ${request.url}`,
 ): Response {
   return responseWithError(
     unresolvedRealmURL,
-    permissions,
+    isPublicReadableRealm,
+    isPublicWritableRealm,
     new CardError(message, { status: 404 }),
   );
 }
 
 export function badRequest(
   unresolvedRealmURL: string,
-  permissions: RealmPermissions['users'],
+  isPublicReadableRealm: boolean,
+  isPublicWritableRealm: boolean,
   message: string,
 ): Response {
   return responseWithError(
     unresolvedRealmURL,
-    permissions,
+    isPublicReadableRealm,
+    isPublicWritableRealm,
     new CardError(message, { status: 400 }),
   );
 }
 
 export function systemUnavailable(
   unresolvedRealmURL: string,
-  permissions: RealmPermissions['users'],
+  isPublicReadableRealm: boolean,
+  isPublicWritableRealm: boolean,
   message: string,
 ): Response {
   return responseWithError(
     unresolvedRealmURL,
-    permissions,
+    isPublicReadableRealm,
+    isPublicWritableRealm,
     new CardError(message, { status: 503 }),
   );
 }
 
 export function systemError(
   unresolvedRealmURL: string,
-  permissions: RealmPermissions['users'],
+  isPublicReadableRealm: boolean,
+  isPublicWritableRealm: boolean,
   message: string,
   additionalError?: CardError | Error,
 ): Response {
@@ -217,5 +227,5 @@ export function systemError(
   if (additionalError) {
     err.additionalErrors = [additionalError];
   }
-  return responseWithError(unresolvedRealmURL, permissions, err);
+  return responseWithError(unresolvedRealmURL, isPublicReadableRealm, isPublicWritableRealm, err);
 }
