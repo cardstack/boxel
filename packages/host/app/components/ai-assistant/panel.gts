@@ -48,8 +48,8 @@ import type {
 
 import { getRoom, RoomResource } from '../../resources/room';
 
-const { matrixURL } = ENV;
-export const aiBotUserId = `@${aiBotUsername}:${new URL(matrixURL).hostname}`;
+const { matrixServerName } = ENV;
+export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
 
 export type AiSessionRoom = { room: RoomField; member: RoomMemberField };
 
