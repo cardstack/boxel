@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
