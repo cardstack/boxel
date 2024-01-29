@@ -254,6 +254,10 @@ export default class CodeSubmode extends Component<Signature> {
     return !!(this.codePath && this.currentOpenFile?.state !== 'not-found');
   }
 
+  private get isCardPreviewError() {
+    return this.isCard && this.cardResource.cardError;
+  }
+
   private get fileIncompatibilityMessage() {
     if (this.isCard) {
       if (this.cardResource.cardError) {
@@ -800,7 +804,7 @@ export default class CodeSubmode extends Component<Signature> {
             >
               <InnerContainer>
                 {{#if this.isReady}}
-                  {{#if this.cardResource.cardError}}
+                  {{#if this.isCardPreviewError}}
                     <div
                       class='preview-error-container'
                       data-test-file-incompatibility-message
