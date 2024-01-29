@@ -112,18 +112,6 @@ export async function runTestRealmServer(
   };
 }
 
-export async function runTestRealmServer_old(
-  loader: Loader,
-  dir: string,
-  flatFiles: Record<string, string | LooseSingleCardDocument> = {},
-  testRealmURL: URL,
-) {
-  let testRealm = await createRealm(loader, dir, flatFiles, testRealmURL.href);
-  await testRealm.ready;
-  let testRealmServer = new RealmServer([testRealm]);
-  return testRealmServer.listen(parseInt(testRealmURL.port));
-}
-
 export function setupCardLogs(
   hooks: NestedHooks,
   apiThunk: () => Promise<typeof CardAPI>,
