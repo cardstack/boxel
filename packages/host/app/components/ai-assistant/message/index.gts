@@ -71,8 +71,6 @@ export default class AiAssistantMessage extends Component<Signature> {
                 class='retry-button'
                 @size='small'
                 @kind='secondary-dark'
-                @isLoading={{true}}
-                @isDisabled={{true}}
               >
                 Retry
               </Button>

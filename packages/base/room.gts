@@ -174,6 +174,10 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       data-test-message-idx={{@model.index}}
       data-test-message-cards
     >
+      <div>
+        {{@fields.message}}
+      </div>
+
       {{#each @model.attachedResources as |cardResource|}}
         {{#if cardResource.cardError}}
           <div data-test-card-error={{cardResource.cardError.id}} class='error'>
@@ -211,7 +215,7 @@ type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
 type JSONObject = { [x: string]: JSONValue };
 
-export type PatchObject = { patch: { attributes: JSONObject }; id: string };
+type PatchObject = { patch: { attributes: JSONObject }; id: string };
 
 class PatchObjectField extends FieldDef {
   static [primitive]: PatchObject;
