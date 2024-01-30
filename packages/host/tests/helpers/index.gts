@@ -11,7 +11,6 @@ import ms from 'ms';
 import {
   Kind,
   RealmAdapter,
-  RealmPermissions,
   FileRef,
   LooseSingleCardDocument,
   baseRealm,
@@ -524,7 +523,6 @@ async function setupTestRealm({
     });
   }
 
-  let permissions: RealmPermissions['users'] = { '*': ['read', 'write'] };
   realm = new Realm({
     url: realmURL,
     adapter,
@@ -537,7 +535,7 @@ async function setupTestRealm({
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
-    permissions,
+    permissions: { '*': ['read', 'write'] },
     realmSecretSeed: "shhh! it's a secret",
   });
   loader.prependURLHandlers([
