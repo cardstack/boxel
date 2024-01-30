@@ -19,7 +19,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     autoAttachedCard?: CardDef;
-    cardsToAttach: Set<CardDef>;
+    cardsToAttach: CardDef[] | undefined;
     chooseCard: (card: CardDef) => void;
     removeCard: (card: CardDef) => void;
     maxNumberOfCards?: number;
@@ -109,20 +109,18 @@ export default class AiAssistantCardPicker extends Component<Signature> {
   </template>
 
   private get cardsToDisplay() {
-    let cards = [...this.args.cardsToAttach];
+    let cards = this.args.cardsToAttach ?? [];
     if (this.args.autoAttachedCard) {
-      cards = [
-        ...new Set([this.args.autoAttachedCard, ...this.args.cardsToAttach]),
-      ];
+      cards = [...new Set([this.args.autoAttachedCard, ...cards])];
     }
     return cards;
   }
 
   private get canDisplayAddButton() {
-    if (!this.args.maxNumberOfCards) {
+    if (!this.args.maxNumberOfCards || !this.args.cardsToAttach) {
       return true;
     }
-    return this.args.cardsToAttach.size < this.args.maxNumberOfCards;
+    return this.args.cardsToAttach.length < this.args.maxNumberOfCards;
   }
 
   @action

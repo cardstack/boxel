@@ -37,17 +37,26 @@ Once logged in, create a room and invite the aibot - it should join automaticall
 
 It will be able to see any cards shared in the chat and can respond using GPT4 if you ask for content modifications (as a start, try 'can you create some sample data for this?'). The response should stream back and give you several options, these get applied as patches to the shared card if it is in your stack.
 
-You can deliberately trigger a specific patch by sending a message that starts `debugpatch:` and has the JSON patch you want returned. For example:
+### Debugging
+
+You can deliberately trigger a specific patch by sending a message that starts `debug:patch:` and has the JSON patch you want returned. For example:
 
 ```
-debugpatch:{"firstName": "David"}
+debug:patch:{"firstName": "David"}
 ```
 
 This will return a patch with the ID of the last card you uploaded. This does not hit GPT4 and is useful for testing the integration of the two components without waiting for streaming responses.
+
+You can set a room name with `debug:title:set:`
+
+```
+debug:title:set:My Room
+```
+
+And you can trigger room naming with `debug:title:create` on its own.
 
 ## Testing
 
 ### Unit tests
 
 Run `pnpm test`
-

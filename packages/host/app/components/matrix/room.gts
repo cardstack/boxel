@@ -26,6 +26,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
+import ApplyButton from '../ai-assistant/apply-button';
 import AiAssistantMessage, {
   AiAssistantConversation,
 } from '../ai-assistant/message';
@@ -45,6 +46,7 @@ export default class Room extends Component<Signature> {
   <template>
     <section
       class='room'
+      data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-name={{this.room.name}}
     >
@@ -89,32 +91,31 @@ export default class Room extends Component<Signature> {
             data-test-message-index={{i}}
             data-test-boxel-message-from={{Message.card.author.name}}
           >
-            {{#if Message.card.attachedCardId}}
+            {{#if (eq Message.card.command.commandType 'patch')}}
+              <div
+                class='patch-button-bar'
+                data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
+              >
+                {{#let Message.card.command.payload as |payload|}}
+                  <ApplyButton
+                    @state={{if
+                      this.operatorModeStateService.patchCard.isRunning
+                      'applying'
+                      'ready'
+                    }}
+                    data-test-command-apply
+                    {{on
+                      'click'
+                      (fn this.patchCard payload.id payload.patch.attributes)
+                    }}
+                  />
+                {{/let}}
+              </div>
+            {{/if}}
+            {{#if Message.card.attachedCardIds}}
               <Message.component />
             {{/if}}
           </AiAssistantMessage>
-
-          {{#if (eq Message.card.command.commandType 'patch')}}
-            <div
-              data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
-            >
-              {{#let Message.card.command.payload as |payload|}}
-                <Button
-                  @kind='secondary-dark'
-                  data-test-command-apply
-                  {{on
-                    'click'
-                    (fn this.patchCard payload.id payload.patch.attributes)
-                  }}
-                  @loading={{this.operatorModeStateService.patchCard.isRunning}}
-                  @disabled={{this.operatorModeStateService.patchCard.isRunning}}
-                >
-                  Apply
-                </Button>
-              {{/let}}
-            </div>
-          {{/if}}
-
         {{else}}
           <div data-test-no-messages>
             (No messages)
@@ -167,6 +168,12 @@ export default class Room extends Component<Signature> {
       .error {
         color: var(--boxel-danger);
         font-weight: 'bold';
+      }
+
+      .patch-button-bar {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: var(--boxel-sp);
       }
 
       .timeline-start {
@@ -236,6 +243,10 @@ export default class Room extends Component<Signature> {
   }
 
   private patchCard = (cardId: string, attributes: any) => {
+    if (this.operatorModeStateService.patchCard.isRunning) {
+      return;
+    }
+
     this.operatorModeStateService.patchCard.perform(cardId, attributes);
   };
 

@@ -339,4 +339,67 @@ test.describe('User Registration w/ Token', () => {
 
     await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
   });
+
+  test('it shows an error encountered when registering', async ({ page }) => {
+    await clearLocalStorage(page);
+    await gotoRegistration(page);
+
+    await expect(
+      page.locator('[data-test-register-user-error]'),
+      'error is not shown',
+    ).toHaveCount(0);
+    await page.locator('[data-test-name-field]').fill('user1');
+    await page.locator('[data-test-email-field]').fill('not-an-email-address');
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('mypassword1!');
+    await page.locator('[data-test-register-btn]').click();
+
+    await expect(page.locator('[data-test-register-user-error]')).toContainText(
+      'There was an error registering: Email address is invalid',
+    );
+  });
+
+  test('it shows an error encountered when submitting the token', async ({
+    page,
+  }) => {
+    await clearLocalStorage(page);
+    await gotoRegistration(page);
+
+    await page.locator('[data-test-name-field]').fill('user1');
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('mypassword1!');
+    await page.locator('[data-test-register-btn]').click();
+
+    await expect(
+      page.locator(
+        '[data-test-token-field] ~ [data-test-boxel-input-error-message]',
+      ),
+      'no error message is displayed',
+    ).toHaveCount(0);
+
+    await page.locator('[data-test-token-field]').fill('abc123');
+    await page.context().setOffline(true);
+    await page.locator('[data-test-next-btn]').click();
+
+    await expect(
+      page.locator(
+        '[data-test-token-field][data-test-boxel-input-validation-state="invalid"]',
+      ),
+      'token field displays invalid validation state',
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-token-field] ~ [data-test-boxel-input-error-message]',
+      ),
+    ).toContainText(
+      'There was an error verifying token: Could not connect to server',
+    );
+  });
 });

@@ -35,12 +35,9 @@ module('loader', function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    testRealmServer = await runTestRealmServer(
-      loader,
-      dir.name,
-      undefined,
-      testRealmURL,
-    );
+    testRealmServer = (
+      await runTestRealmServer(loader, dir.name, undefined, testRealmURL)
+    ).testRealmServer;
   });
 
   hooks.afterEach(function () {

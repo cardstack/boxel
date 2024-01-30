@@ -21,6 +21,7 @@ import {
   type MatrixCardError,
   type TokenClaims,
   sanitizeHtml,
+  aiBotUsername,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
@@ -51,6 +52,7 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL, ownRealmURL } = ENV;
 const SET_OBJECTIVE_POWER_LEVEL = 50;
+const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const DEFAULT_PAGE_SIZE = 50;
 
 export type Event = Partial<IEvent>;
@@ -346,6 +348,12 @@ export default class MatrixService extends Service {
       topic,
       room_alias_name: encodeURIComponent(name),
     });
+    invites.map((i) => {
+      let fullId = i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`;
+      if (i === aiBotUsername) {
+        this.client.setPowerLevel(roomId, fullId, AI_BOT_POWER_LEVEL, null);
+      }
+    });
     return roomId;
   }
 
@@ -381,7 +389,7 @@ export default class MatrixService extends Service {
   async sendMessage(
     roomId: string,
     body: string | undefined,
-    card?: CardDef,
+    cards?: CardDef[],
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
@@ -415,21 +423,21 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let serializedCard: LooseSingleCardDocument | undefined;
-    if (card) {
-      serializedCard = await this.cardService.serializeCard(card);
-      body = `${body ?? ''} (Card: ${card.title ?? 'Untitled'}, ${
-        card.id
-      })`.trim();
+    let serializedCards: LooseSingleCardDocument[] = [];
+    if (cards?.length) {
+      serializedCards = await Promise.all(
+        cards.map(async (c) => await this.cardService.serializeCard(c)),
+      );
+
+      body = body ?? '';
+      body += cards.map((c) => `Card: ${c.title ?? 'Untitled'}, ${c.id}`);
     }
-    if (card) {
+    if (cards?.length) {
       await this.sendEvent(roomId, 'm.room.message', {
         msgtype: 'org.boxel.card',
         body,
         formatted_body: html,
-        data: {
-          instance: serializedCard!,
-        },
+        data: { instances: serializedCards },
       });
     } else {
       await this.client.sendHtmlMessage(roomId, body ?? '', html);

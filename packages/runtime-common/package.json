@@ -22,6 +22,7 @@
     "@types/babel__traverse": "^7.14.2",
     "@types/diff": "^5.0.2",
     "@types/flat": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.5",
     "@types/lodash": "^4.14.182",
     "@types/pluralize": "^0.0.30",
     "@types/qs": "^6.9.7",
@@ -38,6 +39,7 @@
     "ignore": "^5.2.0",
     "js-string-escape": "^1.0.1",
     "json-typescript": "^1.1.2",
+    "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "loglevel": "^1.8.1",
     "pluralize": "^8.0.0",
@@ -59,10 +61,5 @@
   "peerDependencies": {
     "@babel/core": "^7.22.11",
     "ember-cli-htmlbars": "^6.3.0"
-  },
-  "dependenciesMeta": {
-    "@cardstack/ember-template-imports": {
-      "injected": true
-    }
   }
 }

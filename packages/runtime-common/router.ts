@@ -1,6 +1,9 @@
 import { notFound, CardError, responseWithError } from './error';
 import { Realm, RealmPaths, logger } from './index';
 
+export class AuthenticationError extends Error {}
+export class AuthorizationError extends Error {}
+
 type Handler = (request: Request) => Promise<Response>;
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 export enum SupportedMimeType {
@@ -97,7 +100,9 @@ export class Router {
       if (err instanceof CardError) {
         return responseWithError(realm, err);
       }
+
       this.log.error(err);
+
       return new Response(`unexpected exception in realm ${err}`, {
         status: 500,
       });
