@@ -157,49 +157,7 @@ if (distURL) {
       manager.getOptions.bind(manager),
     );
 
-    let userPermissions = {} as {
-      [realmUrl: string]: { users: RealmPermissionsInterface };
-    };
-    let userPermissionsjsonContent;
-
-    if (['development', 'test'].includes(process.env.NODE_ENV || '')) {
-      userPermissionsjsonContent = fs.readFileSync(
-        `.realms.json.${process.env.NODE_ENV}`,
-        'utf-8',
-      );
-    } else {
-      userPermissionsjsonContent = process.env.REALM_USER_PERMISSIONS;
-      if (!userPermissionsjsonContent) {
-        throw new Error(
-          `REALM_USER_PERMISSIONS env var is blank. It should have a JSON string value that looks like this:
-            {
-              "https://realm-url-1/": {
-                "users":{
-                  "*":["read"],
-                  "@hassan:boxel.ai":["read", "write"],
-                  ...
-                }
-              },
-              "https://realm-url-2/": { ... }
-            }
-          `,
-        );
-      }
-    }
-
-    try {
-      userPermissions = JSON.parse(userPermissionsjsonContent);
-    } catch (error: any) {
-      throw new Error(
-        `Error while JSON parsing user permissions: ${userPermissionsjsonContent}`,
-      );
-    }
-
-    if (!userPermissions[url]) {
-      throw new Error(
-        `Missing permissions for realm ${url} in config ${userPermissionsjsonContent}`,
-      );
-    }
+    let realmPermissions = getRealmPermissions(url);
 
     realms.push(
       new Realm(
@@ -213,7 +171,7 @@ if (distURL) {
             readFileSync(join(distPath, 'index.html')).toString(),
           matrix: { url: new URL(matrixURL), username, password },
           realmSecretSeed: REALM_SECRET_SEED,
-          permissions: userPermissions[url].users,
+          permissions: realmPermissions.users,
         },
         {
           deferStartUp: true,
@@ -263,3 +221,51 @@ if (distURL) {
   );
   process.exit(1);
 });
+
+function getRealmPermissions(realmUrl: string) {
+  let userPermissions = {} as {
+    [realmUrl: string]: { users: RealmPermissionsInterface };
+  };
+  let userPermissionsjsonContent;
+
+  if (['development', 'test'].includes(process.env.NODE_ENV || '')) {
+    userPermissionsjsonContent = fs.readFileSync(
+      `.realms.json.${process.env.NODE_ENV}`,
+      'utf-8',
+    );
+  } else {
+    userPermissionsjsonContent = process.env.REALM_USER_PERMISSIONS;
+    if (!userPermissionsjsonContent) {
+      throw new Error(
+        `REALM_USER_PERMISSIONS env var is blank. It should have a JSON string value that looks like this:
+          {
+            "https://realm-url-1/": {
+              "users":{
+                "*":["read"],
+                "@hassan:boxel.ai":["read", "write"],
+                ...
+              }
+            },
+            "https://realm-url-2/": { ... }
+          }
+        `,
+      );
+    }
+  }
+
+  try {
+    userPermissions = JSON.parse(userPermissionsjsonContent);
+  } catch (error: any) {
+    throw new Error(
+      `Error while JSON parsing user permissions: ${userPermissionsjsonContent}`,
+    );
+  }
+
+  if (!userPermissions[realmUrl]) {
+    throw new Error(
+      `Missing permissions for realm ${realmUrl} in config ${userPermissionsjsonContent}`,
+    );
+  }
+
+  return userPermissions[realmUrl];
+}
