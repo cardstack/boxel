@@ -1,0 +1,22 @@
+{
+  "http://localhost:4201/base/": {
+    "users": {
+      "*": ["read", "write"]
+    }
+  },
+  "http://localhost:4201/drafts/": {
+    "users": {
+      "*": ["read", "write"]
+    }
+  },
+  "http://localhost:4201/published/": {
+    "users": {
+      "*": ["read", "write"]
+    }
+  },
+  "https://cardstack.com/base/": {
+    "users": {
+      "*": ["read", "write"]
+    }
+  }
+}

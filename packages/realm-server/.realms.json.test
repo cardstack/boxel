@@ -1,15 +1,15 @@
 {
-  "base": {
-    "users": {
-      "*": ["read"]
-    }
-  },
-  "drafts": {
+  "https://cardstack.com/base/": {
     "users": {
       "*": ["read", "write"]
     }
   },
-  "published": {
+  "http://localhost:4202/node-test/": {
+    "users": {
+      "*": ["read", "write"]
+    }
+  },
+  "http://localhost:4202/test/": {
     "users": {
       "*": ["read", "write"]
     }

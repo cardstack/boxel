@@ -62,7 +62,12 @@ import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properti
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
 import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
-import { Router, SupportedMimeType } from './router';
+import {
+  AuthenticationError,
+  AuthorizationError,
+  Router,
+  SupportedMimeType,
+} from './router';
 import { parseQueryString } from './query';
 //@ts-ignore service worker can't handle this
 import type { Readable } from 'stream';
@@ -74,6 +79,9 @@ import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 import { MatrixClient } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
+
+import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
+import RealmPermissionChecker from './realm-permission-checker';
 
 export type RealmInfo = {
   name: string;
@@ -98,9 +106,7 @@ export interface TokenClaims {
 }
 
 export interface RealmPermissions {
-  users: {
-    [username: string]: ('read' | 'write')[];
-  };
+  [username: string]: ('read' | 'write')[];
 }
 
 export interface RealmAdapter {
@@ -237,7 +243,7 @@ export class Realm {
   #flushOperations: Promise<void> | undefined;
   #operationQueue: Operation[] = [];
   #realmSecretSeed: string;
-  #permissions: RealmPermissions['users'];
+  #permissions: RealmPermissions;
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -274,7 +280,7 @@ export class Realm {
       runnerOptsMgr: RunnerOptionsManager;
       getIndexHTML: () => Promise<string>;
       matrix: { url: URL; username: string; password: string };
-      permissions: RealmPermissions['users'];
+      permissions: RealmPermissions;
       realmSecretSeed: string;
     },
     opts?: Options,
@@ -397,6 +403,10 @@ export class Realm {
     }
 
     operationsDrained!();
+  }
+
+  createJWT(claims: TokenClaims, expiration: string): string {
+    return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
   async write(
@@ -723,17 +733,38 @@ export class Realm {
     request: Request,
     isLocal: boolean,
   ): Promise<ResponseWithNodeStream> {
-    // local requests are allowed to query the realm as the index is being built up
-    if (!isLocal) {
-      await this.ready;
-    }
-    if (!this.searchIndex) {
-      return systemError(this.url, 'search index is not available');
-    }
-    if (this.#router.handles(request)) {
-      return this.#router.handle(request);
-    } else {
-      return this.fallbackHandle(request);
+    try {
+      // local requests are allowed to query the realm as the index is being built up
+      if (!isLocal) {
+        await this.ready;
+
+        let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
+          request.method,
+        );
+        await this.checkPermission(request, isWrite ? 'write' : 'read');
+      }
+      if (!this.searchIndex) {
+        return systemError(this.url, 'search index is not available');
+      }
+      if (this.#router.handles(request)) {
+        return this.#router.handle(request);
+      } else {
+        return this.fallbackHandle(request);
+      }
+    } catch (e) {
+      if (e instanceof AuthenticationError) {
+        return new Response(`Authentication error: ${e.message}`, {
+          status: 401,
+        });
+      }
+
+      if (e instanceof AuthorizationError) {
+        return new Response(`Authorization error: ${e.message}`, {
+          status: 403,
+        });
+      }
+
+      throw e;
     }
   }
 
@@ -877,6 +908,52 @@ export class Realm {
     }) as ResponseWithNodeStream;
     response.nodeStream = ref.content;
     return response;
+  }
+
+  private async checkPermission(
+    request: Request,
+    neededPermission: 'read' | 'write',
+  ) {
+    // If the realm is public readable or writable, do not require a JWT
+    if (
+      (neededPermission === 'read' &&
+        this.#permissions['*']?.includes('read')) ||
+      (neededPermission === 'write' &&
+        this.#permissions['*']?.includes('write'))
+    ) {
+      return;
+    }
+
+    let authorizationString = request.headers.get('Authorization');
+    if (!authorizationString) {
+      throw new AuthenticationError("Missing 'Authorization' header");
+    }
+    let tokenString = authorizationString.replace('Bearer ', ''); // Parse the JWT
+
+    let token: TokenClaims;
+
+    try {
+      token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
+      let realmPermissionChecker = new RealmPermissionChecker(
+        this.#permissions,
+      );
+
+      if (!realmPermissionChecker.can(token.user, neededPermission)) {
+        throw new AuthorizationError(
+          'Insufficient permissions to perform this action',
+        );
+      }
+    } catch (e) {
+      if (e instanceof TokenExpiredError) {
+        throw new AuthenticationError('Token expired');
+      }
+
+      if (e instanceof JsonWebTokenError) {
+        throw new AuthenticationError('Invalid token');
+      }
+
+      throw e;
+    }
   }
 
   private async upsertCardSource(request: Request): Promise<Response> {
