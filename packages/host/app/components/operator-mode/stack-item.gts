@@ -157,7 +157,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let itemsOnStackCount = this.args.stackItems.length;
     let invertedIndex = itemsOnStackCount - this.args.index - 1;
     let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
-    let offsetPx = 40; // Every new card on the stack is 40px lower than the previous one
+    let offsetPx = 30; // Every new card on the stack is 30px lower than the previous one
 
     return htmlSafe(`
       height: calc(100% - ${offsetPx}px * ${this.args.index});
@@ -469,8 +469,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 <:trigger>
                   <IconButton
                     @icon={{IconX}}
-                    @width='20px'
-                    @height='20px'
+                    @width='24px'
+                    @height='24px'
                     class='icon-button'
                     aria-label='Close'
                     {{on 'click' (fn @close @item)}}
@@ -521,12 +521,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .header {
         --boxel-header-icon-width: var(--boxel-icon-med);
         --boxel-header-icon-height: var(--boxel-icon-med);
-        --boxel-header-padding: var(--boxel-sp-xs);
+        --boxel-header-padding: var(--boxel-sp-sm);
         --boxel-header-text-size: var(--boxel-font-med);
-
+        --boxel-header-border-radius: var(--boxel-border-radius-xl);
         z-index: 1;
         background-color: var(--boxel-light);
         max-width: max-content;
+        height: fit-content;
         min-width: 100%;
         gap: var(--boxel-sp-xxs);
       }
@@ -563,6 +564,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .card {
+        border-radius: var(--boxel-border-radius-xl);
         position: relative;
         height: 100%;
         display: grid;
@@ -584,6 +586,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .buried .card {
+        border-radius: var(--boxel-border-radius-lg);
         background-color: var(--boxel-200);
         grid-template-rows: var(--buried-operator-mode-header-height) auto;
       }
@@ -599,7 +602,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .buried .header {
         cursor: pointer;
         font: 700 var(--boxel-font);
-        padding: 0 var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
+        --boxel-header-padding: var(--boxel-sp-xs);
+        --boxel-header-text-size: var(--boxel-font-size);
+        --boxel-header-icon-width: var(--boxel-icon-sm);
+        --boxel-header-icon-height: var(--boxel-icon-sm);
+        --boxel-header-border-radius: var(--boxel-border-radius-lg);
       }
 
       .edit .header {
@@ -616,19 +624,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
         background-color: var(--boxel-light);
       }
 
-      .icon-button {
-        --icon-color: var(--boxel-highlight);
-        --boxel-icon-button-width: 28px;
-        --boxel-icon-button-height: 28px;
+      .icon-button,
+      .icon-save {
+        --boxel-icon-button-width: 26px;
+        --boxel-icon-button-height: 26px;
         border-radius: 4px;
 
         display: flex;
         align-items: center;
         justify-content: center;
-
         font: var(--boxel-font-sm);
-        margin-left: var(--boxel-sp-xxxs);
         z-index: 1;
+      }
+
+      .icon-button {
+        --icon-color: var(--boxel-highlight);
       }
 
       .icon-button:hover {
@@ -639,17 +649,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .icon-save {
         --icon-color: var(--boxel-dark);
         background-color: var(--boxel-light);
-
-        --boxel-icon-button-width: 28px;
-        --boxel-icon-button-height: 28px;
-        border-radius: 4px;
-
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        font: var(--boxel-font-sm);
-        z-index: 1;
       }
 
       .icon-save:hover {
