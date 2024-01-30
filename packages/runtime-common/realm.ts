@@ -63,8 +63,8 @@ import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
 import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
 import {
+  AuthenticationError,
   AuthorizationError,
-  PermissionError,
   Router,
   SupportedMimeType,
 } from './router';
@@ -752,12 +752,16 @@ export class Realm {
         return this.fallbackHandle(request);
       }
     } catch (e) {
-      if (e instanceof AuthorizationError) {
-        return new Response(`Unauthorized: ${e.message}`, { status: 401 });
+      if (e instanceof AuthenticationError) {
+        return new Response(`Authentication error: ${e.message}`, {
+          status: 401,
+        });
       }
 
-      if (e instanceof PermissionError) {
-        return new Response(`Not allowed: ${e.message}`, { status: 403 });
+      if (e instanceof AuthorizationError) {
+        return new Response(`Authorization error: ${e.message}`, {
+          status: 403,
+        });
       }
 
       throw e;
@@ -922,7 +926,7 @@ export class Realm {
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
-      throw new AuthorizationError("Missing 'Authorization' header");
+      throw new AuthenticationError("Missing 'Authorization' header");
     }
     let tokenString = authorizationString.replace('Bearer ', ''); // Parse the JWT
 
@@ -935,17 +939,17 @@ export class Realm {
       );
 
       if (!realmPermissionChecker.can(token.user, neededPermission)) {
-        throw new PermissionError(
+        throw new AuthorizationError(
           'Insufficient permissions to perform this action',
         );
       }
     } catch (e) {
       if (e instanceof TokenExpiredError) {
-        throw new AuthorizationError('Token expired');
+        throw new AuthenticationError('Token expired');
       }
 
       if (e instanceof JsonWebTokenError) {
-        throw new AuthorizationError('Invalid token');
+        throw new AuthenticationError('Invalid token');
       }
 
       throw e;

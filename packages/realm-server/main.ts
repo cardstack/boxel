@@ -9,7 +9,7 @@ import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
-import { RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common/realm';
+import { type RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common/realm';
 
 import fs from 'fs';
 

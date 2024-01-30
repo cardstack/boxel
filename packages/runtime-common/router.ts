@@ -2,8 +2,8 @@ import { notFound, CardError, responseWithError } from './error';
 import { logger } from './index';
 import { RealmPaths } from './paths';
 
+export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
-export class PermissionError extends Error {}
 
 type Handler = (request: Request) => Promise<Response>;
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
