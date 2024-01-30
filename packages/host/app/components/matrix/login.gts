@@ -143,12 +143,6 @@ export default class Login extends Component<Signature> {
   @service private declare matrixService: MatrixService;
 
   private get isLoginButtonDisabled() {
-    console.log(
-      `button disabled? !this.username ${!this
-        .username} || !this.password ${!this.password} || this.error ${
-        this.error
-      } || this.doLogin.isRunning ${this.doLogin.isRunning}`,
-    );
     return (
       !this.username || !this.password || this.error || this.doLogin.isRunning
     );
@@ -197,8 +191,6 @@ export default class Login extends Component<Signature> {
         this.error = `Sign in failed: ${e.message}`;
       }
 
-      console.log('throwing', e);
-
       throw e;
     }
     if (auth) {
@@ -212,8 +204,6 @@ export default class Login extends Component<Signature> {
 }
 
 export function extractMatrixErrorMessage(e: MatrixError) {
-  console.log('matrix error', e, JSON.stringify(e));
-
   if (e.httpStatus === 403) {
     return 'Please check your credentials and try again.';
   } else if (e.httpStatus === 429) {
