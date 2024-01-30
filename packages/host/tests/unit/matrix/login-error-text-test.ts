@@ -16,11 +16,19 @@ module('Unit | matrix | extractMatrixErrorMessage', function () {
     let result = extractMatrixErrorMessage(error);
     assert.strictEqual(result, 'Too many failed attempts, try again later.');
 
-    error.data.retry_after_ms = 191117;
+    let errorWithBackoff = {
+      httpStatus: 429,
+      errcode: 'M_ERROR_CODE',
+      data: {
+        errcode: 'M_ERROR_CODE',
+        error: 'More error text',
+        retry_after_ms: 191117,
+      },
+    };
 
-    result = extractMatrixErrorMessage(error);
+    let resultWithBackoff = extractMatrixErrorMessage(errorWithBackoff);
     assert.strictEqual(
-      result,
+      resultWithBackoff,
       'Too many failed attempts, try again in 4 minutes.',
     );
   });
