@@ -15,6 +15,14 @@ module('Unit | matrix | extractMatrixErrorMessage', function () {
 
     let result = extractMatrixErrorMessage(error);
     assert.strictEqual(result, 'Too many failed attempts, try again later.');
+
+    error.data.retry_after_ms = 191117;
+
+    result = extractMatrixErrorMessage(error);
+    assert.strictEqual(
+      result,
+      'Too many failed attempts, try again in 4 minutes.',
+    );
   });
 
   test('it describes a 403', function (assert) {

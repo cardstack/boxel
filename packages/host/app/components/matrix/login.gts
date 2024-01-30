@@ -8,6 +8,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 
 import { type IAuthData } from 'matrix-js-sdk';
+import moment from 'moment';
 
 import {
   Button,
@@ -216,6 +217,12 @@ export function extractMatrixErrorMessage(e: MatrixError) {
   if (e.httpStatus === 403) {
     return 'Please check your credentials and try again.';
   } else if (e.httpStatus === 429) {
+    if (e.data.retry_after_ms) {
+      moment.relativeTimeRounding(Math.ceil);
+      return `Too many failed attempts, try again ${moment
+        .duration(e.data.retry_after_ms)
+        .humanize(true)}.`;
+    }
     return 'Too many failed attempts, try again later.';
   } else {
     return `Unknown error ${e.httpStatus}: ${e.data.error}`;
