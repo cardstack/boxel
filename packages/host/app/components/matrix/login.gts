@@ -8,6 +8,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 
 import { type IAuthData } from 'matrix-js-sdk';
+import moment from 'moment';
 
 import {
   Button,
@@ -15,7 +16,10 @@ import {
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
 
-import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
+import {
+  isMatrixError,
+  type MatrixError,
+} from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { AuthMode } from './auth';
@@ -182,8 +186,9 @@ export default class Login extends Component<Signature> {
       auth = await this.matrixService.login(this.username, this.password);
     } catch (e: any) {
       if (isMatrixError(e)) {
-        this.error =
-          'Sign in failed. Please check your credentials and try again.';
+        this.error = `Sign in failed. ${extractMatrixErrorMessage(e)}`;
+      } else {
+        this.error = `Sign in failed: ${e.message}`;
       }
 
       throw e;
@@ -196,6 +201,22 @@ export default class Login extends Component<Signature> {
       );
     }
   });
+}
+
+export function extractMatrixErrorMessage(e: MatrixError) {
+  if (e.httpStatus === 403) {
+    return 'Please check your credentials and try again.';
+  } else if (e.httpStatus === 429) {
+    if (e.data.retry_after_ms) {
+      moment.relativeTimeRounding(Math.ceil);
+      return `Too many failed attempts, try again ${moment
+        .duration(e.data.retry_after_ms)
+        .humanize(true)}.`;
+    }
+    return 'Too many failed attempts, try again later.';
+  } else {
+    return `Unknown error ${e.httpStatus}: ${e.data.error}`;
+  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {

@@ -1,6 +1,8 @@
 import { notFound, CardError, responseWithError } from './error';
-import { logger } from './index';
-import { RealmPaths } from './paths';
+import { Realm, RealmPaths, logger } from './index';
+
+export class AuthenticationError extends Error {}
+export class AuthorizationError extends Error {}
 
 type Handler = (request: Request) => Promise<Response>;
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -87,18 +89,20 @@ export class Router {
     return !!this.lookupHandler(request);
   }
 
-  async handle(request: Request): Promise<Response> {
+  async handle(realm: Realm, request: Request): Promise<Response> {
     let handler = this.lookupHandler(request);
     if (!handler) {
-      return notFound(this.#paths.url, request);
+      return notFound(realm, request);
     }
     try {
       return await handler(request);
     } catch (err) {
       if (err instanceof CardError) {
-        return responseWithError(this.#paths.url, err);
+        return responseWithError(realm, err);
       }
+
       this.log.error(err);
+
       return new Response(`unexpected exception in realm ${err}`, {
         status: 500,
       });

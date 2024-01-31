@@ -4,6 +4,7 @@ export interface MatrixError {
   data: {
     errcode: string;
     error: string;
+    retry_after_ms?: number;
   };
   httpStatus: number;
   errcode: string;

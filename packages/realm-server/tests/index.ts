@@ -3,4 +3,4 @@ import './realm-server-test';
 import './loader-test';
 import './indexing-test';
 import './module-syntax-test';
-import './permissions/user-permissions-test';
+import './permissions/permission-checker-test';

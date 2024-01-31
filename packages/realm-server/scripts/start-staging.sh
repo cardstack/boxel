@@ -2,7 +2,7 @@
 pnpm setup:base-in-deployment
 pnpm setup:drafts-in-deployment
 pnpm setup:published-in-deployment
-NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' REALM_USER_PERMISSIONS="{}" ts-node \
+NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' ts-node \
   --transpileOnly main \
   --port=3000 \
   \

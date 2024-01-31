@@ -9,7 +9,8 @@ import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
-import RealmPermissions from './lib/realm-permissions';
+import { type RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common/realm';
+
 import fs from 'fs';
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
@@ -131,8 +132,6 @@ if (distURL) {
   dist = resolve(distDir);
 }
 
-let realmPermissions = new RealmPermissions();
-
 (async () => {
   let realms: Realm[] = [];
   for (let [i, path] of paths.entries()) {
@@ -157,7 +156,9 @@ let realmPermissions = new RealmPermissions();
       dist,
       manager.getOptions.bind(manager),
     );
-    let permissions = realmPermissions.permissionsForRealm(url);
+
+    let realmPermissions = getRealmPermissions(url);
+
     realms.push(
       new Realm(
         {
@@ -170,7 +171,7 @@ let realmPermissions = new RealmPermissions();
             readFileSync(join(distPath, 'index.html')).toString(),
           matrix: { url: new URL(matrixURL), username, password },
           realmSecretSeed: REALM_SECRET_SEED,
-          permissions,
+          permissions: realmPermissions.users,
         },
         {
           deferStartUp: true,
@@ -187,18 +188,6 @@ let realmPermissions = new RealmPermissions();
   let server = new RealmServer(realms, {
     ...(distURL ? { assetsURL: new URL(distURL) } : {}),
   });
-
-  // RealmPermissions expects REALM_USER_PERMISSIONS env var to be set. This is temporary until we start using a database to store user permissions.
-  // For ease of development we are reading it from a file otherwise it needs to be set in the environment.
-  if (
-    process.env.NODE_ENV === 'development' &&
-    !process.env.REALM_USER_PERMISSIONS
-  ) {
-    process.env.REALM_USER_PERMISSIONS = fs.readFileSync(
-      '.realms.json',
-      'utf-8',
-    );
-  }
 
   server.listen(port);
   log.info(`Realm server listening on port ${port}:`);
@@ -232,3 +221,51 @@ let realmPermissions = new RealmPermissions();
   );
   process.exit(1);
 });
+
+function getRealmPermissions(realmUrl: string) {
+  let userPermissions = {} as {
+    [realmUrl: string]: { users: RealmPermissionsInterface };
+  };
+  let userPermissionsjsonContent;
+
+  if (['development', 'test'].includes(process.env.NODE_ENV || '')) {
+    userPermissionsjsonContent = fs.readFileSync(
+      `.realms.json.${process.env.NODE_ENV}`,
+      'utf-8',
+    );
+  } else {
+    userPermissionsjsonContent = process.env.REALM_USER_PERMISSIONS;
+    if (!userPermissionsjsonContent) {
+      throw new Error(
+        `REALM_USER_PERMISSIONS env var is blank. It should have a JSON string value that looks like this:
+          {
+            "https://realm-url-1/": {
+              "users":{
+                "*":["read"],
+                "@hassan:boxel.ai":["read", "write"],
+                ...
+              }
+            },
+            "https://realm-url-2/": { ... }
+          }
+        `,
+      );
+    }
+  }
+
+  try {
+    userPermissions = JSON.parse(userPermissionsjsonContent);
+  } catch (error: any) {
+    throw new Error(
+      `Error while JSON parsing user permissions: ${userPermissionsjsonContent}`,
+    );
+  }
+
+  if (!userPermissions[realmUrl]) {
+    throw new Error(
+      `Missing permissions for realm ${realmUrl} in config ${userPermissionsjsonContent}`,
+    );
+  }
+
+  return userPermissions[realmUrl];
+}
