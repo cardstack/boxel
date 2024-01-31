@@ -131,6 +131,10 @@ export default class Room extends Component<Signature> {
       .timeline-start {
         padding-bottom: var(--boxel-sp);
       }
+
+      .room-actions {
+        box-shadow: var(--boxel-box-shadow);
+      }
     </style>
   </template>
 
