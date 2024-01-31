@@ -10,6 +10,8 @@ declare module '@cardstack/host/templates/*' {
   export default tmpl;
 }
 
+// FIXME add type for *.webp
+
 declare global {
   function showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
   interface Window {
