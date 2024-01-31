@@ -1,16 +1,20 @@
 import Component from '@glimmer/component';
 
+import assistantIcon1x from './ai-assist-icon.webp';
+import assistantIcon2x from './ai-assist-icon@2x.webp';
+import assistantIcon3x from './ai-assist-icon@3x.webp';
+
 interface Signature {
   Element: HTMLButtonElement;
 }
 
 export default class AiAssistantButton extends Component<Signature> {
   <template>
-    {{! template-lint-disable no-inline-styles }}
+    {{! template-lint-disable no-inline-styles style-concatenation }}
     <button
       class='ai-assistant-button'
       data-test-open-ai-assistant
-      style="background-image: image-set(url('/images/ai-assist-icon.webp') 1x, url('/images/ai-assist-icon@2x.webp') 2x, url('/images/ai-assist-icon@3x.webp') 3x)"
+      style='background-image: image-set(url({{assistantIcon1x}}) 1x, url({{assistantIcon2x}}) 2x, url({{assistantIcon3x}}) 3x)'
       ...attributes
     />
     <style>

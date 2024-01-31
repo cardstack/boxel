@@ -48,6 +48,8 @@ import type {
 
 import { getRoom, RoomResource } from '../../resources/room';
 
+import assistantIcon from './ai-assist-icon.webp';
+
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
 
@@ -71,7 +73,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header>
-          <img alt='AI Assistant' src='/images/ai-assist-icon.webp' />
+          <img alt='AI Assistant' src={{assistantIcon}} />
           <span>Assistant</span>
           <IconButton
             @variant='primary'
