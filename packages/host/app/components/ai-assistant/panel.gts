@@ -225,7 +225,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         display: flex;
         padding: var(--boxel-sp-xs) calc(var(--boxel-sp) / 2) var(--boxel-sp-xs)
           var(--boxel-sp-lg);
-        gap: var(--boxel-sp);
+        gap: var(--boxel-sp-xs);
       }
       .ai-assistant-panel header img {
         height: 20px;
