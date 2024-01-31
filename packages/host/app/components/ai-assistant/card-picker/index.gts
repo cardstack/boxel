@@ -11,9 +11,9 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
-
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import RealmIcon from '../../operator-mode/realm-icon';
 import Pill from '../../pill';
