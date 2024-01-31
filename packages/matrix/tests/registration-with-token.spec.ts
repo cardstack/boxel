@@ -101,7 +101,11 @@ test.describe('User Registration w/ Token', () => {
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await registerUser(synapse, 'user1', 'pass');
     await clearLocalStorage(page);
 
@@ -155,7 +159,11 @@ test.describe('User Registration w/ Token', () => {
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await clearLocalStorage(page);
 
     await gotoRegistration(page);
@@ -315,7 +323,7 @@ test.describe('User Registration w/ Token', () => {
     await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await createRegistrationToken(
-      // synapse,
+      synapse,
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
