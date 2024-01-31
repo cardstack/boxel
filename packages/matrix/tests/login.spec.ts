@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { registerUser } from '../docker/synapse';
 import { synapseStop, type SynapseInstance } from '../docker/synapse';
 import {
@@ -12,6 +12,7 @@ import {
   registerRealmUsers,
   startTestingSynapse,
   testHost,
+  test,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
 

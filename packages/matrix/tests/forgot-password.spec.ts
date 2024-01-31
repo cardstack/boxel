@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
   synapseStop,
   updateUser,
@@ -14,6 +14,7 @@ import {
   login,
   registerRealmUsers,
   startTestingSynapse,
+  test,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 

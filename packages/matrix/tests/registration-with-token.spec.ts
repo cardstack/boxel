@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { synapseStop, type SynapseInstance } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
@@ -10,6 +10,7 @@ import {
   logout,
   registerRealmUsers,
   startTestingSynapse,
+  test,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 

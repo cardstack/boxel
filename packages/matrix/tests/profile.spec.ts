@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import {
   synapseStop,
   type SynapseInstance,
@@ -13,6 +13,7 @@ import {
   assertLoggedIn,
   registerRealmUsers,
   startTestingSynapse,
+  test,
 } from '../helpers';
 
 test.describe('Profile', () => {

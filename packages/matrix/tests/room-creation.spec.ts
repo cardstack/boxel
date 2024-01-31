@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { registerUser } from '../docker/synapse';
 import { synapseStop, type SynapseInstance } from '../docker/synapse';
 import {
@@ -9,6 +9,7 @@ import {
   reloadAndOpenAiAssistant,
   registerRealmUsers,
   startTestingSynapse,
+  test,
 } from '../helpers';
 
 test.describe('Room creation', () => {
