@@ -11,8 +11,6 @@ import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import CardPill from '../card-pill';
-
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {
@@ -83,14 +81,12 @@ export default class AiAssistantMessage extends Component<Signature> {
 
           <div>{{yield}}</div>
 
-          {{#if @attachedCards}}
+          {{#if @attachedCards.length}}
             <div class='cards' data-test-message-cards>
-              {{#each @attachedCards as |card i|}}
-                <CardPill
-                  @card={{card}}
-                  data-test-pill-index={{i}}
-                  data-test-message-card={{card.id}}
-                />
+              {{#each this.cardResources as |resource|}}
+                <div data-test-message-card={{resource.card.id}}>
+                  <resource.component />
+                </div>
               {{/each}}
             </div>
           {{/if}}
@@ -188,8 +184,6 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .cards {
-        --pill-height: 1.875rem;
-        --pill-content-max-width: 10rem;
         color: var(--boxel-dark);
         display: flex;
         flex-wrap: wrap;
@@ -197,6 +191,13 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
     </style>
   </template>
+
+  private get cardResources() {
+    return this.args.attachedCards?.map((card) => ({
+      card,
+      component: card.constructor.getComponent(card, 'atom'),
+    }));
+  }
 }
 
 interface AiAssistantConversationSignature {

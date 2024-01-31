@@ -55,7 +55,7 @@ export default class Pill extends Component<PillSignature> {
       }
 
       .icon > :deep(*) {
-        height: 20px;
+        height: var(--pill-icon-size, 1.25rem);
       }
     </style>
   </template>

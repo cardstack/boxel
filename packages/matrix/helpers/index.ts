@@ -320,7 +320,11 @@ export async function assertMessages(
       ).toContainText(message);
     }
     if (cards?.length) {
-      await expect(page.locator(`[data-test-message-cards]`)).toHaveCount(1);
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+        ),
+      ).toHaveCount(1);
       await expect(
         page.locator(
           `[data-test-message-idx="${index}"] [data-test-message-card]`,
@@ -342,7 +346,11 @@ export async function assertMessages(
         }
       });
     } else {
-      await expect(page.locator(`[data-test-message-cards]`)).toHaveCount(0);
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+        ),
+      ).toHaveCount(0);
     }
   }
 }

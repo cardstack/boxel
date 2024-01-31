@@ -6,14 +6,17 @@ import Component from '@glimmer/component';
 import { restartableTask } from 'ember-concurrency';
 
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import CardPill from '../card-pill';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+
+import RealmIcon from '../../operator-mode/realm-icon';
+import Pill from '../../pill';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -30,19 +33,41 @@ export default class AiAssistantCardPicker extends Component<Signature> {
   <template>
     <div class='card-picker'>
       {{#each this.cardsToDisplay as |card i|}}
-        <CardPill
-          @card={{card}}
-          class={{if (eq card.id @autoAttachedCard.id) 'is-autoattached'}}
-          data-test-pill-index={{i}}
-          data-test-selected-card={{card.id}}
-        >
-          <IconButton
-            class='remove-button'
-            @icon={{IconX}}
-            {{on 'click' (fn @removeCard card)}}
-            data-test-remove-card-btn={{i}}
-          />
-        </CardPill>
+        {{#if card.id}}
+          <Pill
+            @inert={{true}}
+            class={{cn
+              'card-pill'
+              is-autoattached=(eq card.id @autoAttachedCard.id)
+            }}
+            data-test-pill-index={{i}}
+            data-test-selected-card={{card.id}}
+          >
+            <:icon>
+              <RealmInfoProvider @fileURL={{card.id}}>
+                <:ready as |realmInfo|>
+                  <RealmIcon
+                    @realmIconURL={{realmInfo.iconURL}}
+                    @realmName={{realmInfo.name}}
+                    width='18'
+                    height='18'
+                  />
+                </:ready>
+              </RealmInfoProvider>
+            </:icon>
+            <:default>
+              <div class='card-title'>
+                {{if card.title card.title 'Untitled Card'}}
+              </div>
+              <IconButton
+                class='remove-button'
+                @icon={{IconX}}
+                {{on 'click' (fn @removeCard card)}}
+                data-test-remove-card-btn={{i}}
+              />
+            </:default>
+          </Pill>
+        {{/if}}
       {{/each}}
       {{#if this.canDisplayAddButton}}
         <AddButton
@@ -86,6 +111,18 @@ export default class AiAssistantCardPicker extends Component<Signature> {
       }
       .remove-button:hover:not(:disabled) {
         --icon-color: var(--boxel-highlight);
+      }
+      .card-pill {
+        --pill-icon-size: 18px;
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-400);
+        height: 1.875rem;
+      }
+      .card-title {
+        max-width: 10rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .is-autoattached {
         border-style: dashed;
