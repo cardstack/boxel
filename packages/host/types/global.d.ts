@@ -10,12 +10,6 @@ declare module '@cardstack/host/templates/*' {
   export default tmpl;
 }
 
-// Types for image files
-declare module '*.webp' {
-  const value: string;
-  export default value;
-}
-
 declare global {
   function showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
   interface Window {
