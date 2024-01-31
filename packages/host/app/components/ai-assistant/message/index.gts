@@ -37,7 +37,7 @@ export default class AiAssistantMessage extends Component<Signature> {
     >
       <div class='meta'>
         {{#if @isFromAssistant}}
-          {{! template-lint-disable no-inline-styles }}
+          {{! template-lint-disable no-inline-styles style-concatenation }}
           <div
             class='ai-avatar'
             style='background-image: image-set(url({{assistantIcon1x}}) 1x, url({{assistantIcon2x}}) 2x, url({{assistantIcon3x}}) 3x)'

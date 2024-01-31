@@ -10,7 +10,7 @@ interface Signature {
 
 export default class AiAssistantButton extends Component<Signature> {
   <template>
-    {{! template-lint-disable no-inline-styles }}
+    {{! template-lint-disable no-inline-styles style-concatenation }}
     <button
       class='ai-assistant-button'
       data-test-open-ai-assistant
