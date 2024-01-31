@@ -8,9 +8,9 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
-import assistantIcon1x from './ai-assist-icon.webp';
-import assistantIcon2x from './ai-assist-icon@2x.webp';
-import assistantIcon3x from './ai-assist-icon@3x.webp';
+import assistantIcon1x from '../ai-assist-icon.webp';
+import assistantIcon2x from '../ai-assist-icon@2x.webp';
+import assistantIcon3x from '../ai-assist-icon@3x.webp';
 
 import type { ComponentLike } from '@glint/template';
 
