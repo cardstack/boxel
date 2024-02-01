@@ -1,6 +1,10 @@
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import { format as formatDate } from 'date-fns';
 
@@ -17,7 +21,10 @@ import {
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
+import type { RoomField } from 'https://cardstack.com/base/room';
+
 import { AiSessionRoom } from '@cardstack/host/components/ai-assistant/panel';
+import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
 
 interface Signature {
   Args: {
@@ -137,7 +144,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
                     )
                     (menuItem
                       'Delete'
-                      (fn @deleteSession session.room.roomId)
+                      (fn this.setItemToDelete session.room)
                       icon=IconTrash
                     )
                   }}
@@ -148,5 +155,24 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         {{/each}}
       </ul>
     {{/if}}
+
+    {{#if this.itemToDelete}}
+      <ToElsewhere
+        @named='delete-modal'
+        @send={{component
+          DeleteModal
+          itemToDelete=this.itemToDelete
+          onConfirm=(fn @deleteSession this.itemToDelete.roomId)
+          onCancel=(fn this.setItemToDelete undefined)
+        }}
+      />
+    {{/if}}
   </template>
+
+  @tracked itemToDelete?: RoomField = undefined;
+
+  @action
+  setItemToDelete(room?: RoomField) {
+    this.itemToDelete = room;
+  }
 }

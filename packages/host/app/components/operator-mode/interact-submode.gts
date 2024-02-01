@@ -10,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { isEqual } from 'lodash';
 import get from 'lodash/get';
 
@@ -25,6 +26,7 @@ import {
   codeRefWithAbsoluteURL,
   moduleFrom,
   RealmPaths,
+  isCardDef,
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -35,6 +37,7 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -205,8 +208,8 @@ export default class InteractSubmode extends Component<Signature> {
         let item = here.findCardInStack(card, stackIndex);
         here.save.perform(item, dismissItem);
       },
-      delete: (card: CardDef | URL): void => {
-        if (!card || card instanceof URL) {
+      delete: (card: CardDef | URL | RoomField): void => {
+        if (!card || card instanceof URL || !isCardDef(card)) {
           throw new Error(`bug: delete called with invalid card "${card}"`);
         }
         if (!here.itemToDelete) {
@@ -619,6 +622,7 @@ export default class InteractSubmode extends Component<Signature> {
             @isDeleteRunning={{this.delete.isRunning}}
           />
         {{/if}}
+        <FromElseWhere @name='delete-modal' />
       </div>
     </SubmodeLayout>
 
