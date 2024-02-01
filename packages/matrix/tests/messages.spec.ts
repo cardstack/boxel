@@ -83,7 +83,7 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     await openRoom(page, room1);
 
-    await expect(page.locator('[data-test-message-index]')).toHaveCount(
+    await expect(page.locator('[data-test-message-idx]')).toHaveCount(
       totalMessageCount,
     );
   });
@@ -99,7 +99,7 @@ test.describe('Room messages', () => {
       },
     ]);
     await expect(
-      page.locator(`[data-test-message-index="0"] .content em`),
+      page.locator(`[data-test-message-idx="0"] .content em`),
     ).toContainText('style');
   });
 
@@ -149,7 +149,7 @@ test.describe('Room messages', () => {
       },
     ]);
     await expect(
-      page.locator(`[data-test-message-index="0"] .content em`),
+      page.locator(`[data-test-message-idx="0"] .content em`),
     ).toContainText('my');
   });
 
