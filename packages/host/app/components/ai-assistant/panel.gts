@@ -168,7 +168,8 @@ export default class AiAssistantPanel extends Component<Signature> {
               <:body>
                 <AiAssistantPastSessionsList
                   @sessions={{this.sortedAiSessionRooms}}
-                  @onSessionSelect={{this.enterRoom}}
+                  @openSession={{this.enterRoom}}
+                  @deleteSession={{this.leaveRoom}}
                 />
               </:body>
             </AiAssistantPanelPopover>

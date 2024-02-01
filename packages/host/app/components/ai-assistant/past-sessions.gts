@@ -1,17 +1,25 @@
-import { fn } from '@ember/helper';
+import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
 import { format as formatDate } from 'date-fns';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
+import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
+import { ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
 import { AiSessionRoom } from '@cardstack/host/components/ai-assistant/panel';
 
 interface Signature {
   Args: {
     sessions: AiSessionRoom[];
-    onSessionSelect: (roomId: string) => void;
+    openSession: (roomId: string) => void;
+    deleteSession: (roomId: string) => void;
   };
   Element: HTMLButtonElement;
 }
@@ -19,14 +27,17 @@ interface Signature {
 export default class AiAssistantPastSessionsList extends Component<Signature> {
   <template>
     <style>
-      ul {
+      .past-sessions {
         list-style-type: none;
         padding: 0;
         margin: 0;
         margin-bottom: var(--boxel-sp-xs);
       }
 
-      li {
+      .session {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
         border-top: 1px solid var(--boxel-300);
         padding-top: var(--boxel-sp-sm);
         padding-left: var(--boxel-sp-xs);
@@ -35,20 +46,20 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         margin-left: var(--boxel-sp-xs);
       }
 
-      li > button {
+      .view-session-button {
         background-color: transparent;
         border: none;
         width: 100%;
         text-align: left;
       }
 
-      li:hover {
+      .session:hover {
         background-color: var(--boxel-200);
         cursor: pointer;
         border-radius: 8px;
       }
 
-      li:hover + li {
+      .session:hover + .session {
         border-top-color: transparent;
       }
 
@@ -73,11 +84,12 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         No past sessions to show.
       </div>
     {{else}}
-      <ul>
+      <ul class='past-sessions'>
         {{#each @sessions as |session|}}
-          <li data-test-joined-room={{session.room.name}}>
+          <li class='session' data-test-joined-room={{session.room.name}}>
             <button
-              {{on 'click' (fn @onSessionSelect session.room.roomId)}}
+              class='view-session-button'
+              {{on 'click' (fn @openSession session.room.roomId)}}
               data-test-enter-room={{session.room.name}}
             >
               <div class='top'>{{session.room.name}}</div>
@@ -86,6 +98,37 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
                   'iiii MMM d, yyyy, h:mm aa'
                 }}</div>
             </button>
+            <BoxelDropdown>
+              <:trigger as |bindings|>
+                <Tooltip @placement='top'>
+                  <:trigger>
+                    <IconButton
+                      @icon={{ThreeDotsHorizontal}}
+                      @width='20px'
+                      @height='20px'
+                      class='more-options-button'
+                      aria-label='Options'
+                      data-test-past-session-options-button
+                      {{bindings}}
+                    />
+                  </:trigger>
+                  <:content>
+                    More Options
+                  </:content>
+                </Tooltip>
+              </:trigger>
+              <:content as |dd|>
+                <Menu
+                  @closeMenu={{dd.close}}
+                  @items={{array
+                    (menuItem
+                      'Open Session' (fn @openSession session.room.roomId)
+                    )
+                    (menuItem 'Delete' (fn @deleteSession session.room.roomId))
+                  }}
+                />
+              </:content>
+            </BoxelDropdown>
           </li>
         {{/each}}
       </ul>
