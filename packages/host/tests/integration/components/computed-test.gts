@@ -771,7 +771,7 @@ module('Integration | computeds', function (hooks) {
       .exists({ count: 3 });
     assert
       .dom('[data-test-links-to-many="collaborators"] [data-test-remove-card]')
-      .doesNotExist({ count: 4 });
+      .doesNotExist();
   });
 
   test('can render an asynchronous computed linksToMany field', async function (this: RenderingTestContext, assert) {
