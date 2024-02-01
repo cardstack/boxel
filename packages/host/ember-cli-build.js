@@ -44,6 +44,10 @@ module.exports = function (defaults) {
                 test: /\.woff2$/,
                 type: 'asset',
               },
+              {
+                test: /\.webp$/,
+                type: 'asset',
+              },
             ],
           },
           plugins: [
