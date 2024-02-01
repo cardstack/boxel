@@ -48,6 +48,8 @@ import type {
 
 import { getRoom, RoomResource } from '../../resources/room';
 
+import assistantIcon from './ai-assist-icon.webp';
+
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
 
@@ -71,7 +73,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header>
-          <img alt='AI Assistant' src='/images/ai-assist-icon.webp' />
+          <img alt='AI Assistant' src={{assistantIcon}} />
           <span>Assistant</span>
           <IconButton
             @variant='primary'
@@ -225,7 +227,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         display: flex;
         padding: var(--boxel-sp-xs) calc(var(--boxel-sp) / 2) var(--boxel-sp-xs)
           var(--boxel-sp-lg);
-        gap: var(--boxel-sp);
+        gap: var(--boxel-sp-xs);
       }
       .ai-assistant-panel header img {
         height: 20px;

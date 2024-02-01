@@ -3,10 +3,17 @@ import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { format as formatDate, formatISO } from 'date-fns';
+import Modifier from 'ember-modifier';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
+
+import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import assistantIcon1x from '../ai-assist-icon.webp';
+import assistantIcon2x from '../ai-assist-icon@2x.webp';
+import assistantIcon3x from '../ai-assist-icon@3x.webp';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -17,26 +24,33 @@ interface Signature {
     datetime: Date;
     isFromAssistant: boolean;
     profileAvatar?: ComponentLike;
+    attachedCards?: CardDef[];
     errorMessage?: string;
     retryAction?: () => void;
   };
   Blocks: { default: [] };
 }
 
-// TODO: Update Boxel::Message component
+class ScrollIntoView extends Modifier {
+  modify(element: HTMLElement) {
+    element.scrollIntoView();
+  }
+}
+
 export default class AiAssistantMessage extends Component<Signature> {
   <template>
     <div
       class={{cn 'ai-assistant-message' is-from-assistant=@isFromAssistant}}
+      {{ScrollIntoView}}
       data-test-ai-assistant-message
       ...attributes
     >
       <div class='meta'>
         {{#if @isFromAssistant}}
-          {{! template-lint-disable no-inline-styles }}
+          {{! template-lint-disable no-inline-styles style-concatenation }}
           <div
             class='ai-avatar'
-            style="background-image: image-set(url('/images/ai-assist-icon.webp') 1x, url('/images/ai-assist-icon@2x.webp') 2x, url('/images/ai-assist-icon@3x.webp') 3x)"
+            style='background-image: image-set(url({{assistantIcon1x}}) 1x, url({{assistantIcon2x}}) 2x, url({{assistantIcon3x}}) 3x)'
           ></div>
         {{else if @profileAvatar}}
           <@profileAvatar />
@@ -49,7 +63,10 @@ export default class AiAssistantMessage extends Component<Signature> {
         {{#if @errorMessage}}
           <div class='error-container'>
             <FailureBordered class='error-icon' />
-            <div class='error-message'>{{@errorMessage}}</div>
+            <div class='error-message' data-test-card-error>
+              Error:
+              {{@errorMessage}}
+            </div>
             {{#if @retryAction}}
               <Button
                 {{on 'click' @retryAction}}
@@ -62,13 +79,25 @@ export default class AiAssistantMessage extends Component<Signature> {
             {{/if}}
           </div>
         {{/if}}
+
         <div class='content'>
           {{@formattedMessage}}
 
           <div>{{yield}}</div>
+
+          {{#if @attachedCards.length}}
+            <div class='cards' data-test-message-cards>
+              {{#each this.cardResources as |resource|}}
+                <div data-test-message-card={{resource.card.id}}>
+                  <resource.component />
+                </div>
+              {{/each}}
+            </div>
+          {{/if}}
         </div>
       </div>
     </div>
+
     <style>
       .ai-assistant-message {
         --ai-assistant-message-avatar-size: 1.25rem; /* 20px. */
@@ -129,7 +158,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         padding: var(--boxel-sp);
       }
       .is-from-assistant .content {
-        background: #433358;
+        background: #3b394b;
         color: var(--boxel-light);
       }
 
@@ -157,8 +186,22 @@ export default class AiAssistantMessage extends Component<Signature> {
         --boxel-button-min-width: max-content;
         border-color: var(--boxel-light);
       }
+
+      .cards {
+        color: var(--boxel-dark);
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxs);
+      }
     </style>
   </template>
+
+  private get cardResources() {
+    return this.args.attachedCards?.map((card) => ({
+      card,
+      component: card.constructor.getComponent(card, 'atom'),
+    }));
+  }
 }
 
 interface AiAssistantConversationSignature {

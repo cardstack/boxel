@@ -305,24 +305,24 @@ export async function assertMessages(
     cards?: { id: string; title?: string }[];
   }[],
 ) {
-  await expect(page.locator('[data-test-message-index]')).toHaveCount(
+  await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messages.length,
   );
   for (let [index, { from, message, cards }] of messages.entries()) {
     await expect(
       page.locator(
-        `[data-test-message-index="${index}"][data-test-boxel-message-from="${from}"]`,
+        `[data-test-message-idx="${index}"][data-test-boxel-message-from="${from}"]`,
       ),
     ).toHaveCount(1);
     if (message != null) {
       await expect(
-        page.locator(`[data-test-message-index="${index}"] .content`),
+        page.locator(`[data-test-message-idx="${index}"] .content`),
       ).toContainText(message);
     }
     if (cards?.length) {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"][data-test-message-cards]`,
+          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
         ),
       ).toHaveCount(1);
       await expect(
@@ -340,7 +340,7 @@ export async function assertMessages(
           // note: attached cards are in atom format (which display the title by default)
           await expect(
             page.locator(
-              `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"] [data-test-card-format="atom"]`,
+              `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"]`,
             ),
           ).toContainText(card.title);
         }
@@ -348,7 +348,7 @@ export async function assertMessages(
     } else {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"][data-test-message-cards]`,
+          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
         ),
       ).toHaveCount(0);
     }
