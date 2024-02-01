@@ -1368,8 +1368,8 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2
       glimmer-scoped-css:
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.4.1
+        version: 0.4.1
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
@@ -15360,6 +15360,18 @@ packages:
       super-fast-md5: 1.0.1
     transitivePeerDependencies:
       - supports-color
+
+  /glimmer-scoped-css@0.4.1:
+    resolution: {integrity: sha512-BWZyBEpmZu0RLnuOaSBJkCjSMoGuxO3glq7JCM1QH0r9Ki8OVdYj+nUIgfg03T5duqbeQqR1Oad8MvDF/O4bCQ==}
+    dependencies:
+      '@embroider/addon-shim': 1.8.6
+      js-string-escape: 1.0.1
+      postcss: 8.4.31
+      postcss-selector-parser: 6.0.13
+      super-fast-md5: 1.0.1
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
 
   /glob-parent@3.1.0:
     resolution: {integrity: sha512-E8Ak/2+dZY6fnzlR7+ueWvhsH1SjHr4jjss4YS/h4py44jY9MhK/VFdaZJAWDz6BbL21KeteKxFSFpq8OS5gVA==}
