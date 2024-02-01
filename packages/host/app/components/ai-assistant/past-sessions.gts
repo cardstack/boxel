@@ -11,7 +11,11 @@ import {
   Tooltip,
 } from '@cardstack/boxel-ui/components';
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
-import { ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
+import {
+  Upload,
+  IconTrash,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
 
 import { AiSessionRoom } from '@cardstack/host/components/ai-assistant/panel';
 
@@ -77,6 +81,10 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         text-align: center;
         color: var(--boxel-450);
       }
+
+      .more-options-menu :deep(svg) {
+        --icon-stroke-width: 1.5px;
+      }
     </style>
 
     {{#if (eq @sessions.length 0)}}
@@ -119,12 +127,19 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
               </:trigger>
               <:content as |dd|>
                 <Menu
+                  class='more-options-menu'
                   @closeMenu={{dd.close}}
                   @items={{array
                     (menuItem
-                      'Open Session' (fn @openSession session.room.roomId)
+                      'Open Session'
+                      (fn @openSession session.room.roomId)
+                      icon=Upload
                     )
-                    (menuItem 'Delete' (fn @deleteSession session.room.roomId))
+                    (menuItem
+                      'Delete'
+                      (fn @deleteSession session.room.roomId)
+                      icon=IconTrash
+                    )
                   }}
                 />
               </:content>
