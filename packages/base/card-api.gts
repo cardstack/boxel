@@ -1037,7 +1037,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     format: Format,
     context?: CardContext,
   ): BoxComponent {
-    if (format === 'edit') {
+    if (format === 'edit' && !this.computeVia) {
       let innerModel = model.field(
         this.name as keyof BaseDef,
       ) as unknown as Box<CardDef | null>;
@@ -1435,6 +1435,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
       model.value.constructor.isFieldDef
     ) {
       renderFormat = 'atom';
+    }
+    if (format === 'edit' && this.computeVia) {
+      renderFormat = 'embedded';
     }
     return getLinksToManyComponent({
       model,
