@@ -1406,4 +1406,41 @@ module('Acceptance | code submode tests', function (hooks) {
         'can not create new card for linksToMany field in code mode',
       );
   });
+
+  test('closes the top-most modal first when clicking overlay background', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitFor('[data-test-code-mode][data-test-save-idle]');
+    await waitFor('[data-test-new-file-button]');
+    await click('[data-test-new-file-button]');
+    await click(`[data-test-boxel-menu-item-text="Card Instance"]`);
+    await waitFor(`[data-test-create-file-modal][data-test-ready]`);
+
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    let cardCatalogModalOverlay = document.querySelector(
+      '[data-test-card-catalog-modal]',
+    )?.previousElementSibling;
+    assert.dom(cardCatalogModalOverlay).exists();
+    await click(cardCatalogModalOverlay!);
+    assert.dom('[data-test-card-catalog-modal]').doesNotExist();
+
+    let createFileModalOverlay = document.querySelector(
+      '[data-test-create-file-modal]',
+    )?.previousElementSibling;
+    assert.dom(createFileModalOverlay).exists();
+    await click(createFileModalOverlay!);
+    assert.dom('[data-test-create-file-modal]').doesNotExist();
+  });
 });

@@ -358,7 +358,9 @@ export default class EditFieldModal extends Component<Signature> {
       @size='medium'
       @centered={{true}}
       {{focusTrap
-        focusTrapOptions=(hash initialFocus='.edit-field-modal input')
+        focusTrapOptions=(hash
+          initialFocus='.edit-field-modal input' allowOutsideClick=true
+        )
       }}
       @cardContainerClass='edit-field'
       class='edit-field-modal'
