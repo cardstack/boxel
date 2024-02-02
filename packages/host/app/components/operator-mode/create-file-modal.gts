@@ -709,7 +709,7 @@ export class ${className} extends ${exportName} {
       await this.cardService.saveModel(this, card);
       this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
     } catch (e: any) {
-      console.log('error???', e);
+      console.log('Error saving', e);
       this.saveError = `Error creating card instance: ${e.message}`;
     }
   });
