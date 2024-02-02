@@ -5,6 +5,7 @@ import {
   fillIn,
   focus,
   blur,
+  setupOnerror,
   triggerEvent,
   triggerKeyEvent,
   typeIn,
@@ -1011,6 +1012,13 @@ module('Integration | operator-mode', function (hooks) {
 
   // TODO CS-6268 visual indicator for failed auto-save should build off of this test
   test('an error in auto-save is handled gracefully', async function (assert) {
+    let done = assert.async();
+
+    setupOnerror(function (error) {
+      assert.ok(error, 'expected a global error');
+      done();
+    });
+
     await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
 
     await renderComponent(
@@ -1028,8 +1036,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-pet]');
     // Card still runs (our error was designed to only fire during save)
-    // despite save error and there are no uncaught exceptions (which QUnit
-    // fails as a "Global" error)
+    // despite save error
     assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
   });
 
