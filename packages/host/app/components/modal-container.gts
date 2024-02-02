@@ -44,6 +44,7 @@ export default class ModalContainer extends Component<Signature> {
       @isOpen={{this.isOpen}}
       @onClose={{@onClose}}
       @centered={{@centered}}
+      @zIndex={{@zIndex}}
       style={{this.styleString}}
       ...attributes
     >
