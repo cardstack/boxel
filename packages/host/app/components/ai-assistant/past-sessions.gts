@@ -1,8 +1,6 @@
-import { fn, array } from '@ember/helper';
+import { fn, array, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
@@ -23,7 +21,7 @@ import {
 
 import type { RoomField } from 'https://cardstack.com/base/room';
 
-import { AiSessionRoom } from '@cardstack/host/components/ai-assistant/panel';
+import type { AiSessionRoom } from '@cardstack/host/components/ai-assistant/panel';
 import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
 
 interface Signature {
@@ -31,6 +29,8 @@ interface Signature {
     sessions: AiSessionRoom[];
     openSession: (roomId: string) => void;
     deleteSession: (roomId: string) => void;
+    roomToDelete: RoomField | undefined;
+    setRoomToDelete: (room: RoomField | undefined) => void;
   };
   Element: HTMLButtonElement;
 }
@@ -143,9 +143,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
                       icon=Upload
                     )
                     (menuItem
-                      'Delete'
-                      (fn this.setItemToDelete session.room)
-                      icon=IconTrash
+                      'Delete' (fn @setRoomToDelete session.room) icon=IconTrash
                     )
                   }}
                 />
@@ -156,23 +154,19 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
       </ul>
     {{/if}}
 
-    {{#if this.itemToDelete}}
-      <ToElsewhere
-        @named='delete-modal'
-        @send={{component
-          DeleteModal
-          itemToDelete=this.itemToDelete
-          onConfirm=(fn @deleteSession this.itemToDelete.roomId)
-          onCancel=(fn this.setItemToDelete undefined)
-        }}
-      />
-    {{/if}}
+    {{#let @roomToDelete.roomId @roomToDelete.name as |id name|}}
+      {{#if id}}
+        <ToElsewhere
+          @named='delete-modal'
+          @send={{component
+            DeleteModal
+            itemToDelete=id
+            onConfirm=(fn @deleteSession id)
+            onCancel=(fn @setRoomToDelete undefined)
+            itemInfo=(hash type='room' name=(if name name id) id=id)
+          }}
+        />
+      {{/if}}
+    {{/let}}
   </template>
-
-  @tracked itemToDelete?: RoomField = undefined;
-
-  @action
-  setItemToDelete(room?: RoomField) {
-    this.itemToDelete = room;
-  }
 }

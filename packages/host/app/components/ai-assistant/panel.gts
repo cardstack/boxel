@@ -9,6 +9,7 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 import { restartableTask, timeout } from 'ember-concurrency';
+import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { Velcro } from 'ember-velcro';
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -170,6 +171,8 @@ export default class AiAssistantPanel extends Component<Signature> {
                   @sessions={{this.sortedAiSessionRooms}}
                   @openSession={{this.enterRoom}}
                   @deleteSession={{this.leaveRoom}}
+                  @roomToDelete={{this.roomToDelete}}
+                  @setRoomToDelete={{this.setRoomToDelete}}
                 />
               </:body>
             </AiAssistantPanelPopover>
@@ -188,6 +191,9 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{/unless}}
       </div>
     </Velcro>
+    {{#if this.roomToDelete}}
+      <FromElseWhere @name='delete-modal' />
+    {{/if}}
 
     <style>
       .ai-assistant-panel {
@@ -292,6 +298,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private isShowingCreateNew = false;
   @tracked private newRoomName = '';
   @tracked private roomNameError: string | undefined;
+  @tracked private roomToDelete: RoomField | undefined = undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -417,9 +424,14 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.isShowingPastSessions = false;
   }
 
+  @action private setRoomToDelete(room: RoomField | undefined) {
+    this.roomToDelete = room;
+  }
+
   @action
   private leaveRoom(roomId: string) {
     this.doLeaveRoom.perform(roomId);
+    this.roomToDelete = undefined;
   }
 
   private doLeaveRoom = restartableTask(async (roomId: string) => {
