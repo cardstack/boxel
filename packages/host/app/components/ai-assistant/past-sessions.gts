@@ -123,7 +123,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
                       @height='20px'
                       class='more-options-button'
                       aria-label='Options'
-                      data-test-past-session-options-button
+                      data-test-past-session-options-button={{session.room.name}}
                       {{bindings}}
                     />
                   </:trigger>

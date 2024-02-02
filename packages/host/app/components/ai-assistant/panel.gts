@@ -183,10 +183,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           {{#if this.doCreateRoom.isRunning}}
             <LoadingIndicator />
           {{else if this.currentRoomId}}
-            <Room
-              @roomId={{this.currentRoomId}}
-              @leaveRoom={{this.leaveRoom}}
-            />
+            <Room @roomId={{this.currentRoomId}} />
           {{/if}}
         {{/unless}}
       </div>
