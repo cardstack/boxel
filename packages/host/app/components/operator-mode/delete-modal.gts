@@ -1,19 +1,17 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+
 import Component from '@glimmer/component';
 
 import { BoxelButton, Modal } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { RoomField } from 'https://cardstack.com/base/room';
-
-import { isCardDef } from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
-    itemToDelete: CardDef | URL | RoomField | null | undefined;
-    onConfirm: (item: CardDef | URL | RoomField) => void;
+    itemToDelete: CardDef | URL | null | undefined;
+    onConfirm: (item: CardDef | URL) => void;
     onCancel: () => void;
     isDeleteRunning?: boolean;
   };
@@ -108,32 +106,16 @@ export default class DeleteModal extends Component<Signature> {
   }
 
   private get itemType() {
-    if (this.item instanceof URL) {
-      return 'file';
-    } else if (isCardDef(this.item)) {
-      return 'card';
-    } else {
-      return 'room';
-    }
+    return this.item instanceof URL ? 'file' : 'card';
   }
 
   private get name() {
-    if (this.item instanceof URL) {
-      return this.item.href.split('/').pop()!;
-    } else if (isCardDef(this.item)) {
-      return this.item.title;
-    } else {
-      return this.item.name;
-    }
+    return this.item instanceof URL
+      ? this.item.href.split('/').pop()!
+      : this.item.title;
   }
 
   private get id() {
-    if (this.item instanceof URL) {
-      return this.item.href;
-    } else if (isCardDef(this.item)) {
-      return this.item.id;
-    } else {
-      return this.item.roomId;
-    }
+    return this.item instanceof URL ? this.item.href : this.item.id;
   }
 }
