@@ -880,7 +880,7 @@ module('Integration | operator-mode', function (hooks) {
       room_id: 'testroom',
       state_key: 'state',
       type: 'm.room.message',
-      origin_server_ts: Date.now(),
+      origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
       content: {
         body: 'card with error',
         formatted_body: 'card with error',
