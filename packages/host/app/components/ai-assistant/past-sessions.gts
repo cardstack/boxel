@@ -2,9 +2,8 @@ import { fn, array, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
-
 import { format as formatDate } from 'date-fns';
+import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import {
   BoxelDropdown,
@@ -19,10 +18,10 @@ import {
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
-import type { RoomField } from 'https://cardstack.com/base/room';
-
 import type { AiSessionRoom } from '@cardstack/host/components/ai-assistant/panel';
 import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
+
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 interface Signature {
   Args: {
