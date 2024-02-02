@@ -51,6 +51,46 @@ export class MatrixClient {
     this.access = { accessToken, deviceId, userId };
   }
 
+  async rooms() {
+    if (!this.access) {
+      throw new Error(`Missing matrix access token`);
+    }
+    let response = await fetch(
+      `${this.matrixURL.href}_matrix/client/v3/joined_rooms`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.access.accessToken}`,
+        },
+      },
+    );
+
+    return (await response.json()) as { joined_rooms: string[] };
+  }
+
+  async joinRoom(roomId: string) {
+    if (!this.access) {
+      throw new Error(`Missing matrix access token`);
+    }
+    let response = await fetch(
+      `${this.matrixURL.href}_matrix/client/v3/rooms/${roomId}/join`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.access.accessToken}`,
+        },
+      },
+    );
+    if (!response.ok) {
+      let json = await response.json();
+      throw new Error(
+        `Unable to join room ${roomId}: status ${
+          response.status
+        } - ${JSON.stringify(json)}`,
+      );
+    }
+  }
+
   async createDM(invite: string): Promise<string> {
     if (!this.access) {
       throw new Error(`Missing matrix access token`);
