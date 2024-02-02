@@ -47,6 +47,18 @@ const files: Record<string, any> = {
       },
     },
   },
+  'error.gts': `
+    import { CardDef } from 'https://cardstack.com/base/card-api';
+
+    export default class ErrorCard extends CardDef {
+      static displayName = 'error';
+
+      constructor(owner: unknown, args: any) {
+        super(owner, args);
+        throw new Error('A deliberate constructor error');
+      }
+    }
+  `,
   'pet.gts': `
     import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
     import StringField from "https://cardstack.com/base/string";
@@ -74,6 +86,28 @@ const files: Record<string, any> = {
       @field pet = linksTo(Pet);
     }
   `,
+  'Catalog-Entry/error.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        title: 'Error',
+        description: 'Catalog entry for Error',
+        ref: {
+          module: '../error',
+          name: 'default',
+        },
+        demo: {
+          title: 'Error title',
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/catalog-entry',
+          name: 'CatalogEntry',
+        },
+      },
+    },
+  },
   'Catalog-Entry/pet.json': {
     data: {
       type: 'card',
@@ -282,6 +316,41 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
 
     await deferred.promise;
+  });
+
+  test<TestContextWithSave>('an error when creating a new card instance is shown', async function (assert) {
+    const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
+    await openNewFileModal('Card Instance');
+    assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
+    await waitFor(`[data-test-selected-type="General Card"]`);
+    assert
+      .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
+      .hasText('Adopted From');
+    assert.dom(`[data-test-selected-type]`).hasText('General Card');
+    assert
+      .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
+      .hasAttribute('src', baseRealmIconURL);
+
+    // card type selection
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/error"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/error"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Error"]`);
+    assert.dom(`[data-test-selected-type]`).hasText('Error');
+    assert
+      .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
+      .hasAttribute('src', testRealmAIconURL);
+
+    await click('[data-test-create-card-instance]');
+
+    await waitFor('[data-test-create-file-modal] [data-test-error-message]');
+    assert
+      .dom('[data-test-create-file-modal] [data-test-error-message]')
+      .containsText(
+        'Error creating card instance: A deliberate constructor error',
+      );
   });
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from a remote realm', async function (assert) {

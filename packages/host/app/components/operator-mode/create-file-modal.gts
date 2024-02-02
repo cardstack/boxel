@@ -183,6 +183,11 @@ export default class CreateFileModal extends Component<Signature> {
             {{/if}}
           {{/if}}
         {{/if}}
+        {{#if this.saveError}}
+          <div class='error-message' data-test-error-message>
+            {{this.saveError}}
+          </div>
+        {{/if}}
       </:content>
       <:footer>
         {{#if this.isModalOpen}}
@@ -291,6 +296,10 @@ export default class CreateFileModal extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-lg);
         line-height: 1.82;
       }
+      .error-message {
+        color: var(--boxel-error-100);
+        margin-top: var(--boxel-sp-lg);
+      }
     </style>
   </template>
 
@@ -301,6 +310,7 @@ export default class CreateFileModal extends Component<Signature> {
   @tracked private displayName = '';
   @tracked private fileName = '';
   @tracked private fileNameError: string | undefined;
+  @tracked private saveError: string | undefined;
   @tracked private currentRequest:
     | {
         fileType: FileType;
@@ -688,16 +698,20 @@ export class ${className} extends ${exportName} {
       },
     };
 
-    let card = await this.cardService.createFromSerialized(doc.data, doc);
+    try {
+      let card = await this.cardService.createFromSerialized(doc.data, doc);
 
-    if (!card) {
-      throw new Error(
-        `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
-      );
+      if (!card) {
+        throw new Error(
+          `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
+        );
+      }
+      await this.cardService.saveModel(this, card);
+      this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
+    } catch (e: any) {
+      console.log('error???', e);
+      this.saveError = `Error creating card instance: ${e.message}`;
     }
-
-    await this.cardService.saveModel(this, card);
-    this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
   });
 }
 
