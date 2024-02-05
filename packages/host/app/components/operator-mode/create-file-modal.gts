@@ -631,6 +631,7 @@ export class ${className} extends ${exportName} {
       await this.cardService.saveSource(url, src.join('\n').trim());
       this.currentRequest.newFileDeferred.fulfill(url);
     } catch (e: any) {
+      // FIXME how to differentiate between new field vs card definition?
       console.log('Error saving card definition', e);
       this.saveError = `Error creating card definition: ${e.message}`;
     }
