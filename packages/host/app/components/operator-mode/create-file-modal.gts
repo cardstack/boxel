@@ -522,22 +522,20 @@ export default class CreateFileModal extends Component<Signature> {
     }
     if (!this.selectedRealmURL) {
       throw new Error(
-        `bug: cannot call createCardDefinition without a selected realm URL`,
+        `bug: cannot call createDefinition without a selected realm URL`,
       );
     }
     if (!this.selectedCatalogEntry && !this.definitionClass) {
       throw new Error(
-        `bug: cannot call createCardDefinition without a selected catalog entry or definitionClass `,
+        `bug: cannot call createDefinition without a selected catalog entry or definitionClass `,
       );
     }
     if (!this.fileName) {
-      throw new Error(
-        `bug: cannot call createCardDefinition without a file name`,
-      );
+      throw new Error(`bug: cannot call createDefinition without a file name`);
     }
     if (!this.displayName) {
       throw new Error(
-        `bug: cannot call createCardDefinition without a display name`,
+        `bug: cannot call createDefinition without a display name`,
       );
     }
 
