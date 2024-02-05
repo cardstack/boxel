@@ -379,6 +379,7 @@ export default class CreateFileModal extends Component<Signature> {
     this.selectedCatalogEntry = undefined;
     this.currentRequest = undefined;
     this.fileNameError = undefined;
+    this.saveError = undefined;
     this.displayName = '';
     this.fileName = '';
   }

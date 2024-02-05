@@ -351,6 +351,13 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       .containsText(
         'Error creating card instance: A deliberate constructor error',
       );
+
+    await click('[data-test-cancel-create-file]');
+    await openNewFileModal('Card Instance');
+
+    assert
+      .dom('[data-test-create-file-modal] [data-test-error-message]')
+      .doesNotExist();
   });
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from a remote realm', async function (assert) {
