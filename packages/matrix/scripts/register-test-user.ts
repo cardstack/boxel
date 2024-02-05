@@ -1,6 +1,6 @@
 import * as childProcess from 'child_process';
 
-import { loginUser } from '../docker/synapse';
+import { loginUser, removeRateLimit } from '../docker/synapse';
 
 export const adminUsername = 'admin';
 export const adminPassword = 'password';
@@ -22,6 +22,7 @@ let password = process.env.PASSWORD || adminPassword;
               );
               return;
             } else {
+              await removeRateLimit(adminUsername, adminPassword, username);
               console.log(
                 `User ${username} already exists and the password matches`,
               );
@@ -31,6 +32,7 @@ let password = process.env.PASSWORD || adminPassword;
           }
           reject(err);
         }
+        await removeRateLimit(adminUsername, adminPassword, username);
         console.log(stdout.trim());
         resolve(stdout.trim());
       },

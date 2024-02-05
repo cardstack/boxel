@@ -298,6 +298,35 @@ export async function createRegistrationToken(
   }
 }
 
+export async function removeRateLimit(
+  adminUsername: string,
+  adminPassword: string,
+  username: string,
+): Promise<void> {
+  console.log(
+    `Logging in as admin user to remove rate limit for user ${username}`,
+  );
+  let { accessToken } = await loginUser(adminUsername, adminPassword);
+  let response = await fetch(
+    `http://localhost:8008/_synapse/admin/v1/users/@${username}:localhost/override_ratelimit`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ messages_per_second: 0, burst_count: 0 }),
+    },
+  );
+
+  console.log(
+    `Received: ${response.status}, ${response.statusText}, ${JSON.stringify(
+      await response.json(),
+    )}`,
+  );
+
+  return;
+}
+
 export async function updateUser(
   adminAccessToken: string,
   userId: string,
