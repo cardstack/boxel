@@ -1,11 +1,9 @@
 import { MatrixClient } from './matrix-client';
 
 export class RealmAuthClient {
-  private matrixUsername: string;
-  private matrixPassword: string;
-  private matrixURL: URL;
   private realmURL: URL;
-  private rawJWT: string | undefined;
+  private jwt: string | undefined;
+  private matrixClient: MatrixClient;
 
   constructor(
     matrixUsername: string,
@@ -13,51 +11,39 @@ export class RealmAuthClient {
     matrixURL: URL,
     realmURL: URL,
   ) {
-    this.matrixUsername = matrixUsername;
-    this.matrixPassword = matrixPassword;
-    this.matrixURL = matrixURL;
     this.realmURL = realmURL;
+    this.matrixClient = new MatrixClient(
+      matrixURL,
+      matrixUsername,
+      matrixPassword,
+    );
   }
 
   async getJWT() {
     let extraPeriodBeforeExpirySeconds = 60;
-    let rawJWT: string;
+    let jwt: string;
 
-    if (!this.rawJWT) {
-      rawJWT = await this.createRealmSession();
-      this.rawJWT = rawJWT;
-      return rawJWT;
+    if (!this.jwt) {
+      jwt = await this.createRealmSession();
+      this.jwt = jwt;
+      return jwt;
     } else {
-      let jwtData = JSON.parse(atob(this.rawJWT.split('.')[1]));
-      // If the token is about to expire in extraPeriodBeforeExpirySeconds, create a new one just to make sure we reduce the risk of outdated tokens
+      let jwtData = JSON.parse(atob(this.jwt.split('.')[1]));
+      // If the token is about to expire (in extraPeriodBeforeExpirySeconds), create a new one just to make sure we reduce the risk of the token getting outdated during things happening in createRealmSession
       if (jwtData.exp - extraPeriodBeforeExpirySeconds < Date.now() / 1000) {
-        rawJWT = await this.createRealmSession();
-        this.rawJWT = rawJWT;
-        return rawJWT;
+        jwt = await this.createRealmSession();
+        this.jwt = jwt;
+        return jwt;
       } else {
-        return this.rawJWT;
+        return this.jwt;
       }
     }
   }
 
-  async createRealmSession() {
-    let matrixClient = new MatrixClient(
-      this.matrixURL,
-      this.matrixUsername,
-      this.matrixPassword,
-    );
+  private async createRealmSession() {
+    await this.matrixClient.login();
 
-    await matrixClient.login();
-
-    let initialResponse = await fetch(`${this.realmURL.href}_session`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        user: matrixClient.userId,
-      }),
-    });
+    let initialResponse = await this.initiateSessionRequest();
 
     if (initialResponse.status !== 401) {
       throw new Error(
@@ -74,36 +60,52 @@ export class RealmAuthClient {
 
     let { room, challenge } = initialJSON;
 
-    let rooms = (await matrixClient.rooms()).joined_rooms;
+    let rooms = (await this.matrixClient.getRooms()).joined_rooms;
 
     if (!rooms.includes(room)) {
-      await matrixClient.joinRoom(room);
+      await this.matrixClient.joinRoom(room);
     }
 
-    await matrixClient.sendRoomEvent(room, 'm.room.message', {
+    await this.matrixClient.sendRoomEvent(room, 'm.room.message', {
       body: `auth-response: ${challenge}`,
       msgtype: 'm.text',
     });
 
-    let challengeResponse = await fetch(`${this.realmURL.href}_session`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        user: matrixClient.userId,
-        challenge,
-      }),
-    });
+    let challengeResponse = await this.challengeRequest(challenge);
 
-    let rawJWT = challengeResponse.headers.get('Authorization');
+    let jwt = challengeResponse.headers.get('Authorization');
 
-    if (!rawJWT) {
+    if (!jwt) {
       throw new Error(
         "expected 'Authorization' header in response to POST session but it was missing",
       );
     }
 
-    return rawJWT;
+    return jwt;
+  }
+
+  private async initiateSessionRequest() {
+    return fetch(`${this.realmURL.href}_session`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        user: this.matrixClient.userId,
+      }),
+    });
+  }
+
+  private async challengeRequest(challenge: string) {
+    return fetch(`${this.realmURL.href}_session`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        user: this.matrixClient.userId,
+        challenge,
+      }),
+    });
   }
 }

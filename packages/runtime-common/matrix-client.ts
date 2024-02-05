@@ -51,7 +51,7 @@ export class MatrixClient {
     this.access = { accessToken, deviceId, userId };
   }
 
-  async rooms() {
+  async getRooms() {
     if (!this.access) {
       throw new Error(`Missing matrix access token`);
     }
