@@ -629,8 +629,13 @@ export class ${className} extends ${exportName} {
     src.push(`  */`);
     src.push(`}`);
 
-    await this.cardService.saveSource(url, src.join('\n').trim());
-    this.currentRequest.newFileDeferred.fulfill(url);
+    try {
+      await this.cardService.saveSource(url, src.join('\n').trim());
+      this.currentRequest.newFileDeferred.fulfill(url);
+    } catch (e: any) {
+      console.log('Error saving card definition', e);
+      this.saveError = `Error creating card definition: ${e.message}`;
+    }
   });
 
   private duplicateCardInstance = restartableTask(async () => {

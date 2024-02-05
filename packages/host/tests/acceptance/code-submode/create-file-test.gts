@@ -195,6 +195,14 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       loader,
       contents: filesB,
       realmURL: testRealmURL2,
+      onFetch: async (req: Request) => {
+        // Some tests need a simulated creation failure
+        if (req.url.includes('fetch-failure')) {
+          throw new Error('A deliberate fetch error');
+        }
+
+        return req;
+      },
     });
     ({ adapter } = await setupAcceptanceTestRealm({
       loader,
@@ -648,6 +656,28 @@ export class TestCard extends Person {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+  });
+
+  test<TestContextWithSave>('an error when creating a new card definition is shown', async function (assert) {
+    await openNewFileModal('Card Definition');
+
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Person"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-fetch-failure-card');
+
+    await click('[data-test-create-definition]');
+
+    await waitFor('[data-test-create-file-modal] [data-test-error-message]');
+    assert
+      .dom('[data-test-create-file-modal] [data-test-error-message]')
+      .containsText('Error creating card definition')
+      .containsText('A deliberate fetch error');
   });
 
   test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
