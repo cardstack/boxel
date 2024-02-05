@@ -40,6 +40,7 @@ import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
 import SuccessBordered from './icons/success-bordered.gts';
 import ThreeDotsHorizontal from './icons/three-dots-horizontal.gts';
+import Upload from './icons/upload.gts';
 import Warning from './icons/warning.gts';
 
 export const ALL_ICON_COMPONENTS = [
@@ -80,6 +81,7 @@ export const ALL_ICON_COMPONENTS = [
   Sparkle,
   SuccessBordered,
   ThreeDotsHorizontal,
+  Upload,
   Warning,
 ];
 export {
@@ -121,5 +123,6 @@ export {
   Sparkle,
   SuccessBordered,
   ThreeDotsHorizontal,
+  Upload,
   Warning,
 };

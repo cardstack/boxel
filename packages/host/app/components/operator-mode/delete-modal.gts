@@ -10,10 +10,15 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
-    itemToDelete: CardDef | URL | null | undefined;
-    onConfirm: (item: CardDef | URL) => void;
+    itemToDelete: CardDef | URL | string | null | undefined;
+    onConfirm: (item: CardDef | URL | string) => void;
     onCancel: () => void;
     isDeleteRunning?: boolean;
+    itemInfo?: {
+      type: string;
+      name: string;
+      id: string;
+    };
   };
 }
 
@@ -21,7 +26,7 @@ export default class DeleteModal extends Component<Signature> {
   <template>
     <Modal
       data-test-delete-modal-container
-      data-test-delete-modal={{this.id}}
+      data-test-delete-modal={{this.itemInfo.id}}
       @layer='urgent'
       @size='x-small'
       @isOpen={{true}}
@@ -31,8 +36,8 @@ export default class DeleteModal extends Component<Signature> {
       <section class='delete'>
         <p class='content' data-test-delete-msg>
           Delete the
-          {{this.itemType}}<br />
-          <strong>{{this.name}}</strong>?
+          {{this.itemInfo.type}}<br />
+          <strong>{{this.itemInfo.name}}</strong>?
         </p>
         <p class='content disclaimer'>This action is not reversible.</p>
         <footer class='buttons'>
@@ -105,17 +110,27 @@ export default class DeleteModal extends Component<Signature> {
     return this.args.itemToDelete;
   }
 
-  private get itemType() {
-    return this.item instanceof URL ? 'file' : 'card';
-  }
+  private get itemInfo() {
+    if (typeof this.item === 'string' && !this.args.itemInfo) {
+      throw new Error('DeleteModal requires itemInfo');
+    }
 
-  private get name() {
-    return this.item instanceof URL
-      ? this.item.href.split('/').pop()!
-      : this.item.title;
-  }
+    if (this.args.itemInfo || typeof this.item === 'string') {
+      return this.args.itemInfo;
+    }
 
-  private get id() {
-    return this.item instanceof URL ? this.item.href : this.item.id;
+    if (this.item instanceof URL) {
+      return {
+        type: 'file',
+        name: this.item.href.split('/').pop()!,
+        id: this.item.href,
+      };
+    }
+
+    return {
+      type: 'card',
+      name: this.item.title,
+      id: this.item.id,
+    };
   }
 }

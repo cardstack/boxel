@@ -10,6 +10,7 @@ import {
   BoxelDropdown,
   IconButton,
   Menu,
+  Tooltip,
 } from '@cardstack/boxel-ui/components';
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 
@@ -91,15 +92,22 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
 
         <BoxelDropdown>
           <:trigger as |bindings|>
-            <IconButton
-              @icon={{ThreeDotsHorizontal}}
-              @width='20px'
-              @height='20px'
-              class='header-actions__button'
-              aria-label='Options'
-              data-test-embedded-card-options-button
-              {{bindings}}
-            />
+            <Tooltip @placement='top'>
+              <:trigger>
+                <IconButton
+                  @icon={{ThreeDotsHorizontal}}
+                  @width='20px'
+                  @height='20px'
+                  class='header-actions__button'
+                  aria-label='Options'
+                  data-test-embedded-card-options-button
+                  {{bindings}}
+                />
+              </:trigger>
+              <:content>
+                More Options
+              </:content>
+            </Tooltip>
           </:trigger>
           <:content as |dd|>
             <Menu
