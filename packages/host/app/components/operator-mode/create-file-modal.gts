@@ -92,7 +92,9 @@ export default class CreateFileModal extends Component<Signature> {
       @onClose={{this.onCancel}}
       {{focusTrap
         isActive=this.onSetup.isIdle
-        focusTrapOptions=(hash initialFocus=this.initialFocusSelector)
+        focusTrapOptions=(hash
+          initialFocus=this.initialFocusSelector allowOutsideClick=true
+        )
       }}
       data-test-ready={{this.onSetup.isIdle}}
       data-test-create-file-modal

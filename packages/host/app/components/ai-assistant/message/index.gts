@@ -11,10 +11,6 @@ import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import assistantIcon1x from '../ai-assist-icon.webp';
-import assistantIcon2x from '../ai-assist-icon@2x.webp';
-import assistantIcon3x from '../ai-assist-icon@3x.webp';
-
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {
@@ -47,11 +43,7 @@ export default class AiAssistantMessage extends Component<Signature> {
     >
       <div class='meta'>
         {{#if @isFromAssistant}}
-          {{! template-lint-disable no-inline-styles style-concatenation }}
-          <div
-            class='ai-avatar'
-            style='background-image: image-set(url({{assistantIcon1x}}) 1x, url({{assistantIcon2x}}) 2x, url({{assistantIcon3x}}) 3x)'
-          ></div>
+          <div class='ai-avatar'></div>
         {{else if @profileAvatar}}
           <@profileAvatar />
         {{/if}}
@@ -116,6 +108,12 @@ export default class AiAssistantMessage extends Component<Signature> {
       .ai-avatar {
         width: var(--ai-assistant-message-avatar-size);
         height: var(--ai-assistant-message-avatar-size);
+
+        background-image: image-set(
+          url('../ai-assist-icon.webp') 1x,
+          url('../ai-assist-icon@2x.webp') 2x,
+          url('../ai-assist-icon@3x.webp')
+        );
         background-repeat: no-repeat;
         background-size: var(--ai-assistant-message-avatar-size);
       }
