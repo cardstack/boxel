@@ -2,12 +2,12 @@ import { TokenField, CurrencyField } from './asset';
 
 export function balanceInCurrency(
   balance: number | null | undefined,
-  payment: TokenField | CurrencyField | null | undefined,
+  payment: TokenField | CurrencyField | null | undefined, // TODO: work exchange rate into this
 ) {
-  if (balance == null || payment?.exchangeRate == null) {
+  if (balance == null) {
     return 0;
   }
-  let total = balance * payment.exchangeRate;
+  let total = balance * 1;
   if (payment.name === 'USD') {
     return formatUSD(total);
   } else {
