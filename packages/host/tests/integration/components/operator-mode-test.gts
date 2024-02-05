@@ -880,7 +880,7 @@ module('Integration | operator-mode', function (hooks) {
       room_id: 'testroom',
       state_key: 'state',
       type: 'm.room.message',
-      origin_server_ts: Date.now(),
+      origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
       content: {
         body: 'card with error',
         formatted_body: 'card with error',
@@ -916,6 +916,7 @@ module('Integration | operator-mode', function (hooks) {
       .containsText(
         'Error: cannot render card http://this-is-not-a-real-card.com/: status: 500 - Failed to fetch.',
       );
+    await percySnapshot(assert);
   });
 
   test('it can handle an error in a room objective card', async function (assert) {

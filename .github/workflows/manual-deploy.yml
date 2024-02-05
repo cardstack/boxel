@@ -42,7 +42,7 @@ jobs:
 
   deploy-realm-server:
     name: Deploy realm server
-    needs: [build-realm-server]
+    needs: [build-realm-server, deploy-host]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:

@@ -135,7 +135,7 @@
     "fast-json-stable-stringify": "^2.1.0",
     "filesize": "^10.0.12",
     "flat": "^5.0.2",
-    "glimmer-scoped-css": "^0.4.0",
+    "glimmer-scoped-css": "^0.4.1",
     "ignore": "^5.2.0",
     "indefinite": "^2.4.3",
     "loader.js": "^4.7.0",

@@ -90,6 +90,10 @@ export default class AiAssistantMessageUsage extends Component {
           @onInput={{fn (mut this.formattedMessage)}}
           @value={{this.formattedMessage}}
         />
+        <Args.Array
+          @name='attachedCards'
+          @description='Cards attached to the message in pill form.'
+        />
         <Args.String
           @name='errorMessage'
           @description='Error state message to display'
