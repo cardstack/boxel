@@ -647,6 +647,16 @@ module('Integration | computeds', function (hooks) {
     assert
       .dom('[data-test-field="friend"] [data-test="name"]')
       .hasText('Van Gogh');
+
+    await renderCard(loader, firstPost, 'edit');
+    assert
+      .dom(
+        '[data-test-field="bestFriend"] [data-test-links-to-editor="bestFriend"]',
+      )
+      .exists();
+    assert
+      .dom('[data-test-field="friend"] [data-test-links-to-editor="friend"]')
+      .doesNotExist();
   });
 
   test('can render an asynchronous computed linksTo field', async function (assert) {
@@ -754,6 +764,14 @@ module('Integration | computeds', function (hooks) {
       ].map((element) => element.textContent?.trim()),
       ['Mango', 'A', 'B', 'C'],
     );
+
+    await renderCard(loader, firstPost, 'edit');
+    assert
+      .dom('[data-test-links-to-many="factCheckers"] [data-test-remove-card]')
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-links-to-many="collaborators"] [data-test-remove-card]')
+      .doesNotExist();
   });
 
   test('can render an asynchronous computed linksToMany field', async function (this: RenderingTestContext, assert) {
