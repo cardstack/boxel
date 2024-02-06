@@ -67,7 +67,8 @@ test.describe('Room creation', () => {
     await assertRooms(page, []);
   });
 
-  test('it can cancel a room creation', async ({ page }) => {
+  // TODO: update
+  test('it can cancel renaming a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await page.locator('[data-test-create-room-mode-btn]').click();
 
@@ -102,9 +103,7 @@ test.describe('Room creation', () => {
     await assertRooms(page, ['Room Z', 'Room A']);
   });
 
-  test('it shows an error when a duplicate room is created', async ({
-    page,
-  }) => {
+  test('it shows an error when a room name is duplicated', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, 'Room 1');
 
@@ -122,7 +121,7 @@ test.describe('Room creation', () => {
       ),
       'no error message is displayed',
     ).toHaveCount(0);
-    await page.locator('[data-test-create-room-btn]').click();
+    await page.locator('[data-test-save-room-name-button]').click();
 
     await expect(
       page.locator(
@@ -149,7 +148,7 @@ test.describe('Room creation', () => {
       ),
       'no error message is displayed',
     ).toHaveCount(0);
-    await page.locator('[data-test-create-room-btn]').click();
+    await page.locator('[data-test-save-room-name-button]').click();
     await page.waitForFunction(() =>
       document.querySelector('[data-test-room-settled]'),
     );
