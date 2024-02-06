@@ -262,3 +262,27 @@ export class MatrixClient {
     }
   }
 }
+
+export async function waitForMatrixMessage(
+  matrixClient: MatrixClient,
+  roomId: string,
+  filter: (m: any) => boolean,
+  waitBetweenChecksMs = 200,
+  timeoutMs = 10000,
+) {
+  let waitedMs = 0;
+
+  let messages = await matrixClient.roomMessages(roomId);
+
+  while (waitedMs < timeoutMs) {
+    let message = messages.find(filter);
+    if (message) {
+      return message;
+    }
+
+    await new Promise((res) => setTimeout(res, waitBetweenChecksMs));
+    waitedMs += waitBetweenChecksMs;
+  }
+
+  return null;
+}

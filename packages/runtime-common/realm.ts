@@ -77,7 +77,7 @@ import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
-import { MatrixClient } from './matrix-client';
+import { MatrixClient, waitForMatrixMessage } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
@@ -679,50 +679,33 @@ export class Realm {
     // This is a best-effort type of implementation - we don't know when the messages will appear in the room so we just wait for a bit.
     // This is not a problem when the realms are on the same matrix server but when they are on different (federated) servers the latencies and
     // race conditions can cause delays in the messages appearing in the room.
-    let waitForAuthMessages = async (
-      thisRealmMatrixUser: string,
-      otherRealmMatrixUser: string,
-    ) => {
-      let waitBetweenChecks = 100;
-      let timeout = 10000;
-      let waited = 0;
-      let oneMinuteAgo = Date.now() - 60000;
-      let latestAuthResponseMessage, latestAuthChallengeMessage;
+    let oneMinuteAgo = Date.now() - 60000;
 
-      while (waited < timeout) {
-        let messages = await this.#matrixClient.roomMessages(roomId);
-        latestAuthChallengeMessage =
-          latestAuthChallengeMessage ||
-          messages.find(
-            (m) =>
-              m.type === 'm.room.message' &&
-              m.sender === thisRealmMatrixUser &&
-              m.content.body.startsWith('auth-challenge:') &&
-              m.origin_server_ts > oneMinuteAgo,
-          );
+    let latestAuthChallengeMessage = await waitForMatrixMessage(
+      this.#matrixClient,
+      roomId,
+      (m) => {
+        return (
+          m.type === 'm.room.message' &&
+          m.sender === this.#matrixClient.userId &&
+          m.content.body.startsWith('auth-challenge:') &&
+          m.origin_server_ts > oneMinuteAgo
+        );
+      },
+    );
 
-        latestAuthResponseMessage =
-          latestAuthResponseMessage ||
-          messages.find(
-            (m) =>
-              m.type === 'm.room.message' &&
-              m.sender === otherRealmMatrixUser &&
-              m.content.body.startsWith('auth-response:') &&
-              m.origin_server_ts > oneMinuteAgo,
-          );
-
-        if (latestAuthChallengeMessage && latestAuthResponseMessage) {
-          return { latestAuthChallengeMessage, latestAuthResponseMessage };
-        }
-
-        await new Promise((res) => setTimeout(res, waitBetweenChecks));
-        waited += waitBetweenChecks;
-      }
-      return { latestAuthChallengeMessage, latestAuthResponseMessage };
-    };
-
-    let { latestAuthChallengeMessage, latestAuthResponseMessage } =
-      await waitForAuthMessages(this.#matrixClient.userId!, user);
+    let latestAuthResponseMessage = await waitForMatrixMessage(
+      this.#matrixClient,
+      roomId,
+      (m) => {
+        return (
+          m.type === 'm.room.message' &&
+          m.sender === user &&
+          m.content.body.startsWith('auth-response:') &&
+          m.origin_server_ts > oneMinuteAgo
+        );
+      },
+    );
 
     if (!latestAuthChallengeMessage) {
       return badRequest(this, `No challenge found for user ${user}`);
