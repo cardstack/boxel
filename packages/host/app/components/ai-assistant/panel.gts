@@ -17,6 +17,8 @@ import {
   Button,
   IconButton,
   LoadingIndicator,
+  FieldContainer,
+  BoxelInput,
 } from '@cardstack/boxel-ui/components';
 import { ResizeHandle } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
@@ -29,7 +31,6 @@ import { aiBotUsername } from '@cardstack/runtime-common';
 
 import AiAssistantPanelPopover from '@cardstack/host/components/ai-assistant/panel-popover';
 import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
-import RenameRoom from '@cardstack/host/components/ai-assistant/rename-room';
 import Room from '@cardstack/host/components/matrix/room';
 
 import ENV from '@cardstack/host/config/environment';
@@ -145,13 +146,42 @@ export default class AiAssistantPanel extends Component<Signature> {
               </:body>
             </AiAssistantPanelPopover>
           {{else if this.roomToEdit}}
-            <RenameRoom
-              @velcroSettings={{pastSessionsVelcro.loop}}
-              @room={{this.roomToEdit}}
-              @renameRoom={{this.renameRoom}}
-              @cancelRenameRoom={{this.cancelRenameRoom}}
-              @isRunning={{this.doRenameRoom.isRunning}}
-            />
+            <AiAssistantPanelPopover {{pastSessionsVelcro.loop}}>
+              <:header>
+                Rename Session
+              </:header>
+              <:body>
+                <div class='rename-room'>
+                  <FieldContainer @label='Room Name' @tag='label'>
+                    <BoxelInput
+                      @state={{this.roomNameInputState}}
+                      @value={{this.newRoomName}}
+                      @errorMessage={{this.roomNameError}}
+                      @onInput={{this.setNewRoomName}}
+                      data-test-room-name-field
+                    />
+                  </FieldContainer>
+                </div>
+                <div class='rename-room-button-wrapper'>
+                  <Button
+                    @kind='secondary'
+                    {{on 'click' this.cancelRenameRoom}}
+                    data-test-cancel-room-name-button
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    @kind='primary'
+                    @disabled={{this.isSaveRenameDisabled}}
+                    @loading={{this.doRenameRoom.isRunning}}
+                    {{on 'click' this.renameRoom}}
+                    data-test-save-room-name-button
+                  >
+                    Save
+                  </Button>
+                </div>
+              </:body>
+            </AiAssistantPanelPopover>
           {{/if}}
         </div>
 
@@ -253,6 +283,16 @@ export default class AiAssistantPanel extends Component<Signature> {
       .create-new-loading {
         padding: var(--boxel-sp);
       }
+
+      .rename-room {
+        padding: var(--boxel-sp) 0 var(--boxel-sp) var(--boxel-sp);
+      }
+      .rename-room-button-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp);
+      }
     </style>
   </template>
 
@@ -264,6 +304,8 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private isShowingPastSessions = false;
   @tracked private roomToEdit: RoomField | undefined = undefined;
   @tracked private roomToDelete: RoomField | undefined = undefined;
+  @tracked private newRoomName = '';
+  @tracked private roomNameError: string | undefined = undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -367,21 +409,40 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.hidePastSessions();
   }
 
-  @action private renameRoom(name: string) {
-    this.doRenameRoom.perform(name);
+  private get roomNameInputState() {
+    return this.roomNameError ? 'invalid' : 'initial';
   }
 
-  private doRenameRoom = restartableTask(async (name: string) => {
-    if (!name) {
+  private get isSaveRenameDisabled() {
+    return !this.newRoomName?.length || this.doRenameRoom.isRunning;
+  }
+
+  @action
+  private setNewRoomName(name: string) {
+    this.roomNameError = undefined;
+    this.newRoomName = name;
+  }
+
+  @action private renameRoom() {
+    this.doRenameRoom.perform();
+  }
+
+  private doRenameRoom = restartableTask(async () => {
+    if (!this.newRoomName || !this.roomToEdit) {
       throw new Error(`bug: should never get here`);
     }
     try {
-      // TODO: rename room
-      await this.matrixService.renameRoom(name);
+      await this.matrixService.client.setRoomName(
+        this.roomToEdit.roomId,
+        this.newRoomName,
+      );
       this.setRoomToEdit(undefined);
     } catch (e) {
-      if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
-        // this.roomNameError = 'Room already exists';
+      if (isMatrixError(e) && e.data.errcode === 'M_FORBIDDEN') {
+        this.roomNameError = `You don't have permission to rename this room`;
+        return;
+      } else if (isMatrixError(e)) {
+        this.roomNameError = `Error renaming room: ${e.data.error}`;
         return;
       }
       throw e;
@@ -389,6 +450,8 @@ export default class AiAssistantPanel extends Component<Signature> {
   });
 
   @action private cancelRenameRoom() {
+    this.roomNameError = undefined;
+    this.newRoomName = '';
     this.setRoomToEdit(undefined);
   }
 
