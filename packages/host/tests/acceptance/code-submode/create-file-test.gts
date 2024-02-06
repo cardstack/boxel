@@ -330,7 +330,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await openNewFileModal('Card Instance');
     await waitFor(`[data-test-selected-type="General Card"]`);
 
-    // card type selection
     await click('[data-test-select-card-type]');
     await waitFor('[data-test-card-catalog-modal]');
     await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/error"]`);
