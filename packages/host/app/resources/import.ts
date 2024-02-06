@@ -1,16 +1,15 @@
-import { getOwner } from '@ember/owner';
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
 import { logger } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
 
 import type LoaderService from '../services/loader-service';
 
 interface Args {
-  named: { url: string; loader: Loader };
+  named: { url: string };
 }
 
 const log = logger('resource:import');
@@ -18,23 +17,24 @@ const log = logger('resource:import');
 export class ImportResource extends Resource<Args> {
   @tracked module: object | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
+  @service declare loaderService: LoaderService;
   #loaded!: Promise<void>; // modifier runs at init so we will always have a value
 
   modify(_positional: never[], named: Args['named']) {
-    let { url, loader } = named;
-    this.#loaded = this.load.perform(url, loader);
+    let { url } = named;
+    this.#loaded = this.load.perform(url);
   }
 
   get loaded() {
     return this.#loaded;
   }
 
-  private load = task(async (url: string, loader: Loader) => {
+  private load = task(async (url: string) => {
     try {
-      let m = await loader.import<object>(url);
+      let m = await this.loaderService.loader.import<object>(url);
       this.module = m;
     } catch (err) {
-      let errResponse = await loader.fetch(url, {
+      let errResponse = await this.loaderService.fetchWithAuth(url, {
         headers: { 'content-type': 'text/javascript' },
       });
       if (!errResponse.ok) {
@@ -55,21 +55,10 @@ Check console log for more details`,
   });
 }
 
-export function importResource(
-  parent: object,
-  url: () => string,
-  loader?: () => Loader,
-) {
+export function importResource(parent: object, url: () => string) {
   return ImportResource.from(parent, () => ({
     named: {
       url: url(),
-      loader: loader
-        ? loader()
-        : (
-            (getOwner(parent) as any).lookup(
-              'service:loader-service',
-            ) as LoaderService
-          ).loader,
     },
   })) as ImportResource;
 }

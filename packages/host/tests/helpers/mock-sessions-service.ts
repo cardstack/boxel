@@ -22,6 +22,10 @@ function generateMockSessionsService(read: boolean, write: boolean) {
     get canWrite() {
       return write;
     }
+
+    async getRealmToken(_realmURL: URL) {
+      return 'realm-token';
+    }
   }
 
   return MockSessionsService;

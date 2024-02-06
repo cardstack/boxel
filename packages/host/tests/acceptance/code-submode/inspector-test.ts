@@ -36,6 +36,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   setupServerSentEvents,
+  setupSessionsServiceMock,
   setupOnSave,
   visitOperatorMode,
   waitForCodeEditor,
@@ -405,6 +406,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupOnSave(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
+  setupSessionsServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');

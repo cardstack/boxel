@@ -22,6 +22,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   setupServerSentEvents,
+  setupSessionsServiceMock,
   setupOnSave,
   getMonacoContent,
   visitOperatorMode,
@@ -232,6 +233,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
+  setupSessionsServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');

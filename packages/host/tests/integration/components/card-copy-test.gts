@@ -29,6 +29,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupServerSentEvents,
+  setupSessionsServiceMock,
   type TestContextWithSave,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
@@ -55,15 +56,11 @@ module('Integration | card-copy', function (hooks) {
       if (!onFetch) {
         return Promise.resolve(req);
       }
-      let { headers, method } = req;
-      let body = await req.text();
+      // need to clone request since we just read the body
+      let clonedRequest = req.clone();
+      let body = await clonedRequest.text();
       onFetch(req, body);
-      // need to return a new request since we just read the body
-      return new Request(req.url, {
-        method,
-        headers,
-        ...(body ? { body } : {}),
-      });
+      return req;
     };
   }
 
@@ -80,6 +77,7 @@ module('Integration | card-copy', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
+  setupSessionsServiceMock(hooks);
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
   });

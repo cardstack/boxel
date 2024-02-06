@@ -19,15 +19,16 @@ const waiter = buildWaiter('realm-info-service:waiter');
 export default class RealmInfoService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  cachedRealmURLsForFileURL: TrackedMap<string, string> = new TrackedMap(); // Has the file url already been resolved to a realm url?
+  cachedRealmURLsForURL: Map<string, string> = new Map(); // Has the file url already been resolved to a realm url?
   cachedRealmInfos: TrackedMap<string, RealmInfo> = new TrackedMap(); // Has the realm url already been resolved to a realm info?
+  cachedPublicReadableRealms: Map<string, boolean> = new Map();
 
-  async fetchRealmURL(fileURL: string): Promise<string> {
-    if (this.cachedRealmURLsForFileURL.has(fileURL)) {
-      return this.cachedRealmURLsForFileURL.get(fileURL)!;
+  async fetchRealmURL(url: string): Promise<URL> {
+    if (this.cachedRealmURLsForURL.has(url)) {
+      return new URL(this.cachedRealmURLsForURL.get(url)!);
     }
 
-    let response = await this.loaderService.loader.fetch(fileURL);
+    let response = await this.loaderService.loader.fetch(url);
     let realmURL = response.headers.get('x-boxel-realm-url');
 
     if (!realmURL) {
@@ -36,9 +37,24 @@ export default class RealmInfoService extends Service {
       );
     }
 
-    this.cachedRealmURLsForFileURL.set(fileURL, realmURL);
+    this.cachedRealmURLsForURL.set(url, realmURL);
 
-    return realmURL;
+    return new URL(realmURL);
+  }
+
+  async isPublicReadable(realmURL: URL, skipCache?: boolean): Promise<boolean> {
+    let realmURLString = realmURL.href;
+    if (this.cachedPublicReadableRealms.has(realmURLString) && !skipCache) {
+      return this.cachedPublicReadableRealms.get(realmURLString)!;
+    }
+
+    let response = await this.loaderService.loader.fetch(realmURL);
+    let isPublicReadable = Boolean(
+      response.headers.get('x-boxel-realm-public-readable'),
+    );
+    this.cachedPublicReadableRealms.set(realmURLString, isPublicReadable);
+
+    return isPublicReadable;
   }
 
   // When realmUrl is provided, it will fetch realm info from that url, otherwise it will first
@@ -56,12 +72,12 @@ export default class RealmInfoService extends Service {
     try {
       let realmURLString = realmURL
         ? realmURL.href
-        : await this.fetchRealmURL(fileURL!);
+        : (await this.fetchRealmURL(fileURL!)).href;
 
       if (this.cachedRealmInfos.has(realmURLString)) {
         return this.cachedRealmInfos.get(realmURLString)!;
       } else {
-        let realmInfoResponse = await this.loaderService.loader.fetch(
+        let realmInfoResponse = await this.loaderService.fetchWithAuth(
           `${realmURLString}_info`,
           { headers: { Accept: SupportedMimeType.RealmInfo } },
         );

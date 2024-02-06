@@ -88,7 +88,7 @@ export class DirectoryResource extends Resource<Args> {
 
   private async getEntries(url: URL): Promise<Entry[]> {
     let response: Response | undefined;
-    response = await this.loaderService.loader.fetch(url, {
+    response = await this.loaderService.fetchWithAuth(url, {
       headers: { Accept: SupportedMimeType.DirectoryListing },
     });
     if (!response.ok) {

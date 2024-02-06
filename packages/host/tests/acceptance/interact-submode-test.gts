@@ -51,7 +51,6 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupOnSave(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');
@@ -236,6 +235,8 @@ module('Acceptance | interact submode tests', function (hooks) {
   });
 
   module('0 stacks', function () {
+    setupSessionsServiceMock(hooks);
+
     test('Clicking card in search panel opens card on a new stack', async function (assert) {
       await visitOperatorMode({});
 
@@ -429,6 +430,8 @@ module('Acceptance | interact submode tests', function (hooks) {
   });
 
   module('1 stack', function () {
+    setupSessionsServiceMock(hooks);
+
     test('restoring the stack from query param', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -778,6 +781,8 @@ module('Acceptance | interact submode tests', function (hooks) {
   });
 
   module('2 stacks', function () {
+    setupSessionsServiceMock(hooks);
+
     test('restoring the stacks from query param', async function (assert) {
       await visitOperatorMode({
         stacks: [

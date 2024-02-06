@@ -4,16 +4,21 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import { type TokenClaims } from '@cardstack/runtime-common';
 
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import type LoaderService from './loader-service';
 
 type RealmJWT = TokenClaims & { iat: number; exp: number };
 
 const LOCAL_STORAGE_KEY = 'boxel-session';
 
 export default class SessionsService extends Service {
+  @service declare matrixService: MatrixService;
+  @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  realmURLToRawJWT = new TrackedMap<String, String>();
+  realmURLToRawJWT = new TrackedMap<string, string>();
 
   constructor(properties: object) {
     super(properties);
@@ -37,6 +42,10 @@ export default class SessionsService extends Service {
       return;
     }
 
+    return this.toJWT(rawJWT);
+  }
+
+  toJWT(rawJWT: string) {
     let [_header, payload] = rawJWT.split('.');
     let claims = JSON.parse(atob(payload)) as RealmJWT;
 
@@ -77,5 +86,86 @@ export default class SessionsService extends Service {
         console.log('Error restoring sessions', e);
       }
     }
+  }
+
+  async getRealmToken(
+    realmURL: URL,
+    skipCache?: boolean,
+  ): Promise<string | undefined> {
+    let tokenRefreshPeriod = 5 * 60; // 5 minutes
+    let rawJWT = this.realmURLToRawJWT.get(realmURL.href);
+
+    if (rawJWT && !skipCache) {
+      let claims = this.toJWT(rawJWT);
+      let expiration = claims.exp;
+      if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
+        return rawJWT;
+      }
+    }
+
+    rawJWT = await this.createRealmSession(realmURL);
+    if (rawJWT) {
+      this.setSession(realmURL, rawJWT);
+    } else {
+      this.clearSession(realmURL);
+    }
+    return rawJWT;
+  }
+
+  private async createRealmSession(realmURL: URL) {
+    await this.matrixService.ready;
+    if (!this.matrixService.isLoggedIn) {
+      return;
+    }
+
+    let initialResponse = await this.loaderService.loader.fetch(
+      `${realmURL.href}_session`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          user: this.matrixService.userId,
+        }),
+      },
+    );
+    let initialJSON = (await initialResponse.json()) as {
+      room: string;
+      challenge: string;
+    };
+    if (initialResponse.status !== 401) {
+      throw new Error(
+        `unexpected response from POST ${realmURL.href}_session: ${
+          initialResponse.status
+        } - ${JSON.stringify(initialJSON)}`,
+      );
+    }
+    let { room, challenge } = initialJSON;
+    if (!this.matrixService.rooms.has(room)) {
+      await this.matrixService.client.joinRoom(room);
+    }
+    await this.matrixService.sendMessage(room, `auth-response: ${challenge}`);
+    let challengeResponse = await this.loaderService.loader.fetch(
+      `${realmURL.href}_session`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          user: this.matrixService.userId,
+          challenge,
+        }),
+      },
+    );
+    if (!challengeResponse.ok) {
+      throw new Error(
+        `Could not authenticate with realm ${realmURL.href} - ${
+          challengeResponse.status
+        }: ${JSON.stringify(await challengeResponse.json())}`,
+      );
+    }
+    return challengeResponse.headers.get('Authorization') ?? undefined;
   }
 }
