@@ -2,7 +2,10 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import NumberField from 'https://cardstack.com/base/number';
 import { Seller as SellerCard } from './seller';
-import { MonetaryAmount as MonetaryAmountField } from './monetary-amount';
+import {
+  MonetaryAmount as MonetaryAmountField,
+  MonetaryAmountAtom,
+} from './monetary-amount';
 import {
   CardDef,
   field,
@@ -19,18 +22,6 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
-
-const usdFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-});
-
-export function formatUsd(val: number | undefined) {
-  if (val === undefined) {
-    return '';
-  }
-  return usdFormatter.format(val / 100);
-}
 
 export function expectedArrivalDescription(
   leadTimeDays: number,
@@ -68,7 +59,7 @@ export class EmbeddedProductComponent extends GlimmerComponent<EmbeddedProductCo
         {{@model.title}}
       </div>
       <div class='price'>
-        {{formatUsd @model.unitPriceCents}}
+        <MonetaryAmountAtom @model={{@model.unitPrice}} />
       </div>
       <div class='seller'>
         {{@model.seller.title}}
@@ -219,11 +210,11 @@ export class ProductDetail extends GlimmerComponent<ProductDetailSignature> {
           <div>⮐ Returns &amp; exchanges not accepted</div>
         {{/if}}
         <div>
-          {{#if (eq @model.usShippingCostCents 0)}}
+          {{#if (eq @model.shippingCost.amount 0)}}
             🚚 Free shipping
           {{else}}
             🚚 Cost to ship:
-            {{formatUsd @model.usShippingCostCents}}
+            <MonetaryAmountAtom @model={{@model.shippingCost}} />
           {{/if}}
         </div>
       </div>
@@ -270,7 +261,9 @@ class Isolated extends Component<typeof Product> {
           </span>
         </div>
         <h1 class='title'>{{@model.title}}</h1>
-        <div class='price'>{{formatUsd @model.unitPriceCents}}</div>
+        <div class='price'>
+          <MonetaryAmountAtom @model={{@model.unitPrice}} />
+        </div>
         <button>
           Add to cart
         </button>

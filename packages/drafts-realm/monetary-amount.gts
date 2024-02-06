@@ -4,7 +4,6 @@ import {
   field,
   contains,
   linksTo,
-  relativeTo,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import { Currency } from './asset';
@@ -13,34 +12,56 @@ import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
 import { getLiveCards } from '@cardstack/runtime-common';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { guidFor } from '@ember/object/internals';
+import GlimmerComponent from '@glimmer/component';
 
+// TODO: should this be configurable?
+const CURRENCIES_REALM_URL = 'http://localhost:4201/drafts/';
+// window.location.port === '4200'
+//   ? 'http://localhost:4201/drafts/'
+//   : `${window.location.origin}/drafts/`;
+
+interface MonetaryAmountAtomSignature {
+  Element: HTMLSpanElement;
+  Args: {
+    model: MonetaryAmount | Partial<MonetaryAmount> | undefined;
+  };
+}
+
+export class MonetaryAmountAtom extends GlimmerComponent<MonetaryAmountAtomSignature> {
+  <template>
+    {{@model.formattedAmount}}
+  </template>
+}
+
+class Atom extends Component<typeof MonetaryAmount> {
+  <template>
+    {{@model.formattedAmount}}
+  </template>
+}
 class Edit extends Component<typeof MonetaryAmount> {
   get id() {
     return guidFor(this);
   }
 
-  // TODO: how to I query the current realm? Do I even want to do that?
   liveCurrencyQuery = getLiveCards(
     {
       filter: {
         type: {
-          module: `${this.args.model[relativeTo]?.origin}/drafts/asset`,
+          module: `${CURRENCIES_REALM_URL}asset`,
           name: 'Currency',
         },
       },
       sort: [
         {
           on: {
-            module: `${this.args.model[relativeTo]?.origin}/drafts/asset`,
+            module: `${CURRENCIES_REALM_URL}asset`,
             name: 'Currency',
           },
           by: 'name',
         },
       ],
     },
-    this.args.model[relativeTo]
-      ? [`${this.args.model[relativeTo]?.origin}/drafts/`]
-      : undefined,
+    [CURRENCIES_REALM_URL],
   );
 
   @action
@@ -70,12 +91,8 @@ class Edit extends Component<typeof MonetaryAmount> {
       @inputmode='decimal'
       class='input-selectable-currency-amount'
     >
-      <:before>
-        <div class='input-selectable-currency-amount__before'>
-          <span class='input-selectable-currency-amount__currency-sign'>
-            {{this.args.model.currency.sign}}
-          </span>
-        </div>
+      <:before as |Accessories|>
+        <Accessories.Text>{{this.args.model.currency.sign}}</Accessories.Text>
       </:before>
       <:after as |Accessories|>
         <Accessories.Select
@@ -94,17 +111,17 @@ class Edit extends Component<typeof MonetaryAmount> {
               'input-selectable-currency-amount__dropdown-item'
               itemCssClass
             }}
+            title={{item.name}}
           >
-            {{#if item.logoURI}}
+            {{#if item.logoURL}}
               <img
-                src={{item.logoURI}}
+                src={{item.logoURL}}
                 class='boxel-selectable-currency-icon__icon'
                 loading='lazy'
                 role='presentation'
               />
             {{/if}}
             {{item.symbol}}
-            ({{item.name}})
           </div>
         </Accessories.Select>
       </:after>
@@ -119,11 +136,6 @@ class Edit extends Component<typeof MonetaryAmount> {
         width: 100%;
         font-family: var(--boxel-font-family);
         font-size: var(--input-selectable-currency-amount-input-font-size);
-      }
-      .input-selectable-currency-amount__before {
-        border-top: 1px solid #aaaaaa;
-        border-bottom: 1px solid #aaaaaa;
-        border-left: 1px solid #aaaaaa;
       }
 
       .input-selectable-currency-amount__select[aria-disabled='true'] {
@@ -154,65 +166,17 @@ export class MonetaryAmount extends FieldDef {
   @field amount = contains(NumberField);
   @field currency = linksTo(Currency);
 
+  get formattedAmount() {
+    return this.currency?.format(this.amount);
+  }
+
   static edit = Edit;
+  static atom = Atom;
 
   /*
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
-
-  static atom = class Atom extends Component<typeof this> {
-    <template></template>
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

@@ -35,6 +35,7 @@ class Asset extends CardDef {
       return this.name;
     },
   });
+
   static embedded = class Embedded extends Component<typeof Asset> {
     <template>
       <div class='asset-card'>
@@ -99,10 +100,33 @@ class AssetField extends FieldDef {
   };
 }
 
+const currencyFormatters = new Map<string, Intl.NumberFormat>();
+
 // For fiat money
 export class Currency extends Asset {
   static displayName = 'Currency';
   @field sign = contains(StringCard); // $, €, £, ¥, ₽, ₿ etc.
+  @field locale = contains(StringCard); // en-US, en-GB, ja-JP, ru-RU, etc.
+
+  get formatter() {
+    if (!currencyFormatters.has(this.locale)) {
+      currencyFormatters.set(
+        this.locale,
+        new Intl.NumberFormat(this.locale, {
+          style: 'currency',
+          currency: this.symbol,
+        }),
+      );
+    }
+    return currencyFormatters.get(this.locale)!;
+  }
+
+  format(amount?: number) {
+    if (amount === undefined) {
+      return '';
+    }
+    return this.formatter.format(amount);
+  }
 }
 
 export class CurrencyField extends AssetField {
