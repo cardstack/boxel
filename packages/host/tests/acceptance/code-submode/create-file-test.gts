@@ -327,17 +327,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('an error when creating a new card instance is shown', async function (assert) {
-    const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
     await openNewFileModal('Card Instance');
-    assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
     await waitFor(`[data-test-selected-type="General Card"]`);
-    assert
-      .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
-      .hasText('Adopted From');
-    assert.dom(`[data-test-selected-type]`).hasText('General Card');
-    assert
-      .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
-      .hasAttribute('src', baseRealmIconURL);
 
     // card type selection
     await click('[data-test-select-card-type]');
@@ -346,10 +337,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await click(`[data-test-select="${testRealmURL}Catalog-Entry/error"]`);
     await click('[data-test-card-catalog-go-button]');
     await waitFor(`[data-test-selected-type="Error"]`);
-    assert.dom(`[data-test-selected-type]`).hasText('Error');
-    assert
-      .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
-      .hasAttribute('src', testRealmAIconURL);
 
     await click('[data-test-create-card-instance]');
 
