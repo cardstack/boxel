@@ -1,4 +1,4 @@
-import { TokenClaims } from 'realm';
+import { TokenClaims } from './realm';
 import { MatrixClient } from './matrix-client';
 
 // iat - issued at (seconds since epoch)
