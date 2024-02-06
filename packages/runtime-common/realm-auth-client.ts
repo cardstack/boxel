@@ -20,7 +20,7 @@ export class RealmAuthClient {
   }
 
   async getJWT() {
-    let extraPeriodBeforeExpirySeconds = 60;
+    let tokenRefreshLeadTimeSeconds = 60;
     let jwt: string;
 
     if (!this.jwt) {
@@ -29,8 +29,8 @@ export class RealmAuthClient {
       return jwt;
     } else {
       let jwtData = JSON.parse(atob(this.jwt.split('.')[1]));
-      // If the token is about to expire (in extraPeriodBeforeExpirySeconds), create a new one just to make sure we reduce the risk of the token getting outdated during things happening in createRealmSession
-      if (jwtData.exp - extraPeriodBeforeExpirySeconds < Date.now() / 1000) {
+      // If the token is about to expire (in tokenRefreshLeadTimeSeconds), create a new one just to make sure we reduce the risk of the token getting outdated during things happening in createRealmSession
+      if (jwtData.exp - tokenRefreshLeadTimeSeconds < Date.now() / 1000) {
         jwt = await this.createRealmSession();
         this.jwt = jwt;
         return jwt;
