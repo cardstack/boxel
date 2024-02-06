@@ -1,4 +1,9 @@
+import { TokenClaims } from 'realm';
 import { MatrixClient } from './matrix-client';
+
+// iat - issued at (seconds since epoch)
+// exp - expires at (seconds since epoch)
+type JWTPayload = TokenClaims & { iat: number; exp: number };
 
 export class RealmAuthClient {
   private realmURL: URL;
@@ -28,7 +33,7 @@ export class RealmAuthClient {
       this.jwt = jwt;
       return jwt;
     } else {
-      let jwtData = JSON.parse(atob(this.jwt.split('.')[1]));
+      let jwtData = JSON.parse(atob(this.jwt.split('.')[1])) as JWTPayload;
       // If the token is about to expire (in tokenRefreshLeadTimeSeconds), create a new one just to make sure we reduce the risk of the token getting outdated during things happening in createRealmSession
       if (jwtData.exp - tokenRefreshLeadTimeSeconds < Date.now() / 1000) {
         jwt = await this.createRealmSession();
