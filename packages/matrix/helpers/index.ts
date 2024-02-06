@@ -240,8 +240,18 @@ export async function isInRoom(page: Page, roomName: string) {
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
 }
 
-export async function leaveRoom(page: Page, roomName: string) {
-  await page.locator(`[data-test-leave-room-btn="${roomName}"]`).click();
+export async function deleteRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-past-sessions-button]`).click();
+  await page
+    .locator(`[data-test-past-session-options-button="${roomName}"]`)
+    .click();
+  await page.locator(`[data-test-boxel-menu-item-text="Delete"]`).click();
+  await page
+    .locator(
+      `[data-test-delete-modal-container] [data-test-confirm-delete-button]`,
+    )
+    .click();
+  await page.locator(`[data-test-close-past-sessions]`).click();
 }
 
 export async function openRoom(page: Page, roomName: string) {

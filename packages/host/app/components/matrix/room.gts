@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -31,7 +30,6 @@ import RoomMessage from './room-message';
 interface Signature {
   Args: {
     roomId: string;
-    leaveRoom: (roomId: string) => void;
   };
 }
 
@@ -45,14 +43,6 @@ export default class Room extends Component<Signature> {
     >
       <header class='room-info'>
         <h3 class='room-name'>{{this.room.name}}</h3>
-        <Button
-          @kind='secondary-dark'
-          @size='extra-small'
-          {{on 'click' (fn @leaveRoom @roomId)}}
-          data-test-leave-room-btn={{this.room.name}}
-        >
-          Leave Room
-        </Button>
       </header>
 
       <AiAssistantConversation>
