@@ -4,6 +4,7 @@ import {
   click,
   settled,
   waitFor,
+  waitUntil,
   currentURL,
   visit,
 } from '@ember/test-helpers';
@@ -1773,6 +1774,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     });
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor(`[data-test-boxel-selector-item]:nth-of-type(4)`);
+    await waitUntil(() => {
+      return !document
+        .querySelector('[data-test-boxel-selector-item]:nth-of-type(4)')
+        ?.textContent?.includes('exportedFunction');
+    });
+
     assert
       .dom(`[data-test-boxel-selector-item]:nth-of-type(4)`)
       .hasText(`${renamedElementName} function`);
