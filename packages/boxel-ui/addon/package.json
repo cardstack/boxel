@@ -34,12 +34,13 @@
     "test:ember": "ember test"
   },
   "dependencies": {
+    "@ember/string": "^3.1.1",
     "@embroider/addon-shim": "^1.8.6",
     "@floating-ui/dom": "^1.4.3",
     "@glint/template": "^1.2.1",
     "classnames": "^2.3.2",
     "dayjs": "^1.11.7",
-    "ember-basic-dropdown": "^7.1.0",
+    "ember-basic-dropdown": "^7.3.0",
     "ember-composable-helpers": "^5.0.0",
     "ember-css-url": "^1.0.0",
     "ember-focus-trap": "^1.0.1",
@@ -47,6 +48,7 @@
     "ember-link": "^2.1.0",
     "ember-load-initializers": "^2.1.2",
     "ember-modifier": "^4.1.0",
+    "ember-power-select": "^6.0.1",
     "ember-ref-bucket": "5.0.5",
     "ember-resize-modifier": "^0.6.0",
     "ember-set-body-class": "^1.0.2",

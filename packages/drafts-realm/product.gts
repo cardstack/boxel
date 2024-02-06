@@ -2,6 +2,7 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import NumberField from 'https://cardstack.com/base/number';
 import { Seller as SellerCard } from './seller';
+import { MonetaryAmount as MonetaryAmountField } from './monetary-amount';
 import {
   CardDef,
   field,
@@ -332,8 +333,8 @@ export class Product extends CardDef {
 
   @field images = containsMany(StringField);
   @field seller = linksTo(SellerCard);
-  @field unitPriceCents = contains(NumberField);
-  @field usShippingCostCents = contains(NumberField);
+  @field unitPrice = contains(MonetaryAmountField);
+  @field shippingCost = contains(MonetaryAmountField);
   @field leadTimeDays = contains(NumberField);
   @field deliveryWindowDays = contains(NumberField);
   @field isReturnable = contains(BooleanField);

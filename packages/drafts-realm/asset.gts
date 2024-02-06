@@ -22,11 +22,6 @@ class Asset extends CardDef {
   @field name = contains(StringCard);
   @field symbol = contains(StringCard);
   @field logoURL = contains(StringCard);
-  @field exchangeRate = contains(NumberCard, {
-    computeVia: function (this: Asset) {
-      return EXCHANGE_RATES[this.symbol];
-    },
-  });
   @field logoHref = contains(StringCard, {
     computeVia: function (this: Asset) {
       if (!this.logoURL) {
@@ -68,11 +63,6 @@ class AssetField extends FieldDef {
   @field name = contains(StringCard);
   @field symbol = contains(StringCard);
   @field logoURL = contains(StringCard);
-  @field exchangeRate = contains(NumberCard, {
-    computeVia: function (this: Asset) {
-      return EXCHANGE_RATES[this.symbol];
-    },
-  });
   @field logoHref = contains(StringCard, {
     computeVia: function (this: Asset) {
       if (!this.logoURL) {
@@ -111,12 +101,12 @@ class AssetField extends FieldDef {
 
 // For fiat money
 export class Currency extends Asset {
-  static displayName = 'Currency Card Type With Very Very Long Display Name';
+  static displayName = 'Currency';
   @field sign = contains(StringCard); // $, €, £, ¥, ₽, ₿ etc.
 }
 
 export class CurrencyField extends AssetField {
-  static displayName = 'Currency Card Type With Very Very Long Display Name';
+  static displayName = 'Currency';
   @field sign = contains(StringCard); // $, €, £, ¥, ₽, ₿ etc.
 }
 
