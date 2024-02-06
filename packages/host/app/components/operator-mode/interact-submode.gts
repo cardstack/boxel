@@ -10,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+
 import { isEqual } from 'lodash';
 import get from 'lodash/get';
 
@@ -205,8 +206,8 @@ export default class InteractSubmode extends Component<Signature> {
         let item = here.findCardInStack(card, stackIndex);
         here.save.perform(item, dismissItem);
       },
-      delete: (card: CardDef | URL): void => {
-        if (!card || card instanceof URL) {
+      delete: (card: CardDef | URL | string): void => {
+        if (!card || card instanceof URL || typeof card === 'string') {
           throw new Error(`bug: delete called with invalid card "${card}"`);
         }
         if (!here.itemToDelete) {

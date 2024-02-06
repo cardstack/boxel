@@ -299,7 +299,7 @@ export interface Actions {
   ) => Promise<void>;
   editCard: (card: CardDef) => void;
   saveCard(card: CardDef, dismissItem: boolean): void;
-  delete: (item: CardDef | URL) => void;
+  delete: (item: CardDef | URL | string) => void;
   doWithStableScroll: (
     card: CardDef,
     changeSizeCallback: () => Promise<void>,

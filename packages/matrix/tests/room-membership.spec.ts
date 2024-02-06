@@ -9,7 +9,7 @@ import {
   login,
   assertRooms,
   createRoom,
-  leaveRoom,
+  deleteRoom,
   reloadAndOpenAiAssistant,
   registerRealmUsers,
 } from '../helpers';
@@ -25,15 +25,39 @@ test.describe('Room membership', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('it can leave a joined room', async ({ page }) => {
+  test('it can delete a room from past sessions list', async ({ page }) => {
     await login(page, 'user1', 'pass');
     let name = await createRoom(page);
     await assertRooms(page, [name]);
 
-    await leaveRoom(page, name);
+    await deleteRoom(page, name);
     await assertRooms(page, []);
 
     await reloadAndOpenAiAssistant(page);
     await assertRooms(page, []);
+  });
+
+  test('it can cancel deleting a room from past sessions list', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let name = await createRoom(page);
+    await assertRooms(page, [name]);
+
+    await page.locator(`[data-test-past-sessions-button]`).click();
+    await page
+      .locator(`[data-test-past-session-options-button="${name}"]`)
+      .click();
+    await page.locator(`[data-test-boxel-menu-item-text="Delete"]`).click();
+    await page
+      .locator(
+        `[data-test-delete-modal-container] [data-test-confirm-cancel-button]`,
+      )
+      .click();
+    await page.locator(`[data-test-close-past-sessions]`).click();
+    await assertRooms(page, [name]);
+
+    await reloadAndOpenAiAssistant(page);
+    await assertRooms(page, [name]);
   });
 });
