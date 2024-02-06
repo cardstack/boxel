@@ -539,6 +539,8 @@ export default class CreateFileModal extends Component<Signature> {
       );
     }
 
+    let isField = this.fileType.id === 'field-definition';
+
     let realmPath = new RealmPaths(this.selectedRealmURL);
     // assert that filename is a GTS file and is a LocalPath
     let fileName: LocalPath = `${this.fileName.replace(
@@ -631,9 +633,9 @@ export class ${className} extends ${exportName} {
       await this.cardService.saveSource(url, src.join('\n').trim());
       this.currentRequest.newFileDeferred.fulfill(url);
     } catch (e: any) {
-      // FIXME how to differentiate between new field vs card definition?
-      console.log('Error saving card definition', e);
-      this.saveError = `Error creating card definition: ${e.message}`;
+      let fieldOrCard = isField ? 'field' : 'card';
+      console.log(`Error saving ${fieldOrCard} definition`, e);
+      this.saveError = `Error creating ${fieldOrCard} definition: ${e.message}`;
     }
   });
 

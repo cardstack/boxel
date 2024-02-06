@@ -737,6 +737,29 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
     await deferred.promise;
   });
 
+  test<TestContextWithSave>('an error when creating a new field definition is shown', async function (assert) {
+    await openNewFileModal('Field Definition');
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+
+    await waitFor(
+      `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+    );
+    await click(
+      `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+    await fillIn('[data-test-display-name-field]', 'Field that will not save');
+    await fillIn('[data-test-file-name-field]', 'test-fetch-failure-card');
+    await click('[data-test-create-definition]');
+
+    await waitFor('[data-test-create-file-modal] [data-test-error-message]');
+    assert
+      .dom('[data-test-create-file-modal] [data-test-error-message]')
+      .containsText('Error creating field definition')
+      .containsText('A deliberate fetch error');
+  });
+
   test<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (assert) {
     assert.expect(1);
     await openNewFileModal('Card Definition');
@@ -791,29 +814,6 @@ export class TestCard extends Pet {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
-  });
-
-  test<TestContextWithSave>('an error when creating a new field definition is shown', async function (assert) {
-    await openNewFileModal('Card Definition');
-
-    // select card type
-    await click('[data-test-select-card-type]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
-    await click(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await waitFor(`[data-test-selected-type="Pet"]`);
-
-    await fillIn('[data-test-display-name-field]', 'Test Card');
-    await fillIn('[data-test-file-name-field]', 'test-fetch-failure-card');
-
-    await click('[data-test-create-definition]');
-
-    await waitFor('[data-test-create-file-modal] [data-test-error-message]');
-    assert
-      .dom('[data-test-create-file-modal] [data-test-error-message]')
-      .containsText('Error creating field definition')
-      .containsText('A deliberate fetch error');
   });
 
   test<TestContextWithSave>('can reconcile a classname collision with the selected name of extending a card definition which uses a default export', async function (assert) {
