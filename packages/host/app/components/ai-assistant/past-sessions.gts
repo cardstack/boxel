@@ -32,7 +32,6 @@ interface Signature {
     deleteSession: (roomId: string) => void;
     roomToDelete: RoomField | undefined;
     setRoomToDelete: (room: RoomField | undefined) => void;
-    roomDeleteError?: string;
   };
   Element: HTMLButtonElement;
 }
@@ -175,7 +174,6 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
             onConfirm=(fn @deleteSession id)
             onCancel=(fn @setRoomToDelete undefined)
             itemInfo=(hash type='room' name=(if name name id) id=id)
-            error=@roomDeleteError
           }}
         />
       {{/if}}

@@ -19,7 +19,6 @@ interface Signature {
       name: string;
       id: string;
     };
-    error?: string;
   };
 }
 
@@ -64,9 +63,6 @@ export default class DeleteModal extends Component<Signature> {
               Delete
             </BoxelButton>
           {{/if}}
-          {{#if @error}}
-            <p class='error'>{{@error}}</p>
-          {{/if}}
         </footer>
       </section>
     </Modal>
@@ -98,20 +94,11 @@ export default class DeleteModal extends Component<Signature> {
       .buttons {
         margin-top: var(--boxel-sp-lg);
         display: flex;
-        flex-wrap: wrap;
         justify-content: center;
         width: 100%;
       }
       button:first-child {
         margin-right: var(--boxel-sp-xs);
-      }
-      .error {
-        flex-grow: 1;
-        color: var(--boxel-danger);
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        margin-top: var(--boxel-sp);
-        margin-bottom: 0;
       }
     </style>
   </template>

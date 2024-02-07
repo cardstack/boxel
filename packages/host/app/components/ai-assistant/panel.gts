@@ -133,10 +133,9 @@ export default class AiAssistantPanel extends Component<Signature> {
                   @sessions={{this.sortedAiSessionRooms}}
                   @openSession={{this.enterRoom}}
                   @renameSession={{this.setupRoomRename}}
-                  @deleteSession={{this.deleteRoom}}
+                  @deleteSession={{this.leaveRoom}}
                   @roomToDelete={{this.roomToDelete}}
                   @setRoomToDelete={{this.setRoomToDelete}}
-                  @roomDeleteError={{this.roomDeleteError}}
                 />
               </:body>
             </AiAssistantPanelPopover>
@@ -308,7 +307,6 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private roomToDelete: RoomField | undefined = undefined;
   @tracked private newRoomName = '';
   @tracked private roomNameError: string | undefined = undefined;
-  @tracked private roomDeleteError: string | undefined = undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -402,7 +400,6 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.hidePastSessions();
   }
 
-  // Room rename
   @action private setupRoomRename(room: RoomField) {
     this.roomToEdit = room;
     this.newRoomName = room.name;
@@ -448,10 +445,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       );
       this.resetRoomRename();
     } catch (e) {
-      if (isMatrixError(e) && e.data.errcode === 'M_FORBIDDEN') {
-        this.roomNameError = `You don't have permission to rename this room`;
-        return;
-      } else if (isMatrixError(e)) {
+      if (isMatrixError(e)) {
         this.roomNameError = `Error renaming room: ${e.data.error}`;
         return;
       }
@@ -459,35 +453,22 @@ export default class AiAssistantPanel extends Component<Signature> {
     }
   });
 
-  // Room deletion
   @action private setRoomToDelete(room: RoomField | undefined) {
-    this.roomDeleteError = undefined;
     this.roomToDelete = room;
   }
 
   @action
-  private deleteRoom(roomId: string) {
-    this.doDeleteRoom.perform(roomId);
+  private leaveRoom(roomId: string) {
+    this.doLeaveRoom.perform(roomId);
   }
 
-  private doDeleteRoom = restartableTask(async (roomId: string) => {
-    try {
-      await this.matrixService.client.leave(roomId);
-      await timeout(eventDebounceMs); // this makes it feel a bit more responsive
-      this.roomToDelete = undefined;
-      if (this.currentRoomId === roomId) {
-        this.currentRoomId = this.sortedAiSessionRooms[0]?.room.roomId;
-      }
-      this.hidePastSessions();
-    } catch (e) {
-      if (isMatrixError(e) && e.data.errcode === 'M_FORBIDDEN') {
-        this.roomDeleteError = `You don't have permission to delete this room`;
-        return;
-      } else if (isMatrixError(e)) {
-        this.roomDeleteError = `Error deleting room: ${e.data.error}`;
-        return;
-      }
-      throw e;
+  private doLeaveRoom = restartableTask(async (roomId: string) => {
+    await this.matrixService.client.leave(roomId);
+    await timeout(eventDebounceMs); // this makes it feel a bit more responsive
+    if (this.currentRoomId === roomId) {
+      this.currentRoomId = undefined;
     }
+    this.roomToDelete = undefined;
+    this.hidePastSessions();
   });
 }
