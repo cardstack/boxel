@@ -21,11 +21,7 @@ import {
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
 import { ResizeHandle } from '@cardstack/boxel-ui/components';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
-
-import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
-import { DropdownArrowUp } from '@cardstack/boxel-ui/icons';
+import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
@@ -111,12 +107,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 {{pastSessionsVelcro.hook}}
               >
                 Past Sessions
-
-                <DropdownArrowDown
-                  width={{20}}
-                  height={{20}}
-                  style={{cssVar icon-color='#fff'}}
-                />
+                <DropdownArrowFilled width='10' height='10' />
               </Button>
             {{/if}}
           </div>
@@ -127,15 +118,15 @@ export default class AiAssistantPanel extends Component<Signature> {
               data-test-past-sessions
             >
               <:header>
-                <div class='past-sessions-header'>
-                  Past Sessions
-                  <button
-                    {{on 'click' this.hidePastSessions}}
-                    data-test-close-past-sessions
-                  >
-                    <DropdownArrowUp width={{20}} height={{20}} />
-                  </button>
-                </div>
+                Past Sessions
+                <IconButton
+                  @icon={{DropdownArrowFilled}}
+                  @width='12px'
+                  @height='12px'
+                  {{on 'click' this.hidePastSessions}}
+                  aria-label='Close Past Sessions'
+                  data-test-close-past-sessions
+                />
               </:header>
               <:body>
                 <AiAssistantPastSessionsList
@@ -159,7 +150,11 @@ export default class AiAssistantPanel extends Component<Signature> {
               </:header>
               <:body>
                 <div class='rename-room'>
-                  <FieldContainer @label='Room Name' @tag='label'>
+                  <FieldContainer
+                    @label='Session Name'
+                    @tag='label'
+                    @vertical={{true}}
+                  >
                     <BoxelInput
                       @state={{this.roomNameInputState}}
                       @value={{this.newRoomName}}
@@ -172,6 +167,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 <div class='rename-room-button-wrapper'>
                   <Button
                     @kind='secondary'
+                    @size='small'
                     {{on 'click' this.resetRoomRename}}
                     data-test-cancel-name-button
                   >
@@ -179,6 +175,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                   </Button>
                   <Button
                     @kind='primary'
+                    @size='small'
                     @disabled={{this.isSaveRenameDisabled}}
                     @loading={{this.doRenameRoom.isRunning}}
                     {{on 'click' this.renameRoom}}
@@ -271,16 +268,8 @@ export default class AiAssistantPanel extends Component<Signature> {
         margin-left: auto;
       }
 
-      .past-sessions-header {
-        display: flex;
-        justify-content: space-between;
-      }
-      .past-sessions-header button {
-        border: 0;
-        background: inherit;
-      }
-
       .past-sessions-button svg {
+        --icon-color: var(--boxel-light);
         margin-left: var(--boxel-sp-xs);
       }
       .room-list {
@@ -292,13 +281,19 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .rename-room {
-        padding: var(--boxel-sp) 0 var(--boxel-sp) var(--boxel-sp);
+        padding: 0 var(--boxel-sp);
+      }
+      .rename-room :deep(.label) {
+        font: 700 var(--boxel-font-sm);
       }
       .rename-room-button-wrapper {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp);
+      }
+      .rename-room-button-wrapper :deep(.boxel-button:not(:disabled)) {
+        --boxel-button-text-color: var(--boxel-dark);
       }
     </style>
   </template>
