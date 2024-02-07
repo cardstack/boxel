@@ -1,0 +1,38 @@
+diff --git a/lib/crypto/index.js b/lib/crypto/index.js
+index b965c8c5bd8b6eb939c2f449a82e22fd83996369..be9560d26d73e671f84104c9c465ba50dc4a4f82 100644
+--- a/lib/crypto/index.js
++++ b/lib/crypto/index.js
+@@ -1901,10 +1901,14 @@ class Crypto extends _typedEventEmitter.TypedEventEmitter {
+     }
+     const res = await this.baseApis.uploadKeysRequest(requestBody);
+     if (fallbackJson) {
+-      this.fallbackCleanup = setTimeout(() => {
++      let timer = setTimeout(() => {
+         delete this.fallbackCleanup;
+         this.olmDevice.forgetOldFallbackKey();
+       }, 60 * 60 * 1000);
++      if (typeof timer.unref === "function") {
++        timer.unref();
++      }
++      this.fallbackCleanup = timer;
+     }
+     await this.olmDevice.markKeysAsPublished();
+     return res;
+diff --git a/lib/http-api/utils.js b/lib/http-api/utils.js
+index 9115598fd769bad15ed23293a68d617d5dbf21a5..95c28e59d8414dbc0837f5c85c98dd96a80446c8 100644
+--- a/lib/http-api/utils.js
++++ b/lib/http-api/utils.js
+@@ -30,9 +30,12 @@ limitations under the License.
+ // Ponyfill for https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout
+ function timeoutSignal(ms) {
+   const controller = new AbortController();
+-  setTimeout(() => {
++  let timer = setTimeout(() => {
+     controller.abort();
+   }, ms);
++  if (typeof timer.unref === 'function') {
++    timer.unref();
++  }
+   return controller.signal;
+ }
+ function anySignal(signals) {

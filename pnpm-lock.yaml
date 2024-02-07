@@ -20,6 +20,9 @@ patchedDependencies:
   magic-string@0.25.9:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
+  matrix-js-sdk@31.0.0:
+    hash: jnv3nlvwopx4raymczlximq4ti
+    path: patches/matrix-js-sdk@31.0.0.patch
   style-loader@2.0.0:
     hash: xqjji5denmqrswdovljl2t3yv4
     path: patches/style-loader@2.0.0.patch
@@ -114,7 +117,7 @@ importers:
         version: 1.7.3
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0
+        version: 31.0.0(patch_hash=jnv3nlvwopx4raymczlximq4ti)
       openai:
         specifier: 4.19.0
         version: 4.19.0
@@ -1383,7 +1386,7 @@ importers:
         version: 5.0.2
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0
+        version: 31.0.0(patch_hash=jnv3nlvwopx4raymczlximq4ti)
       moment:
         specifier: ^2.29.4
         version: 2.29.4
@@ -18113,7 +18116,7 @@ packages:
   /matrix-events-sdk@0.0.1:
     resolution: {integrity: sha512-1QEOsXO+bhyCroIe2/A5OwaxHvBm7EsSQ46DEDn8RBIfQwN5HWBpFvyWWR4QY0KHPPnnJdI99wgRiAl7Ad5qaA==}
 
-  /matrix-js-sdk@31.0.0:
+  /matrix-js-sdk@31.0.0(patch_hash=jnv3nlvwopx4raymczlximq4ti):
     resolution: {integrity: sha512-2TqDwEK34NFS0uiOti02CBCupwJcAIxWarOSD0yIrgMpIwSVNB795jEnXxNXz+bgPKsepDmiqeg2DrlinIoW1w==}
     engines: {node: '>=18.0.0'}
     dependencies:
@@ -18131,6 +18134,7 @@ packages:
       sdp-transform: 2.14.1
       unhomoglyph: 1.0.6
       uuid: 9.0.1
+    patched: true
 
   /matrix-widget-api@1.6.0:
     resolution: {integrity: sha512-VXIJyAZ/WnBmT4C7ePqevgMYGneKMCP/0JuCOqntSsaNlCRHJvwvTxmqUU+ufOpzIF5gYNyIrAjbgrEbK3iqJQ==}
