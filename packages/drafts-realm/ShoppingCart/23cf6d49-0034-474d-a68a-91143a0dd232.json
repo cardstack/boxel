@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "lineItems": [
+        {
+          "quantity": 3
+        },
+        {
+          "quantity": 4
+        }
+      ],
+      "title": "My Cart",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "lineItems.0.product": {
+        "links": {
+          "self": "../Product/1c49353e-2705-44c5-b008-13cd709eb743"
+        }
+      },
+      "lineItems.1.product": {
+        "links": {
+          "self": "../Product/13e1dc95-e84d-4ddd-ad17-fa6b3c59cca5"
+        }
+      },
+      "preferredCurrency": {
+        "links": {
+          "self": "../Currency/1"
+        }
+      },
+      "exchangeRates.0": {
+        "links": {
+          "self": "../ExchangeRate/c3f4e02a-8ede-4ead-8209-07eab6306613"
+        }
+      },
+      "exchangeRates.1": {
+        "links": {
+          "self": "../ExchangeRate/17c002dd-808a-4f99-920f-ff193f3717ff"
+        }
+      },
+      "exchangeRates.2": {
+        "links": {
+          "self": "../ExchangeRate/5fe108c9-ddac-4b4b-805b-130d53134308"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../shopping-cart",
+        "name": "ShoppingCart"
+      }
+    }
+  }
+}

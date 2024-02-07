@@ -6,23 +6,14 @@ import {
   Component,
   relativeTo,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
-import NumberCard from 'https://cardstack.com/base/number';
+import StringField from 'https://cardstack.com/base/string';
 
-let EXCHANGE_RATES: Record<string, number> = {
-  USD: 1,
-  USDC: 1,
-  DAI: 1,
-  LINK: 0.16995055,
-  EUR: 0.94,
-};
-
-class Asset extends CardDef {
+export class Asset extends CardDef {
   static displayName = 'Asset';
-  @field name = contains(StringCard);
-  @field symbol = contains(StringCard);
-  @field logoURL = contains(StringCard);
-  @field logoHref = contains(StringCard, {
+  @field name = contains(StringField);
+  @field symbol = contains(StringField);
+  @field logoURL = contains(StringField);
+  @field logoHref = contains(StringField, {
     computeVia: function (this: Asset) {
       if (!this.logoURL) {
         return null;
@@ -30,7 +21,7 @@ class Asset extends CardDef {
       return new URL(this.logoURL, this[relativeTo] || this.id).href;
     },
   });
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Asset) {
       return this.name;
     },
@@ -61,10 +52,10 @@ class Asset extends CardDef {
 
 class AssetField extends FieldDef {
   static displayName = 'Asset';
-  @field name = contains(StringCard);
-  @field symbol = contains(StringCard);
-  @field logoURL = contains(StringCard);
-  @field logoHref = contains(StringCard, {
+  @field name = contains(StringField);
+  @field symbol = contains(StringField);
+  @field logoURL = contains(StringField);
+  @field logoHref = contains(StringField, {
     computeVia: function (this: Asset) {
       if (!this.logoURL) {
         return null;
@@ -72,7 +63,7 @@ class AssetField extends FieldDef {
       return new URL(this.logoURL, this[relativeTo] || this.id).href;
     },
   });
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Asset) {
       return this.name;
     },
@@ -105,8 +96,8 @@ const currencyFormatters = new Map<string, Intl.NumberFormat>();
 // For fiat money
 export class Currency extends Asset {
   static displayName = 'Currency';
-  @field sign = contains(StringCard); // $, €, £, ¥, ₽, ₿ etc.
-  @field locale = contains(StringCard); // en-US, en-GB, ja-JP, ru-RU, etc.
+  @field sign = contains(StringField); // $, €, £, ¥, ₽, ₿ etc.
+  @field locale = contains(StringField); // en-US, en-GB, ja-JP, ru-RU, etc.
 
   get formatter() {
     if (!currencyFormatters.has(this.locale)) {
@@ -131,16 +122,16 @@ export class Currency extends Asset {
 
 export class CurrencyField extends AssetField {
   static displayName = 'Currency';
-  @field sign = contains(StringCard); // $, €, £, ¥, ₽, ₿ etc.
+  @field sign = contains(StringField); // $, €, £, ¥, ₽, ₿ etc.
 }
 
 // For crypto
 export class Token extends Asset {
   static displayName = 'Token';
-  @field address = contains(StringCard);
+  @field address = contains(StringField);
 }
 
 export class TokenField extends AssetField {
   static displayName = 'Token';
-  @field address = contains(StringCard);
+  @field address = contains(StringField);
 }

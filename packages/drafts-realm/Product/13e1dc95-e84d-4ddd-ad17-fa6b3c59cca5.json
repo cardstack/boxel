@@ -12,10 +12,10 @@
         "https://i.etsystatic.com/39837875/r/il/f9cc89/5588274509/il_794xN.5588274509_3l0i.jpg"
       ],
       "unitPrice": {
-        "amount": 24.86
+        "amount": 1900
       },
       "shippingCost": {
-        "amount": 7.48
+        "amount": 150
       },
       "leadTimeDays": 2,
       "deliveryWindowDays": 11,
@@ -37,7 +37,7 @@
       },
       "shippingCost.currency": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/drafts/Currency/3"
         }
       }
     },

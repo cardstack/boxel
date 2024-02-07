@@ -14,7 +14,7 @@
         "amount": 124.54
       },
       "shippingCost": {
-        "amount": null
+        "amount": 0
       },
       "leadTimeDays": 7,
       "deliveryWindowDays": 3,
@@ -36,7 +36,7 @@
       },
       "shippingCost.currency": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/drafts/Currency/2"
         }
       }
     },

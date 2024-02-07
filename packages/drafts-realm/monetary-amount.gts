@@ -16,9 +16,6 @@ import GlimmerComponent from '@glimmer/component';
 
 // TODO: should this be configurable?
 const CURRENCIES_REALM_URL = 'http://localhost:4201/drafts/';
-// window.location.port === '4200'
-//   ? 'http://localhost:4201/drafts/'
-//   : `${window.location.origin}/drafts/`;
 
 interface MonetaryAmountAtomSignature {
   Element: HTMLSpanElement;
@@ -160,6 +157,27 @@ class Edit extends Component<typeof MonetaryAmount> {
   </template>
 }
 
+export class MonetaryAmountEmbedded extends Component<typeof MonetaryAmount> {
+  <template>
+    <div class='monetary-amount'>
+      {{@model.formattedAmount}}
+      {{#if @model.currency.logoURL}}
+        <img
+          src={{@model.currency.logoURL}}
+          class='icon'
+          loading='lazy'
+          role='presentation'
+        />
+      {{/if}}
+    </div>
+    <style>
+      .monetary-amount {
+        font: var(--boxel-font-lg);
+      }
+    </style>
+  </template>
+}
+
 export class MonetaryAmount extends FieldDef {
   static displayName = 'MonetaryAmount';
 
@@ -172,17 +190,5 @@ export class MonetaryAmount extends FieldDef {
 
   static edit = Edit;
   static atom = Atom;
-
-  /*
-  static embedded = class Embedded extends Component<typeof this> {
-    <template></template>
-  }
-
-
-
-
-
-
-
-  */
+  static embedded = MonetaryAmountEmbedded;
 }
