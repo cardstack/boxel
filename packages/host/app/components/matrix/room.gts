@@ -39,10 +39,10 @@ export default class Room extends Component<Signature> {
       class='room'
       data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-      data-test-room-name={{this.room.name}}
+      data-test-room={{this.room.name}}
     >
       <header class='room-info'>
-        <h3 class='room-name'>{{this.room.name}}</h3>
+        <h3 class='room-name' data-test-room-name>{{this.room.name}}</h3>
       </header>
 
       <AiAssistantConversation>

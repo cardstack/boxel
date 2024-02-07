@@ -100,7 +100,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             </Button>
 
             {{#if this.loadRoomsTask.isRunning}}
-              <LoadingIndicator />
+              <LoadingIndicator @color='var(--boxel-light)' />
             {{else}}
               <Button
                 @kind='secondary-dark'
@@ -477,12 +477,12 @@ export default class AiAssistantPanel extends Component<Signature> {
   private doDeleteRoom = restartableTask(async (roomId: string) => {
     try {
       await this.matrixService.client.leave(roomId);
-      await this.matrixService.client.forget(roomId, true /* deleteRoom */);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
       this.roomToDelete = undefined;
       if (this.currentRoomId === roomId) {
-        this.currentRoomId = undefined;
+        this.currentRoomId = this.sortedAiSessionRooms[0]?.room.roomId;
       }
+      this.hidePastSessions();
     } catch (e) {
       if (isMatrixError(e) && e.data.errcode === 'M_FORBIDDEN') {
         this.roomDeleteError = `You don't have permission to delete this room`;

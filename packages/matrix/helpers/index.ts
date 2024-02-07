@@ -221,22 +221,19 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function createRoom(page: Page, name?: string) {
-  let roomName: string;
-  await page.locator('[data-test-create-room-mode-btn]').click();
-  if (name) {
-    roomName = name;
-    await page.locator('[data-test-room-name-field]').fill(name);
-  } else {
-    roomName = await page.locator('[data-test-room-name-field]').inputValue();
-  }
+export async function createRoom(page: Page) {
   await page.locator('[data-test-create-room-btn]').click();
+  await page.locator(`[data-test-room-name]`).waitFor();
+  let roomName = await page.locator('[data-test-room-name]').textContent();
+  if (!roomName) {
+    throw new Error('room name is not found');
+  }
   await isInRoom(page, roomName);
   return roomName;
 }
 
 export async function isInRoom(page: Page, roomName: string) {
-  await page.locator(`[data-test-room-name="${roomName}"]`).waitFor();
+  await page.locator(`[data-test-room="${roomName}"]`).waitFor();
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
 }
 
@@ -251,7 +248,6 @@ export async function deleteRoom(page: Page, roomName: string) {
       `[data-test-delete-modal-container] [data-test-confirm-delete-button]`,
     )
     .click();
-  await page.locator(`[data-test-close-past-sessions]`).click();
 }
 
 export async function openRoom(page: Page, roomName: string) {
