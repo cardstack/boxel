@@ -9,6 +9,7 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 import { restartableTask, timeout } from 'ember-concurrency';
+import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { Velcro } from 'ember-velcro';
 import { TrackedMap } from 'tracked-built-ins';
@@ -178,6 +179,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                     @disabled={{this.isSaveRenameDisabled}}
                     @loading={{this.doRenameRoom.isRunning}}
                     {{on 'click' this.renameRoom}}
+                    {{onKeyMod 'Enter' this.renameRoom}}
                     data-test-save-name-button
                   >
                     Save
@@ -304,9 +306,9 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
   @tracked private roomToEdit: RoomField | undefined = undefined;
-  @tracked private roomToDelete: RoomField | undefined = undefined;
   @tracked private newRoomName = '';
   @tracked private roomNameError: string | undefined = undefined;
+  @tracked private roomToDelete: RoomField | undefined = undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
