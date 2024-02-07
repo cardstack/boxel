@@ -122,7 +122,10 @@ export default class AiAssistantPanel extends Component<Signature> {
           </div>
 
           {{#if this.isShowingPastSessions}}
-            <AiAssistantPanelPopover {{pastSessionsVelcro.loop}}>
+            <AiAssistantPanelPopover
+              {{pastSessionsVelcro.loop}}
+              data-test-past-sessions
+            >
               <:header>
                 <div class='past-sessions-header'>
                   Past Sessions
@@ -147,7 +150,10 @@ export default class AiAssistantPanel extends Component<Signature> {
               </:body>
             </AiAssistantPanelPopover>
           {{else if this.roomToEdit}}
-            <AiAssistantPanelPopover {{pastSessionsVelcro.loop}}>
+            <AiAssistantPanelPopover
+              {{pastSessionsVelcro.loop}}
+              data-test-rename-session
+            >
               <:header>
                 Rename Session
               </:header>
@@ -159,7 +165,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                       @value={{this.newRoomName}}
                       @errorMessage={{this.roomNameError}}
                       @onInput={{this.setNewRoomName}}
-                      data-test-room-name-field
+                      data-test-name-field
                     />
                   </FieldContainer>
                 </div>
@@ -167,7 +173,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                   <Button
                     @kind='secondary'
                     {{on 'click' this.resetRoomRename}}
-                    data-test-cancel-room-name-button
+                    data-test-cancel-name-button
                   >
                     Cancel
                   </Button>
@@ -176,7 +182,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                     @disabled={{this.isSaveRenameDisabled}}
                     @loading={{this.doRenameRoom.isRunning}}
                     {{on 'click' this.renameRoom}}
-                    data-test-save-room-name-button
+                    data-test-save-name-button
                   >
                     Save
                   </Button>
@@ -348,16 +354,11 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private doCreateRoom = restartableTask(
     async (newRoomName: string, newRoomInvite: string[]) => {
-      try {
-        let newRoomId = await this.matrixService.createRoom(
-          newRoomName,
-          newRoomInvite,
-        );
-        this.enterRoom(newRoomId);
-      } catch (e) {
-        // TODO: room creation error handling
-        throw e;
-      }
+      let newRoomId = await this.matrixService.createRoom(
+        newRoomName,
+        newRoomInvite,
+      );
+      this.enterRoom(newRoomId);
     },
   );
 

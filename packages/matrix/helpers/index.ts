@@ -256,6 +256,15 @@ export async function openRoom(page: Page, roomName: string) {
   await isInRoom(page, roomName);
 }
 
+export async function openRenameMenu(page: Page, name: string) {
+  await page.locator(`[data-test-past-sessions-button]`).click();
+  await page
+    .locator(`[data-test-past-session-options-button="${name}"]`)
+    .click();
+  await page.locator(`[data-test-boxel-menu-item-text="Rename"]`).click();
+  await page.locator(`[data-test-name-field]`).waitFor();
+}
+
 export async function writeMessage(
   page: Page,
   roomName: string,
@@ -370,12 +379,13 @@ export async function assertRooms(page: Page, rooms: string[]) {
         rooms.length,
       rooms,
     );
-    rooms.map(
-      async (name) =>
-        await expect(
+    await Promise.all(
+      rooms.map((name) =>
+        expect(
           page.locator(`[data-test-joined-room="${name}"]`),
           `the joined room '${name}' is displayed`,
         ).toHaveCount(1),
+      ),
     );
   } else {
     await expect(
