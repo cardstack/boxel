@@ -42,7 +42,7 @@ It will be able to see any cards shared in the chat and can respond using GPT4 i
 You can deliberately trigger a specific patch by sending a message that starts `debug:patch:` and has the JSON patch you want returned. For example:
 
 ```
-debug:patch:{"firstName": "David"}
+debug:patch:{"card_id":"http://localhost:4200/card/1", "decsription": "message", "attributes": {"firstName": "David"}}
 ```
 
 This will return a patch with the ID of the last card you uploaded. This does not hit GPT4 and is useful for testing the integration of the two components without waiting for streaming responses.
