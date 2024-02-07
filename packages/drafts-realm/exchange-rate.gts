@@ -22,16 +22,11 @@ export class ExchangeRate extends CardDef {
     },
   });
 
-  convert(input: MonetaryAmount) {
-    let result = new MonetaryAmount();
-    if (input.currency === this.asset1) {
-      result.currency = this.asset2;
-      result.amount = input.amount * this.conversionRate;
-      return result;
-    } else if (input.currency === this.asset2) {
-      result.currency = this.asset1;
-      result.amount = input.amount * (1 / this.conversionRate);
-      return result;
+  convert(input: MonetaryAmount): number {
+    if (input.currency.symbol === this.asset1.symbol) {
+      return input.amount * this.conversionRate;
+    } else if (input.currency.symbol === this.asset2.symbol) {
+      return input.amount * (1 / this.conversionRate);
     } else {
       throw new Error(
         `Can only convert amounts in ${this.asset1.symbol} to ${this.asset2.symbol}, and vice versa`,
@@ -55,6 +50,9 @@ export class ExchangeRate extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
 
 
 

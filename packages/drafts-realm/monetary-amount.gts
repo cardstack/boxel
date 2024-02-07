@@ -157,7 +157,14 @@ class Edit extends Component<typeof MonetaryAmount> {
   </template>
 }
 
-export class MonetaryAmountEmbedded extends Component<typeof MonetaryAmount> {
+interface MonetaryAmountEmbeddedSignature {
+  Element: HTMLDivElement;
+  Args: {
+    model: MonetaryAmount | Partial<MonetaryAmount> | undefined;
+  };
+}
+
+export class MonetaryAmountEmbedded extends GlimmerComponent<MonetaryAmountEmbeddedSignature> {
   <template>
     <div class='monetary-amount'>
       {{@model.formattedAmount}}
@@ -178,6 +185,12 @@ export class MonetaryAmountEmbedded extends Component<typeof MonetaryAmount> {
   </template>
 }
 
+class MonetaryAmountEmbeddedFormat extends Component<typeof MonetaryAmount> {
+  <template>
+    <MonetaryAmountEmbedded @model={{@model}} />
+  </template>
+}
+
 export class MonetaryAmount extends FieldDef {
   static displayName = 'MonetaryAmount';
 
@@ -188,7 +201,14 @@ export class MonetaryAmount extends FieldDef {
     return this.currency?.format(this.amount);
   }
 
+  multiply(multiplier: number) {
+    let newModel = new MonetaryAmount();
+    newModel.amount = (this.amount || 0) * multiplier;
+    newModel.currency = this.currency;
+    return newModel;
+  }
+
   static edit = Edit;
   static atom = Atom;
-  static embedded = MonetaryAmountEmbedded;
+  static embedded = MonetaryAmountEmbeddedFormat;
 }

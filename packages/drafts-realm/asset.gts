@@ -48,6 +48,23 @@ export class Asset extends CardDef {
       </style>
     </template>
   };
+
+  static atom = class Atom extends Component<typeof Asset> {
+    <template>
+      <span>
+        {{#if @model.logoURL}}
+          <img src={{@model.logoHref}} width='20' height='20' />
+        {{/if}}
+        {{@model.title}}
+      </span>
+      <style>
+        img {
+          vertical-align: middle;
+          margin-right: var(--boxel-sp-xxxs);
+        }
+      </style>
+    </template>
+  };
 }
 
 class AssetField extends FieldDef {

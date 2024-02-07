@@ -8,6 +8,9 @@
         },
         {
           "quantity": 4
+        },
+        {
+          "quantity": 1
         }
       ],
       "title": "My Cart",
@@ -23,6 +26,11 @@
       "lineItems.1.product": {
         "links": {
           "self": "../Product/13e1dc95-e84d-4ddd-ad17-fa6b3c59cca5"
+        }
+      },
+      "lineItems.2.product": {
+        "links": {
+          "self": "../VideoProduct/9d37cb15-f63a-4eb1-ba1b-f209a12fe1c8"
         }
       },
       "preferredCurrency": {
