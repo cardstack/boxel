@@ -256,7 +256,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
-    // in the case where we get no realm URL from the card we are dealing with
+    // in the case where we get no realm URL from the card, we are dealing with
     // a new card instance that does not have a realm URL yet. For now let's
     // assume that the new card instance will reside in the realm that is hosting the app...
     let realmURL =
