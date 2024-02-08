@@ -88,6 +88,7 @@ interface Signature {
     ) => void;
   };
 }
+const { ownRealmURL } = config;
 
 export interface RenderedCardForOverlayActions {
   element: HTMLElement;
@@ -255,13 +256,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
-    let maybeURL = await this.cardService.getRealmURL(this.card);
-    if (!maybeURL) {
-      throw new Error(
-        `bug: could not determine realm URL for card ${this.card.id}`,
-      );
-    }
-    let realmURL = maybeURL;
+    // in the case where we get no realm URL from the card we are dealing with
+    // a new card instance that does not have a realm URL yet. For now let's
+    // assume that the new card instance will reside in the realm that is hosting the app...
+    let realmURL =
+      (await this.cardService.getRealmURL(this.card)) ?? new URL(ownRealmURL);
     this.realmResource = getRealm(this, () => realmURL);
     await this.realmResource.loaded;
   });

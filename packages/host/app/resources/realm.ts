@@ -22,17 +22,15 @@ const tokenRefreshPeriod = 5 * 60; // 5 minutes
 export class RealmResource extends Resource<Args> {
   @tracked token: RealmJWT | undefined;
   @tracked loaded: Promise<void> | undefined;
-  @tracked private realmURL: URL | undefined;
   @service private declare matrixService: MatrixService;
 
   modify(_positional: never[], named: Args['named']) {
     this.token = undefined;
-    this.realmURL = named.realmURL;
 
     let tokens = extractSessionsFromStorage();
     let rawToken: string | undefined;
     if (tokens) {
-      rawToken = tokens[this.realmURL.href];
+      rawToken = tokens[named.realmURL.href];
       if (rawToken) {
         let claims = claimsFromRawToken(rawToken);
         let expiration = claims.exp;
@@ -44,12 +42,8 @@ export class RealmResource extends Resource<Args> {
     }
 
     if (!this.token) {
-      this.loaded = this.getToken.perform(this.realmURL);
+      this.loaded = this.getToken.perform(named.realmURL);
     }
-  }
-
-  get url() {
-    return this.realmURL;
   }
 
   get canRead() {
@@ -61,16 +55,13 @@ export class RealmResource extends Resource<Args> {
   }
 
   private getToken = restartableTask(async (realmURL: URL) => {
-    if (!this.url) {
-      throw new Error(`bug: no realm URL--should never get here`);
-    }
     let rawToken = await this.matrixService.createRealmSession(realmURL);
     if (rawToken) {
       this.token = claimsFromRawToken(rawToken);
-      setRealmSession(this.url, rawToken);
+      setRealmSession(realmURL, rawToken);
     } else {
       this.token = undefined;
-      clearRealmSession(this.url);
+      clearRealmSession(realmURL);
     }
   });
 }
