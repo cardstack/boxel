@@ -55,8 +55,8 @@ import config from '@cardstack/host/config/environment';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 
+import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
-import type SessionsService from '@cardstack/host/services/sessions-service';
 
 import type {
   CardDef,
@@ -101,7 +101,6 @@ export interface RenderedCardForOverlayActions {
 export default class OperatorModeStackItem extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare environmentService: EnvironmentService;
-  @service declare sessionsService: SessionsService;
   @tracked selectedCards = new TrackedArray<CardDef>([]);
   @tracked isHoverOnRealmIcon = false;
   @tracked isSaving = false;
@@ -111,6 +110,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
+  private realmResource: RealmResource | undefined;
 
   cardTracker = new ElementTracker<{
     card: CardDef;
@@ -244,6 +244,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
       : cardTypeDisplayName(this.card);
   }
 
+  get canWrite() {
+    return this.realmResource?.canWrite;
+  }
+
   @cached
   get card(): CardDef {
     return this.args.item.card;
@@ -251,6 +255,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
+    let maybeURL = await this.cardService.getRealmURL(this.card);
+    if (!maybeURL) {
+      throw new Error(
+        `bug: could not determine realm URL for card ${this.card.id}`,
+      );
+    }
+    let realmURL = maybeURL;
+    this.realmResource = getRealm(this, () => realmURL);
+    await this.realmResource.loaded;
   });
 
   private subscribeToCard = task(async () => {
@@ -386,7 +399,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               {{/if}}
             </:icon>
             <:actions>
-              {{#if this.sessionsService.canWrite}}
+              {{#if this.canWrite}}
                 {{#if (eq @item.format 'isolated')}}
                   <Tooltip @placement='top'>
                     <:trigger>
