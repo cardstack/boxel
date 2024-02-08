@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -9,7 +10,6 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 import { restartableTask, timeout } from 'ember-concurrency';
-import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { Velcro } from 'ember-velcro';
 import { TrackedMap } from 'tracked-built-ins';
@@ -18,8 +18,6 @@ import {
   Button,
   IconButton,
   LoadingIndicator,
-  FieldContainer,
-  BoxelInput,
 } from '@cardstack/boxel-ui/components';
 import { ResizeHandle } from '@cardstack/boxel-ui/components';
 import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
@@ -28,13 +26,11 @@ import { aiBotUsername } from '@cardstack/runtime-common';
 
 import AiAssistantPanelPopover from '@cardstack/host/components/ai-assistant/panel-popover';
 import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
+import RenameSession from '@cardstack/host/components/ai-assistant/rename-session';
 import Room from '@cardstack/host/components/matrix/room';
 
 import ENV from '@cardstack/host/config/environment';
-import {
-  isMatrixError,
-  eventDebounceMs,
-} from '@cardstack/host/lib/matrix-utils';
+import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -133,60 +129,19 @@ export default class AiAssistantPanel extends Component<Signature> {
                 <AiAssistantPastSessionsList
                   @sessions={{this.sortedAiSessionRooms}}
                   @openSession={{this.enterRoom}}
-                  @renameSession={{this.setupRoomRename}}
+                  @renameSession={{this.setRoomToRename}}
                   @deleteSession={{this.leaveRoom}}
                   @roomToDelete={{this.roomToDelete}}
                   @setRoomToDelete={{this.setRoomToDelete}}
                 />
               </:body>
             </AiAssistantPanelPopover>
-          {{else if this.roomToEdit}}
-            <AiAssistantPanelPopover
-              {{pastSessionsVelcro.loop}}
-              data-test-rename-session
-            >
-              <:header>
-                Rename Session
-              </:header>
-              <:body>
-                <div class='rename-room'>
-                  <FieldContainer
-                    @label='Session Name'
-                    @tag='label'
-                    @vertical={{true}}
-                  >
-                    <BoxelInput
-                      @state={{this.roomNameInputState}}
-                      @value={{this.newRoomName}}
-                      @errorMessage={{this.roomNameError}}
-                      @onInput={{this.setNewRoomName}}
-                      data-test-name-field
-                    />
-                  </FieldContainer>
-                </div>
-                <div class='rename-room-button-wrapper'>
-                  <Button
-                    @kind='secondary'
-                    @size='small'
-                    {{on 'click' this.resetRoomRename}}
-                    data-test-cancel-name-button
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    @kind='primary'
-                    @size='small'
-                    @disabled={{this.isSaveRenameDisabled}}
-                    @loading={{this.doRenameRoom.isRunning}}
-                    {{on 'click' this.renameRoom}}
-                    {{onKeyMod 'Enter' this.renameRoom}}
-                    data-test-save-name-button
-                  >
-                    Save
-                  </Button>
-                </div>
-              </:body>
-            </AiAssistantPanelPopover>
+          {{else if this.roomToRename}}
+            <RenameSession
+              @velcroBindings={{pastSessionsVelcro.loop}}
+              @room={{this.roomToRename}}
+              @onClose={{fn this.setRoomToRename undefined}}
+            />
           {{/if}}
         </div>
 
@@ -280,22 +235,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       .create-new-loading {
         padding: var(--boxel-sp);
       }
-
-      .rename-room {
-        padding: 0 var(--boxel-sp);
-      }
-      .rename-room :deep(.label) {
-        font: 700 var(--boxel-font-sm);
-      }
-      .rename-room-button-wrapper {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
-      }
-      .rename-room-button-wrapper :deep(.boxel-button:not(:disabled)) {
-        --boxel-button-text-color: var(--boxel-dark);
-      }
     </style>
   </template>
 
@@ -305,9 +244,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
-  @tracked private roomToEdit: RoomField | undefined = undefined;
-  @tracked private newRoomName = '';
-  @tracked private roomNameError: string | undefined = undefined;
+  @tracked private roomToRename: RoomField | undefined = undefined;
   @tracked private roomToDelete: RoomField | undefined = undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -402,58 +339,10 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.hidePastSessions();
   }
 
-  @action private setupRoomRename(room: RoomField) {
-    this.roomToEdit = room;
-    this.newRoomName = room.name;
+  @action private setRoomToRename(room: RoomField | undefined) {
+    this.roomToRename = room;
     this.hidePastSessions();
   }
-
-  @action private resetRoomRename() {
-    this.roomNameError = undefined;
-    this.newRoomName = '';
-    this.roomToEdit = undefined;
-  }
-
-  private get roomNameInputState() {
-    return this.roomNameError ? 'invalid' : 'initial';
-  }
-
-  @action
-  private setNewRoomName(name: string) {
-    this.roomNameError = undefined;
-    this.newRoomName = name;
-  }
-
-  private get isSaveRenameDisabled() {
-    return (
-      !this.newRoomName?.length ||
-      this.newRoomName === this.roomToEdit?.name ||
-      this.doRenameRoom.isRunning
-    );
-  }
-
-  @action private renameRoom() {
-    this.doRenameRoom.perform();
-  }
-
-  private doRenameRoom = restartableTask(async () => {
-    if (!this.newRoomName.length || !this.roomToEdit) {
-      throw new Error(`bug: should never get here`);
-    }
-    try {
-      await this.matrixService.client.setRoomName(
-        this.roomToEdit.roomId,
-        this.newRoomName,
-      );
-      this.resetRoomRename();
-    } catch (e) {
-      if (isMatrixError(e)) {
-        this.roomNameError = `Error renaming room: ${e.data.error}`;
-        return;
-      }
-      throw e;
-    }
-  });
 
   @action private setRoomToDelete(room: RoomField | undefined) {
     this.roomToDelete = room;

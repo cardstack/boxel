@@ -105,14 +105,7 @@ test.describe('Room creation', () => {
     await expect(page.locator(`[data-test-rename-session]`)).toHaveCount(0);
     await assertRooms(page, [room1, room2]);
 
-    await page.locator(`[data-test-past-sessions-button]`).click();
-    await page
-      .locator(`[data-test-past-session-options-button="${room1}"]`)
-      .click();
-    await expect(
-      page.locator(`[data-test-boxel-menu-item-text="Rename"]`),
-    ).toHaveCount(1);
-    await page.locator(`[data-test-boxel-menu-item-text="Rename"]`).click();
+    await openRenameMenu(page, room1);
     let name = await page.locator('[data-test-name-field]').inputValue();
     expect(name).not.toEqual(newName);
     expect(name).toEqual(room1);

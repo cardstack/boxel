@@ -261,6 +261,9 @@ export async function openRenameMenu(page: Page, name: string) {
   await page
     .locator(`[data-test-past-session-options-button="${name}"]`)
     .click();
+  await expect(
+    page.locator(`[data-test-boxel-menu-item-text="Rename"]`),
+  ).toHaveCount(1);
   await page.locator(`[data-test-boxel-menu-item-text="Rename"]`).click();
   await page.locator(`[data-test-name-field]`).waitFor();
 }
