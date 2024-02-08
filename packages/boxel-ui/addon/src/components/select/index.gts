@@ -66,7 +66,8 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
   </PowerSelect>
   <style>
     .boxel-select {
-      border: 0;
+      border: 1px solid var(--boxel-form-control-border-color);
+      border-radius: var(--boxel-form-control-border-radius);
       background: none;
       display: flex;
       gap: var(--boxel-sp-sm);
@@ -89,7 +90,7 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
         reverse;
 
       box-shadow: var(--boxel-box-shadow);
-      border-radius: var(--boxel-border-radius);
+      border-radius: var(--boxel-form-control-border-radius);
     }
 
     .boxel-select__dropdown :deep(ul) {
@@ -137,7 +138,8 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       outline: var(--boxel-outline);
     }
 
-    .ember-power-select-option--no-matches-message {
+    .boxel-select__dropdown
+      :deep(.ember-power-select-option--no-matches-message) {
       padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
     }
 
@@ -145,12 +147,6 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       font-weight: 600;
       font-size: var(--boxel-font-size-sm);
       padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
-    }
-
-    .boxel-select :deep(.ember-power-select-placeholder),
-    .boxel-select--selected .boxel-select__item {
-      font-weight: bold;
-      font-size: var(--boxel-font-size);
     }
 
     .boxel-select__dropdown.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-in {

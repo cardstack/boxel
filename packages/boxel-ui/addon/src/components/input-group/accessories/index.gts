@@ -2,6 +2,8 @@ import { type EmptyObject } from '@ember/component/helper';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
 
+import cn from '../../../helpers/cn.ts';
+import setCssVar from '../../../modifiers/set-css-var.ts';
 import BoxelButton, { type BoxelButtonKind } from '../../button/index.gts';
 import BoxelIconButton, {
   type Signature as BoxelIconButtonSignature,
@@ -129,8 +131,13 @@ interface SelectAccessorySignature<ItemT = any> {
 export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
   <template>
     <div
-      class='boxel-input-group__accessory boxel-input-group__select-accessory'
+      class={{cn
+        'boxel-input-group__accessory'
+        'boxel-input-group__select-accessory'
+        boxel-input-group__select-accessory--disabled=@disabled
+      }}
       data-test-boxel-input-group-select-accessory
+      {{setCssVar boxel-form-control-border-color='transparent'}}
     >
       <BoxelSelect
         @disabled={{@disabled}}
@@ -174,8 +181,8 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         font-weight: 600;
         padding: var(
           --boxel-button-padding,
-          var(--boxel-sp-xs) var(--boxel-sp) var(--boxel-sp-xs)
-            var(--boxel-sp-sm)
+          var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
+            var(--boxel-sp-xs)
         );
       }
 
@@ -195,7 +202,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         transform: rotate(180deg);
       }
 
-      .boxel-input-group--disabled .boxel-input-group__select-accessory {
+      .boxel-input-group__select-accessory--disabled {
         border-color: var(--boxel-input-group-border-color);
         color: rgb(0 0 0 / 50%);
         opacity: 0.5;
