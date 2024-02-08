@@ -4,8 +4,6 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { ModifierLike } from '@glint/template';
-
 import { restartableTask } from 'ember-concurrency';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
@@ -23,8 +21,8 @@ import type { RoomField } from 'https://cardstack.com/base/room';
 import AiAssistantPanelPopover from './panel-popover';
 
 interface Signature {
+  Element: HTMLElement;
   Args: {
-    velcroBindings: ModifierLike<{ Element: HTMLElement }>;
     room: RoomField;
     onClose: () => void;
   };
@@ -32,7 +30,7 @@ interface Signature {
 
 export default class RenameSession extends Component<Signature> {
   <template>
-    <AiAssistantPanelPopover {{@velcroBindings}} data-test-rename-session>
+    <AiAssistantPanelPopover data-test-rename-session ...attributes>
       <:header>Rename Session</:header>
       <:body>
         <div class='rename-field'>

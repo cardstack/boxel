@@ -138,9 +138,9 @@ export default class AiAssistantPanel extends Component<Signature> {
             </AiAssistantPanelPopover>
           {{else if this.roomToRename}}
             <RenameSession
-              @velcroBindings={{pastSessionsVelcro.loop}}
               @room={{this.roomToRename}}
               @onClose={{fn this.setRoomToRename undefined}}
+              {{pastSessionsVelcro.loop}}
             />
           {{/if}}
         </div>
