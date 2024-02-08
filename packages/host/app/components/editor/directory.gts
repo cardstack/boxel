@@ -32,6 +32,7 @@ export default class Directory extends Component<Args> {
           {{#if (eq entry.kind 'file')}}
             <button
               data-test-file={{entryPath}}
+              title={{entry.name}}
               {{on 'click' (fn this.openFile entryPath)}}
               {{scrollIntoViewModifier
                 (fileIsSelected entryPath this.operatorModeStateService)
@@ -49,6 +50,7 @@ export default class Directory extends Component<Args> {
           {{else}}
             <button
               data-test-directory={{entryPath}}
+              title={{entry.name}}
               {{on 'click' (fn this.toggleDirectory entryPath)}}
               class='directory'
             >
@@ -93,6 +95,9 @@ export default class Directory extends Component<Args> {
         padding: var(--boxel-sp-xxxs);
         width: 100%;
         text-align: start;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .directory:hover,

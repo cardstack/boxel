@@ -298,12 +298,14 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitFor('[data-test-file]');
     assert
       .dom('[data-test-directory="Person/"]')
-      .exists('Person/ directory entry is rendered');
+      .exists('Person/ directory entry is rendered')
+      .hasAttribute('title', 'Person/');
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('closed');
 
     assert
       .dom('[data-test-file="person.gts"]')
-      .exists('person.gts file entry is rendered');
+      .exists('person.gts file entry is rendered')
+      .hasAttribute('title', 'person.gts');
 
     await click('[data-test-directory="Person/"]');
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
