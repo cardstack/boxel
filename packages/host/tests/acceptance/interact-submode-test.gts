@@ -9,7 +9,7 @@ import {
 
 import { setupApplicationTest } from 'ember-qunit';
 
-import window from 'ember-window-mock';
+import windowMock from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
@@ -37,10 +37,13 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
   setupAcceptanceTestRealm,
-  setupSessionsServiceMock,
   visitOperatorMode,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
+  [testRealmURL]: ['read', 'write'],
+};
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
@@ -50,17 +53,21 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
+  setupMatrixServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
+    windowMock.localStorage.removeItem('recent-cards');
+    windowMock.localStorage.removeItem('recent-files');
+    // intentionally not using the window mock because otherwise the actual
+    // app's local storage stomps on top of the window mock
+    window.localStorage.removeItem('boxel-session');
   });
 
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
+    realmPermissions = { [testRealmURL]: ['read', 'write'] };
+    windowMock.localStorage.removeItem('recent-cards');
+    windowMock.localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('boxel-session');
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
@@ -754,7 +761,9 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     module('when the user lacks write permissions', function (hooks) {
-      setupSessionsServiceMock(hooks, true, false);
+      hooks.beforeEach(async function () {
+        realmPermissions = { [testRealmURL]: ['read'] };
+      });
 
       test('the edit button is hidden when the user lacks permissions', async function (assert) {
         await visitOperatorMode({
@@ -860,7 +869,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
-      window.localStorage.setItem(
+      windowMock.localStorage.setItem(
         'recent-cards',
         JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       );

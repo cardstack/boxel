@@ -9,6 +9,7 @@ import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -16,6 +17,12 @@ import type { RoomField } from 'https://cardstack.com/base/room';
 import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+
+export type MockMatrixService = MatrixService & {
+  cardAPI: typeof cardApi;
+  createAndJoinRoom(roomId: string): Promise<void>;
+  lastMessageSent: any;
+};
 
 class MockClient {
   lastSentEvent: any;
@@ -49,139 +56,153 @@ class MockClient {
     return this.userId;
   }
 }
+function generateMockMatrixService(
+  realmPermissions?: () => {
+    [realmURL: string]: ('read' | 'write')[];
+  },
+) {
+  class MockMatrixService extends Service implements MockMatrixService {
+    @service declare loaderService: LoaderService;
+    lastMessageSent: any;
+    // @ts-ignore
+    @tracked client: MockClient = new MockClient('@testuser:staging', '');
+    // @ts-ignore
+    cardAPI!: typeof cardApi;
 
-export class MockMatrixService extends Service {
-  @service declare loaderService: LoaderService;
-  lastMessageSent: any;
-  // @ts-ignore
-  @tracked client: MockClient = new MockClient('@testuser:staging', '');
-  // @ts-ignore
-  cardAPI!: typeof cardApi;
+    profile = getMatrixProfile(this, () => this.userId);
 
-  profile = getMatrixProfile(this, () => this.userId);
+    // These will be empty in the tests, but we need to define them to satisfy the interface
+    rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+    roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
+      new TrackedMap();
 
-  // These will be empty in the tests, but we need to define them to satisfy the interface
-  rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
-  roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
-    new TrackedMap();
+    async start(_auth?: any) {}
 
-  async start(_auth?: any) {}
+    get isLoggedIn() {
+      return this.userId !== undefined;
+    }
+    get userId() {
+      return this.client.getUserId();
+    }
 
-  get isLoggedIn() {
-    return this.userId !== undefined;
+    async allowedToSetObjective(_roomId: string): Promise<boolean> {
+      return false;
+    }
+
+    async createRealmSession(realmURL: URL) {
+      let secret = "shhh! it's a secret";
+      let nowInSeconds = Math.floor(Date.now() / 1000);
+      let expires = nowInSeconds + 60 * 60;
+      let header = { alg: 'none', typ: 'JWT' };
+      let payload = {
+        iat: nowInSeconds,
+        exp: expires,
+        user: this.userId,
+        realm: realmURL.href,
+        permissions: realmPermissions?.()[realmURL.href] ?? ['read', 'write'],
+      };
+      let stringifiedHeader = JSON.stringify(header);
+      let stringifiedPayload = JSON.stringify(payload);
+      let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
+        stringifiedPayload,
+      )}`;
+      // this is our silly JWT--we don't sign with crypto since we are running in the
+      // browser so the secret is the signature
+      return Promise.resolve(`${headerAndPayload}.${secret}`);
+    }
+
+    async createRoom(
+      name: string,
+      _invites: string[], // these can be local names
+      _topic?: string,
+    ): Promise<string> {
+      return name;
+    }
+
+    async sendMessage(
+      roomId: string,
+      body: string | undefined,
+      cards?: CardDef[],
+      context?: OperatorModeContext,
+    ) {
+      this.lastMessageSent = { roomId, body, cards, context };
+    }
+
+    async logout() {
+      this.client = new MockClient(undefined);
+    }
+
+    async setDisplayName(displayName: string) {
+      this.client.displayname = displayName;
+      return Promise.resolve();
+    }
+
+    async reloadProfile() {
+      await this.profile.load.perform();
+    }
+
+    public createAndJoinRoom(roomId: string) {
+      addRoomEvent(this, {
+        event_id: 'eventname',
+        room_id: roomId,
+        type: 'm.room.name',
+        content: {
+          name: 'test_a',
+        },
+      });
+
+      addRoomEvent(this, {
+        event_id: 'eventcreate',
+        room_id: roomId,
+        type: 'm.room.create',
+        origin_server_ts: 0,
+        content: {
+          creator: '@testuser:staging',
+          room_version: '0',
+        },
+      });
+
+      addRoomEvent(this, {
+        event_id: 'eventjoin',
+        room_id: roomId,
+        type: 'm.room.member',
+        sender: '@testuser:staging',
+        state_key: '@testuser:staging',
+        content: {
+          displayname: 'testuser',
+          membership: 'join',
+          membershipTs: Date.now(),
+          membershipInitiator: '@testuser:staging',
+        },
+      });
+
+      addRoomEvent(this, {
+        event_id: 'eventinvite',
+        room_id: roomId,
+        type: 'm.room.member',
+        sender: '@testuser:staging',
+        state_key: '@aibot:localhost',
+        content: {
+          displayname: 'aibot',
+          membership: 'invite',
+        },
+      });
+    }
   }
-  get userId() {
-    return this.client.getUserId();
-  }
-
-  async allowedToSetObjective(_roomId: string): Promise<boolean> {
-    return false;
-  }
-
-  async createRealmSession(realmURL: URL) {
-    let secret = "shhh! it's a secret";
-    let nowInSeconds = Math.floor(Date.now() / 1000);
-    let expires = nowInSeconds + 60 * 60;
-    let header = { alg: 'none', typ: 'JWT' };
-    let payload = {
-      iat: nowInSeconds,
-      exp: expires,
-      user: this.userId,
-      realm: realmURL.href,
-      permissions: ['read', 'write'],
-    };
-    let stringifiedHeader = JSON.stringify(header);
-    let stringifiedPayload = JSON.stringify(payload);
-    let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
-      stringifiedPayload,
-    )}`;
-    // this is our silly JWT--we don't sign with crypto since we are running in the
-    // browser so the secret is the signature
-    return Promise.resolve(`${headerAndPayload}.${secret}`);
-  }
-
-  async createRoom(
-    name: string,
-    _invites: string[], // these can be local names
-    _topic?: string,
-  ): Promise<string> {
-    return name;
-  }
-
-  async sendMessage(
-    roomId: string,
-    body: string | undefined,
-    cards?: CardDef[],
-    context?: OperatorModeContext,
-  ) {
-    this.lastMessageSent = { roomId, body, cards, context };
-  }
-
-  async logout() {
-    this.client = new MockClient(undefined);
-  }
-
-  async setDisplayName(displayName: string) {
-    this.client.displayname = displayName;
-    return Promise.resolve();
-  }
-
-  async reloadProfile() {
-    await this.profile.load.perform();
-  }
-
-  public createAndJoinRoom(roomId: string) {
-    addRoomEvent(this, {
-      event_id: 'eventname',
-      room_id: roomId,
-      type: 'm.room.name',
-      content: {
-        name: 'test_a',
-      },
-    });
-
-    addRoomEvent(this, {
-      event_id: 'eventcreate',
-      room_id: roomId,
-      type: 'm.room.create',
-      origin_server_ts: 0,
-      content: {
-        creator: '@testuser:staging',
-        room_version: '0',
-      },
-    });
-
-    addRoomEvent(this, {
-      event_id: 'eventjoin',
-      room_id: roomId,
-      type: 'm.room.member',
-      sender: '@testuser:staging',
-      state_key: '@testuser:staging',
-      content: {
-        displayname: 'testuser',
-        membership: 'join',
-        membershipTs: Date.now(),
-        membershipInitiator: '@testuser:staging',
-      },
-    });
-
-    addRoomEvent(this, {
-      event_id: 'eventinvite',
-      room_id: roomId,
-      type: 'm.room.member',
-      sender: '@testuser:staging',
-      state_key: '@aibot:localhost',
-      content: {
-        displayname: 'aibot',
-        membership: 'invite',
-      },
-    });
-  }
+  return MockMatrixService;
 }
 
-export function setupMatrixServiceMock(hooks: NestedHooks) {
+export function setupMatrixServiceMock(
+  hooks: NestedHooks,
+  realmPermissions?: () => {
+    [realmURL: string]: ('read' | 'write')[];
+  },
+) {
   hooks.beforeEach(function () {
-    this.owner.register('service:matrixService', MockMatrixService);
+    this.owner.register(
+      'service:matrixService',
+      generateMockMatrixService(realmPermissions),
+    );
     let matrixService = this.owner.lookup(
       'service:matrixService',
     ) as MockMatrixService;
