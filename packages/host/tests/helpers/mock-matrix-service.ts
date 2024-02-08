@@ -78,6 +78,28 @@ export class MockMatrixService extends Service {
     return false;
   }
 
+  async createRealmSession(realmURL: URL) {
+    let secret = "shhh! it's a secret";
+    let nowInSeconds = Math.floor(Date.now() / 1000);
+    let expires = nowInSeconds + 60 * 60;
+    let header = { alg: 'none', typ: 'JWT' };
+    let payload = {
+      iat: nowInSeconds,
+      exp: expires,
+      user: this.userId,
+      realm: realmURL.href,
+      permissions: ['read', 'write'],
+    };
+    let stringifiedHeader = JSON.stringify(header);
+    let stringifiedPayload = JSON.stringify(payload);
+    let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
+      stringifiedPayload,
+    )}`;
+    // this is our silly JWT--we don't sign with crypto since we are running in the
+    // browser so the secret is the signature
+    return Promise.resolve(`${headerAndPayload}.${secret}`);
+  }
+
   async createRoom(
     name: string,
     _invites: string[], // these can be local names

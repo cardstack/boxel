@@ -22,8 +22,8 @@ const tokenRefreshPeriod = 5 * 60; // 5 minutes
 export class RealmResource extends Resource<Args> {
   @tracked token: RealmJWT | undefined;
   @tracked loaded: Promise<void> | undefined;
+  @tracked private realmURL: URL | undefined;
   @service private declare matrixService: MatrixService;
-  private realmURL: URL | undefined;
 
   modify(_positional: never[], named: Args['named']) {
     this.token = undefined;
