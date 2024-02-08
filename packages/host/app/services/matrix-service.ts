@@ -6,7 +6,7 @@ import { task } from 'ember-concurrency';
 
 import { marked } from 'marked';
 import {
-  type IAuthData,
+  type LoginResponse,
   type MatrixEvent,
   type RoomMember,
   type EmittedEvents,
@@ -167,7 +167,7 @@ export default class MatrixService extends Service {
     }
   }
 
-  async startAndSetDisplayName(auth: IAuthData, displayName: string) {
+  async startAndSetDisplayName(auth: LoginResponse, displayName: string) {
     this.start(auth);
     this.setDisplayName(displayName);
   }
@@ -180,7 +180,7 @@ export default class MatrixService extends Service {
     await this.profile.load.perform();
   }
 
-  async start(auth?: IAuthData) {
+  async start(auth?: MatrixSDK.LoginResponse) {
     if (!auth) {
       auth = getAuth();
       if (!auth) {
@@ -596,7 +596,7 @@ export default class MatrixService extends Service {
       }),
     });
     if (response.ok) {
-      return (await response.json()) as MatrixSDK.IAuthData;
+      return (await response.json()) as MatrixSDK.LoginResponse;
     } else {
       let data = (await response.json()) as { errcode: string; error: string };
       let error = new Error(data.error) as any;
@@ -655,7 +655,7 @@ export default class MatrixService extends Service {
   }
 }
 
-function saveAuth(auth: IAuthData) {
+function saveAuth(auth: LoginResponse) {
   localStorage.setItem('auth', JSON.stringify(auth));
 }
 
@@ -663,12 +663,12 @@ function clearAuth() {
   localStorage.removeItem('auth');
 }
 
-function getAuth(): IAuthData | undefined {
+function getAuth(): LoginResponse | undefined {
   let auth = localStorage.getItem('auth');
   if (!auth) {
     return;
   }
-  return JSON.parse(auth) as IAuthData;
+  return JSON.parse(auth) as LoginResponse;
 }
 
 interface MessageOptions {
