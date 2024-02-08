@@ -1052,6 +1052,9 @@ importers:
       '@cardstack/cardpay-sdk':
         specifier: ^1.0.53
         version: 1.0.53(@babel/core@7.22.11)(typescript@5.1.6)
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.182
