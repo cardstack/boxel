@@ -13,7 +13,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
   ><path fill='none' d='M0 0h24v24H0z' /><path
       fill='var(--icon-color, #000)'
       stroke='var(--icon-color, #000)'
-      stroke-width='.7'
+      stroke-width='var(--icon-stroke-width, 0.7)'
       d='M4 20.75a.751.751 0 0 1-.75-.75v-4.181a.755.755 0 0 1 .22-.53L14.711 4.05a2.72 2.72 0 0 1 3.848 0l1.391 1.391a2.72 2.72 0 0 1 0 3.848L8.712 20.53a.747.747 0 0 1-.531.22zm.75-4.621v3.121h3.12l7.91-7.91-3.12-3.12zm12.091-5.849 2.051-2.051a1.223 1.223 0 0 0 0-1.727l-1.393-1.394a1.222 1.222 0 0 0-1.727 0L13.72 7.16z'
     /></svg>
 </template>;
