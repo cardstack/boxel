@@ -9,7 +9,7 @@ import {
 
 import { setupApplicationTest } from 'ember-qunit';
 
-import windowMock from 'ember-window-mock';
+import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
@@ -57,17 +57,15 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupMatrixServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
-    windowMock.localStorage.removeItem('recent-cards');
-    windowMock.localStorage.removeItem('recent-files');
-    // intentionally not using the window mock because otherwise the actual
-    // app's local storage stomps on top of the window mock
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
     window.localStorage.removeItem('boxel-session');
   });
 
   hooks.beforeEach(async function () {
     realmPermissions = { [testRealmURL]: ['read', 'write'] };
-    windowMock.localStorage.removeItem('recent-cards');
-    windowMock.localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
     window.localStorage.removeItem('boxel-session');
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -918,7 +916,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
-      windowMock.localStorage.setItem(
+      window.localStorage.setItem(
         'recent-cards',
         JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       );

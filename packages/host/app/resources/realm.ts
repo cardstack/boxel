@@ -3,6 +3,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
+import window from 'ember-window-mock';
 
 import { type TokenClaims } from '@cardstack/runtime-common';
 
@@ -77,20 +78,20 @@ export function clearAllRealmSessions() {
 }
 
 function setRealmSession(realmURL: URL, rawToken: string) {
-  let sessionStr = localStorage.getItem(LOCAL_STORAGE_KEY) ?? '{}';
+  let sessionStr = window.localStorage.getItem(LOCAL_STORAGE_KEY) ?? '{}';
   let session = JSON.parse(sessionStr);
   session[realmURL.href] = rawToken;
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
+  window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
 }
 
 function clearRealmSession(realmURL: URL) {
-  let sessionStr = localStorage.getItem(LOCAL_STORAGE_KEY);
+  let sessionStr = window.localStorage.getItem(LOCAL_STORAGE_KEY);
   if (!sessionStr) {
     return;
   }
   let session = JSON.parse(sessionStr);
   delete session[realmURL.href];
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
+  window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
 }
 
 function claimsFromRawToken(rawToken: string): RealmJWT {
