@@ -3,8 +3,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import { type MatrixCardError } from '@cardstack/runtime-common';
-
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -13,7 +11,6 @@ import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type { RoomField } from 'https://cardstack.com/base/room';
-import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 
@@ -62,8 +59,6 @@ export class MockMatrixService extends Service {
 
   // These will be empty in the tests, but we need to define them to satisfy the interface
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
-  roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
-    new TrackedMap();
 
   async start(_auth?: any) {}
 
@@ -72,10 +67,6 @@ export class MockMatrixService extends Service {
   }
   get userId() {
     return this.client.getUserId();
-  }
-
-  async allowedToSetObjective(_roomId: string): Promise<boolean> {
-    return false;
   }
 
   async createRoom(

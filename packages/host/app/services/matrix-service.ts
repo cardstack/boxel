@@ -17,8 +17,6 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   type LooseSingleCardDocument,
-  type CodeRef,
-  type MatrixCardError,
   type TokenClaims,
   sanitizeHtml,
   aiBotUsername,
@@ -39,7 +37,6 @@ import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/room';
-import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
@@ -51,7 +48,6 @@ import type SessionsService from './sessions-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL, ownRealmURL } = ENV;
-const SET_OBJECTIVE_POWER_LEVEL = 50;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -71,8 +67,6 @@ export default class MatrixService extends Service {
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
-  roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
-    new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
@@ -442,29 +436,6 @@ export default class MatrixService extends Service {
     } else {
       await this.client.sendHtmlMessage(roomId, body ?? '', html);
     }
-  }
-
-  async allowedToSetObjective(roomId: string): Promise<boolean> {
-    let powerLevels = await this.getPowerLevels(roomId);
-    let myUserId = this.client.getUserId();
-    if (!myUserId) {
-      throw new Error(`bug: cannot get user ID for current matrix client`);
-    }
-
-    return (powerLevels[myUserId] ?? 0) >= SET_OBJECTIVE_POWER_LEVEL;
-  }
-
-  async setObjective(roomId: string, ref: CodeRef): Promise<void> {
-    if (!this.allowedToSetObjective(roomId)) {
-      throw new Error(
-        `The user '${this.client.getUserId()}' is not permitted to set an objective in room '${roomId}'`,
-      );
-    }
-    await this.client.sendEvent(roomId, 'm.room.message', {
-      msgtype: 'org.boxel.objective',
-      body: `Objective has been set by ${this.client.getUserId()}`,
-      ref,
-    });
   }
 
   async initializeRooms() {
