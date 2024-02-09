@@ -28,7 +28,6 @@ import {
   isField,
   primitive,
   identifyCard,
-  isCardDef,
   loadCard,
   humanReadable,
   maybeURL,
@@ -71,7 +70,7 @@ export type PartialBaseInstanceType<T extends BaseDefConstructor> = T extends {
   [primitive]: infer P;
 }
   ? P | null
-  : Partial<InstanceType<T>>;
+  : Partial<InstanceType<T>> & { constructor: BaseDefConstructor };
 export type FieldsTypeFor<T extends BaseDef> = {
   [Field in keyof T]: BoxComponent &
     (T[Field] extends ArrayLike<unknown>
@@ -1720,22 +1719,19 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
 
 class MissingEmbeddedTemplate extends GlimmerComponent<{
   Args: {
+    displayName: string;
+    kind: 'CardDef' | 'FieldDef';
+    actions: Actions | undefined;
     cardOrField: typeof BaseDef;
-    model: CardDef;
-    fields: Record<string, new () => GlimmerComponent>;
-    context?: CardContext;
   };
 }> {
   <template>
-    <div
-      class='missing-embedded-template
-        {{if (isCardDef @cardOrField) "card" "field"}}'
-    >
+    <div class='missing-embedded-template {{@kind}}'>
       <span data-test-missing-embedded-template-text>Missing embedded component
         for
-        {{if (isCardDef @cardOrField) 'CardDef' 'FieldDef'}}:
-        {{@cardOrField.displayName}}</span>
-      {{#if @context.actions.changeSubmode}}
+        {{@kind}}:
+        {{@displayName}}</span>
+      {{#if @actions.changeSubmode}}
         <span
           class='open-code-submode'
           {{on 'click' this.openCodeSubmode}}
@@ -1763,11 +1759,11 @@ class MissingEmbeddedTemplate extends GlimmerComponent<{
         letter-spacing: var(--boxel-lsp-xs);
         transition: background-color var(--boxel-transition);
       }
-      .card {
+      .CardDef {
         width: calc(100% + calc(2 * var(--boxel-sp)));
         margin: calc(-1 * var(--boxel-sp));
       }
-      .field {
+      .FieldDef {
         width: 100%;
         margin: 0;
       }
@@ -1788,7 +1784,7 @@ class MissingEmbeddedTemplate extends GlimmerComponent<{
       return;
     }
     let moduleId = moduleFrom(ref);
-    this.args.context?.actions?.changeSubmode(new URL(moduleId), 'code');
+    this.args.actions?.changeSubmode(new URL(moduleId), 'code');
   }
 }
 
@@ -1871,7 +1867,18 @@ export class FieldDef extends BaseDef {
   static isFieldDef = true;
   static displayName = 'Field';
 
-  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
+  static embedded: BaseDefComponent = class Embedded extends Component<
+    typeof this
+  > {
+    <template>
+      <MissingEmbeddedTemplate
+        @displayName={{@model.constructor.displayName}}
+        @kind={{'FieldDef'}}
+        @actions={{@context.actions}}
+        @cardOrField={{@cardOrField}}
+      />
+    </template>
+  };
   static edit: BaseDefComponent = FieldDefEditTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
 }
@@ -1968,7 +1975,19 @@ export class CardDef extends BaseDef {
     }
   }
 
-  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
+  static embedded: BaseDefComponent = class Embedded extends Component<
+    typeof this
+  > {
+    <template>
+      <MissingEmbeddedTemplate
+        @displayName={{@model.constructor.displayName}}
+        @kind={{'CardDef'}}
+        @actions={{@context.actions}}
+        @cardOrField={{@cardOrField}}
+      />
+    </template>
+  };
+
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
@@ -2683,6 +2702,7 @@ function cardThunk<CardT extends BaseDefConstructor>(
 
 export type SignatureFor<CardT extends BaseDefConstructor> = {
   Args: {
+    cardOrField: BaseDefConstructor;
     model: PartialBaseInstanceType<CardT>;
     fields: FieldsTypeFor<InstanceType<CardT>>;
     set: Setter;
