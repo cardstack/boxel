@@ -5,7 +5,7 @@
     "url": "https://github.com/cardstack/boxel"
   },
   "scripts": {
-    "build:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && pnpm build:production",
+    "build:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && NODE_OPTIONS='--max_old_space_size=8192' pnpm build:production",
     "clear-caches": "find . -name 'node_modules' -type d -prune -exec rm -rf {} \\; && rm -rf $TMPDIR/embroider",
     "deploy:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy",
     "deploy:boxel-host:preview-staging": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy s3-preview-staging --verbose",
