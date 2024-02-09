@@ -127,11 +127,13 @@ export default class RenameSession extends Component<Signature> {
       this.newRoomName = '';
       this.args.onClose();
     } catch (e) {
+      console.error(e);
+      this.roomNameError = `Error renaming room`;
       if (isMatrixError(e)) {
-        this.roomNameError = `Error renaming room: ${e.data.error}`;
-        return;
+        this.roomNameError += `: ${e.data.error}`;
+      } else if (e instanceof Error) {
+        this.roomNameError += `: ${e.message}`;
       }
-      throw e;
     }
   });
 }
