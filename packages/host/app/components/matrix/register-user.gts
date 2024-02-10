@@ -9,7 +9,11 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { type IAuthData, type IRequestTokenResponse } from 'matrix-js-sdk';
+import {
+  type RegisterResponse,
+  type IRequestTokenResponse,
+  type LoginResponse,
+} from 'matrix-js-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -650,7 +654,7 @@ export default class RegisterUser extends Component<Signature> {
         `invalid state: cannot doRegistrationFlow() in state ${this.state.type}`,
       );
     }
-    let auth: IAuthData | undefined;
+    let auth: RegisterResponse;
     try {
       auth = await this.matrixService.client.registerRequest({
         username: this.state.username,
@@ -669,7 +673,7 @@ export default class RegisterUser extends Component<Signature> {
                   client_secret: this.state.clientSecret,
                 }
               : {},
-        } as IAuthData, // IAuthData doesn't seem to know about threepid_creds...,
+        },
       });
     } catch (e: any) {
       let maybeRegistrationFlow = e.data;
@@ -691,9 +695,13 @@ export default class RegisterUser extends Component<Signature> {
 
       throw e;
     }
-
-    if (auth) {
-      await this.matrixService.startAndSetDisplayName(auth, this.state.name);
+    // If access_token and device_id are present, RegisterResponse matches LoginResponse
+    // except for the optional well_known field
+    if (auth.access_token && auth.device_id) {
+      await this.matrixService.startAndSetDisplayName(
+        auth as LoginResponse,
+        this.state.name,
+      );
       this.args.setMode('login');
     }
   });

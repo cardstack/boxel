@@ -10,11 +10,7 @@ import {
   IRoomEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import {
-  logger,
-  aiBotUsername,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
   constructHistory,
   getModifyPrompt,
@@ -111,17 +107,6 @@ async function sendOption(
     messageObject,
     eventToUpdate,
   );
-}
-
-function getLastUploadedCardID(history: IRoomEvent[]): string | undefined {
-  for (let event of history.slice().reverse()) {
-    if (event.content.msgtype === 'org.boxel.card') {
-      const cardInstances: LooseSingleCardDocument[] =
-        event.content.data.instances;
-      return cardInstances[0].data.id;
-    }
-  }
-  return undefined;
 }
 
 function getResponse(history: IRoomEvent[], aiBotUsername: string) {
@@ -228,25 +213,27 @@ async function handleDebugCommands(
     let patchMessage = eventBody.split('debug:patch:')[1];
     // If there's a card attached, we need to split it off to parse the json
     patchMessage = patchMessage.split('(Card')[0];
-    let attributes = {};
+    let command: {
+      card_id?: string;
+      description?: string;
+      attributes?: any;
+    } = {};
     try {
-      attributes = JSON.parse(patchMessage);
+      command = JSON.parse(patchMessage);
+      if (!command.card_id || !command.description || !command.attributes) {
+        throw new Error(
+          'Invalid debug patch: card_id, description, or attributes is missing.',
+        );
+      }
     } catch (error) {
-      await sendMessage(
+      return await sendMessage(
         client,
         room,
-        'Error parsing your debug patch as JSON: ' + patchMessage,
+        `Error parsing your debug patch, ${error} ${patchMessage}`,
         undefined,
       );
     }
-    let command = {
-      type: 'patch',
-      id: getLastUploadedCardID(history),
-      patch: {
-        attributes: attributes,
-      },
-    };
-    return await sendOption(client, room, command);
+    return await sendOption(client, room, command, undefined);
   }
 }
 

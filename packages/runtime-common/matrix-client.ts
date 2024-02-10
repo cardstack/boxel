@@ -17,14 +17,32 @@ export class MatrixClient {
     return this.access?.userId;
   }
 
+  private async request(
+    path: string,
+    method: 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'GET' = 'GET',
+    options: RequestInit = {},
+    includeAuth = true,
+  ) {
+    options.method = method;
+
+    if (includeAuth) {
+      if (!this.access) {
+        throw new Error(`Missing matrix access token`);
+      }
+      options.headers = {
+        ...options.headers,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.access.accessToken}`,
+      };
+    }
+    return fetch(`${this.matrixURL.href}${path}`, options);
+  }
+
   async login() {
-    let response = await fetch(
-      `${this.matrixURL.href}_matrix/client/v3/login`,
+    let response = await this.request(
+      '_matrix/client/v3/login',
+      'POST',
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           identifier: {
             type: 'm.id.user',
@@ -34,8 +52,11 @@ export class MatrixClient {
           type: 'm.login.password',
         }),
       },
+      false,
     );
+
     let json = await response.json();
+
     if (!response.ok) {
       throw new Error(
         `Unable to login to matrix ${this.matrixURL.href} as user ${
@@ -51,24 +72,31 @@ export class MatrixClient {
     this.access = { accessToken, deviceId, userId };
   }
 
-  async createDM(invite: string): Promise<string> {
-    if (!this.access) {
-      throw new Error(`Missing matrix access token`);
-    }
-    let response = await fetch(
-      `${this.matrixURL.href}_matrix/client/v3/createRoom`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.access.accessToken}`,
-        },
-        body: JSON.stringify({
-          invite: [invite],
-          is_direct: true,
-        }),
-      },
+  async getRooms() {
+    let response = await this.request('_matrix/client/v3/joined_rooms');
+
+    return (await response.json()) as { joined_rooms: string[] };
+  }
+
+  async joinRoom(roomId: string) {
+    let response = await this.request(
+      `_matrix/client/v3/rooms/${roomId}/join`,
+      'POST',
     );
+    if (!response.ok) {
+      let json = await response.json();
+      throw new Error(
+        `Unable to join room ${roomId}: status ${
+          response.status
+        } - ${JSON.stringify(json)}`,
+      );
+    }
+  }
+
+  async createDM(invite: string): Promise<string> {
+    let response = await this.request('_matrix/client/v3/createRoom', 'POST', {
+      body: JSON.stringify({ invite: [invite], is_direct: true }),
+    });
     let json = (await response.json()) as { room_id: string };
     if (!response.ok) {
       throw new Error(
@@ -81,17 +109,10 @@ export class MatrixClient {
   }
 
   async setAccountData<T>(type: string, data: T) {
-    if (!this.access) {
-      throw new Error(`Missing matrix access token`);
-    }
-    let response = await fetch(
-      `${this.matrixURL.href}_matrix/client/v3/user/${this.access.userId}/account_data/${type}`,
+    let response = await this.request(
+      `_matrix/client/v3/user/${this.access!.userId}/account_data/${type}`,
+      'PUT',
       {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.access.accessToken}`,
-        },
         body: JSON.stringify(data),
       },
     );
@@ -99,24 +120,15 @@ export class MatrixClient {
       let json = await response.json();
       throw new Error(
         `Unable to set account data '${type}' for ${
-          this.access.userId
+          this.access!.userId
         }: status ${response.status} - ${JSON.stringify(json)}`,
       );
     }
   }
 
   async getAccountData<T>(type: string) {
-    if (!this.access) {
-      throw new Error(`Missing matrix access token`);
-    }
-    let response = await fetch(
-      `${this.matrixURL.href}_matrix/client/v3/user/${this.access.userId}/account_data/${type}`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.access.accessToken}`,
-        },
-      },
+    let response = await this.request(
+      `_matrix/client/v3/user/${this.access!.userId}/account_data/${type}`,
     );
     if (response.status === 404) {
       return;
@@ -125,7 +137,7 @@ export class MatrixClient {
     if (!response.ok) {
       throw new Error(
         `Unable to get account data '${type}' for ${
-          this.access.userId
+          this.access!.userId
         }: status ${response.status} - ${JSON.stringify(json)}`,
       );
     }
@@ -137,17 +149,13 @@ export class MatrixClient {
       throw new Error(`Missing matrix access token`);
     }
     let txnId = Date.now();
-    let response = await fetch(
-      `${this.matrixURL.href}_matrix/client/v3/rooms/${roomId}/send/${type}/${txnId}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.access.accessToken}`,
-        },
-        body: JSON.stringify(content),
-      },
+
+    let response = await this.request(
+      `_matrix/client/v3/rooms/${roomId}/send/${type}/${txnId}`,
+      'PUT',
+      { body: JSON.stringify(content) },
     );
+
     let json = (await response.json()) as { event_id: string };
     if (!response.ok) {
       throw new Error(
@@ -161,17 +169,8 @@ export class MatrixClient {
 
   // This defaults to the last 10 messages in reverse chronological order
   async roomMessages(roomId: string) {
-    if (!this.access) {
-      throw new Error(`Missing matrix access token`);
-    }
-    let response = await fetch(
-      `${this.matrixURL.href}_matrix/client/v3/rooms/${roomId}/messages?dir=b`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.access.accessToken}`,
-        },
-      },
+    let response = await this.request(
+      `_matrix/client/v3/rooms/${roomId}/messages?dir=b`,
     );
     let json = (await response.json()) as {
       chunk: {
@@ -202,15 +201,7 @@ export class MatrixClient {
     if (!this.access) {
       throw new Error(`Missing matrix access token`);
     }
-    let response = await fetch(
-      `${this.matrixURL.href}_matrix/client/v3/account/whoami`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.access.accessToken}`,
-        },
-      },
-    );
+    let response = await this.request('_matrix/client/v3/account/whoami');
     let json = (await response.json()) as {
       user_id: string;
       device_id: string;
@@ -221,4 +212,28 @@ export class MatrixClient {
       return json.user_id;
     }
   }
+}
+
+export async function waitForMatrixMessage(
+  matrixClient: MatrixClient,
+  roomId: string,
+  filter: (m: any) => boolean,
+  waitBetweenChecksMs = 200,
+  timeoutMs = 10000,
+) {
+  let waitedMs = 0;
+
+  let messages = await matrixClient.roomMessages(roomId);
+
+  while (waitedMs < timeoutMs) {
+    let message = messages.find(filter);
+    if (message) {
+      return message;
+    }
+
+    await new Promise((res) => setTimeout(res, waitBetweenChecksMs));
+    waitedMs += waitBetweenChecksMs;
+  }
+
+  return null;
 }

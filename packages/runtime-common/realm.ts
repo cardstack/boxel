@@ -77,7 +77,7 @@ import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
-import { MatrixClient } from './matrix-client';
+import { MatrixClient, waitForMatrixMessage } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
@@ -604,17 +604,17 @@ export class Realm {
     try {
       json = JSON.parse(body);
     } catch (e) {
-      return badRequest(this,  `Request body is not valid JSON`);
+      return badRequest(this, `Request body is not valid JSON`);
     }
     let { user, challenge } = json as { user?: string; challenge?: string };
     if (!user) {
-      return badRequest(this,  `Request body missing 'user' property`);
+      return badRequest(this, `Request body missing 'user' property`);
     }
 
-    if (!challenge) {
-      return await this.createChallenge(user);
-    } else {
+    if (challenge) {
       return await this.verifyChallenge(user);
+    } else {
+      return await this.createChallenge(user);
     }
   }
 
@@ -639,6 +639,7 @@ export class Realm {
       body: `auth-challenge: ${hashedChallenge}`,
       msgtype: 'm.text',
     });
+
     return createResponse(
       this,
       JSON.stringify({
@@ -666,37 +667,62 @@ export class Realm {
         `No challenge previously issued for user ${user}`,
       );
     }
-    let messages = await this.#matrixClient.roomMessages(roomId);
-    let latestChallenge = messages.find(
-      (m) =>
-        m.type === 'm.room.message' &&
-        m.sender === this.#matrixClient.userId &&
-        m.content.body.startsWith('auth-challenge:'),
+
+    // The messages look like this:
+    // --- Matrix Room Messages ---:
+    // realm1
+    // auth-challenge: 7cb8f904a2a53d256687c2aeb374a686a26cfd66af5fcc09a366d49644a3e2ba
+    // realm2
+    // auth-response: 342c5854-e716-4bda-9b31-eba83d24e25d
+    // ----------------------------
+
+    // This is a best-effort type of implementation - we don't know when the messages will appear in the room so we just wait for a bit.
+    // This is not a problem when the realms are on the same matrix server but when they are on different (federated) servers the latencies and
+    // race conditions can cause delays in the messages appearing in the room.
+    let oneMinuteAgo = Date.now() - 60000;
+
+    let latestAuthChallengeMessage = await waitForMatrixMessage(
+      this.#matrixClient,
+      roomId,
+      (m) => {
+        return (
+          m.type === 'm.room.message' &&
+          m.sender === this.#matrixClient.userId &&
+          m.content.body.startsWith('auth-challenge:') &&
+          m.origin_server_ts > oneMinuteAgo
+        );
+      },
     );
-    if (!latestChallenge) {
-      return badRequest(
-        this,
-        `No challenge previously issued for user ${user}`,
-      );
+
+    let latestAuthResponseMessage = await waitForMatrixMessage(
+      this.#matrixClient,
+      roomId,
+      (m) => {
+        return (
+          m.type === 'm.room.message' &&
+          m.sender === user &&
+          m.content.body.startsWith('auth-response:') &&
+          m.origin_server_ts > oneMinuteAgo
+        );
+      },
+    );
+
+    if (!latestAuthChallengeMessage) {
+      return badRequest(this, `No challenge found for user ${user}`);
     }
-    let latestChallengeResponse = messages.find(
-      (m) =>
-        m.type === 'm.room.message' &&
-        m.sender === user &&
-        m.content.body.startsWith('auth-response:'),
-    );
-    if (!latestChallengeResponse) {
+
+    if (!latestAuthResponseMessage) {
       return badRequest(
         this,
-        `No challenge response found for user ${user}`,
+        `No challenge response response found for user ${user}`,
       );
     }
 
-    let challenge = latestChallenge.content.body.replace(
+    let challenge = latestAuthChallengeMessage.content.body.replace(
       'auth-challenge: ',
       '',
     );
-    let response = latestChallengeResponse.content.body.replace(
+    let response = latestAuthResponseMessage.content.body.replace(
       'auth-response: ',
       '',
     );
@@ -730,7 +756,7 @@ export class Realm {
   }
 
   private async internalHandle(
-   request: Request,
+    request: Request,
     isLocal: boolean,
   ): Promise<ResponseWithNodeStream> {
     try {
@@ -889,7 +915,7 @@ export class Realm {
       ref.content instanceof Uint8Array ||
       typeof ref.content === 'string'
     ) {
-      return createResponse(this,  ref.content, {
+      return createResponse(this, ref.content, {
         headers: {
           'last-modified': formatRFC7231(ref.lastModified),
         },
@@ -901,7 +927,7 @@ export class Realm {
     }
 
     // add the node stream to the response which will get special handling in the node env
-    let response = createResponse(this,  null, {
+    let response = createResponse(this, null, {
       headers: {
         'last-modified': formatRFC7231(ref.lastModified),
       },
@@ -961,14 +987,14 @@ export class Realm {
       this.paths.local(request.url),
       await request.text(),
     );
-    return createResponse(this,  null, {
+    return createResponse(this, null, {
       status: 204,
       headers: { 'last-modified': formatRFC7231(lastModified) },
     });
   }
 
   private async getCardSourceOrRedirect(
-   request: Request,
+    request: Request,
   ): Promise<ResponseWithNodeStream> {
     let localName = this.paths.local(request.url);
     let handle = await this.getFileWithFallbacks(localName, [
@@ -980,7 +1006,7 @@ export class Realm {
     }
 
     if (handle.path !== localName) {
-      return createResponse(this,  null, {
+      return createResponse(this, null, {
         status: 302,
         headers: { Location: `${new URL(this.url).pathname}${handle.path}` },
       });
@@ -998,7 +1024,7 @@ export class Realm {
       return notFound(this, request, `${localName} not found`);
     }
     await this.delete(handle.path);
-    return createResponse(this,  null, { status: 204 });
+    return createResponse(this, null, { status: 204 });
   }
 
   private transpileJS(content: string, debugFilename: string): string {
@@ -1053,14 +1079,14 @@ export class Realm {
     try {
       content = this.transpileJS(content, debugFilename);
     } catch (err: any) {
-      return createResponse(this,  err.message, {
+      return createResponse(this, err.message, {
         // using "Not Acceptable" here because no text/javascript representation
         // can be made and we're sending text/html error page instead
         status: 406,
         headers: { 'content-type': 'text/html' },
       });
     }
-    return createResponse(this,  content, {
+    return createResponse(this, content, {
       status: 200,
       headers: { 'content-type': 'text/javascript' },
     });
@@ -1136,7 +1162,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return createResponse(this,  JSON.stringify(doc, null, 2), {
+    return createResponse(this, JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
         'content-type': SupportedMimeType.CardJson,
@@ -1209,7 +1235,7 @@ export class Realm {
         null,
         2,
       ),
-     request.headers.get('X-Boxel-Client-Request-Id'),
+      request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.card(new URL(instanceURL), {
@@ -1259,7 +1285,7 @@ export class Realm {
 
     let foundPath = this.paths.local(url);
     if (localPath !== foundPath) {
-      return createResponse(this,  null, {
+      return createResponse(this, null, {
         status: 302,
         headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
       });
@@ -1284,7 +1310,7 @@ export class Realm {
     }
     let path = this.paths.local(url) + '.json';
     await this.delete(path);
-    return createResponse(this,  null, { status: 204 });
+    return createResponse(this, null, { status: 204 });
   }
 
   private async directoryEntries(
@@ -1370,7 +1396,7 @@ export class Realm {
       ] = relationship;
     }
 
-    return createResponse(this,  JSON.stringify({ data }, null, 2), {
+    return createResponse(this, JSON.stringify({ data }, null, 2), {
       headers: { 'content-type': SupportedMimeType.DirectoryListing },
     });
   }
