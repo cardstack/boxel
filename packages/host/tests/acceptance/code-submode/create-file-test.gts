@@ -664,6 +664,12 @@ export class TestCard extends Person {
       .dom('[data-test-create-file-modal] [data-test-error-message]')
       .containsText('Error creating card definition')
       .containsText('A deliberate fetch error');
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+
+    assert
+      .dom('[data-test-create-file-modal] [data-test-error-message]')
+      .doesNotExist('changing a field should clear the error');
   });
 
   test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {

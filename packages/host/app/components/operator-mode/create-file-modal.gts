@@ -379,9 +379,13 @@ export default class CreateFileModal extends Component<Signature> {
     this.selectedCatalogEntry = undefined;
     this.currentRequest = undefined;
     this.fileNameError = undefined;
-    this.saveError = undefined;
     this.displayName = '';
     this.fileName = '';
+    this.clearSaveError();
+  }
+
+  private clearSaveError() {
+    this.saveError = undefined;
   }
 
   private get fileNameInputState() {
@@ -399,14 +403,17 @@ export default class CreateFileModal extends Component<Signature> {
         `Cannot select realm when there is no this.currentRequest`,
       );
     }
+    this.clearSaveError();
     this.currentRequest = { ...this.currentRequest, realmURL: new URL(path) };
   }
 
   @action private setDisplayName(name: string) {
+    this.clearSaveError();
     this.displayName = name;
   }
 
   @action private setFileName(name: string) {
+    this.clearSaveError();
     this.fileNameError = undefined;
     this.fileName = name;
   }
@@ -504,6 +511,7 @@ export default class CreateFileModal extends Component<Signature> {
   });
 
   private chooseType = restartableTask(async () => {
+    this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
     this.selectedCatalogEntry = await chooseCard({
       filter: {
