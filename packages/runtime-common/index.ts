@@ -79,7 +79,7 @@ export type {
   Relationship,
   Meta,
 } from './card-document';
-export type { JWTPayload } from 'realm-auth-client';
+export type { JWTPayload } from './realm-auth-client';
 export {
   isMeta,
   isCardResource,
