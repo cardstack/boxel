@@ -104,7 +104,7 @@ export default class CreateFileModal extends Component<Signature> {
           {{#if this.onSetup.isRunning}}
             <LoadingIndicator />
           {{else}}
-            <FieldContainer @label='Realm' @tag='label' class='field'>
+            <FieldContainer @label='Create In' @tag='label' class='field'>
               <RealmDropdown
                 @dropdownWidth='15rem'
                 @selectedRealmURL={{this.selectedRealmURL}}
