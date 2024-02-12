@@ -221,22 +221,19 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function createRoom(page: Page, name?: string) {
-  let roomName: string;
-  await page.locator('[data-test-create-room-mode-btn]').click();
-  if (name) {
-    roomName = name;
-    await page.locator('[data-test-room-name-field]').fill(name);
-  } else {
-    roomName = await page.locator('[data-test-room-name-field]').inputValue();
-  }
+export async function createRoom(page: Page) {
   await page.locator('[data-test-create-room-btn]').click();
+  await page.locator(`[data-test-room-name]`).waitFor();
+  let roomName = await page.locator('[data-test-room-name]').textContent();
+  if (!roomName) {
+    throw new Error('room name is not found');
+  }
   await isInRoom(page, roomName);
   return roomName;
 }
 
 export async function isInRoom(page: Page, roomName: string) {
-  await page.locator(`[data-test-room-name="${roomName}"]`).waitFor();
+  await page.locator(`[data-test-room="${roomName}"]`).waitFor();
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
 }
 
@@ -251,13 +248,24 @@ export async function deleteRoom(page: Page, roomName: string) {
       `[data-test-delete-modal-container] [data-test-confirm-delete-button]`,
     )
     .click();
-  await page.locator(`[data-test-close-past-sessions]`).click();
 }
 
 export async function openRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
   await isInRoom(page, roomName);
+}
+
+export async function openRenameMenu(page: Page, name: string) {
+  await page.locator(`[data-test-past-sessions-button]`).click();
+  await page
+    .locator(`[data-test-past-session-options-button="${name}"]`)
+    .click();
+  await expect(
+    page.locator(`[data-test-boxel-menu-item-text="Rename"]`),
+  ).toHaveCount(1);
+  await page.locator(`[data-test-boxel-menu-item-text="Rename"]`).click();
+  await page.locator(`[data-test-name-field]`).waitFor();
 }
 
 export async function writeMessage(
@@ -374,12 +382,13 @@ export async function assertRooms(page: Page, rooms: string[]) {
         rooms.length,
       rooms,
     );
-    rooms.map(
-      async (name) =>
-        await expect(
+    await Promise.all(
+      rooms.map((name) =>
+        expect(
           page.locator(`[data-test-joined-room="${name}"]`),
           `the joined room '${name}' is displayed`,
         ).toHaveCount(1),
+      ),
     );
   } else {
     await expect(

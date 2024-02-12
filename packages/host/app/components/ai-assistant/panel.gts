@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -17,27 +18,19 @@ import {
   Button,
   IconButton,
   LoadingIndicator,
-  FieldContainer,
-  BoxelInput,
 } from '@cardstack/boxel-ui/components';
 import { ResizeHandle } from '@cardstack/boxel-ui/components';
-import { not, cssVar } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
-
-import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
-import { DropdownArrowUp } from '@cardstack/boxel-ui/icons';
+import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
 import AiAssistantPanelPopover from '@cardstack/host/components/ai-assistant/panel-popover';
 import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
+import RenameSession from '@cardstack/host/components/ai-assistant/rename-session';
 import Room from '@cardstack/host/components/matrix/room';
 
 import ENV from '@cardstack/host/config/environment';
-import {
-  isMatrixError,
-  eventDebounceMs,
-} from '@cardstack/host/lib/matrix-utils';
+import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -93,99 +86,73 @@ export default class AiAssistantPanel extends Component<Signature> {
               @kind='secondary-dark'
               @size='small'
               class='new-session-button'
-              {{on 'click' this.displayCreateNew}}
-              @disabled={{this.isShowingCreateNew}}
-              data-test-create-room-mode-btn
+              {{on 'click' this.createNewSession}}
+              data-test-create-room-btn
             >
               New Session
             </Button>
 
             {{#if this.loadRoomsTask.isRunning}}
-              <LoadingIndicator />
+              <LoadingIndicator @color='var(--boxel-light)' />
             {{else}}
               <Button
                 @kind='secondary-dark'
                 @size='small'
-                {{on 'click' this.togglePastSessions}}
+                {{on 'click' this.displayPastSessions}}
                 data-test-past-sessions-button
                 class='past-sessions-button'
                 {{pastSessionsVelcro.hook}}
               >
                 Past Sessions
-
-                <DropdownArrowDown
-                  width={{20}}
-                  height={{20}}
-                  style={{cssVar icon-color='#fff'}}
-                />
+                <DropdownArrowFilled width='10' height='10' />
               </Button>
             {{/if}}
           </div>
 
-          {{#if this.isShowingCreateNew}}
-            <div class='create-room'>
-              <FieldContainer
-                @label='Room Name'
-                @tag='label'
-                class='create-room__field'
-              >
-                <BoxelInput
-                  @state={{this.roomNameInputState}}
-                  @value={{this.newRoomName}}
-                  @errorMessage={{this.roomNameError}}
-                  @onInput={{this.setNewRoomName}}
-                  data-test-room-name-field
-                />
-              </FieldContainer>
-            </div>
-            <div class='create-button-wrapper'>
-              <Button
-                @kind='secondary-dark'
-                {{on 'click' this.closeCreateRoom}}
-                data-test-create-room-cancel-btn
-              >Cancel</Button>
-              <Button
-                @kind='primary'
-                @disabled={{not this.newRoomName.length}}
-                {{on 'click' this.createNewSession}}
-                data-test-create-room-btn
-              >Create</Button>
-            </div>
-          {{/if}}
-
           {{#if this.isShowingPastSessions}}
-            <AiAssistantPanelPopover {{pastSessionsVelcro.loop}}>
+            <AiAssistantPanelPopover
+              {{pastSessionsVelcro.loop}}
+              data-test-past-sessions
+            >
               <:header>
-                <div class='past-sessions-header'>
-                  Past Sessions
-                  <button
-                    {{on 'click' this.togglePastSessions}}
-                    data-test-close-past-sessions
-                  >
-                    <DropdownArrowUp width={{20}} height={{20}} />
-                  </button>
-                </div>
+                Past Sessions
+                <IconButton
+                  @icon={{DropdownArrowFilled}}
+                  @width='12px'
+                  @height='12px'
+                  {{on 'click' this.hidePastSessions}}
+                  aria-label='Close Past Sessions'
+                  data-test-close-past-sessions
+                />
               </:header>
               <:body>
                 <AiAssistantPastSessionsList
                   @sessions={{this.sortedAiSessionRooms}}
                   @openSession={{this.enterRoom}}
+                  @renameSession={{this.setRoomToRename}}
                   @deleteSession={{this.leaveRoom}}
                   @roomToDelete={{this.roomToDelete}}
                   @setRoomToDelete={{this.setRoomToDelete}}
                 />
               </:body>
             </AiAssistantPanelPopover>
+          {{else if this.roomToRename}}
+            <RenameSession
+              @room={{this.roomToRename}}
+              @onClose={{fn this.setRoomToRename undefined}}
+              {{pastSessionsVelcro.loop}}
+            />
           {{/if}}
         </div>
 
-        {{#unless this.isShowingCreateNew}}
-          {{#if this.doCreateRoom.isRunning}}
-            <LoadingIndicator />
-          {{else if this.currentRoomId}}
-            <Room @roomId={{this.currentRoomId}} />
-          {{/if}}
-        {{/unless}}
+        {{#if this.doCreateRoom.isRunning}}
+          <LoadingIndicator
+            class='create-new-loading'
+            @color='var(--boxel-light)'
+          />
+        {{else if this.currentRoomId}}
+          <Room @roomId={{this.currentRoomId}} />
+        {{/if}}
       </div>
     </Velcro>
     {{#if this.roomToDelete}}
@@ -256,32 +223,17 @@ export default class AiAssistantPanel extends Component<Signature> {
         --icon-color: var(--boxel-highlight);
         margin-left: auto;
       }
-      .create-room {
-        padding: var(--boxel-sp) 0;
-      }
-      .create-room :deep(.boxel-label) {
-        color: var(--boxel-light);
-      }
-      .create-button-wrapper {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp-xs);
-      }
-      .past-sessions-header {
-        display: flex;
-        justify-content: space-between;
-      }
-
-      .past-sessions-header button {
-        border: 0;
-        background: inherit;
-      }
 
       .past-sessions-button svg {
+        --icon-color: var(--boxel-light);
         margin-left: var(--boxel-sp-xs);
       }
       .room-list {
         padding: 0;
+      }
+
+      .create-new-loading {
+        padding: var(--boxel-sp);
       }
     </style>
   </template>
@@ -292,9 +244,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
-  @tracked private isShowingCreateNew = false;
-  @tracked private newRoomName = '';
-  @tracked private roomNameError: string | undefined;
+  @tracked private roomToRename: RoomField | undefined = undefined;
   @tracked private roomToDelete: RoomField | undefined = undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -324,66 +274,34 @@ export default class AiAssistantPanel extends Component<Signature> {
     }
   });
 
-  @action private displayCreateNew() {
-    this.newRoomName = this.newRoomAutoName;
-    this.isShowingCreateNew = true;
-  }
-
-  private get roomNameInputState() {
-    return this.roomNameError ? 'invalid' : 'initial';
-  }
-
-  private get newRoomAutoName() {
-    return `${format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")} - ${
-      this.matrixService.userId
-    }`;
-  }
-
-  @action
-  private setNewRoomName(name: string) {
-    this.newRoomName = name;
-    this.roomNameError = undefined;
-  }
-
   @action
   private createNewSession() {
-    let newRoomName = this.newRoomName;
+    let newRoomName = `${format(
+      new Date(),
+      "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
+    )} - ${this.matrixService.userId}`;
     let newRoomInvite = [aiBotUsername];
     this.doCreateRoom.perform(newRoomName, newRoomInvite);
   }
 
   private doCreateRoom = restartableTask(
     async (newRoomName: string, newRoomInvite: string[]) => {
-      if (!newRoomName) {
-        throw new Error(
-          `bug: should never get here, create button is disabled when there is no new room name`,
-        );
-      }
-      try {
-        let newRoomId = await this.matrixService.createRoom(
-          newRoomName,
-          newRoomInvite,
-        );
-        this.enterRoom(newRoomId);
-      } catch (e) {
-        if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
-          this.roomNameError = 'Room already exists';
-          return;
-        }
-        throw e;
-      }
-      this.closeCreateRoom();
+      let newRoomId = await this.matrixService.createRoom(
+        newRoomName,
+        newRoomInvite,
+      );
+      this.enterRoom(newRoomId);
     },
   );
 
   @action
-  private closeCreateRoom() {
-    this.isShowingCreateNew = false;
+  private displayPastSessions() {
+    this.isShowingPastSessions = true;
   }
 
   @action
-  togglePastSessions() {
-    this.isShowingPastSessions = !this.isShowingPastSessions;
+  private hidePastSessions() {
+    this.isShowingPastSessions = false;
   }
 
   @cached
@@ -418,7 +336,12 @@ export default class AiAssistantPanel extends Component<Signature> {
   @action
   private enterRoom(roomId: string) {
     this.currentRoomId = roomId;
-    this.isShowingPastSessions = false;
+    this.hidePastSessions();
+  }
+
+  @action private setRoomToRename(room: RoomField | undefined) {
+    this.roomToRename = room;
+    this.hidePastSessions();
   }
 
   @action private setRoomToDelete(room: RoomField | undefined) {
@@ -428,7 +351,6 @@ export default class AiAssistantPanel extends Component<Signature> {
   @action
   private leaveRoom(roomId: string) {
     this.doLeaveRoom.perform(roomId);
-    this.roomToDelete = undefined;
   }
 
   private doLeaveRoom = restartableTask(async (roomId: string) => {
@@ -437,5 +359,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     if (this.currentRoomId === roomId) {
       this.currentRoomId = undefined;
     }
+    this.roomToDelete = undefined;
+    this.hidePastSessions();
   });
 }
