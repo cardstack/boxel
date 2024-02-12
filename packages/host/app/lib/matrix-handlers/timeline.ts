@@ -1,24 +1,9 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent } from 'matrix-js-sdk';
 
-import {
-  type LooseSingleCardDocument,
-  type MatrixCardError,
-  isMatrixCardError,
-} from '@cardstack/runtime-common';
-
-import { type MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
-
-import { type RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
-
 import { eventDebounceMs } from '../matrix-utils';
 
-import {
-  type Context,
-  type Event,
-  addRoomEvent,
-  recomputeRoomObjective,
-} from './index';
+import { type Context, type Event, addRoomEvent } from './index';
 
 export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {
@@ -56,43 +41,6 @@ async function processDecryptedEvent(context: Context, event: Event) {
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let discreteEvent = event as DiscreteMatrixEvent;
-  if (
-    discreteEvent.type === 'm.room.message' &&
-    discreteEvent.content.msgtype === 'org.boxel.objective'
-  ) {
-    let objective = await context.roomObjectives.get(roomId);
-    if (!objective) {
-      let doc = {
-        data: {
-          meta: {
-            adoptsFrom: discreteEvent.content.ref,
-          },
-        },
-      } as LooseSingleCardDocument;
-      let room = await context.rooms.get(roomId);
-      let objective: RoomObjectiveField | MatrixCardError;
-      try {
-        if (!room) {
-          throw new Error(`could not get room card for room '${roomId}'`);
-        }
-        objective = await context.cardAPI.createFromSerialized<
-          typeof RoomObjectiveField
-        >(doc.data, doc, undefined, context.loaderService.loader);
-      } catch (error: any) {
-        objective = {
-          id: doc.data.id,
-          error,
-        } as MatrixCardError;
-      }
-      if (!isMatrixCardError(objective) && room) {
-        objective.room = room;
-      }
-      context.roomObjectives.set(roomId, objective);
-    }
-  }
-
-  await recomputeRoomObjective(context, roomId);
 
   let room = context.client.getRoom(roomId);
   if (!room) {
