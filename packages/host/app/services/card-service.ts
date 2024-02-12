@@ -210,6 +210,7 @@ export default class CardService extends Service {
       // save has failed. Until that ticket is implemented, the only indication
       // of a failed auto-save will be from the console.
       console.error(`Failed to save ${card.id}: `, err);
+      throw err;
       return;
     } finally {
       api.unsubscribeFromChanges(card, onCardChange);

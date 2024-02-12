@@ -17,7 +17,6 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   type LooseSingleCardDocument,
-  type TokenClaims,
   sanitizeHtml,
   aiBotUsername,
 } from '@cardstack/runtime-common';
@@ -41,9 +40,10 @@ import type {
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
+import { getRealm, clearAllRealmSessions } from '../resources/realm';
+
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
-import type SessionsService from './sessions-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -61,7 +61,6 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  @service declare sessionsService: SessionsService;
   @tracked private _client: MatrixClient | undefined;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
@@ -151,7 +150,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
-      this.sessionsService.clearSessions();
+      clearAllRealmSessions();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -234,7 +233,8 @@ export default class MatrixService extends Service {
         // obtain sessions for realms that we care about. wrapping this in an inner
         // try/catch so token issues don't trigger a logout
         try {
-          await this.getRealmToken(new URL(ownRealmURL));
+          let realmResource = getRealm(this, () => new URL(ownRealmURL));
+          await realmResource.loaded;
         } catch (tokenError) {
           console.error(`could not obtain realm token`, tokenError);
         }
@@ -245,24 +245,7 @@ export default class MatrixService extends Service {
     }
   }
 
-  async getRealmToken(
-    realmURL: URL,
-  ): Promise<TokenClaims & { iat: number; exp: number }> {
-    let tokenRefreshPeriod = 5 * 60; // 5 minutes
-
-    if (this.sessionsService.currentJWT) {
-      let claims = this.sessionsService.currentJWT;
-      let expiration = claims.exp;
-      if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
-        return claims;
-      }
-    }
-
-    await this.createRealmSession(realmURL);
-    return await this.getRealmToken(realmURL);
-  }
-
-  private async createRealmSession(realmURL: URL) {
+  public async createRealmSession(realmURL: URL) {
     await this.ready;
     if (!this.isLoggedIn) {
       throw new Error(
@@ -312,13 +295,7 @@ export default class MatrixService extends Service {
         }: ${JSON.stringify(await challengeResponse.json())}`,
       );
     }
-    let token = challengeResponse.headers.get('Authorization');
-
-    if (token) {
-      this.sessionsService.setSession(realmURL, token);
-    } else {
-      this.sessionsService.clearSession(realmURL);
-    }
+    return challengeResponse.headers.get('Authorization');
   }
 
   async createRoom(

@@ -47,6 +47,18 @@ const files: Record<string, any> = {
       },
     },
   },
+  'error.gts': `
+    import { CardDef } from 'https://cardstack.com/base/card-api';
+
+    export default class ErrorCard extends CardDef {
+      static displayName = 'error';
+
+      constructor(owner: unknown, args: any) {
+        super(owner, args);
+        throw new Error('A deliberate constructor error');
+      }
+    }
+  `,
   'pet.gts': `
     import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
     import StringField from "https://cardstack.com/base/string";
@@ -74,6 +86,28 @@ const files: Record<string, any> = {
       @field pet = linksTo(Pet);
     }
   `,
+  'Catalog-Entry/error.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        title: 'Error',
+        description: 'Catalog entry for Error',
+        ref: {
+          module: '../error',
+          name: 'default',
+        },
+        demo: {
+          title: 'Error title',
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/catalog-entry',
+          name: 'CatalogEntry',
+        },
+      },
+    },
+  },
   'Catalog-Entry/pet.json': {
     data: {
       type: 'card',
@@ -161,6 +195,14 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       loader,
       contents: filesB,
       realmURL: testRealmURL2,
+      onFetch: async (req: Request) => {
+        // Some tests need a simulated creation failure
+        if (req.url.includes('fetch-failure')) {
+          throw new Error('A deliberate fetch error');
+        }
+
+        return req;
+      },
     });
     ({ adapter } = await setupAcceptanceTestRealm({
       loader,
@@ -282,6 +324,34 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
 
     await deferred.promise;
+  });
+
+  test<TestContextWithSave>('an error when creating a new card instance is shown', async function (assert) {
+    await openNewFileModal('Card Instance');
+    await waitFor(`[data-test-selected-type="General Card"]`);
+
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/error"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/error"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Error"]`);
+
+    await click('[data-test-create-card-instance]');
+
+    await waitFor('[data-test-create-file-modal] [data-test-error-message]');
+    assert
+      .dom('[data-test-create-file-modal] [data-test-error-message]')
+      .containsText(
+        'Error creating card instance: A deliberate constructor error',
+      );
+
+    await click('[data-test-cancel-create-file]');
+    await openNewFileModal('Card Instance');
+
+    assert
+      .dom('[data-test-create-file-modal] [data-test-error-message]')
+      .doesNotExist();
   });
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from a remote realm', async function (assert) {
@@ -574,6 +644,34 @@ export class TestCard extends Person {
     await deferred.promise;
   });
 
+  test<TestContextWithSave>('an error when creating a new card definition is shown', async function (assert) {
+    await openNewFileModal('Card Definition');
+
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Person"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-fetch-failure-card');
+
+    await click('[data-test-create-definition]');
+
+    await waitFor('[data-test-create-file-modal] [data-test-error-message]');
+    assert
+      .dom('[data-test-create-file-modal] [data-test-error-message]')
+      .containsText('Error creating card definition')
+      .containsText('A deliberate fetch error');
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+
+    assert
+      .dom('[data-test-create-file-modal] [data-test-error-message]')
+      .doesNotExist('changing a field should clear the error');
+  });
+
   test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
     assert.expect(3);
     await openNewFileModal('Field Definition');
@@ -629,6 +727,29 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+  });
+
+  test<TestContextWithSave>('an error when creating a new field definition is shown', async function (assert) {
+    await openNewFileModal('Field Definition');
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+
+    await waitFor(
+      `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+    );
+    await click(
+      `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+    await fillIn('[data-test-display-name-field]', 'Field that will not save');
+    await fillIn('[data-test-file-name-field]', 'test-fetch-failure-card');
+    await click('[data-test-create-definition]');
+
+    await waitFor('[data-test-create-file-modal] [data-test-error-message]');
+    assert
+      .dom('[data-test-create-file-modal] [data-test-error-message]')
+      .containsText('Error creating field definition')
+      .containsText('A deliberate fetch error');
   });
 
   test<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (assert) {
