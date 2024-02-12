@@ -3,7 +3,7 @@ import { MatrixClient } from './matrix-client';
 
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)
-type JWTPayload = TokenClaims & { iat: number; exp: number };
+export type JWTPayload = TokenClaims & { iat: number; exp: number };
 
 export class RealmAuthClient {
   private realmURL: URL;

@@ -5,7 +5,7 @@ import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import window from 'ember-window-mock';
 
-import { type TokenClaims } from '@cardstack/runtime-common';
+import { type JWTPayload } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -15,13 +15,11 @@ interface Args {
   };
 }
 
-type RealmJWT = TokenClaims & { iat: number; exp: number };
-
 const LOCAL_STORAGE_KEY = 'boxel-session';
 const tokenRefreshPeriod = 5 * 60; // 5 minutes
 
 export class RealmResource extends Resource<Args> {
-  @tracked token: RealmJWT | undefined;
+  @tracked token: JWTPayload | undefined;
   @tracked loaded: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
 
@@ -94,9 +92,9 @@ function clearRealmSession(realmURL: URL) {
   window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
 }
 
-function claimsFromRawToken(rawToken: string): RealmJWT {
+function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
-  return JSON.parse(atob(payload)) as RealmJWT;
+  return JSON.parse(atob(payload)) as JWTPayload;
 }
 
 function extractSessionsFromStorage(): Record<string, string> | undefined {
