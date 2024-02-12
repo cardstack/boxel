@@ -381,11 +381,6 @@ export default class InteractSubmode extends Component<Signature> {
         let destinationRealmURL = await this.cardService.getRealmURL(
           destinationItem.card,
         );
-        if (!destinationRealmURL) {
-          throw new Error(
-            `bug: could not determine realm URL for index card ${destinationItem.card.id}`,
-          );
-        }
         let realmURL = destinationRealmURL;
         sources.sort((a, b) => a.title.localeCompare(b.title));
         let scrollToCard: CardDef | undefined;

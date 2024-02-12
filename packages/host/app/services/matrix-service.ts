@@ -239,7 +239,9 @@ export default class MatrixService extends Service {
         // obtain sessions for realms that we care about. wrapping this in an inner
         // try/catch so token issues don't trigger a logout
         try {
-          let realmResource = getRealm(this, () => new URL(ownRealmURL));
+          let realmResource = getRealm(this, {
+            realmURL: () => new URL(ownRealmURL),
+          });
           await realmResource.loaded;
         } catch (tokenError) {
           console.error(`could not obtain realm token`, tokenError);

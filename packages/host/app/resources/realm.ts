@@ -7,11 +7,15 @@ import window from 'ember-window-mock';
 
 import { type JWTPayload } from '@cardstack/runtime-common';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {
-    realmURL: URL;
+    realmURL?: URL;
+    card?: CardDef;
   };
 }
 
@@ -21,28 +25,40 @@ const tokenRefreshPeriod = 5 * 60; // 5 minutes
 export class RealmResource extends Resource<Args> {
   @tracked token: JWTPayload | undefined;
   @tracked loaded: Promise<void> | undefined;
+  @tracked _realmURL: URL | undefined;
   @service private declare matrixService: MatrixService;
+  @service private declare cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {
+    let { realmURL, card } = named;
+    if (!realmURL && !card) {
+      throw new Error(
+        `must provide either a realm URL or a card in order to get RealmResource`,
+      );
+    }
     this.token = undefined;
-
-    let tokens = extractSessionsFromStorage();
-    let rawToken: string | undefined;
-    if (tokens) {
-      rawToken = tokens[named.realmURL.href];
-      if (rawToken) {
-        let claims = claimsFromRawToken(rawToken);
-        let expiration = claims.exp;
-        if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
-          this.token = claims;
-          this.loaded = Promise.resolve();
-        }
+    if (realmURL) {
+      this._realmURL = realmURL;
+      let token = processTokenFromStorage(realmURL);
+      if (token) {
+        this.token = token;
+        this.loaded = Promise.resolve();
       }
+      if (!this.token) {
+        this.loaded = this.getToken.perform(realmURL);
+      }
+    } else if (card) {
+      this.loaded = this.getTokenForRealmOfCard.perform(card);
     }
+  }
 
-    if (!this.token) {
-      this.loaded = this.getToken.perform(named.realmURL);
+  get realmURL() {
+    if (!this._realmURL) {
+      throw new Error(
+        `Accessed realmURL on RealmResource before it was loaded. Please await RealmResource.loaded first`,
+      );
     }
+    return this._realmURL;
   }
 
   get canRead() {
@@ -52,6 +68,17 @@ export class RealmResource extends Resource<Args> {
   get canWrite() {
     return this.token?.permissions?.includes('write');
   }
+
+  private getTokenForRealmOfCard = restartableTask(async (card: CardDef) => {
+    let realmURL = await this.cardService.getRealmURL(card);
+    this._realmURL = realmURL;
+    let token = processTokenFromStorage(realmURL);
+    if (token) {
+      this.token = token;
+    } else {
+      await this.getToken.perform(realmURL);
+    }
+  });
 
   private getToken = restartableTask(async (realmURL: URL) => {
     let rawToken = await this.matrixService.createRealmSession(realmURL);
@@ -65,9 +92,21 @@ export class RealmResource extends Resource<Args> {
   });
 }
 
-export function getRealm(parent: object, realmURL: () => URL) {
+export function getRealm(
+  parent: object,
+  {
+    realmURL,
+    card,
+  }: {
+    // a realm resource can either be loaded by RealmURL directly, or by the
+    // realm URL associated with the provided card
+    realmURL?: () => URL;
+    card?: () => CardDef;
+  },
+) {
   return RealmResource.from(parent, () => ({
-    realmURL: realmURL(),
+    realmURL: realmURL?.(),
+    card: card?.(),
   })) as RealmResource;
 }
 
@@ -95,6 +134,22 @@ function clearRealmSession(realmURL: URL) {
 function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as JWTPayload;
+}
+
+function processTokenFromStorage(realmURL: URL) {
+  let tokens = extractSessionsFromStorage();
+  let rawToken: string | undefined;
+  if (tokens) {
+    rawToken = tokens[realmURL.href];
+    if (rawToken) {
+      let claims = claimsFromRawToken(rawToken);
+      let expiration = claims.exp;
+      if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
+        return claims;
+      }
+    }
+  }
+  return undefined;
 }
 
 function extractSessionsFromStorage(): Record<string, string> | undefined {
