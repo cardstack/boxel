@@ -25,7 +25,6 @@ const tokenRefreshPeriod = 5 * 60; // 5 minutes
 export class RealmResource extends Resource<Args> {
   @tracked token: JWTPayload | undefined;
   @tracked loaded: Promise<void> | undefined;
-  @tracked _realmURL: URL | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
 
@@ -38,7 +37,6 @@ export class RealmResource extends Resource<Args> {
     }
     this.token = undefined;
     if (realmURL) {
-      this._realmURL = realmURL;
       let token = processTokenFromStorage(realmURL);
       if (token) {
         this.token = token;
@@ -52,15 +50,6 @@ export class RealmResource extends Resource<Args> {
     }
   }
 
-  get realmURL() {
-    if (!this._realmURL) {
-      throw new Error(
-        `Accessed realmURL on RealmResource before it was loaded. Please await RealmResource.loaded first`,
-      );
-    }
-    return this._realmURL;
-  }
-
   get canRead() {
     return this.token?.permissions?.includes('read');
   }
@@ -71,7 +60,6 @@ export class RealmResource extends Resource<Args> {
 
   private getTokenForRealmOfCard = restartableTask(async (card: CardDef) => {
     let realmURL = await this.cardService.getRealmURL(card);
-    this._realmURL = realmURL;
     let token = processTokenFromStorage(realmURL);
     if (token) {
       this.token = token;

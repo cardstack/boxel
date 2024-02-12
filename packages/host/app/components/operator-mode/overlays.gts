@@ -1,8 +1,8 @@
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import Component from '@glimmer/component';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
@@ -26,12 +26,13 @@ import {
 
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
+import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
+import type CardService from '@cardstack/host/services/card-service';
+
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import OperatorModeOverlayItemHeader from './overlay-item-header';
 import { RenderedCardForOverlayActions } from './stack-item';
-import type CardService from '@cardstack/host/services/card-service';
-import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
 
 import type { MiddlewareState } from '@floating-ui/dom';
 
