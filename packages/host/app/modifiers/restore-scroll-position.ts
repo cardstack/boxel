@@ -110,7 +110,7 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
     if (
       e.target &&
       e.target instanceof HTMLElement &&
-      e.target.scrollTop &&
+      e.target.scrollTop != undefined &&
       this.#previousContainer &&
       this.#previousKey
     ) {
