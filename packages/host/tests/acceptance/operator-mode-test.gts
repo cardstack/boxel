@@ -28,7 +28,6 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
-  setupSessionsServiceMock,
   visitOperatorMode,
 } from '../helpers';
 import {
@@ -43,7 +42,6 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupOnSave(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');

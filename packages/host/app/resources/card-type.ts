@@ -1,3 +1,4 @@
+import { getOwner } from '@ember/application';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -19,6 +20,7 @@ import {
   isResolvedCodeRef,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
 
@@ -35,6 +37,7 @@ import type LoaderService from '../services/loader-service';
 interface Args {
   named: {
     definition: typeof BaseDef;
+    loader: Loader;
   };
 }
 
@@ -71,12 +74,13 @@ const moduleInfoCache: Map<string, ModuleInfo> = new Map();
 export class CardType extends Resource<Args> {
   @tracked type: Type | undefined;
   @service declare cardService: CardService;
-  @service declare loaderService: LoaderService;
+  declare loader: Loader;
   typeCache: Map<string, Type> = new Map();
   ready: Promise<void> | undefined;
 
   modify(_positional: never[], named: Args['named']) {
-    let { definition } = named;
+    let { definition, loader } = named;
+    this.loader = loader;
     this.ready = this.assembleType.perform(definition);
   }
 
@@ -118,7 +122,7 @@ export class CardType extends Resource<Args> {
       moduleInfoCache.get(moduleIdentifier) ??
       (await this.fetchModuleInfo(new URL(moduleIdentifier)));
 
-    let api = await this.loaderService.loader.import<typeof CardAPI>(
+    let api = await this.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
     );
     let { id: _remove, ...fields } = api.getFields(card, {
@@ -165,7 +169,7 @@ export class CardType extends Resource<Args> {
   }
 
   private fetchModuleInfo = async (url: URL) => {
-    let response = await this.loaderService.fetchWithAuth(url, {
+    let response = await this.loader.fetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
     });
 
@@ -192,10 +196,21 @@ export class CardType extends Resource<Args> {
   };
 }
 
-export function getCardType(parent: object, card: () => typeof BaseDef) {
+export function getCardType(
+  parent: object,
+  card: () => typeof BaseDef,
+  loader?: () => Loader,
+) {
   return CardType.from(parent, () => ({
     named: {
       definition: card(),
+      loader: loader
+        ? loader()
+        : (
+            (getOwner(parent) as any).lookup(
+              'service:loader-service',
+            ) as LoaderService
+          ).loader,
     },
   })) as CardType;
 }

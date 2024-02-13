@@ -14,7 +14,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
-  setupSessionsServiceMock,
   visitOperatorMode,
   waitForCodeEditor,
 } from '../../helpers';
@@ -180,7 +179,6 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');

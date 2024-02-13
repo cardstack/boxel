@@ -459,7 +459,7 @@ export class Loader {
     }
   }
 
-  asUnresolvedRequest(
+  private asUnresolvedRequest(
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Request {
@@ -476,7 +476,7 @@ export class Loader {
     }
   }
 
-  asResolvedRequest(
+  private asResolvedRequest(
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Request {

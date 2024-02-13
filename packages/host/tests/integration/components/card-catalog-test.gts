@@ -23,7 +23,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
   setupServerSentEvents,
-  setupSessionsServiceMock,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -35,7 +34,6 @@ module('Integration | card-catalog', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
 
   const noop = () => {};
 

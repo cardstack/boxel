@@ -87,11 +87,13 @@ export default class CardService extends Service {
   async fetchJSON(
     url: string | URL,
     args?: RequestInit,
+    loader?: Loader,
   ): Promise<CardDocument | undefined> {
     let clientRequestId = uuidv4();
     this.clientRequestIds.add(clientRequestId);
 
-    let response = await this.loaderService.fetchWithAuth(url, {
+    loader = loader ?? this.loaderService.loader;
+    let response = await loader.fetch(url, {
       headers: {
         Accept: SupportedMimeType.CardJson,
         'X-Boxel-Client-Request-Id': clientRequestId,
@@ -215,8 +217,9 @@ export default class CardService extends Service {
     }
   }
 
-  async saveSource(url: URL, content: string) {
-    let response = await this.loaderService.fetchWithAuth(url, {
+  async saveSource(url: URL, content: string, loader?: Loader) {
+    loader = loader ?? this.loaderService.loader;
+    let response = await loader.fetch(url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -235,8 +238,9 @@ export default class CardService extends Service {
     return response;
   }
 
-  async deleteSource(url: URL) {
-    let response = await this.loaderService.fetchWithAuth(url, {
+  async deleteSource(url: URL, loader?: Loader) {
+    loader = loader ?? this.loaderService.loader;
+    let response = await loader.fetch(url, {
       method: 'DELETE',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -396,8 +400,12 @@ export default class CardService extends Service {
     return undefined;
   }
 
-  async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {
-    let response = await this.loaderService.fetchWithAuth(`${realmURL}_info`, {
+  async getRealmInfoByRealmURL(
+    realmURL: URL,
+    loader?: Loader,
+  ): Promise<RealmInfo> {
+    loader = loader ?? this.loaderService.loader;
+    let response = await loader.fetch(`${realmURL}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },
       method: 'GET',
     });

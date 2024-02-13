@@ -17,7 +17,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupIntegrationTestRealm,
-  setupSessionsServiceMock,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent, renderCard } from '../../helpers/render-component';
@@ -46,7 +45,6 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
 
   hooks.beforeEach(async function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)

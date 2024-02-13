@@ -6,15 +6,19 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import {
+  type RealmSessionResource,
+  getRealmSession,
+} from '@cardstack/host/resources/realm-session';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
-import SessionsService from '@cardstack/host/services/sessions-service';
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
   @service declare realmInfoService: RealmInfoService;
-  @service declare sessionsService: SessionsService;
 
   @tracked loader = this.makeInstance();
+  // This resources all have the same owner, it's safe to reuse cache.
+  private cacheRealmResources: Map<string, RealmSessionResource> = new Map();
 
   reset() {
     if (this.loader) {
@@ -37,68 +41,70 @@ export default class LoaderService extends Service {
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),
     );
+    loader.prependURLHandlers([(req) => this.fetchWithAuth(req)]);
     shimExternals(loader);
 
     return loader;
   }
 
-  async fetchWithAuth(
-    urlOrRequest: string | URL | Request,
-    init?: RequestInit,
-  ) {
-    try {
-      let request = this.loader.asResolvedRequest(urlOrRequest, init);
-      await this.includeAuthHeader(request);
-      let response = await this.loader.fetch(request);
-      await this.handleUnAuthorizedError(request, response);
-      return response;
-    } catch (err: any) {
-      let url =
-        urlOrRequest instanceof Request
-          ? urlOrRequest.url
-          : String(urlOrRequest);
-      return new Response(`fetch failed for ${url}`, {
-        status: 500,
-        statusText: err.message,
-      });
+  private async fetchWithAuth(request: Request) {
+    // To avoid deadlock, we can assume that any GET requests to baseRealm don't need authentication.
+    let isGetRequestToBaseRealm =
+      request.url.includes(baseRealm.url) && request.method === 'GET';
+    if (
+      isGetRequestToBaseRealm ||
+      request.url.includes('session') ||
+      request.method === 'HEAD' ||
+      request.headers.has('Authorization')
+    ) {
+      return null;
     }
-  }
-
-  async includeAuthHeader(request: Request) {
     let realmURL = await this.realmInfoService.fetchRealmURL(request.url);
-    let isPublicReadable = await this.realmInfoService.isPublicReadable(
-      realmURL,
-    );
-    let token = await this.sessionsService.getRealmToken(realmURL);
-
-    if ((request.method !== 'GET' || !isPublicReadable) && token) {
-      request.headers.append('Authorization', token);
-    }
-  }
-
-  async handleUnAuthorizedError(request: Request, response: Response) {
-    if (response.ok || response.status !== 401) {
-      return;
+    if (!realmURL) {
+      return null;
     }
 
-    let realmURL = await this.realmInfoService.fetchRealmURL(request.url);
+    // We have to get public readable status
+    // before we instatiate realm resource and load realm token.
+    // Because we don't want to do authentication
+    // for GET request to publicly readable realm.
     let isPublicReadable = await this.realmInfoService.isPublicReadable(
       realmURL,
     );
     if (request.method === 'GET' && isPublicReadable) {
-      isPublicReadable = await this.realmInfoService.isPublicReadable(
-        realmURL,
-        true,
-      );
+      return null;
     }
 
-    // Try to refresh token
-    if (!isPublicReadable || request.method !== 'GET') {
-      let token = await this.sessionsService.getRealmToken(realmURL, true);
-      if (token) {
-        request.headers.append('Authorization', token);
-        response = await this.loader.fetch(request);
-      }
+    let realmResource = await this.getRealmResource(realmURL);
+    await realmResource.loaded;
+    if (!realmResource.realmToken) {
+      return null;
     }
+
+    request.headers.set('Authorization', realmResource.realmToken);
+    let body;
+    if (request.bodyUsed) {
+      body = null;
+    } else if (request.headers.get('content-type') === 'application/json') {
+      body = JSON.stringify(await request.json());
+    } else {
+      body = await request.text();
+    }
+    return await this.loader.fetch(request.url, {
+      method: request.method,
+      headers: new Headers(request.headers),
+      body,
+    });
+  }
+
+  private async getRealmResource(realmURL: URL) {
+    let realmURLString = realmURL.href;
+    let realmResource = this.cacheRealmResources.get(realmURLString);
+
+    if (!realmResource) {
+      realmResource = getRealmSession(this, () => realmURL);
+      this.cacheRealmResources.set(realmURLString, realmResource);
+    }
+    return realmResource;
   }
 }

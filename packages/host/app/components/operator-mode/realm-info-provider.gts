@@ -58,9 +58,10 @@ export default class RealmInfoProvider extends Component<Signature> {
         let token = waiter.beginAsync();
         try {
           let realmInfo = await this.realmInfoService.fetchRealmInfo(this.args);
-
-          state.value = realmInfo;
-          this.cachedRealmInfo = realmInfo;
+          if (realmInfo) {
+            state.value = realmInfo;
+            this.cachedRealmInfo = realmInfo;
+          }
         } catch (error: any) {
           state.error = error;
         } finally {

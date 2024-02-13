@@ -17,7 +17,6 @@ import {
   setupOnSave,
   setupAcceptanceTestRealm,
   setupServerSentEvents,
-  setupSessionsServiceMock,
   waitForCodeEditor,
   getMonacoContent,
   visitOperatorMode,
@@ -173,7 +172,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupOnSave(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
 
   async function openNewFileModal(menuSelection: string) {
     await waitFor('[data-test-code-mode][data-test-save-idle]');

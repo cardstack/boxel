@@ -55,7 +55,10 @@ import config from '@cardstack/host/config/environment';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 
-import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
+import {
+  type RealmSessionResource,
+  getRealmSession,
+} from '@cardstack/host/resources/realm-session';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type {
@@ -111,7 +114,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
-  private realmResource: RealmResource | undefined;
+  private realmResource: RealmSessionResource | undefined;
 
   cardTracker = new ElementTracker<{
     card: CardDef;
@@ -261,7 +264,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     // assume that the new card instance will reside in the realm that is hosting the app...
     let realmURL =
       (await this.cardService.getRealmURL(this.card)) ?? new URL(ownRealmURL);
-    this.realmResource = getRealm(this, () => realmURL);
+    this.realmResource = getRealmSession(this, () => realmURL);
     await this.realmResource.loaded;
   });
 

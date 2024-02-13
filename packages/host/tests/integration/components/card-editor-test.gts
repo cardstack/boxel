@@ -29,7 +29,6 @@ import {
   setupLocalIndexing,
   saveCard,
   setupIntegrationTestRealm,
-  setupSessionsServiceMock,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -54,7 +53,6 @@ module('Integration | card-editor', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;

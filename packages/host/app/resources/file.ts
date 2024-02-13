@@ -133,7 +133,7 @@ class _FileResource extends Resource<Args> {
   }
 
   private read = restartableTask(async () => {
-    let response = await this.loaderService.fetchWithAuth(this._url, {
+    let response = await this.loaderService.loader.fetch(this._url, {
       headers: { Accept: SupportedMimeType.CardSource },
     });
 

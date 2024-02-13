@@ -29,7 +29,6 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupServerSentEvents,
-  setupSessionsServiceMock,
   type TestContextWithSave,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
@@ -56,11 +55,15 @@ module('Integration | card-copy', function (hooks) {
       if (!onFetch) {
         return Promise.resolve(req);
       }
-      // need to clone request since we just read the body
-      let clonedRequest = req.clone();
-      let body = await clonedRequest.text();
+      let { headers, method } = req;
+      let body = await req.text();
       onFetch(req, body);
-      return req;
+      // need to return a new request since we just read the body
+      return new Request(req.url, {
+        method,
+        headers,
+        ...(body ? { body } : {}),
+      });
     };
   }
 
@@ -77,7 +80,6 @@ module('Integration | card-copy', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
   });
@@ -815,7 +817,7 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     onFetch = (req, body) => {
-      if (req.method !== 'GET') {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
         let json = JSON.parse(body);
         assert.strictEqual(json.data.attributes.firstName, 'Hassan');
         assert.strictEqual(
@@ -934,7 +936,7 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     onFetch = (req, body) => {
-      if (req.method !== 'GET') {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
         let json = JSON.parse(body);
         assert.strictEqual(json.data.attributes.firstName, 'Sakura');
         assert.strictEqual(

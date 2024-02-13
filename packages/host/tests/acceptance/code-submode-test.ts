@@ -39,7 +39,6 @@ import {
   type TestContextWithSSE,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
-import { setupSessionsServiceMock } from '../helpers/mock-sessions-service';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -415,7 +414,6 @@ module('Acceptance | code submode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');

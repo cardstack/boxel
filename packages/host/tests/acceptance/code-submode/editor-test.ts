@@ -26,7 +26,6 @@ import {
   getMonacoContent,
   setMonacoContent,
   setupAcceptanceTestRealm,
-  setupSessionsServiceMock,
   visitOperatorMode,
   waitForSyntaxHighlighting,
   waitForCodeEditor,
@@ -45,7 +44,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupOnSave(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');

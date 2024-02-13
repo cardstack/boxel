@@ -557,7 +557,7 @@ export default class CreateFileModal extends Component<Signature> {
     )}.gts`.replace(/^\//, '');
     let url = realmPath.fileURL(fileName);
 
-    let response = await this.loaderService.fetchWithAuth(url, {
+    let response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
     });
     if (response.ok) {

@@ -18,13 +18,15 @@ interface Args {
 const LOCAL_STORAGE_KEY = 'boxel-session';
 const tokenRefreshPeriod = 5 * 60; // 5 minutes
 
-export class RealmResource extends Resource<Args> {
+export class RealmSessionResource extends Resource<Args> {
   @tracked token: JWTPayload | undefined;
+  private _rawToken: string | undefined;
   @tracked loaded: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
 
   modify(_positional: never[], named: Args['named']) {
     this.token = undefined;
+    this._rawToken = undefined;
 
     let tokens = extractSessionsFromStorage();
     let rawToken: string | undefined;
@@ -35,6 +37,7 @@ export class RealmResource extends Resource<Args> {
         let expiration = claims.exp;
         if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
           this.token = claims;
+          this._rawToken = rawToken;
           this.loaded = Promise.resolve();
         }
       }
@@ -53,22 +56,28 @@ export class RealmResource extends Resource<Args> {
     return this.token?.permissions?.includes('write');
   }
 
+  get realmToken() {
+    return this._rawToken;
+  }
+
   private getToken = restartableTask(async (realmURL: URL) => {
     let rawToken = await this.matrixService.createRealmSession(realmURL);
     if (rawToken) {
       this.token = claimsFromRawToken(rawToken);
+      this._rawToken = rawToken;
       setRealmSession(realmURL, rawToken);
     } else {
       this.token = undefined;
+      this._rawToken = undefined;
       clearRealmSession(realmURL);
     }
   });
 }
 
-export function getRealm(parent: object, realmURL: () => URL) {
-  return RealmResource.from(parent, () => ({
+export function getRealmSession(parent: object, realmURL: () => URL) {
+  return RealmSessionResource.from(parent, () => ({
     realmURL: realmURL(),
-  })) as RealmResource;
+  })) as RealmSessionResource;
 }
 
 export function clearAllRealmSessions() {
@@ -92,7 +101,7 @@ function clearRealmSession(realmURL: URL) {
   window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
 }
 
-function claimsFromRawToken(rawToken: string): JWTPayload {
+export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as JWTPayload;
 }

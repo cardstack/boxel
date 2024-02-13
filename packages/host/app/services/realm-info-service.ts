@@ -23,23 +23,37 @@ export default class RealmInfoService extends Service {
   cachedRealmInfos: TrackedMap<string, RealmInfo> = new TrackedMap(); // Has the realm url already been resolved to a realm info?
   cachedPublicReadableRealms: Map<string, boolean> = new Map();
 
-  async fetchRealmURL(url: string): Promise<URL> {
-    if (this.cachedRealmURLsForURL.has(url)) {
-      return new URL(this.cachedRealmURLsForURL.get(url)!);
+  async fetchRealmURL(url: string): Promise<URL | undefined> {
+    let realmURLString = this.getRealmURLFromCache(url);
+    if (!realmURLString) {
+      let response = await this.loaderService.loader.fetch(url, {
+        method: 'HEAD',
+      });
+      realmURLString = response.headers.get('x-boxel-realm-url') ?? undefined;
+
+      if (!realmURLString) {
+        console.warn(
+          'Could not find realm URL in response headers (x-boxel-realm-url)',
+        );
+      }
+    }
+    let realmURL;
+    if (realmURLString) {
+      this.cachedRealmURLsForURL.set(url, realmURLString);
+      realmURL = new URL(realmURLString);
     }
 
-    let response = await this.loaderService.loader.fetch(url);
-    let realmURL = response.headers.get('x-boxel-realm-url');
+    return realmURL;
+  }
 
-    if (!realmURL) {
-      throw new Error(
-        'Could not find realm URL in response headers (x-boxel-realm-url)',
+  private getRealmURLFromCache(url: string) {
+    let realmURLString = this.cachedRealmURLsForURL.get(url);
+    if (!realmURLString) {
+      realmURLString = Array.from(this.cachedRealmURLsForURL.values()).find(
+        (realmURL) => url.includes(realmURL),
       );
     }
-
-    this.cachedRealmURLsForURL.set(url, realmURL);
-
-    return new URL(realmURL);
+    return realmURLString;
   }
 
   async isPublicReadable(realmURL: URL, skipCache?: boolean): Promise<boolean> {
@@ -48,7 +62,9 @@ export default class RealmInfoService extends Service {
       return this.cachedPublicReadableRealms.get(realmURLString)!;
     }
 
-    let response = await this.loaderService.loader.fetch(realmURL);
+    let response = await this.loaderService.loader.fetch(realmURL, {
+      method: 'HEAD',
+    });
     let isPublicReadable = Boolean(
       response.headers.get('x-boxel-realm-public-readable'),
     );
@@ -62,7 +78,7 @@ export default class RealmInfoService extends Service {
   async fetchRealmInfo(params: {
     realmURL?: URL;
     fileURL?: string;
-  }): Promise<RealmInfo> {
+  }): Promise<RealmInfo | undefined> {
     let { realmURL, fileURL } = params;
     if (!realmURL && !fileURL) {
       throw new Error("Must provide either 'realmUrl' or 'fileUrl'");
@@ -72,12 +88,15 @@ export default class RealmInfoService extends Service {
     try {
       let realmURLString = realmURL
         ? realmURL.href
-        : (await this.fetchRealmURL(fileURL!)).href;
+        : (await this.fetchRealmURL(fileURL!))?.href;
+      if (!realmURLString) {
+        return undefined;
+      }
 
       if (this.cachedRealmInfos.has(realmURLString)) {
         return this.cachedRealmInfos.get(realmURLString)!;
       } else {
-        let realmInfoResponse = await this.loaderService.fetchWithAuth(
+        let realmInfoResponse = await this.loaderService.loader.fetch(
           `${realmURLString}_info`,
           { headers: { Accept: SupportedMimeType.RealmInfo } },
         );
