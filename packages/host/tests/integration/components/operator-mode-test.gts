@@ -945,6 +945,62 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
 
+  test('when opening ai panel it opens the most recent room', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    let tinyDelay = () => new Promise((resolve) => setTimeout(resolve, 1)); // Add a tiny artificial delay to ensure rooms are created in the correct order with increasing timestamps
+    await matrixService.createAndJoinRoom('test1', 'test room 1');
+    await tinyDelay();
+    await matrixService.createAndJoinRoom('test2', 'test room 2');
+    await tinyDelay();
+    await matrixService.createAndJoinRoom('test3', 'test room 3');
+
+    await waitFor(`[data-test-open-ai-assistant]`);
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    assert
+      .dom('[data-test-room="test room 3"]')
+      .exists(
+        "test room 3 is the most recently created room and it's opened initially",
+      );
+
+    await click('[data-test-past-sessions-button]');
+    await click('[data-test-enter-room="test room 2"]');
+
+    await click('[data-test-close-ai-panel]');
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert
+      .dom('[data-test-room="test room 2"]')
+      .exists(
+        "test room 2 is the most recently selected room and it's opened initially",
+      );
+
+    await click('[data-test-close-ai-panel]');
+    localStorage.setItem(
+      'aiPanelCurrentRoomId',
+      "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
+    );
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert
+      .dom('[data-test-room="test room 3"]')
+      .exists(
+        "test room 3 is the most recently created room and it's opened initially",
+      );
+
+    localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
+  });
+
   test<TestContextWithSave>('it auto saves the field value', async function (assert) {
     assert.expect(3);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);

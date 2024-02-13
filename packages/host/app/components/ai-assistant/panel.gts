@@ -57,6 +57,8 @@ interface Signature {
   };
 }
 
+let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId'; // Local storage key
+
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
     <Velcro @placement='bottom' @offsetOptions={{-50}} as |pastSessionsVelcro|>
@@ -252,6 +254,26 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.loadRoomsTask.perform();
   }
 
+  private enterRoomInitially() {
+    if (this.currentRoomId) {
+      return;
+    }
+
+    let persistedRoomId = window.localStorage.getItem(
+      currentRoomIdPersistenceKey,
+    );
+    if (persistedRoomId && this.roomResources.has(persistedRoomId)) {
+      this.currentRoomId = persistedRoomId;
+    } else {
+      let latestRoom = this.sortedAiSessionRooms[0];
+      if (latestRoom) {
+        this.currentRoomId = latestRoom.room.roomId;
+      } else {
+        this.createNewSession();
+      }
+    }
+  }
+
   @cached
   private get roomResources() {
     let resources = new TrackedMap<string, RoomResource>();
@@ -268,10 +290,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
     await Promise.all([...this.roomResources.values()].map((r) => r.loading));
-    if (!this.currentRoomId) {
-      let lastestRoom = this.sortedAiSessionRooms[0];
-      this.enterRoom(lastestRoom?.room.roomId);
-    }
+    this.enterRoomInitially();
   });
 
   @action
@@ -337,6 +356,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   private enterRoom(roomId: string) {
     this.currentRoomId = roomId;
     this.hidePastSessions();
+    window.localStorage.setItem(currentRoomIdPersistenceKey, roomId);
   }
 
   @action private setRoomToRename(room: RoomField | undefined) {
