@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn, array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -18,7 +18,6 @@ import {
   timeout,
   waitForProperty,
 } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
 
@@ -33,7 +32,8 @@ import {
   Tooltip,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { cn, eq, menuItem, optional, not } from '@cardstack/boxel-ui/helpers';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, optional } from '@cardstack/boxel-ui/helpers';
 
 import {
   IconPencil,
@@ -91,7 +91,6 @@ interface Signature {
     ) => void;
   };
 }
-const { ownRealmURL } = config;
 
 export interface RenderedCardForOverlayActions {
   element: HTMLElement;
@@ -103,13 +102,13 @@ export interface RenderedCardForOverlayActions {
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
-  @service declare cardService: CardService;
-  @service declare environmentService: EnvironmentService;
-  @tracked selectedCards = new TrackedArray<CardDef>([]);
-  @tracked isHoverOnRealmIcon = false;
-  @tracked isSaving = false;
-  @tracked lastSaved: number | undefined;
-  @tracked lastSavedMsg: string | undefined;
+  @service private declare cardService: CardService;
+  @service private declare environmentService: EnvironmentService;
+  @tracked private selectedCards = new TrackedArray<CardDef>([]);
+  @tracked private isHoverOnRealmIcon = false;
+  @tracked private isSaving = false;
+  @tracked private lastSaved: number | undefined;
+  @tracked private lastSavedMsg: string | undefined;
   private refreshSaveMsg: number | undefined;
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
@@ -135,7 +134,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
   }
 
-  get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
+  private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
     return (
       this.cardTracker.elements
         .filter((entry) => {
@@ -157,7 +156,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
   }
 
-  get styleForStackedCard(): SafeString {
+  private get styleForStackedCard(): SafeString {
     let itemsOnStackCount = this.args.stackItems.length;
     let invertedIndex = itemsOnStackCount - this.args.index - 1;
     let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
@@ -171,11 +170,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     `); // using margin-top instead of padding-top to hide scrolled content from view
   }
 
-  get isBuried() {
+  private get isBuried() {
     return this.args.index + 1 < this.args.stackItems.length;
   }
 
-  get context() {
+  private get context() {
     return {
       renderedIn: this as Component<any>,
       cardComponentModifier: this.cardTracker.trackElement,
@@ -183,7 +182,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     };
   }
 
-  @action toggleSelect(card: CardDef) {
+  @action private toggleSelect(card: CardDef) {
     let index = this.selectedCards.findIndex((c) => c === card);
 
     if (index === -1) {
@@ -197,7 +196,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.args.onSelectedCards([...this.selectedCards], this.args.item);
   }
 
-  copyToClipboard = restartableTask(async () => {
+  private copyToClipboard = restartableTask(async () => {
     if (!this.card.id) {
       return;
     }
@@ -207,34 +206,34 @@ export default class OperatorModeStackItem extends Component<Signature> {
     await navigator.clipboard.writeText(this.card.id);
   });
 
-  fetchRealmInfo = trackedFunction(
+  private fetchRealmInfo = trackedFunction(
     this,
     async () => await this.cardService.getRealmInfo(this.card),
   );
 
-  clearSelections = () => {
+  private clearSelections = () => {
     this.selectedCards.splice(0, this.selectedCards.length);
   };
 
   @cached
-  get iconURL() {
+  private get iconURL() {
     return this.fetchRealmInfo.value?.iconURL;
   }
 
-  get realmName() {
+  private get realmName() {
     return this.fetchRealmInfo.value?.name;
   }
 
-  get cardIdentifier() {
+  private get cardIdentifier() {
     return this.args.item.url?.href;
   }
 
   @action
-  hoverOnRealmIcon() {
+  private hoverOnRealmIcon() {
     this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
   }
 
-  get headerIcon() {
+  private get headerIcon() {
     return {
       URL: this.iconURL,
       onMouseEnter: this.hoverOnRealmIcon,
@@ -242,14 +241,35 @@ export default class OperatorModeStackItem extends Component<Signature> {
     };
   }
 
-  get headerTitle() {
+  private get headerTitle() {
     return this.isHoverOnRealmIcon && this.realmName
       ? `In ${this.realmName}`
       : cardTypeDisplayName(this.card);
   }
 
-  get canWrite() {
+  private get canWrite() {
     return this.realmResource?.canWrite;
+  }
+
+  private get moreOptionsMenuItems() {
+    let menuItems: MenuItem[] = [
+      new MenuItem('Copy Card URL', 'action', {
+        action: () => this.copyToClipboard.perform(),
+        icon: IconLink,
+        disabled: !this.card.id,
+      }),
+    ];
+    if (this.canWrite) {
+      menuItems.push(
+        new MenuItem('Delete', 'action', {
+          action: () => this.args.publicAPI.delete(this.card),
+          icon: IconTrash,
+          dangerous: true,
+          disabled: !this.card.id,
+        }),
+      );
+    }
+    return menuItems;
   }
 
   @cached
@@ -259,12 +279,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
-    // in the case where we get no realm URL from the card, we are dealing with
-    // a new card instance that does not have a realm URL yet. For now let's
-    // assume that the new card instance will reside in the realm that is hosting the app...
-    let realmURL =
-      (await this.cardService.getRealmURL(this.card)) ?? new URL(ownRealmURL);
-    this.realmResource = getRealmSession(this, () => realmURL);
+    this.realmResource = getRealmSession(this, { card: () => this.card });
     await this.realmResource.loaded;
   });
 
@@ -461,21 +476,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <:content as |dd|>
                     <BoxelMenu
                       @closeMenu={{dd.close}}
-                      @items={{array
-                        (menuItem
-                          'Copy Card URL'
-                          (perform this.copyToClipboard)
-                          icon=IconLink
-                          disabled=(not this.card.id)
-                        )
-                        (menuItem
-                          'Delete'
-                          (fn @publicAPI.delete this.card)
-                          icon=IconTrash
-                          dangerous=true
-                          disabled=(not this.card.id)
-                        )
-                      }}
+                      @items={{this.moreOptionsMenuItems}}
                     />
                   </:content>
                 </BoxelDropdown>

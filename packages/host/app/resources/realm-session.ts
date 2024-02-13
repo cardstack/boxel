@@ -7,11 +7,15 @@ import window from 'ember-window-mock';
 
 import { type JWTPayload } from '@cardstack/runtime-common';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {
-    realmURL: URL;
+    realmURL?: URL;
+    card?: CardDef;
   };
 }
 
@@ -23,28 +27,28 @@ export class RealmSessionResource extends Resource<Args> {
   private _rawToken: string | undefined;
   @tracked loaded: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
+  @service private declare cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {
-    this.token = undefined;
-    this._rawToken = undefined;
-
-    let tokens = extractSessionsFromStorage();
-    let rawToken: string | undefined;
-    if (tokens) {
-      rawToken = tokens[named.realmURL.href];
-      if (rawToken) {
-        let claims = claimsFromRawToken(rawToken);
-        let expiration = claims.exp;
-        if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
-          this.token = claims;
-          this._rawToken = rawToken;
-          this.loaded = Promise.resolve();
-        }
-      }
+    let { realmURL, card } = named;
+    if (!realmURL && !card) {
+      throw new Error(
+        `must provide either a realm URL or a card in order to get RealmResource`,
+      );
     }
-
-    if (!this.token) {
-      this.loaded = this.getToken.perform(named.realmURL);
+    this.token = undefined;
+    if (realmURL) {
+      let rawToken = processTokenFromStorage(realmURL);
+      if (rawToken) {
+        this.token = claimsFromRawToken(rawToken);
+        this._rawToken = rawToken;
+        this.loaded = Promise.resolve();
+      }
+      if (!this.token) {
+        this.loaded = this.getToken.perform(realmURL);
+      }
+    } else if (card) {
+      this.loaded = this.getTokenForRealmOfCard.perform(card);
     }
   }
 
@@ -60,6 +64,17 @@ export class RealmSessionResource extends Resource<Args> {
     return this._rawToken;
   }
 
+  private getTokenForRealmOfCard = restartableTask(async (card: CardDef) => {
+    let realmURL = await this.cardService.getRealmURL(card);
+    let rawToken = processTokenFromStorage(realmURL);
+    if (rawToken) {
+      this.token = claimsFromRawToken(rawToken);
+      this._rawToken = rawToken;
+    } else {
+      await this.getToken.perform(realmURL);
+    }
+  });
+
   private getToken = restartableTask(async (realmURL: URL) => {
     let rawToken = await this.matrixService.createRealmSession(realmURL);
     if (rawToken) {
@@ -74,9 +89,21 @@ export class RealmSessionResource extends Resource<Args> {
   });
 }
 
-export function getRealmSession(parent: object, realmURL: () => URL) {
+export function getRealmSession(
+  parent: object,
+  {
+    realmURL,
+    card,
+  }: {
+    // a realm resource can either be loaded by RealmURL directly, or by the
+    // realm URL associated with the provided card
+    realmURL?: () => URL;
+    card?: () => CardDef;
+  },
+) {
   return RealmSessionResource.from(parent, () => ({
-    realmURL: realmURL(),
+    realmURL: realmURL?.(),
+    card: card?.(),
   })) as RealmSessionResource;
 }
 
@@ -104,6 +131,22 @@ function clearRealmSession(realmURL: URL) {
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as JWTPayload;
+}
+
+function processTokenFromStorage(realmURL: URL) {
+  let tokens = extractSessionsFromStorage();
+  let rawToken: string | undefined;
+  if (tokens) {
+    rawToken = tokens[realmURL.href];
+    if (rawToken) {
+      let claims = claimsFromRawToken(rawToken);
+      let expiration = claims.exp;
+      if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
+        return rawToken;
+      }
+    }
+  }
+  return undefined;
 }
 
 function extractSessionsFromStorage(): Record<string, string> | undefined {

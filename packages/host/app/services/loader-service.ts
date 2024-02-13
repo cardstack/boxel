@@ -76,7 +76,6 @@ export default class LoaderService extends Service {
     }
 
     let realmResource = await this.getRealmResource(realmURL);
-    await realmResource.loaded;
     if (!realmResource.realmToken) {
       return null;
     }
@@ -102,7 +101,8 @@ export default class LoaderService extends Service {
     let realmResource = this.cacheRealmResources.get(realmURLString);
 
     if (!realmResource) {
-      realmResource = getRealmSession(this, () => realmURL);
+      realmResource = getRealmSession(this, { realmURL: () => realmURL });
+      await realmResource.loaded;
       this.cacheRealmResources.set(realmURLString, realmResource);
     }
     return realmResource;
