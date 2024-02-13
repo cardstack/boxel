@@ -14,6 +14,7 @@ import Copy from './icons/copy.gts';
 import DiagonalArrowLeftUp from './icons/diagonal-arrow-left-up.gts';
 import Download from './icons/download.gts';
 import DropdownArrowDown from './icons/dropdown-arrow-down.gts';
+import DropdownArrowFilled from './icons/dropdown-arrow-filled.gts';
 import DropdownArrowUp from './icons/dropdown-arrow-up.gts';
 import Exclamation from './icons/exclamation.gts';
 import Eye from './icons/eye.gts';
@@ -55,6 +56,7 @@ export const ALL_ICON_COMPONENTS = [
   DiagonalArrowLeftUp,
   Download,
   DropdownArrowDown,
+  DropdownArrowFilled,
   DropdownArrowUp,
   Exclamation,
   Eye,
@@ -97,6 +99,7 @@ export {
   DiagonalArrowLeftUp,
   Download,
   DropdownArrowDown,
+  DropdownArrowFilled,
   DropdownArrowUp,
   Exclamation,
   Eye,

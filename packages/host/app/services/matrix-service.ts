@@ -6,7 +6,7 @@ import { task } from 'ember-concurrency';
 
 import { marked } from 'marked';
 import {
-  type IAuthData,
+  type LoginResponse,
   type MatrixEvent,
   type RoomMember,
   type EmittedEvents,
@@ -17,8 +17,6 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   type LooseSingleCardDocument,
-  type CodeRef,
-  type MatrixCardError,
   sanitizeHtml,
   aiBotUsername,
 } from '@cardstack/runtime-common';
@@ -38,19 +36,18 @@ import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/room';
-import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
+import { getRealm, clearAllRealmSessions } from '../resources/realm';
+
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
-import type SessionsService from './sessions-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-const { matrixURL } = ENV;
-const SET_OBJECTIVE_POWER_LEVEL = 50;
+const { matrixURL, ownRealmURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -64,14 +61,11 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  @service declare sessionsService: SessionsService;
   @tracked private _client: MatrixClient | undefined;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
-  roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
-    new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
@@ -156,7 +150,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
-      this.sessionsService.clearSessions();
+      clearAllRealmSessions();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -166,7 +160,7 @@ export default class MatrixService extends Service {
     }
   }
 
-  async startAndSetDisplayName(auth: IAuthData, displayName: string) {
+  async startAndSetDisplayName(auth: LoginResponse, displayName: string) {
     this.start(auth);
     this.setDisplayName(displayName);
   }
@@ -179,7 +173,7 @@ export default class MatrixService extends Service {
     await this.profile.load.perform();
   }
 
-  async start(auth?: IAuthData) {
+  async start(auth?: MatrixSDK.LoginResponse) {
     if (!auth) {
       auth = getAuth();
       if (!auth) {
@@ -233,11 +227,75 @@ export default class MatrixService extends Service {
       try {
         await this._client.startClient();
         await this.initializeRooms();
+
+        // TODO this is a temporary measure to prove that we can obtain a realm session.
+        // ultimately we need to figure out a better approach in terms of when/where we
+        // obtain sessions for realms that we care about. wrapping this in an inner
+        // try/catch so token issues don't trigger a logout
+        try {
+          let realmResource = getRealm(this, () => new URL(ownRealmURL));
+          await realmResource.loaded;
+        } catch (tokenError) {
+          console.error(`could not obtain realm token`, tokenError);
+        }
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
       }
     }
+  }
+
+  public async createRealmSession(realmURL: URL) {
+    await this.ready;
+    if (!this.isLoggedIn) {
+      throw new Error(
+        `must be logged in to matrix before a realm session can be created`,
+      );
+    }
+
+    let initialResponse = await fetch(`${realmURL.href}_session`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        user: this.userId,
+      }),
+    });
+    let initialJSON = (await initialResponse.json()) as {
+      room: string;
+      challenge: string;
+    };
+    if (initialResponse.status !== 401) {
+      throw new Error(
+        `unexpected response from POST ${realmURL.href}_session: ${
+          initialResponse.status
+        } - ${JSON.stringify(initialJSON)}`,
+      );
+    }
+    let { room, challenge } = initialJSON;
+    if (!this.rooms.has(room)) {
+      await this.client.joinRoom(room);
+    }
+    await this.sendMessage(room, `auth-response: ${challenge}`);
+    let challengeResponse = await fetch(`${realmURL.href}_session`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        user: this.userId,
+        challenge,
+      }),
+    });
+    if (!challengeResponse.ok) {
+      throw new Error(
+        `Could not authenticate with realm ${realmURL.href} - ${
+          challengeResponse.status
+        }: ${JSON.stringify(await challengeResponse.json())}`,
+      );
+    }
+    return challengeResponse.headers.get('Authorization');
   }
 
   async createRoom(
@@ -355,29 +413,6 @@ export default class MatrixService extends Service {
     } else {
       await this.client.sendHtmlMessage(roomId, body ?? '', html);
     }
-  }
-
-  async allowedToSetObjective(roomId: string): Promise<boolean> {
-    let powerLevels = await this.getPowerLevels(roomId);
-    let myUserId = this.client.getUserId();
-    if (!myUserId) {
-      throw new Error(`bug: cannot get user ID for current matrix client`);
-    }
-
-    return (powerLevels[myUserId] ?? 0) >= SET_OBJECTIVE_POWER_LEVEL;
-  }
-
-  async setObjective(roomId: string, ref: CodeRef): Promise<void> {
-    if (!this.allowedToSetObjective(roomId)) {
-      throw new Error(
-        `The user '${this.client.getUserId()}' is not permitted to set an objective in room '${roomId}'`,
-      );
-    }
-    await this.client.sendEvent(roomId, 'm.room.message', {
-      msgtype: 'org.boxel.objective',
-      body: `Objective has been set by ${this.client.getUserId()}`,
-      ref,
-    });
   }
 
   async initializeRooms() {
@@ -509,7 +544,7 @@ export default class MatrixService extends Service {
       }),
     });
     if (response.ok) {
-      return (await response.json()) as MatrixSDK.IAuthData;
+      return (await response.json()) as MatrixSDK.LoginResponse;
     } else {
       let data = (await response.json()) as { errcode: string; error: string };
       let error = new Error(data.error) as any;
@@ -568,7 +603,7 @@ export default class MatrixService extends Service {
   }
 }
 
-function saveAuth(auth: IAuthData) {
+function saveAuth(auth: LoginResponse) {
   localStorage.setItem('auth', JSON.stringify(auth));
 }
 
@@ -576,12 +611,12 @@ function clearAuth() {
   localStorage.removeItem('auth');
 }
 
-function getAuth(): IAuthData | undefined {
+function getAuth(): LoginResponse | undefined {
   let auth = localStorage.getItem('auth');
   if (!auth) {
     return;
   }
-  return JSON.parse(auth) as IAuthData;
+  return JSON.parse(auth) as LoginResponse;
 }
 
 interface MessageOptions {

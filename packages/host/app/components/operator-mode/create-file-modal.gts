@@ -104,7 +104,7 @@ export default class CreateFileModal extends Component<Signature> {
           {{#if this.onSetup.isRunning}}
             <LoadingIndicator />
           {{else}}
-            <FieldContainer @label='Realm' @tag='label' class='field'>
+            <FieldContainer @label='Create In' @tag='label' class='field'>
               <RealmDropdown
                 @dropdownWidth='15rem'
                 @selectedRealmURL={{this.selectedRealmURL}}
@@ -182,6 +182,11 @@ export default class CreateFileModal extends Component<Signature> {
               </FieldContainer>
             {{/if}}
           {{/if}}
+        {{/if}}
+        {{#if this.saveError}}
+          <div class='error-message' data-test-error-message>
+            {{this.saveError}}
+          </div>
         {{/if}}
       </:content>
       <:footer>
@@ -291,6 +296,10 @@ export default class CreateFileModal extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-lg);
         line-height: 1.82;
       }
+      .error-message {
+        color: var(--boxel-error-100);
+        margin-top: var(--boxel-sp-lg);
+      }
     </style>
   </template>
 
@@ -301,6 +310,7 @@ export default class CreateFileModal extends Component<Signature> {
   @tracked private displayName = '';
   @tracked private fileName = '';
   @tracked private fileNameError: string | undefined;
+  @tracked private saveError: string | undefined;
   @tracked private currentRequest:
     | {
         fileType: FileType;
@@ -371,6 +381,11 @@ export default class CreateFileModal extends Component<Signature> {
     this.fileNameError = undefined;
     this.displayName = '';
     this.fileName = '';
+    this.clearSaveError();
+  }
+
+  private clearSaveError() {
+    this.saveError = undefined;
   }
 
   private get fileNameInputState() {
@@ -388,14 +403,17 @@ export default class CreateFileModal extends Component<Signature> {
         `Cannot select realm when there is no this.currentRequest`,
       );
     }
+    this.clearSaveError();
     this.currentRequest = { ...this.currentRequest, realmURL: new URL(path) };
   }
 
   @action private setDisplayName(name: string) {
+    this.clearSaveError();
     this.displayName = name;
   }
 
   @action private setFileName(name: string) {
+    this.clearSaveError();
     this.fileNameError = undefined;
     this.fileName = name;
   }
@@ -493,6 +511,7 @@ export default class CreateFileModal extends Component<Signature> {
   });
 
   private chooseType = restartableTask(async () => {
+    this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
     this.selectedCatalogEntry = await chooseCard({
       filter: {
@@ -511,24 +530,24 @@ export default class CreateFileModal extends Component<Signature> {
     }
     if (!this.selectedRealmURL) {
       throw new Error(
-        `bug: cannot call createCardDefinition without a selected realm URL`,
+        `bug: cannot call createDefinition without a selected realm URL`,
       );
     }
     if (!this.selectedCatalogEntry && !this.definitionClass) {
       throw new Error(
-        `bug: cannot call createCardDefinition without a selected catalog entry or definitionClass `,
+        `bug: cannot call createDefinition without a selected catalog entry or definitionClass `,
       );
     }
     if (!this.fileName) {
-      throw new Error(
-        `bug: cannot call createCardDefinition without a file name`,
-      );
+      throw new Error(`bug: cannot call createDefinition without a file name`);
     }
     if (!this.displayName) {
       throw new Error(
-        `bug: cannot call createCardDefinition without a display name`,
+        `bug: cannot call createDefinition without a display name`,
       );
     }
+
+    let isField = this.fileType.id === 'field-definition';
 
     let realmPath = new RealmPaths(this.selectedRealmURL);
     // assert that filename is a GTS file and is a LocalPath
@@ -618,8 +637,14 @@ export class ${className} extends ${exportName} {
     src.push(`  */`);
     src.push(`}`);
 
-    await this.cardService.saveSource(url, src.join('\n').trim());
-    this.currentRequest.newFileDeferred.fulfill(url);
+    try {
+      await this.cardService.saveSource(url, src.join('\n').trim());
+      this.currentRequest.newFileDeferred.fulfill(url);
+    } catch (e: any) {
+      let fieldOrCard = isField ? 'field' : 'card';
+      console.log(`Error saving ${fieldOrCard} definition`, e);
+      this.saveError = `Error creating ${fieldOrCard} definition: ${e.message}`;
+    }
   });
 
   private duplicateCardInstance = restartableTask(async () => {
@@ -688,16 +713,20 @@ export class ${className} extends ${exportName} {
       },
     };
 
-    let card = await this.cardService.createFromSerialized(doc.data, doc);
+    try {
+      let card = await this.cardService.createFromSerialized(doc.data, doc);
 
-    if (!card) {
-      throw new Error(
-        `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
-      );
+      if (!card) {
+        throw new Error(
+          `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
+        );
+      }
+      await this.cardService.saveModel(this, card);
+      this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
+    } catch (e: any) {
+      console.log('Error saving', e);
+      this.saveError = `Error creating card instance: ${e.message}`;
     }
-
-    await this.cardService.saveModel(this, card);
-    this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
   });
 }
 

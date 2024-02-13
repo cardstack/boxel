@@ -5,11 +5,11 @@
     "url": "https://github.com/cardstack/boxel"
   },
   "scripts": {
-    "build:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && pnpm build:production",
+    "build:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && NODE_OPTIONS='--max_old_space_size=8192' pnpm build:production",
     "clear-caches": "find . -name 'node_modules' -type d -prune -exec rm -rf {} \\; && rm -rf $TMPDIR/embroider",
-    "deploy:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy",
-    "deploy:boxel-host:preview-staging": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-staging --verbose",
-    "deploy:boxel-host:preview-production": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-production --verbose",
+    "deploy:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy",
+    "deploy:boxel-host:preview-staging": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy s3-preview-staging --verbose",
+    "deploy:boxel-host:preview-production": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy s3-preview-production --verbose",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix"
   },
@@ -30,9 +30,9 @@
       "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
       "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
       "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch",
-      "matrix-js-sdk@25.0.0": "patches/matrix-js-sdk@25.0.0.patch",
       "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
-      "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch"
+      "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
+      "matrix-js-sdk@31.0.0": "patches/matrix-js-sdk@31.0.0.patch"
     }
   },
   "devDependencies": {

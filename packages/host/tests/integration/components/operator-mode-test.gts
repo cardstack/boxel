@@ -5,6 +5,7 @@ import {
   fillIn,
   focus,
   blur,
+  setupOnerror,
   triggerEvent,
   triggerKeyEvent,
   typeIn,
@@ -35,7 +36,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupServerSentEvents,
-  setupSessionsServiceMock,
   setupOnSave,
   showSearchResult,
   type TestContextWithSave,
@@ -68,7 +68,6 @@ module('Integration | operator-mode', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupSessionsServiceMock(hooks);
   setupMatrixServiceMock(hooks);
   let noop = () => {};
 
@@ -919,41 +918,6 @@ module('Integration | operator-mode', function (hooks) {
     await percySnapshot(assert);
   });
 
-  test('it can handle an error in a room objective card', async function (assert) {
-    matrixService.roomObjectives.set('testroom', {
-      error: new Error('error rendering room objective'),
-    });
-    matrixService.cardAPI = cardApi;
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
-
-    await operatorModeStateService.restore({
-      stacks: [[]],
-    });
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor('[data-test-open-ai-assistant]');
-    await click('[data-test-open-ai-assistant]');
-    matrixService.createAndJoinRoom('testroom');
-
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
-    await click('[data-test-enter-room="test_a"]');
-    await waitFor('[data-test-objective-error]');
-    assert
-      .dom('[data-test-objective-error]')
-      .hasText('Error: cannot render card : error rendering room objective');
-  });
-
   test('it loads a card and renders its isolated view', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -1011,6 +975,13 @@ module('Integration | operator-mode', function (hooks) {
 
   // TODO CS-6268 visual indicator for failed auto-save should build off of this test
   test('an error in auto-save is handled gracefully', async function (assert) {
+    let done = assert.async();
+
+    setupOnerror(function (error) {
+      assert.ok(error, 'expected a global error');
+      done();
+    });
+
     await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
 
     await renderComponent(
@@ -1028,8 +999,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-pet]');
     // Card still runs (our error was designed to only fire during save)
-    // despite save error and there are no uncaught exceptions (which QUnit
-    // fails as a "Global" error)
+    // despite save error
     assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
   });
 

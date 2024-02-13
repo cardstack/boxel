@@ -14,6 +14,7 @@ import {
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import {
   Upload,
+  IconPencil,
   IconTrash,
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
@@ -27,6 +28,7 @@ interface Signature {
   Args: {
     sessions: AiSessionRoom[];
     openSession: (roomId: string) => void;
+    renameSession: (room: RoomField) => void;
     deleteSession: (roomId: string) => void;
     roomToDelete: RoomField | undefined;
     setRoomToDelete: (room: RoomField | undefined) => void;
@@ -91,6 +93,12 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
       .more-options-menu :deep(svg) {
         --icon-stroke-width: 1.5px;
       }
+
+      .more-options-menu :deep(.boxel-menu__item:nth-child(2) svg) {
+        --icon-stroke-width: 0.5px;
+        width: 20px;
+        height: 20px;
+      }
     </style>
 
     {{#if (eq @sessions.length 0)}}
@@ -140,6 +148,9 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
                       'Open Session'
                       (fn @openSession session.room.roomId)
                       icon=Upload
+                    )
+                    (menuItem
+                      'Rename' (fn @renameSession session.room) icon=IconPencil
                     )
                     (menuItem
                       'Delete' (fn @setRoomToDelete session.room) icon=IconTrash
