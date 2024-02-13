@@ -180,9 +180,6 @@ export class CardResource extends Resource<Args> {
       return;
     }
     let realmURL = await this.cardService.getRealmURL(card, this.loader);
-    if (!realmURL) {
-      throw new Error(`bug: cannot determine realm URL for card ${card.id}`);
-    }
 
     cardsForLoader.set(card.id, {
       card,

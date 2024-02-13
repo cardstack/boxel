@@ -1,12 +1,13 @@
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
-import { type TrackedArray } from 'tracked-built-ins';
+import { type TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
 
 import {
   BoxelDropdown,
@@ -24,6 +25,9 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
+
+import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
+import type CardService from '@cardstack/host/services/card-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -44,19 +48,6 @@ interface Signature {
 let boundRenderedCardElement = new WeakSet<HTMLElement>();
 
 export default class OperatorModeOverlays extends Component<Signature> {
-  isEmbeddedCard(renderedCard: RenderedCardForOverlayActions) {
-    return (
-      renderedCard.fieldType === 'contains' ||
-      renderedCard.fieldType === 'linksTo' ||
-      renderedCard.fieldType === 'linksToMany'
-    );
-  }
-
-  @action
-  isIncludeHeader(renderedCard: RenderedCardForOverlayActions) {
-    return this.isEmbeddedCard(renderedCard) && renderedCard.format !== 'atom';
-  }
-
   <template>
     {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
       {{#let
@@ -108,38 +99,45 @@ export default class OperatorModeOverlays extends Component<Signature> {
               @icon={{EyeIcon}}
               aria-label='preview card'
             />
-            <BoxelDropdown>
-              <:trigger as |bindings|>
-                <IconButton
-                  {{on
-                    'mouseenter'
-                    (fn this.setCurrentlyHoveredCard renderedCard)
-                  }}
-                  {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-                  class='hover-button more-actions'
-                  @icon={{ThreeDotsHorizontal}}
-                  aria-label='more actions'
-                  {{bindings}}
-                />
-              </:trigger>
-              <:content as |dd|>
-                <Menu
-                  @closeMenu={{dd.close}}
-                  @items={{array
-                    (menuItem
-                      'Delete'
-                      (fn @publicAPI.delete card)
-                      icon=IconTrash
-                      dangerous=true
-                    )
-                  }}
-                  {{on
-                    'mouseenter'
-                    (fn this.setCurrentlyHoveredCard renderedCard)
-                  }}
-                />
-              </:content>
-            </BoxelDropdown>
+            {{#let (this.canWrite card) as |canWrite|}}
+              {{! Since there is just one item in the drop down, if that one item 
+                  cannot be shown then we just don't show the drop down. This should 
+                  change if we add more items in the dropdown }}
+              {{#if canWrite}}
+                <BoxelDropdown>
+                  <:trigger as |bindings|>
+                    <IconButton
+                      {{on
+                        'mouseenter'
+                        (fn this.setCurrentlyHoveredCard renderedCard)
+                      }}
+                      {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
+                      class='hover-button more-actions'
+                      @icon={{ThreeDotsHorizontal}}
+                      aria-label='more actions'
+                      {{bindings}}
+                    />
+                  </:trigger>
+                  <:content as |dd|>
+                    <Menu
+                      @closeMenu={{dd.close}}
+                      @items={{array
+                        (menuItem
+                          'Delete'
+                          (fn @publicAPI.delete card)
+                          icon=IconTrash
+                          dangerous=true
+                        )
+                      }}
+                      {{on
+                        'mouseenter'
+                        (fn this.setCurrentlyHoveredCard renderedCard)
+                      }}
+                    />
+                  </:content>
+                </BoxelDropdown>
+              {{/if}}
+            {{/let}}
           {{/if}}
         </div>
       {{/let}}
@@ -199,9 +197,14 @@ export default class OperatorModeOverlays extends Component<Signature> {
     </style>
   </template>
 
-  @tracked currentlyHoveredCard: RenderedCardForOverlayActions | null = null;
+  @service private declare cardService: CardService;
+  @tracked private currentlyHoveredCard: RenderedCardForOverlayActions | null =
+    null;
+  @tracked private realmResourceByCard: TrackedWeakMap<CardDef, RealmResource> =
+    new TrackedWeakMap();
+  private realmResources: Map<string, RealmResource> = new Map();
 
-  offset = {
+  private offset = {
     name: 'offset',
     fn: (state: MiddlewareState) => {
       let { elements, rects } = state;
@@ -224,7 +227,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   // events on the overlay. However, that prevents the browser from detecting hover state, which is needed to show the operator mode actions, and
   // click event, needed to open the card. To solve this, we add event listeners to the rendered cards underneath the overlay, and use those to
   // detect hover state and click event.
-  get renderedCardsForOverlayActionsWithEvents() {
+  private get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
     for (const renderedCard of renderedCards) {
       if (boundRenderedCardElement.has(renderedCard.element)) {
@@ -253,18 +256,32 @@ export default class OperatorModeOverlays extends Component<Signature> {
         );
       });
       renderedCard.element.style.cursor = 'pointer';
+      this.loadRealmResource.perform(renderedCard.card);
     }
 
     return renderedCards;
   }
 
-  setCurrentlyHoveredCard = (
+  private isEmbeddedCard(renderedCard: RenderedCardForOverlayActions) {
+    return (
+      renderedCard.fieldType === 'contains' ||
+      renderedCard.fieldType === 'linksTo' ||
+      renderedCard.fieldType === 'linksToMany'
+    );
+  }
+
+  @action
+  private isIncludeHeader(renderedCard: RenderedCardForOverlayActions) {
+    return this.isEmbeddedCard(renderedCard) && renderedCard.format !== 'atom';
+  }
+
+  private setCurrentlyHoveredCard = (
     renderedCard: RenderedCardForOverlayActions | null,
   ) => {
     this.currentlyHoveredCard = renderedCard;
   };
 
-  @action openOrSelectCard(
+  @action private openOrSelectCard(
     card: CardDef,
     format: Format = 'isolated',
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
@@ -277,8 +294,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
     }
   }
 
-  @action isSelected(card: CardDef) {
+  @action private isSelected(card: CardDef) {
     return this.args.selectedCards?.some((c: CardDef) => c === card);
+  }
+
+  @action private canWrite(card: CardDef) {
+    return this.realmResourceByCard.get(card)?.canWrite;
   }
 
   private viewCard = restartableTask(
@@ -292,5 +313,14 @@ export default class OperatorModeOverlays extends Component<Signature> {
     },
   );
 
-  // TODO: actions for 'preview' and 'more-actions' buttons
+  private loadRealmResource = task(async (card: CardDef) => {
+    let realmURL = await this.cardService.getRealmURL(card);
+    let resource = this.realmResources.get(realmURL.href);
+    if (!resource) {
+      resource = getRealm(this, { realmURL: () => realmURL });
+      await resource.loaded;
+      this.realmResources.set(realmURL.href, resource);
+    }
+    this.realmResourceByCard.set(card, resource);
+  });
 }
