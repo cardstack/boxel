@@ -120,7 +120,7 @@ export default class FileTree extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.hideMask.perform();
-    this.realmResource = getRealm(this, () => this.args.realmURL);
+    this.realmResource = getRealm(this, { realmURL: () => this.args.realmURL });
   }
 
   private hideMask = restartableTask(async () => {
