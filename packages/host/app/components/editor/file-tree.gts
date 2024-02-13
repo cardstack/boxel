@@ -1,3 +1,4 @@
+import { concat } from '@ember/helper';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
@@ -31,8 +32,13 @@ export default class FileTree extends Component<Signature> {
             @realmName={{realmInfo.name}}
             class='icon'
           />
-          <span data-test-realm-name={{realmInfo.name}}>In
-            {{realmInfo.name}}</span>
+          {{#let (concat 'In ' realmInfo.name) as |realmTitle|}}
+            <span
+              class='realm-title'
+              data-test-realm-name={{realmInfo.name}}
+              title={{realmTitle}}
+            >{{realmTitle}}</span>
+          {{/let}}
           {{#if this.canWrite}}
             <Tooltip @placement='top' class='editability-icon'>
               <:trigger>
@@ -104,6 +110,12 @@ export default class FileTree extends Component<Signature> {
 
       .realm-info img {
         width: 18px;
+      }
+
+      .realm-title {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .editability-icon {

@@ -343,7 +343,10 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
-    assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
+    assert
+      .dom('[data-test-realm-name]')
+      .hasText(`In ${realmInfo.name}`)
+      .hasAttribute('title', `In ${realmInfo.name}`);
     assert.dom('[data-test-realm-writable]').exists();
 
     await waitFor('[data-test-file="pet-person.gts"]');
