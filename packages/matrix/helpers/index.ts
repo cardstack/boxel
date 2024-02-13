@@ -31,9 +31,9 @@ export async function toggleOperatorMode(page: Page) {
 }
 
 export async function openAiAssistant(page: Page) {
-  await page.locator('[data-test-open-ai-panel]').click();
+  await page.locator('[data-test-open-ai-assistant]').click();
   await page.waitForFunction(() =>
-    document.querySelector('[data-test-close-ai-panel]'),
+    document.querySelector('[data-test-close-ai-assistant]'),
   );
 }
 

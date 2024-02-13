@@ -79,7 +79,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             class='close-ai-panel'
             {{on 'click' @onClose}}
             aria-label='Remove'
-            data-test-close-ai-panel
+            data-test-close-ai-assistant
           />
         </header>
         <div class='menu'>

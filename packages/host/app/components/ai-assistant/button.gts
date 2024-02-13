@@ -6,7 +6,11 @@ interface Signature {
 
 export default class AiAssistantButton extends Component<Signature> {
   <template>
-    <button class='ai-assistant-button' data-test-open-ai-panel ...attributes />
+    <button
+      class='ai-assistant-button'
+      data-test-open-ai-assistant
+      ...attributes
+    />
     <style>
       .ai-assistant-button {
         width: var(--container-button-size);

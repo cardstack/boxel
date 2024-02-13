@@ -976,7 +976,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-past-sessions-button]');
     await click('[data-test-enter-room="test room 2"]');
 
-    await click('[data-test-close-ai-panel]');
+    await click('[data-test-close-ai-assistant]');
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
     assert
@@ -985,7 +985,7 @@ module('Integration | operator-mode', function (hooks) {
         "test room 2 is the most recently selected room and it's opened initially",
       );
 
-    await click('[data-test-close-ai-panel]');
+    await click('[data-test-close-ai-assistant]');
     localStorage.setItem(
       'aiPanelCurrentRoomId',
       "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
