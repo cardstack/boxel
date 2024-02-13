@@ -142,7 +142,7 @@
     "lodash": "^4.17.21",
     "loglevel": "^1.8.1",
     "marked": "^5.0.2",
-    "matrix-js-sdk": "^25.0.0",
+    "matrix-js-sdk": "^31.0.0",
     "moment": "^2.29.4",
     "moment-locales-webpack-plugin": "^1.2.0",
     "monaco-editor": "^0.33.0",

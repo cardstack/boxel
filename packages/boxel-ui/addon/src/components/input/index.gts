@@ -190,7 +190,7 @@ export default class BoxelInput extends Component<Signature> {
           </div>
         {{/if}}
         {{#if this.validationIcon}}
-          <div class={{cn 'validation-icon-container' @state}}>
+          <div class='validation-icon-container'>
             <this.validationIcon role='presentation' />
           </div>
         {{/if}}

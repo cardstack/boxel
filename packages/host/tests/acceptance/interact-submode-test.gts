@@ -37,10 +37,14 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
   setupAcceptanceTestRealm,
-  setupSessionsServiceMock,
   visitOperatorMode,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+
+const testRealm2URL = `http://test-realm/test2/`;
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
+  [testRealmURL]: ['read', 'write'],
+};
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
@@ -50,17 +54,19 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
-  setupSessionsServiceMock(hooks);
+  setupMatrixServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');
     window.localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('boxel-session');
   });
 
   hooks.beforeEach(async function () {
+    realmPermissions = { [testRealmURL]: ['read', 'write'] };
     window.localStorage.removeItem('recent-cards');
     window.localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('boxel-session');
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
@@ -233,6 +239,20 @@ module('Acceptance | interact submode tests', function (hooks) {
         },
       },
     }));
+    await setupAcceptanceTestRealm({
+      loader,
+      realmURL: testRealm2URL,
+      contents: {
+        'index.json': new CardsGrid(),
+        '.realm.json': {
+          name: 'Test Workspace A',
+          backgroundURL:
+            'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+        },
+        'Pet/ringo.json': new Pet({ name: 'Ringo' }),
+      },
+    });
   });
 
   module('0 stacks', function () {
@@ -754,7 +774,9 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     module('when the user lacks write permissions', function (hooks) {
-      setupSessionsServiceMock(hooks, true, false);
+      hooks.beforeEach(async function () {
+        realmPermissions = { [testRealmURL]: ['read'] };
+      });
 
       test('the edit button is hidden when the user lacks permissions', async function (assert) {
         await visitOperatorMode({
@@ -774,6 +796,40 @@ module('Acceptance | interact submode tests', function (hooks) {
 
         assert.dom('[data-test-edit-button]').doesNotExist();
       });
+    });
+  });
+
+  module('2 stacks with differing permissions', function (hooks) {
+    hooks.beforeEach(async function () {
+      realmPermissions = {
+        [testRealmURL]: ['read'],
+        [testRealm2URL]: ['read', 'write'],
+      };
+    });
+
+    test('the edit button respects the realm permissions of the cards in differing realms', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              id: `${testRealm2URL}Pet/ringo`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      assert
+        .dom('[data-test-operator-mode-stack="0"] [data-test-edit-button]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-operator-mode-stack="1"] [data-test-edit-button]')
+        .exists();
     });
   });
 

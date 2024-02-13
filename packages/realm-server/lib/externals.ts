@@ -80,6 +80,7 @@ export function shimExternals(loader: Loader) {
   // import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
   loader.shimModule('ember-concurrency/-private/async-arrow-runtime', {
     default: () => {},
+    buildTask: () => {},
   });
   // import * as emberModifier from 'ember-modifier';
   loader.shimModule('ember-modifier', {

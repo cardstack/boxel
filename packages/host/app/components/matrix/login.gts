@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { type IAuthData } from 'matrix-js-sdk';
+import { type LoginResponse } from 'matrix-js-sdk';
 import moment from 'moment';
 
 import {
@@ -181,7 +181,7 @@ export default class Login extends Component<Signature> {
         `bug: should never get here: login button disabled when no password`,
       );
     }
-    let auth: IAuthData | undefined;
+    let auth: LoginResponse;
     try {
       auth = await this.matrixService.login(this.username, this.password);
     } catch (e: any) {
