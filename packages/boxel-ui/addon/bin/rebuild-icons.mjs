@@ -21,13 +21,16 @@ const SUFFIX = `
 IconComponent.name = "__ICON_COMPONENT_NAME__";
 export default IconComponent;
 `;
-let componentsToGenerate = fs.readdirSync(srcDir).map((filename) => {
-  return {
-    name: toPascalCase(path.parse(filename).name),
-    sourceFile: filename,
-    outFile: filename.replace('.svg', '.gts'),
-  };
-});
+let componentsToGenerate = fs
+  .readdirSync(srcDir)
+  .filter((filename) => filename.endsWith('.svg'))
+  .map((filename) => {
+    return {
+      name: toPascalCase(path.parse(filename).name),
+      sourceFile: filename,
+      outFile: filename.replace('.svg', '.gts'),
+    };
+  });
 componentsToGenerate.sort((a, b) => a.name.localeCompare(b.name));
 
 for (const c of componentsToGenerate) {
