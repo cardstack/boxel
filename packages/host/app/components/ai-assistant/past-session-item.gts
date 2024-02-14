@@ -29,7 +29,6 @@ export type RoomActions = {
 interface Signature {
   Args: {
     room: RoomField;
-    joinDate: Date;
     actions: RoomActions;
   };
 }
@@ -44,7 +43,7 @@ export default class PastSessionItem extends Component<Signature> {
       >
         <div class='name'>{{@room.name}}</div>
         <div class='date'>
-          {{formatDate @joinDate 'iiii MMM d, yyyy, h:mm aa'}}
+          {{formatDate @room.created 'iiii MMM d, yyyy, h:mm aa'}}
         </div>
       </button>
       <BoxelDropdown>

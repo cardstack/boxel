@@ -37,10 +37,7 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type {
-  RoomField,
-  RoomMemberField,
-} from 'https://cardstack.com/base/room';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 import { getRoom, RoomResource } from '../../resources/room';
 
@@ -48,8 +45,6 @@ import assistantIcon from './ai-assist-icon.webp';
 
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
-
-export type AiSessionRoom = { room: RoomField; member: RoomMemberField };
 
 interface Signature {
   Element: HTMLDivElement;
@@ -116,7 +111,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
           {{#if this.isShowingPastSessions}}
             <AiAssistantPastSessionsList
-              @sessions={{this.sortedAiSessionRooms}}
+              @sessions={{this.aiSessionRooms}}
               @roomActions={{this.roomActions}}
               @onClose={{this.hidePastSessions}}
               {{popoverVelcro.loop}}
@@ -252,9 +247,9 @@ export default class AiAssistantPanel extends Component<Signature> {
     if (persistedRoomId && this.roomResources.has(persistedRoomId)) {
       this.currentRoomId = persistedRoomId;
     } else {
-      let latestRoom = this.sortedAiSessionRooms[0];
+      let latestRoom = this.aiSessionRooms[0];
       if (latestRoom) {
-        this.currentRoomId = latestRoom.room.roomId;
+        this.currentRoomId = latestRoom.roomId;
       } else {
         this.createNewSession();
       }
@@ -286,16 +281,12 @@ export default class AiAssistantPanel extends Component<Signature> {
       new Date(),
       "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
     )} - ${this.matrixService.userId}`;
-    let newRoomInvite = [aiBotUsername];
-    this.doCreateRoom.perform(newRoomName, newRoomInvite);
+    this.doCreateRoom.perform(newRoomName, [aiBotUsername]);
   }
 
   private doCreateRoom = restartableTask(
-    async (newRoomName: string, newRoomInvite: string[]) => {
-      let newRoomId = await this.matrixService.createRoom(
-        newRoomName,
-        newRoomInvite,
-      );
+    async (name: string, invites: string[], topic?: string) => {
+      let newRoomId = await this.matrixService.createRoom(name, invites, topic);
       this.enterRoom(newRoomId);
     },
   );
@@ -312,31 +303,22 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get aiSessionRooms() {
-    let rooms: AiSessionRoom[] = [];
+    let rooms: RoomField[] = [];
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
         continue;
       }
-      if (resource.room.roomMembers.find((m) => aiBotUserId === m.userId)) {
-        let roomMember = resource.room.joinedMembers.find(
-          (m) => this.matrixService.userId === m.userId,
-        );
-        if (roomMember) {
-          rooms.push({ room: resource.room, member: roomMember });
-        }
+      let { room } = resource;
+      if (
+        room.invitedMembers.find((m) => aiBotUserId === m.userId) &&
+        room.joinedMembers.find((m) => this.matrixService.userId === m.userId)
+      ) {
+        rooms.push(room);
       }
     }
-    return rooms;
-  }
-
-  @cached
-  private get sortedAiSessionRooms() {
+    // member join date is at the time of room creation
     // reverse chronological order
-    return this.aiSessionRooms.sort(
-      (a, b) =>
-        b.member.membershipDateTime.getTime() -
-        a.member.membershipDateTime.getTime(),
-    );
+    return rooms.sort((a, b) => b.created.getTime() - a.created.getTime());
   }
 
   @action

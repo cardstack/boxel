@@ -5,14 +5,14 @@ import { IconButton } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
+import type { RoomField } from 'https://cardstack.com/base/room';
+
 import AiAssistantPanelPopover from './panel-popover';
 import PastSessionItem, { type RoomActions } from './past-session-item';
 
-import type { AiSessionRoom } from './panel';
-
 interface Signature {
   Args: {
-    sessions: AiSessionRoom[];
+    sessions: RoomField[];
     roomActions: RoomActions;
     onClose: () => void;
   };
@@ -41,11 +41,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         {{else}}
           <ul class='past-sessions'>
             {{#each @sessions as |session|}}
-              <PastSessionItem
-                @room={{session.room}}
-                @joinDate={{session.member.membershipDateTime}}
-                @actions={{@roomActions}}
-              />
+              <PastSessionItem @room={{session}} @actions={{@roomActions}} />
             {{/each}}
           </ul>
         {{/if}}
