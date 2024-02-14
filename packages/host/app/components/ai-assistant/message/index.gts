@@ -75,7 +75,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         <div class='content'>
           {{@formattedMessage}}
 
-          <div>{{yield}}</div>
+          {{yield}}
 
           {{#if @attachedCards.length}}
             <div class='cards' data-test-message-cards>
@@ -102,7 +102,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         display: grid;
         grid-template-columns: var(--ai-assistant-message-avatar-size) 1fr;
         grid-template-rows: var(--ai-assistant-message-meta-height);
-        align-items: start;
+        align-items: center;
         gap: var(--ai-assistant-message-gap);
       }
       .ai-avatar {
@@ -125,7 +125,7 @@ export default class AiAssistantMessage extends Component<Signature> {
 
       .time {
         display: block;
-        font: var(--boxel-font-sm);
+        font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-sm);
         color: var(--boxel-450);
         white-space: nowrap;
@@ -151,13 +151,27 @@ export default class AiAssistantMessage extends Component<Signature> {
       .content {
         background-color: var(--boxel-light);
         color: var(--boxel-dark);
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
+        font-size: var(--boxel-font-sm);
+        font-weight: 500;
+        line-height: 1.25rem;
+        letter-spacing: var(--boxel-lsp-xs);
         padding: var(--boxel-sp);
       }
       .is-from-assistant .content {
         background: #3b394b;
         color: var(--boxel-light);
+      }
+
+      .content > :deep(.patch-message) {
+        font-weight: 700;
+      }
+
+      .content > :deep(*) {
+        margin-top: 0;
+        margin-bottom: 0;
+      }
+      .content > :deep(* + *) {
+        margin-top: var(--boxel-sp);
       }
 
       .error-container {
