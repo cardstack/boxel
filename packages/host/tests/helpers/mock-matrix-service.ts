@@ -17,7 +17,7 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 export type MockMatrixService = MatrixService & {
   cardAPI: typeof cardApi;
-  createAndJoinRoom(roomId: string): Promise<void>;
+  createAndJoinRoom(roomId: string, roomName?: string): Promise<void>;
   lastMessageSent: any;
 };
 
@@ -132,33 +132,34 @@ function generateMockMatrixService(
       await this.profile.load.perform();
     }
 
-    public createAndJoinRoom(roomId: string) {
-      addRoomEvent(this, {
+    async createAndJoinRoom(roomId: string, name?: string) {
+      await addRoomEvent(this, {
         event_id: 'eventname',
         room_id: roomId,
         type: 'm.room.name',
         content: {
-          name: 'test_a',
+          name: name || 'test_a',
         },
       });
 
-      addRoomEvent(this, {
+      await addRoomEvent(this, {
         event_id: 'eventcreate',
         room_id: roomId,
         type: 'm.room.create',
-        origin_server_ts: 0,
+        origin_server_ts: Date.now(),
         content: {
           creator: '@testuser:staging',
           room_version: '0',
         },
       });
 
-      addRoomEvent(this, {
+      await addRoomEvent(this, {
         event_id: 'eventjoin',
         room_id: roomId,
         type: 'm.room.member',
         sender: '@testuser:staging',
         state_key: '@testuser:staging',
+        origin_server_ts: Date.now(),
         content: {
           displayname: 'testuser',
           membership: 'join',
