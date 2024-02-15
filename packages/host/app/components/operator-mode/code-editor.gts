@@ -68,20 +68,15 @@ export default class CodeEditor extends Component<Signature> {
     // that we are transitioning to.
     this.codePath = this.operatorModeStateService.state.codePath;
 
-    console.log('isReady?', isReady(this.args.file));
-    console.log(
-      {
-        realmURL: () =>
-          isReady(this.args.file)
-            ? new URL(this.args.file?.realmURL)
-            : undefined,
-      },
-      new URL(this.args.file?.realmURL),
-    );
-    this.realmResource = getRealm(this, {
-      realmURL: () =>
-        isReady(this.args.file) ? new URL(this.args.file?.realmURL) : undefined,
-    });
+    // this.realmResource = getRealm(this, {
+    //   realmURL: () =>
+    //     isReady(this.args.file) ? new URL(this.args.file?.realmURL) : undefined,
+    // });
+
+    // this.realmResource = getRealm(this, {
+    //   realmURL: () =>
+    //     this.args,
+    // });
 
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
@@ -304,8 +299,7 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   private get readOnly() {
-    console.log('readOnly?', !this.realmResource?.canWrite);
-    return !this.realmResource?.canWrite;
+    return !this.readyFile.realmResource.canWrite;
   }
 
   <template>
