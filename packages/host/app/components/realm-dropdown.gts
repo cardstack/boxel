@@ -122,17 +122,14 @@ export default class RealmDropdown extends Component<Signature> {
     let items: RealmDropdownItem[] | [] = [];
     for (let [
       path,
-      extendedRealmInfo,
-    ] of this.realmInfoService.cachedRealms.entries()) {
-      let info = extendedRealmInfo.info;
-      if (info) {
-        let item: RealmDropdownItem = {
-          path,
-          ...info,
-          iconURL: info.iconURL ?? this.defaultRealmIcon,
-        };
-        items = [item, ...items];
-      }
+      realmInfo,
+    ] of this.realmInfoService.cachedRealmInfos.entries()) {
+      let item: RealmDropdownItem = {
+        path,
+        ...realmInfo,
+        iconURL: realmInfo.iconURL ?? this.defaultRealmIcon,
+      };
+      items = [item, ...items];
     }
     return items;
   }
