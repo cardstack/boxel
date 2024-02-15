@@ -10,6 +10,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { AiAssistantConversation } from '../ai-assistant/message';
+import NewSession from '../ai-assistant/new-session';
 
 import RoomInput from './room-input';
 import RoomMessage from './room-message';
@@ -30,14 +31,16 @@ export default class Room extends Component<Signature> {
     >
       <h3 class='boxel-sr-only' data-test-room-name>{{this.room.name}}</h3>
       <AiAssistantConversation>
-        <div class='timeline-start' data-test-timeline-start>
-          - Beginning of conversation -
-        </div>
-        {{#each this.room.messages as |message i|}}
-          <RoomMessage @message={{message}} data-test-message-idx={{i}} />
+        {{#if this.room.messages}}
+          <div class='timeline-start' data-test-timeline-start>
+            - Beginning of conversation -
+          </div>
+          {{#each this.room.messages as |message i|}}
+            <RoomMessage @message={{message}} data-test-message-idx={{i}} />
+          {{/each}}
         {{else}}
-          <div data-test-no-messages>(No messages)</div>
-        {{/each}}
+          <NewSession data-test-no-messages />
+        {{/if}}
       </AiAssistantConversation>
 
       <footer class='room-actions'>

@@ -66,15 +66,17 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header class='panel-header'>
-          <div class='panel-title'>
-            <img
-              alt='AI Assistant'
-              src={{assistantIcon}}
-              width='20'
-              height='20'
-            />
-            <h3>Assistant</h3>
-          </div>
+          {{#if this.currentRoom.messages}}
+            <div class='panel-title-group'>
+              <img
+                alt='AI Assistant'
+                src={{assistantIcon}}
+                width='20'
+                height='20'
+              />
+              <h3 class='panel-title-text'>Assistant</h3>
+            </div>
+          {{/if}}
           <IconButton
             class='close-ai-panel'
             @variant='primary'
@@ -187,13 +189,13 @@ export default class AiAssistantPanel extends Component<Signature> {
         padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
           var(--boxel-sp-lg);
       }
-      .panel-title {
+      .panel-title-group {
         align-items: center;
         display: flex;
         gap: var(--boxel-sp-xs);
         margin-bottom: var(--boxel-sp);
       }
-      .panel-title > h3 {
+      .panel-title-text {
         margin: 0;
         color: var(--boxel-light);
         font: 700 var(--boxel-font);
@@ -256,6 +258,12 @@ export default class AiAssistantPanel extends Component<Signature> {
         this.createNewSession();
       }
     }
+  }
+
+  private get currentRoom() {
+    return this.currentRoomId
+      ? this.roomResources.get(this.currentRoomId)?.room
+      : undefined;
   }
 
   @cached
