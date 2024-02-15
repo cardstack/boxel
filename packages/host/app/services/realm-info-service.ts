@@ -15,13 +15,16 @@ import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 const waiter = buildWaiter('realm-info-service:waiter');
+type ExtendedRealmInfo = {
+  info?: RealmInfo;
+  isPublicReadable?: boolean;
+};
 
 export default class RealmInfoService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   cachedRealmURLsForURL: Map<string, string> = new Map(); // Has the file url already been resolved to a realm url?
-  cachedRealmInfos: TrackedMap<string, RealmInfo> = new TrackedMap(); // Has the realm url already been resolved to a realm info?
-  cachedPublicReadableRealms: Map<string, boolean> = new Map();
+  cachedRealms: TrackedMap<string, ExtendedRealmInfo> = new TrackedMap();
 
   async fetchRealmURL(url: string): Promise<URL | undefined> {
     let realmURLString = this.getRealmURLFromCache(url);
@@ -51,18 +54,22 @@ export default class RealmInfoService extends Service {
   }
 
   async isPublicReadable(realmURL: URL): Promise<boolean> {
-    let realmURLString = realmURL.href;
-    if (this.cachedPublicReadableRealms.has(realmURLString)) {
-      return this.cachedPublicReadableRealms.get(realmURLString)!;
+    const realmURLString = realmURL.href;
+    const realm = this.getRealmInfoFromCache(realmURLString);
+    if (realm.isPublicReadable != undefined) {
+      return realm.isPublicReadable;
     }
 
-    let response = await this.loaderService.loader.fetch(realmURL, {
+    const response = await this.loaderService.loader.fetch(realmURL, {
       method: 'HEAD',
     });
-    let isPublicReadable = Boolean(
+    const isPublicReadable = Boolean(
       response.headers.get('x-boxel-realm-public-readable'),
     );
-    this.cachedPublicReadableRealms.set(realmURLString, isPublicReadable);
+    this.cachedRealms.set(realmURLString, {
+      ...realm,
+      isPublicReadable,
+    });
 
     return isPublicReadable;
   }
@@ -80,7 +87,7 @@ export default class RealmInfoService extends Service {
 
     let token = waiter.beginAsync();
     try {
-      let realmURLString = realmURL
+      const realmURLString = realmURL
         ? realmURL.href
         : (await this.fetchRealmURL(fileURL!))?.href;
       if (!realmURLString) {
@@ -89,17 +96,21 @@ export default class RealmInfoService extends Service {
         );
       }
 
-      if (this.cachedRealmInfos.has(realmURLString)) {
-        return this.cachedRealmInfos.get(realmURLString)!;
+      const realm = this.getRealmInfoFromCache(realmURLString);
+      if (realm.info) {
+        return realm.info;
       } else {
-        let realmInfoResponse = await this.loaderService.loader.fetch(
+        const realmInfoResponse = await this.loaderService.loader.fetch(
           `${realmURLString}_info`,
           { headers: { Accept: SupportedMimeType.RealmInfo } },
         );
 
-        let realmInfo = (await realmInfoResponse.json())?.data?.attributes;
-        this.cachedRealmInfos.set(realmURLString, realmInfo);
-        return realmInfo;
+        const info = (await realmInfoResponse.json())?.data?.attributes;
+        this.cachedRealms.set(realmURLString, {
+          ...realm,
+          info,
+        });
+        return info;
       }
     } finally {
       waiter.endAsync(token);
@@ -122,4 +133,13 @@ export default class RealmInfoService extends Service {
       waiter.endAsync(token);
     }
   });
+
+  private getRealmInfoFromCache(realmURLString: string): ExtendedRealmInfo {
+    let realm = this.cachedRealms.get(realmURLString);
+    if (!realm) {
+      realm = {};
+      this.cachedRealms.set(realmURLString, realm);
+    }
+    return realm;
+  }
 }
