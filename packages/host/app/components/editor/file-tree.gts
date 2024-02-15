@@ -1,3 +1,4 @@
+import { concat } from '@ember/helper';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
@@ -6,8 +7,12 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
+import { Tooltip } from '@cardstack/boxel-ui/components';
+import { IconPencil, IconPencilCrossedOut } from '@cardstack/boxel-ui/icons';
+
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
 
 import Directory from './directory';
 
@@ -27,8 +32,43 @@ export default class FileTree extends Component<Signature> {
             @realmName={{realmInfo.name}}
             class='icon'
           />
-          <span data-test-realm-name={{realmInfo.name}}>In
-            {{realmInfo.name}}</span>
+          {{#let (concat 'In ' realmInfo.name) as |realmTitle|}}
+            <span
+              class='realm-title'
+              data-test-realm-name={{realmInfo.name}}
+              title={{realmTitle}}
+            >{{realmTitle}}</span>
+          {{/let}}
+          {{#if this.canWrite}}
+            <Tooltip @placement='top' class='editability-icon'>
+              <:trigger>
+                <IconPencil
+                  width='18px'
+                  height='18px'
+                  aria-label='Can edit files in this realm'
+                  data-test-realm-writable
+                />
+              </:trigger>
+              <:content>
+                Can edit files in this realm
+              </:content>
+            </Tooltip>
+          {{else}}
+            <Tooltip @placement='top' class='editability-icon'>
+              <:trigger>
+                <IconPencilCrossedOut
+                  width='18px'
+                  height='18px'
+                  aria-label='Cannot edit files in this realm'
+                  data-test-realm-not-writable
+                />
+              </:trigger>
+              <:content>
+                Cannot edit files in this realm
+              </:content>
+            </Tooltip>
+
+          {{/if}}
         </:ready>
       </RealmInfoProvider>
     </div>
@@ -71,14 +111,28 @@ export default class FileTree extends Component<Signature> {
       .realm-info img {
         width: 18px;
       }
+
+      .realm-title {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .editability-icon {
+        display: flex;
+      }
     </style>
   </template>
 
   @service private declare router: RouterService;
   @tracked private showMask = true;
+
+  private realmResource: RealmResource | undefined;
+
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.hideMask.perform();
+    this.realmResource = getRealm(this, { realmURL: () => this.args.realmURL });
   }
 
   private hideMask = restartableTask(async () => {
@@ -86,4 +140,8 @@ export default class FileTree extends Component<Signature> {
     await timeout(300);
     this.showMask = false;
   });
+
+  get canWrite() {
+    return this.realmResource?.canWrite;
+  }
 }
