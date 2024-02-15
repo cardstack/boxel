@@ -10,10 +10,12 @@ import {
   type RealmSessionResource,
   getRealmSession,
 } from '@cardstack/host/resources/realm-session';
+import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
+  @service private declare matrixService: MatrixService;
   @service declare realmInfoService: RealmInfoService;
 
   @tracked loader = this.makeInstance();
@@ -75,6 +77,11 @@ export default class LoaderService extends Service {
     );
     if (request.method === 'GET' && isPublicReadable) {
       return null;
+    }
+
+    await this.matrixService.ready;
+    if (!this.matrixService.isLoggedIn) {
+      return;
     }
 
     let realmResource = await this.getRealmSessionResource(realmURL);

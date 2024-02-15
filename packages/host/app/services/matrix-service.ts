@@ -237,10 +237,9 @@ export default class MatrixService extends Service {
   public async createRealmSession(realmURL: URL) {
     await this.ready;
     if (!this.isLoggedIn) {
-      console.warn(
+      throw new Error(
         `must be logged in to matrix before a realm session can be created`,
       );
-      return;
     }
 
     let initialResponse = await this.loaderService.loader.fetch(
