@@ -69,7 +69,9 @@ export class RealmResource extends Resource<Args> {
   });
 
   private getToken = restartableTask(async (realmURL: URL) => {
+    await this.matrixService.ready;
     let rawToken = await this.matrixService.createRealmSession(realmURL);
+
     if (rawToken) {
       this.token = claimsFromRawToken(rawToken);
       setRealmSession(realmURL, rawToken);

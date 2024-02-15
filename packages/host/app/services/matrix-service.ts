@@ -46,6 +46,10 @@ import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
+import {
+  RealmAuthClient,
+  RealmAuthMatrixClientInterface,
+} from '@cardstack/runtime-common/realm-auth-client';
 
 const { matrixURL, ownRealmURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
@@ -248,56 +252,8 @@ export default class MatrixService extends Service {
   }
 
   public async createRealmSession(realmURL: URL) {
-    await this.ready;
-    if (!this.isLoggedIn) {
-      throw new Error(
-        `must be logged in to matrix before a realm session can be created`,
-      );
-    }
-
-    let initialResponse = await fetch(`${realmURL.href}_session`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        user: this.userId,
-      }),
-    });
-    let initialJSON = (await initialResponse.json()) as {
-      room: string;
-      challenge: string;
-    };
-    if (initialResponse.status !== 401) {
-      throw new Error(
-        `unexpected response from POST ${realmURL.href}_session: ${
-          initialResponse.status
-        } - ${JSON.stringify(initialJSON)}`,
-      );
-    }
-    let { room, challenge } = initialJSON;
-    if (!this.rooms.has(room)) {
-      await this.client.joinRoom(room);
-    }
-    await this.sendMessage(room, `auth-response: ${challenge}`);
-    let challengeResponse = await fetch(`${realmURL.href}_session`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        user: this.userId,
-        challenge,
-      }),
-    });
-    if (!challengeResponse.ok) {
-      throw new Error(
-        `Could not authenticate with realm ${realmURL.href} - ${
-          challengeResponse.status
-        }: ${JSON.stringify(await challengeResponse.json())}`,
-      );
-    }
-    return challengeResponse.headers.get('Authorization');
+    let realmAuthClient = new RealmAuthClient(realmURL, this.client);
+    return await realmAuthClient.getJWT();
   }
 
   async createRoom(
