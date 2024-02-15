@@ -56,9 +56,9 @@ export default class RealmInfoService extends Service {
     return realmURLString;
   }
 
-  async isPublicReadable(realmURL: URL, skipCache?: boolean): Promise<boolean> {
+  async isPublicReadable(realmURL: URL): Promise<boolean> {
     let realmURLString = realmURL.href;
-    if (this.cachedPublicReadableRealms.has(realmURLString) && !skipCache) {
+    if (this.cachedPublicReadableRealms.has(realmURLString)) {
       return this.cachedPublicReadableRealms.get(realmURLString)!;
     }
 

@@ -23,8 +23,8 @@ const LOCAL_STORAGE_KEY = 'boxel-session';
 const tokenRefreshPeriod = 5 * 60; // 5 minutes
 
 export class RealmSessionResource extends Resource<Args> {
-  @tracked token: JWTPayload | undefined;
-  private _rawToken: string | undefined;
+  @tracked private token: JWTPayload | undefined;
+  private rawToken: string | undefined;
   @tracked loaded: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
@@ -41,7 +41,7 @@ export class RealmSessionResource extends Resource<Args> {
       let rawToken = processTokenFromStorage(realmURL);
       if (rawToken) {
         this.token = claimsFromRawToken(rawToken);
-        this._rawToken = rawToken;
+        this.rawToken = rawToken;
         this.loaded = Promise.resolve();
       }
       if (!this.token) {
@@ -60,8 +60,8 @@ export class RealmSessionResource extends Resource<Args> {
     return this.token?.permissions?.includes('write');
   }
 
-  get realmToken() {
-    return this._rawToken;
+  get rawRealmToken() {
+    return this.rawToken;
   }
 
   private getTokenForRealmOfCard = restartableTask(async (card: CardDef) => {
@@ -69,7 +69,7 @@ export class RealmSessionResource extends Resource<Args> {
     let rawToken = processTokenFromStorage(realmURL);
     if (rawToken) {
       this.token = claimsFromRawToken(rawToken);
-      this._rawToken = rawToken;
+      this.rawToken = rawToken;
     } else {
       await this.getToken.perform(realmURL);
     }
@@ -79,11 +79,11 @@ export class RealmSessionResource extends Resource<Args> {
     let rawToken = await this.matrixService.createRealmSession(realmURL);
     if (rawToken) {
       this.token = claimsFromRawToken(rawToken);
-      this._rawToken = rawToken;
+      this.rawToken = rawToken;
       setRealmSession(realmURL, rawToken);
     } else {
       this.token = undefined;
-      this._rawToken = undefined;
+      this.rawToken = undefined;
       clearRealmSession(realmURL);
     }
   });

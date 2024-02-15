@@ -18,7 +18,9 @@ export default class LoaderService extends Service {
 
   @tracked loader = this.makeInstance();
   // This resources all have the same owner, it's safe to reuse cache.
-  private cacheRealmResources: Map<string, RealmSessionResource> = new Map();
+  // The owner is the service, which stays around for the whole lifetime of the host app,
+  // which in turn assures the resources will not get torn down.
+  private realmSessions: Map<string, RealmSessionResource> = new Map();
 
   reset() {
     if (this.loader) {
@@ -53,7 +55,7 @@ export default class LoaderService extends Service {
       request.url.includes(baseRealm.url) && request.method === 'GET';
     if (
       isGetRequestToBaseRealm ||
-      request.url.includes('session') ||
+      request.url.includes('_session') ||
       request.method === 'HEAD' ||
       request.headers.has('Authorization')
     ) {
@@ -75,12 +77,12 @@ export default class LoaderService extends Service {
       return null;
     }
 
-    let realmResource = await this.getRealmResource(realmURL);
-    if (!realmResource.realmToken) {
+    let realmResource = await this.getRealmSessionResource(realmURL);
+    if (!realmResource.rawRealmToken) {
       return null;
     }
 
-    request.headers.set('Authorization', realmResource.realmToken);
+    request.headers.set('Authorization', realmResource.rawRealmToken);
     let body;
     if (request.bodyUsed) {
       body = null;
@@ -96,14 +98,14 @@ export default class LoaderService extends Service {
     });
   }
 
-  private async getRealmResource(realmURL: URL) {
+  private async getRealmSessionResource(realmURL: URL) {
     let realmURLString = realmURL.href;
-    let realmResource = this.cacheRealmResources.get(realmURLString);
+    let realmResource = this.realmSessions.get(realmURLString);
 
     if (!realmResource) {
       realmResource = getRealmSession(this, { realmURL: () => realmURL });
       await realmResource.loaded;
-      this.cacheRealmResources.set(realmURLString, realmResource);
+      this.realmSessions.set(realmURLString, realmResource);
     }
     return realmResource;
   }
