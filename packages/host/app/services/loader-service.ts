@@ -110,7 +110,9 @@ export default class LoaderService extends Service {
     let realmSessionResource = this.realmSessions.get(realmURLString);
 
     if (!realmSessionResource) {
-      realmSessionResource = getRealmSession(this, { realmURL: () => realmURL });
+      realmSessionResource = getRealmSession(this, {
+        realmURL: () => realmURL,
+      });
       await realmSessionResource.loaded;
       this.realmSessions.set(realmURLString, realmSessionResource);
     }
