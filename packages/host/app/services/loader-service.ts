@@ -81,7 +81,7 @@ export default class LoaderService extends Service {
 
     await this.matrixService.ready;
     if (!this.matrixService.isLoggedIn) {
-      return;
+      return null;
     }
 
     let realmResource = await this.getRealmSessionResource(realmURL);

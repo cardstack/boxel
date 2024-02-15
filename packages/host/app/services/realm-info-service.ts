@@ -84,7 +84,9 @@ export default class RealmInfoService extends Service {
         ? realmURL.href
         : (await this.fetchRealmURL(fileURL!))?.href;
       if (!realmURLString) {
-        throw new Error('Could not find realm URL in response headers (x-boxel-realm-url)');
+        throw new Error(
+          'Could not find realm URL in response headers (x-boxel-realm-url)',
+        );
       }
 
       if (this.cachedRealmInfos.has(realmURLString)) {
