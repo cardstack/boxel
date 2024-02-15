@@ -17,8 +17,9 @@ import {
   Button,
   IconButton,
   LoadingIndicator,
+  ResizeHandle,
 } from '@cardstack/boxel-ui/components';
-import { ResizeHandle } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
@@ -54,7 +55,9 @@ interface Signature {
   };
 }
 
-let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId'; // Local storage key
+// Local storage keys
+let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
+let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
 
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
@@ -92,6 +95,7 @@ export default class AiAssistantPanel extends Component<Signature> {
               class='new-session-button'
               @kind='secondary-dark'
               @size='small'
+              @disabled={{not this.currentRoom.messages.length}}
               {{on 'click' this.createNewSession}}
               data-test-create-room-btn
             >
@@ -287,6 +291,10 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @action
   private createNewSession() {
+    if (this.newSessionId) {
+      this.enterRoom(this.newSessionId!);
+      return;
+    }
     let newRoomName = `${format(
       new Date(),
       "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
@@ -297,9 +305,22 @@ export default class AiAssistantPanel extends Component<Signature> {
   private doCreateRoom = restartableTask(
     async (name: string, invites: string[], topic?: string) => {
       let newRoomId = await this.matrixService.createRoom(name, invites, topic);
+      window.localStorage.setItem(newSessionIdPersistenceKey, newRoomId);
       this.enterRoom(newRoomId);
     },
   );
+
+  private get newSessionId() {
+    let id = window.localStorage.getItem(newSessionIdPersistenceKey);
+    if (
+      id &&
+      this.roomResources.has(id) &&
+      this.roomResources.get(id)?.room?.messages.length === 0
+    ) {
+      return id;
+    }
+    return;
+  }
 
   @action
   private displayPastSessions() {
@@ -365,9 +386,20 @@ export default class AiAssistantPanel extends Component<Signature> {
     try {
       await this.matrixService.client.leave(roomId);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
+      this.roomResources.delete(roomId);
+
+      if (this.newSessionId === roomId) {
+        window.localStorage.removeItem(newSessionIdPersistenceKey);
+      }
+
       if (this.currentRoomId === roomId) {
-        this.currentRoomId = undefined;
-        window.localStorage.setItem(currentRoomIdPersistenceKey, '');
+        window.localStorage.removeItem(currentRoomIdPersistenceKey);
+        let latestRoom = this.aiSessionRooms[0];
+        if (latestRoom) {
+          this.enterRoom(latestRoom.roomId);
+        } else {
+          this.createNewSession();
+        }
       }
       this.roomToDelete = undefined;
       this.hidePastSessions();
