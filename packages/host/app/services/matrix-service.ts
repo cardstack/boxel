@@ -62,6 +62,7 @@ export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
+  private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
@@ -248,6 +249,16 @@ export default class MatrixService extends Service {
   }
 
   public async createRealmSession(realmURL: URL) {
+    let inflightAuth = this.realmSessionTasks.get(realmURL.href);
+    if (inflightAuth) {
+      return inflightAuth;
+    }
+    let auth = this._createRealmSession(realmURL);
+    this.realmSessionTasks.set(realmURL.href, auth);
+    return auth;
+  }
+
+  private async _createRealmSession(realmURL: URL) {
     await this.ready;
     if (!this.isLoggedIn) {
       throw new Error(
@@ -291,13 +302,17 @@ export default class MatrixService extends Service {
       }),
     });
     if (!challengeResponse.ok) {
+      let error = JSON.stringify(await challengeResponse.json());
+      console.error(`client failed realm authentication: ${error}`);
       throw new Error(
-        `Could not authenticate with realm ${realmURL.href} - ${
-          challengeResponse.status
-        }: ${JSON.stringify(await challengeResponse.json())}`,
+        `Could not authenticate with realm ${realmURL.href} - ${challengeResponse.status}: ${error}`,
       );
     }
-    return challengeResponse.headers.get('Authorization');
+    try {
+      return challengeResponse.headers.get('Authorization')!;
+    } finally {
+      this.realmSessionTasks.delete(realmURL.href);
+    }
   }
 
   async createRoom(

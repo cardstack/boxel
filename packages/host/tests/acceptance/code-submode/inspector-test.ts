@@ -395,6 +395,10 @@ const localInheritSource = `
   }
 `;
 
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
+  [testRealmURL]: ['read', 'write'],
+};
+
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -405,7 +409,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
@@ -413,6 +417,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
+    realmPermissions = { [testRealmURL]: ['read', 'write'] };
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
@@ -2238,5 +2243,40 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-action-button="Create Instance"]')
       .doesNotExist('field defs do not display a create instance button');
+  });
+
+  module('when the user lacks write permissions', function (hooks) {
+    hooks.beforeEach(async function () {
+      realmPermissions = { [testRealmURL]: ['read'] };
+    });
+
+    test('delete button is not displayed for module when user does not have permission to write to realm', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}pet.gts`,
+      });
+      await waitForCodeEditor();
+      await waitFor('[data-test-current-module-name="pet.gts"]');
+      assert.dom('[data-test-delete-module-button]').doesNotExist();
+    });
+
+    test('delete button is not displayed for card instance when user does not have permission to write to realm', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}Pet/mango.json`,
+      });
+      await waitForCodeEditor();
+      assert.dom('[data-test-action-button="Delete"]').doesNotExist();
+    });
+
+    test('delete button is not displayed for misc file when user does not have permission to write to realm', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}readme.md`,
+      });
+      await waitForCodeEditor();
+      assert.dom('[data-test-action-button="Delete"]').doesNotExist();
+    });
   });
 });
