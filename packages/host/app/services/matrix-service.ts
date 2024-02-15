@@ -25,6 +25,7 @@ import {
   generatePatchCallSpecification,
 } from '@cardstack/runtime-common/helpers/ai';
 
+import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
@@ -46,10 +47,6 @@ import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
-import {
-  RealmAuthClient,
-  RealmAuthMatrixClientInterface,
-} from '@cardstack/runtime-common/realm-auth-client';
 
 const { matrixURL, ownRealmURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
