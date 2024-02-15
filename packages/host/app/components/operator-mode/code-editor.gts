@@ -66,16 +66,6 @@ export default class CodeEditor extends Component<Signature> {
     // that we are transitioning to.
     this.codePath = this.operatorModeStateService.state.codePath;
 
-    // this.realmResource = getRealm(this, {
-    //   realmURL: () =>
-    //     isReady(this.args.file) ? new URL(this.args.file?.realmURL) : undefined,
-    // });
-
-    // this.realmResource = getRealm(this, {
-    //   realmURL: () =>
-    //     this.args,
-    // });
-
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
       // which is async, we leverage an EC task that is running in a
