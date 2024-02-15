@@ -24,7 +24,6 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
-import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 
@@ -56,7 +55,6 @@ export default class CodeEditor extends Component<Signature> {
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
-  private realmResource: RealmResource | undefined;
   private hasUnsavedSourceChanges = false;
   private codePath;
 
