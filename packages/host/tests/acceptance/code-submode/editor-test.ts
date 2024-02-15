@@ -4,6 +4,7 @@ import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
@@ -15,6 +16,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   TestRealmAdapter,
@@ -34,8 +36,13 @@ import {
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
+  [testRealmURL]: ['read', 'write'],
+};
+
 module('Acceptance | code submode | editor tests', function (hooks) {
   let realm: Realm;
+  let monacoService: MonacoService;
   let adapter: TestRealmAdapter;
 
   setupApplicationTest(hooks);
@@ -43,7 +50,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');
@@ -51,6 +58,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
+    realmPermissions = { [testRealmURL]: ['read', 'write'] };
+
+    monacoService = this.owner.lookup(
+      'service:monaco-service',
+    ) as MonacoService;
+
     window.localStorage.removeItem('recent-cards');
     window.localStorage.removeItem('recent-files');
 
@@ -307,6 +320,13 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       codePath: `${testRealmURL}Pet/mango.json`,
     });
     await waitForCodeEditor();
+
+    await this.pauseTest();
+
+    assert.false(
+      monacoService?.editor?.getOption(MonacoSDK.editor.EditorOption.readOnly),
+      'editor should not be read-only',
+    );
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {
@@ -754,5 +774,35 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       expected,
       'pet.gts changes were saved',
     );
+  });
+
+  module('when the user lacks write permissions', function (hooks) {
+    hooks.beforeEach(function () {
+      realmPermissions = { [testRealmURL]: ['read'] };
+    });
+
+    test('the editor is read-only', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}Pet/mango.json`,
+      });
+
+      await waitForCodeEditor();
+
+      assert.true(
+        monacoService?.editor?.getOption(
+          MonacoSDK.editor.EditorOption.readOnly,
+        ),
+        'editor should be read-only',
+      );
+    });
   });
 });

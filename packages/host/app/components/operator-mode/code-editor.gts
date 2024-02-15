@@ -24,12 +24,12 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
+import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
-
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import BinaryFileInfo from './binary-file-info';
@@ -56,6 +56,7 @@ export default class CodeEditor extends Component<Signature> {
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
+  private realmResource: RealmResource | undefined;
   private hasUnsavedSourceChanges = false;
   private codePath;
 
@@ -66,6 +67,21 @@ export default class CodeEditor extends Component<Signature> {
     // to the component that is being destroyed--rather we see the new codePath
     // that we are transitioning to.
     this.codePath = this.operatorModeStateService.state.codePath;
+
+    console.log('isReady?', isReady(this.args.file));
+    console.log(
+      {
+        realmURL: () =>
+          isReady(this.args.file)
+            ? new URL(this.args.file?.realmURL)
+            : undefined,
+      },
+      new URL(this.args.file?.realmURL),
+    );
+    this.realmResource = getRealm(this, {
+      realmURL: () =>
+        isReady(this.args.file) ? new URL(this.args.file?.realmURL) : undefined,
+    });
 
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
@@ -287,6 +303,11 @@ export default class CodeEditor extends Component<Signature> {
     return undefined;
   }
 
+  private get readOnly() {
+    console.log('readOnly?', !this.realmResource?.canWrite);
+    return !this.realmResource?.canWrite;
+  }
+
   <template>
     {{#if this.isReady}}
       {{#if this.readyFile.isBinary}}
@@ -303,6 +324,7 @@ export default class CodeEditor extends Component<Signature> {
             language=this.language
             initialCursorPosition=this.initialMonacoCursorPosition
             onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
+            readOnly=this.readOnly
           }}
         ></div>
       {{/if}}
