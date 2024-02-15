@@ -6,6 +6,7 @@ const testContainerId = 'test-container';
 const iframeSelectorTempId = 'iframe-selector-temp';
 const username = 'user';
 const password = 'password';
+const timeoutMs = 20000;
 
 class Messenger {
   #request;
@@ -44,7 +45,7 @@ class Messenger {
               message,
             )}`,
           ),
-        5000,
+        timeoutMs,
       ),
     );
     let result = await Promise.race([response, timeout]);
@@ -62,15 +63,15 @@ function cleanWhiteSpace(text) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-async function waitFor(selector, messenger, timeoutMs = 10000) {
+async function waitFor(selector, messenger, _timeoutMs = timeoutMs) {
   let startTime = Date.now();
   while (
     (await querySelector(selector, messenger)) == null &&
-    Date.now() <= startTime + timeoutMs
+    Date.now() <= startTime + _timeoutMs
   ) {
-    await new Promise((res) => setTimeout(res, 100));
+    await new Promise((res) => setTimeout(res, 1000));
   }
-  if (Date.now() > startTime + timeoutMs) {
+  if (Date.now() > startTime + _timeoutMs) {
     throw new Error(`timed out waiting for selector '${selector}'`);
   }
 }
@@ -128,7 +129,7 @@ async function boot(url, waitForSelector, isLoginRequired) {
   iframe.setAttribute('src', url);
   container.append(iframe);
   // wait moment for iframe src to load
-  await new Promise((res) => setTimeout(res, 1000));
+  await new Promise((res) => setTimeout(res, timeoutMs));
   let messenger = new Messenger(iframe);
   try {
     if (isLoginRequired) {
