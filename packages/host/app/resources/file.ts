@@ -10,6 +10,7 @@ import { Resource } from 'ember-resources';
 import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 
 import { stripFileExtension } from '@cardstack/host/lib/utils';
+import { getRealm, type RealmResource } from '@cardstack/host/resources/realm';
 import type CardService from '@cardstack/host/services/card-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -54,6 +55,7 @@ export interface Ready {
   realmURL: string;
   size: number; // size in bytes
   write(content: string, flushLoader?: boolean): Promise<void>;
+  realmResource: RealmResource;
   lastModifiedAsDate?: Date;
   isBinary?: boolean;
   writing?: Promise<void>;
@@ -170,6 +172,8 @@ class _FileResource extends Resource<Args> {
     let buffer = await response.arrayBuffer();
     let size = buffer.byteLength;
     let content = utf8.decode(buffer);
+    let realmResource = getRealm(this, { realmURL: () => new URL(realmURL!) });
+    await realmResource.loaded;
 
     let self = this;
 
@@ -178,6 +182,7 @@ class _FileResource extends Resource<Args> {
       lastModified,
       realmURL,
       content,
+      realmResource,
       name: response.url.split('/').pop()!,
       size,
       url: response.url,
@@ -240,6 +245,7 @@ class _FileResource extends Resource<Args> {
         lastModified: response.headers.get('last-modified') || undefined,
         url: state.url,
         name: state.name,
+        realmResource: state.realmResource,
         size,
         write: state.write,
         realmURL: state.realmURL,
@@ -277,6 +283,10 @@ class _FileResource extends Resource<Args> {
 
   get lastModified() {
     return (this.innerState as Ready).lastModified;
+  }
+
+  get realmResource() {
+    return (this.innerState as Ready).realmResource;
   }
 
   get lastModifiedAsDate() {

@@ -33,8 +33,15 @@ export async function toggleOperatorMode(page: Page) {
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
   await page.waitForFunction(() =>
-    document.querySelector('[data-test-close-ai-panel]'),
+    document.querySelector('[data-test-close-ai-assistant]'),
   );
+
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-test-room]')
+        ?.getAttribute('data-test-room'),
+  ); // Opening the AI assistant either opens last room or creates one - wait for it to settle
 }
 
 export async function openRoot(page: Page) {
@@ -239,9 +246,13 @@ export async function isInRoom(page: Page, roomName: string) {
 
 export async function deleteRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-past-sessions-button]`).click();
+
+  // Here, past sessions could be rerendered because in one case we're creating a new room when opening an AI panel, so we need to wait for the past sessions to settle
+  await page.waitForTimeout(500);
   await page
     .locator(`[data-test-past-session-options-button="${roomName}"]`)
     .click();
+
   await page.locator(`[data-test-boxel-menu-item-text="Delete"]`).click();
   await page
     .locator(
@@ -367,6 +378,7 @@ export async function assertMessages(
 
 export async function assertRooms(page: Page, rooms: string[]) {
   await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
+
   if (rooms && rooms.length > 0) {
     await page.waitForFunction(
       (rooms) =>
