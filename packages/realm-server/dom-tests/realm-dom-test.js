@@ -6,7 +6,7 @@ const testContainerId = 'test-container';
 const iframeSelectorTempId = 'iframe-selector-temp';
 const username = 'user';
 const password = 'password';
-const timeoutMs = 20000;
+const timeoutMs = 10000;
 
 class Messenger {
   #request;
@@ -69,10 +69,25 @@ async function waitFor(selector, messenger, _timeoutMs = timeoutMs) {
     (await querySelector(selector, messenger)) == null &&
     Date.now() <= startTime + _timeoutMs
   ) {
-    await new Promise((res) => setTimeout(res, 1000));
+    await new Promise((res) => setTimeout(res, 100));
   }
   if (Date.now() > startTime + _timeoutMs) {
     throw new Error(`timed out waiting for selector '${selector}'`);
+  }
+}
+
+async function waitUntilRemoved(selector, messenger, _timeoutMs = timeoutMs) {
+  let startTime = Date.now();
+  while (
+    (await querySelector(selector, messenger)) != null &&
+    Date.now() <= startTime + _timeoutMs
+  ) {
+    await new Promise((res) => setTimeout(res, 250));
+  }
+  if (Date.now() > startTime + _timeoutMs) {
+    throw new Error(
+      `timed out waiting for selector to be removed '${selector}'`,
+    );
   }
 }
 
@@ -129,16 +144,17 @@ async function boot(url, waitForSelector, isLoginRequired) {
   iframe.setAttribute('src', url);
   container.append(iframe);
   // wait moment for iframe src to load
-  await new Promise((res) => setTimeout(res, timeoutMs));
+  await new Promise((res) => setTimeout(res, 1000));
   let messenger = new Messenger(iframe);
+  await waitFor('[data-test-boxel-root]', messenger);
   try {
     if (isLoginRequired) {
-      try {
-        await waitFor('[data-test-login-btn]', messenger);
-      } catch (err) {
-        // already logged in
-        await logout(messenger);
-      }
+      await waitUntilRemoved(
+        '[data-test-initializing-operator-mode]',
+        messenger,
+      );
+      await logout(messenger);
+      await waitFor('[data-test-login-btn]', messenger);
       await login(username, password, messenger);
     }
 

@@ -166,7 +166,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     >
       <CardCatalogModal />
       {{#if this.loadMatrix.isRunning}}
-        <div class='loading'>
+        <div class='loading' data-test-initializing-operator-mode>
           <LoadingIndicator @color='var(--boxel-light)' />
           <span class='loading__message'>Initializing Operator Mode...</span>
         </div>
