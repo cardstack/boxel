@@ -26,6 +26,7 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
+
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
