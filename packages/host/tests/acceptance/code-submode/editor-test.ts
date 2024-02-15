@@ -321,8 +321,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
     await waitForCodeEditor();
 
-    await this.pauseTest();
-
     assert.false(
       monacoService?.editor?.getOption(MonacoSDK.editor.EditorOption.readOnly),
       'editor should not be read-only',
