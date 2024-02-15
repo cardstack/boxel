@@ -28,10 +28,7 @@ export default class Room extends Component<Signature> {
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room={{this.room.name}}
     >
-      <header class='room-info'>
-        <h3 class='room-name' data-test-room-name>{{this.room.name}}</h3>
-      </header>
-
+      <h3 class='boxel-sr-only' data-test-room-name>{{this.room.name}}</h3>
       <AiAssistantConversation>
         <div class='timeline-start' data-test-timeline-start>
           - Beginning of conversation -
@@ -51,29 +48,13 @@ export default class Room extends Component<Signature> {
     <style>
       .room {
         display: grid;
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: 1fr auto;
         height: 100%;
         overflow: hidden;
       }
-
-      .room-info {
-        border-bottom: var(--boxel-border);
-        padding: var(--boxel-sp);
-      }
-
-      .room-name {
-        margin-top: 0;
-      }
-
-      .error {
-        color: var(--boxel-danger);
-        font-weight: 'bold';
-      }
-
       .timeline-start {
         padding-bottom: var(--boxel-sp);
       }
-
       .room-actions {
         box-shadow: var(--boxel-box-shadow);
       }

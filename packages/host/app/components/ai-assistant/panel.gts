@@ -66,8 +66,15 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header class='panel-header'>
-          <img alt='AI Assistant' src={{assistantIcon}} />
-          <span>Assistant</span>
+          <div class='panel-title'>
+            <img
+              alt='AI Assistant'
+              src={{assistantIcon}}
+              width='20'
+              height='20'
+            />
+            <h3>Assistant</h3>
+          </div>
           <IconButton
             class='close-ai-panel'
             @variant='primary'
@@ -75,18 +82,15 @@ export default class AiAssistantPanel extends Component<Signature> {
             @width='20px'
             @height='20px'
             {{on 'click' @onClose}}
-            aria-label='Remove'
+            aria-label='Close AI Assistant'
             data-test-close-ai-assistant
           />
-        </header>
-        <div class='menu'>
-          <div class='buttons'>
+          <div class='header-buttons' {{popoverVelcro.hook}}>
             <Button
               class='new-session-button'
               @kind='secondary-dark'
               @size='small'
               {{on 'click' this.createNewSession}}
-              {{popoverVelcro.hook}}
               data-test-create-room-btn
             >
               New Session
@@ -100,7 +104,6 @@ export default class AiAssistantPanel extends Component<Signature> {
                 @kind='secondary-dark'
                 @size='small'
                 {{on 'click' this.displayPastSessions}}
-                {{popoverVelcro.hook}}
                 data-test-past-sessions-button
               >
                 Past Sessions
@@ -108,22 +111,22 @@ export default class AiAssistantPanel extends Component<Signature> {
               </Button>
             {{/if}}
           </div>
+        </header>
 
-          {{#if this.isShowingPastSessions}}
-            <AiAssistantPastSessionsList
-              @sessions={{this.aiSessionRooms}}
-              @roomActions={{this.roomActions}}
-              @onClose={{this.hidePastSessions}}
-              {{popoverVelcro.loop}}
-            />
-          {{else if this.roomToRename}}
-            <RenameSession
-              @room={{this.roomToRename}}
-              @onClose={{fn this.setRoomToRename undefined}}
-              {{popoverVelcro.loop}}
-            />
-          {{/if}}
-        </div>
+        {{#if this.isShowingPastSessions}}
+          <AiAssistantPastSessionsList
+            @sessions={{this.aiSessionRooms}}
+            @roomActions={{this.roomActions}}
+            @onClose={{this.hidePastSessions}}
+            {{popoverVelcro.loop}}
+          />
+        {{else if this.roomToRename}}
+          <RenameSession
+            @room={{this.roomToRename}}
+            @onClose={{fn this.setRoomToRename undefined}}
+            {{popoverVelcro.loop}}
+          />
+        {{/if}}
 
         {{#if this.doCreateRoom.isRunning}}
           <LoadingIndicator
@@ -151,7 +154,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     <style>
       .ai-assistant-panel {
         display: grid;
-        grid-template-rows: auto auto 1fr;
+        grid-template-rows: auto 1fr;
         background-color: var(--boxel-ai-purple);
         border: none;
         color: var(--boxel-light);
@@ -173,9 +176,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       :deep(.separator-horizontal:not(:hover) > button) {
         display: none;
       }
-      :deep(.room-info) {
-        padding: var(--boxel-sp) var(--boxel-sp-lg);
-      }
       :deep(.ai-assistant-conversation) {
         padding: var(--boxel-sp) var(--boxel-sp-lg);
       }
@@ -183,28 +183,30 @@ export default class AiAssistantPanel extends Component<Signature> {
         z-index: 1;
       }
       .panel-header {
+        position: relative;
+        padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
+          var(--boxel-sp-lg);
+      }
+      .panel-title {
         align-items: center;
         display: flex;
-        padding: var(--boxel-sp-xs) calc(var(--boxel-sp) / 2) var(--boxel-sp-xs)
-          var(--boxel-sp-lg);
         gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp);
       }
-      .panel-header img {
-        height: 20px;
-        width: 20px;
-      }
-      .panel-header span {
+      .panel-title > h3 {
+        margin: 0;
+        color: var(--boxel-light);
         font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp);
       }
       .close-ai-panel {
         --icon-color: var(--boxel-highlight);
-        margin-left: auto;
+        position: absolute;
+        right: var(--boxel-sp-xs);
+        top: var(--boxel-sp-sm);
       }
-      .menu {
-        padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
+      .header-buttons {
         position: relative;
-      }
-      .buttons {
         align-items: center;
         display: flex;
       }
