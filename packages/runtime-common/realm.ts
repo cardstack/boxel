@@ -943,6 +943,7 @@ export class Realm {
     // If the realm is public readable or writable, do not require a JWT
     if (
       request.url.includes('_session') ||
+      request.method === 'HEAD' ||
       (neededPermission === 'read' &&
         this.#permissions['*']?.includes('read')) ||
       (neededPermission === 'write' &&
