@@ -12,6 +12,7 @@ class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
   <template>
     {{outlet}}
     <CardPrerender />
+    <div data-test-boxel-root style='display: none;'></div>
   </template>
 }
 
