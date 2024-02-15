@@ -144,7 +144,7 @@ async function boot(url, waitForSelector, isLoginRequired) {
   iframe.setAttribute('src', url);
   container.append(iframe);
   // wait moment for iframe src to load
-  await new Promise((res) => setTimeout(res, 2000));
+  await new Promise((res) => setTimeout(res, 1000));
   let messenger = new Messenger(iframe);
   await waitFor('[data-test-boxel-root]', messenger);
   try {
