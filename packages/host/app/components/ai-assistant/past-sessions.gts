@@ -2,7 +2,6 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
 import { IconButton } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
@@ -34,16 +33,16 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         />
       </:header>
       <:body>
-        {{#if (eq @sessions.length 0)}}
-          <div class='empty-collection'>
-            No past sessions to show.
-          </div>
-        {{else}}
+        {{#if @sessions}}
           <ul class='past-sessions'>
             {{#each @sessions as |session|}}
               <PastSessionItem @room={{session}} @actions={{@roomActions}} />
             {{/each}}
           </ul>
+        {{else}}
+          <div class='empty-collection'>
+            No past sessions to show.
+          </div>
         {{/if}}
       </:body>
     </AiAssistantPanelPopover>

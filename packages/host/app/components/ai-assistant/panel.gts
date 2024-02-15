@@ -357,6 +357,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
       if (this.currentRoomId === roomId) {
         this.currentRoomId = undefined;
+        window.localStorage.setItem(currentRoomIdPersistenceKey, '');
       }
       this.roomToDelete = undefined;
       this.hidePastSessions();
