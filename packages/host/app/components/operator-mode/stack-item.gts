@@ -113,7 +113,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
-  private realmResource: RealmSessionResource | undefined;
+  private realmSessionResource: RealmSessionResource | undefined;
 
   cardTracker = new ElementTracker<{
     card: CardDef;
@@ -248,7 +248,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get canWrite() {
-    return this.realmResource?.canWrite;
+    return this.realmSessionResource?.canWrite;
   }
 
   private get moreOptionsMenuItems() {
@@ -279,8 +279,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
-    this.realmResource = getRealmSession(this, { card: () => this.card });
-    await this.realmResource.loaded;
+    this.realmSessionResource = getRealmSession(this, {
+      card: () => this.card,
+    });
+    await this.realmSessionResource.loaded;
   });
 
   private subscribeToCard = task(async () => {

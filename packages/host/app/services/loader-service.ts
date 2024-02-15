@@ -84,12 +84,12 @@ export default class LoaderService extends Service {
       return null;
     }
 
-    let realmResource = await this.getRealmSessionResource(realmURL);
-    if (!realmResource.rawRealmToken) {
+    let realmSessionResource = await this.getRealmSessionResource(realmURL);
+    if (!realmSessionResource.rawRealmToken) {
       return null;
     }
 
-    request.headers.set('Authorization', realmResource.rawRealmToken);
+    request.headers.set('Authorization', realmSessionResource.rawRealmToken);
     let body;
     if (request.bodyUsed) {
       body = null;
@@ -107,13 +107,13 @@ export default class LoaderService extends Service {
 
   private async getRealmSessionResource(realmURL: URL) {
     let realmURLString = realmURL.href;
-    let realmResource = this.realmSessions.get(realmURLString);
+    let realmSessionResource = this.realmSessions.get(realmURLString);
 
-    if (!realmResource) {
-      realmResource = getRealmSession(this, { realmURL: () => realmURL });
-      await realmResource.loaded;
-      this.realmSessions.set(realmURLString, realmResource);
+    if (!realmSessionResource) {
+      realmSessionResource = getRealmSession(this, { realmURL: () => realmURL });
+      await realmSessionResource.loaded;
+      this.realmSessions.set(realmURLString, realmSessionResource);
     }
-    return realmResource;
+    return realmSessionResource;
   }
 }

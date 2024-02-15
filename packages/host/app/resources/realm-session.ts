@@ -33,7 +33,7 @@ export class RealmSessionResource extends Resource<Args> {
     let { realmURL, card } = named;
     if (!realmURL && !card) {
       throw new Error(
-        `must provide either a realm URL or a card in order to get RealmResource`,
+        `must provide either a realm URL or a card in order to get RealmSessionResource`,
       );
     }
     this.token = undefined;
