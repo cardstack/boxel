@@ -30,12 +30,6 @@ export default class RealmInfoService extends Service {
         method: 'HEAD',
       });
       realmURLString = response.headers.get('x-boxel-realm-url') ?? undefined;
-
-      if (!realmURLString) {
-        console.warn(
-          'Could not find realm URL in response headers (x-boxel-realm-url)',
-        );
-      }
     }
     let realmURL;
     if (realmURLString) {
@@ -78,7 +72,7 @@ export default class RealmInfoService extends Service {
   async fetchRealmInfo(params: {
     realmURL?: URL;
     fileURL?: string;
-  }): Promise<RealmInfo | undefined> {
+  }): Promise<RealmInfo> {
     let { realmURL, fileURL } = params;
     if (!realmURL && !fileURL) {
       throw new Error("Must provide either 'realmUrl' or 'fileUrl'");
@@ -90,7 +84,7 @@ export default class RealmInfoService extends Service {
         ? realmURL.href
         : (await this.fetchRealmURL(fileURL!))?.href;
       if (!realmURLString) {
-        return undefined;
+        throw new Error('Could not find realm URL in response headers (x-boxel-realm-url)');
       }
 
       if (this.cachedRealmInfos.has(realmURLString)) {
