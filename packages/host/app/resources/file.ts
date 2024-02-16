@@ -10,7 +10,10 @@ import { Resource } from 'ember-resources';
 import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 
 import { stripFileExtension } from '@cardstack/host/lib/utils';
-import { getRealm, type RealmResource } from '@cardstack/host/resources/realm';
+import {
+  getRealmSession,
+  type RealmSessionResource,
+} from '@cardstack/host/resources/realm-session';
 import type CardService from '@cardstack/host/services/card-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -55,7 +58,7 @@ export interface Ready {
   realmURL: string;
   size: number; // size in bytes
   write(content: string, flushLoader?: boolean): Promise<void>;
-  realmResource: RealmResource;
+  realmSession: RealmSessionResource;
   lastModifiedAsDate?: Date;
   isBinary?: boolean;
   writing?: Promise<void>;
@@ -172,8 +175,10 @@ class _FileResource extends Resource<Args> {
     let buffer = await response.arrayBuffer();
     let size = buffer.byteLength;
     let content = utf8.decode(buffer);
-    let realmResource = getRealm(this, { realmURL: () => new URL(realmURL!) });
-    await realmResource.loaded;
+    let realmSession = getRealmSession(this, {
+      realmURL: () => new URL(realmURL!),
+    });
+    await realmSession.loaded;
 
     let self = this;
 
@@ -182,7 +187,7 @@ class _FileResource extends Resource<Args> {
       lastModified,
       realmURL,
       content,
-      realmResource,
+      realmSession,
       name: response.url.split('/').pop()!,
       size,
       url: response.url,
@@ -245,7 +250,7 @@ class _FileResource extends Resource<Args> {
         lastModified: response.headers.get('last-modified') || undefined,
         url: state.url,
         name: state.name,
-        realmResource: state.realmResource,
+        realmSession: state.realmSession,
         size,
         write: state.write,
         realmURL: state.realmURL,
@@ -285,8 +290,8 @@ class _FileResource extends Resource<Args> {
     return (this.innerState as Ready).lastModified;
   }
 
-  get realmResource() {
-    return (this.innerState as Ready).realmResource;
+  get realmSession() {
+    return (this.innerState as Ready).realmSession;
   }
 
   get lastModifiedAsDate() {

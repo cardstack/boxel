@@ -26,7 +26,10 @@ import {
 
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
-import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
+import {
+  type RealmSessionResource,
+  getRealmSession,
+} from '@cardstack/host/resources/realm-session';
 import type CardService from '@cardstack/host/services/card-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -200,9 +203,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
   @service private declare cardService: CardService;
   @tracked private currentlyHoveredCard: RenderedCardForOverlayActions | null =
     null;
-  @tracked private realmResourceByCard: TrackedWeakMap<CardDef, RealmResource> =
-    new TrackedWeakMap();
-  private realmResources: Map<string, RealmResource> = new Map();
+  @tracked private realmSessionByCard: TrackedWeakMap<
+    CardDef,
+    RealmSessionResource
+  > = new TrackedWeakMap();
+  private realmSessions: Map<string, RealmSessionResource> = new Map();
 
   private offset = {
     name: 'offset',
@@ -256,7 +261,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         );
       });
       renderedCard.element.style.cursor = 'pointer';
-      this.loadRealmResource.perform(renderedCard.card);
+      this.loadRealmSession.perform(renderedCard.card);
     }
 
     return renderedCards;
@@ -299,7 +304,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   @action private canWrite(card: CardDef) {
-    return this.realmResourceByCard.get(card)?.canWrite;
+    return this.realmSessionByCard.get(card)?.canWrite;
   }
 
   private viewCard = restartableTask(
@@ -313,14 +318,14 @@ export default class OperatorModeOverlays extends Component<Signature> {
     },
   );
 
-  private loadRealmResource = task(async (card: CardDef) => {
+  private loadRealmSession = task(async (card: CardDef) => {
     let realmURL = await this.cardService.getRealmURL(card);
-    let resource = this.realmResources.get(realmURL.href);
+    let resource = this.realmSessions.get(realmURL.href);
     if (!resource) {
-      resource = getRealm(this, { realmURL: () => realmURL });
+      resource = getRealmSession(this, { realmURL: () => realmURL });
       await resource.loaded;
-      this.realmResources.set(realmURL.href, resource);
+      this.realmSessions.set(realmURL.href, resource);
     }
-    this.realmResourceByCard.set(card, resource);
+    this.realmSessionByCard.set(card, resource);
   });
 }

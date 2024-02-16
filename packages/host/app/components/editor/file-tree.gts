@@ -12,7 +12,10 @@ import { IconPencil, IconPencilCrossedOut } from '@cardstack/boxel-ui/icons';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
+import {
+  type RealmSessionResource,
+  getRealmSession,
+} from '@cardstack/host/resources/realm-session';
 
 import Directory from './directory';
 
@@ -127,12 +130,14 @@ export default class FileTree extends Component<Signature> {
   @service private declare router: RouterService;
   @tracked private showMask = true;
 
-  private realmResource: RealmResource | undefined;
+  private realmSession: RealmSessionResource | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.hideMask.perform();
-    this.realmResource = getRealm(this, { realmURL: () => this.args.realmURL });
+    this.realmSession = getRealmSession(this, {
+      realmURL: () => this.args.realmURL,
+    });
   }
 
   private hideMask = restartableTask(async () => {
@@ -142,6 +147,6 @@ export default class FileTree extends Component<Signature> {
   });
 
   get canWrite() {
-    return this.realmResource?.canWrite;
+    return this.realmSession?.canWrite;
   }
 }
