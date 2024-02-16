@@ -13,7 +13,7 @@
   color: var(--boxel-highlight-hover);
 }
 
-/* Copied from packages/boxel-ui/addon/src/components/tooltip/index.gts */
+/* Style Monaco read-only tooltip, copied from packages/boxel-ui/addon/src/components/tooltip/index.gts */
 .ember-application .monaco-editor .monaco-editor-overlaymessage {
   background-color: rgb(0 0 0 / 80%);
   box-shadow: 0 0 0 1px var(--boxel-light-500);
