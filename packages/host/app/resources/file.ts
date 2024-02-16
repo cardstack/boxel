@@ -10,7 +10,10 @@ import { Resource } from 'ember-resources';
 import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 
 import { stripFileExtension } from '@cardstack/host/lib/utils';
-import { getRealmSession, type RealmSessionResource } from '@cardstack/host/resources/realm-session';
+import {
+  getRealmSession,
+  type RealmSessionResource,
+} from '@cardstack/host/resources/realm-session';
 import type CardService from '@cardstack/host/services/card-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
