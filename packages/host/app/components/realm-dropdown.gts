@@ -6,6 +6,7 @@ import { MenuItem, cssVar } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
+import ENV from '@cardstack/host/config/environment';
 
 import RealmIcon from './operator-mode/realm-icon';
 
@@ -14,6 +15,7 @@ import type RealmInfoService from '../services/realm-info-service';
 export interface RealmDropdownItem extends RealmInfo {
   path: string;
 }
+const { ownRealmURL } = ENV;
 
 interface Signature {
   Args: {
@@ -124,6 +126,9 @@ export default class RealmDropdown extends Component<Signature> {
       path,
       realmInfo,
     ] of this.realmInfoService.cachedRealmInfos.entries()) {
+      if (!realmInfo.canWrite) {
+        continue;
+      }
       let item: RealmDropdownItem = {
         path,
         ...realmInfo,
@@ -131,6 +136,7 @@ export default class RealmDropdown extends Component<Signature> {
       };
       items = [item, ...items];
     }
+    items.sort((a, b) => a.name.localeCompare(b.name));
     return items;
   }
 
@@ -146,12 +152,26 @@ export default class RealmDropdown extends Component<Signature> {
   }
 
   get selectedRealm(): RealmDropdownItem | undefined {
-    if (!this.args.selectedRealmURL) {
-      return undefined;
+    let selectedRealm: RealmDropdownItem | undefined;
+    if (this.args.selectedRealmURL) {
+      selectedRealm = this.realms.find(
+        (realm) =>
+          realm.path === new RealmPaths(this.args.selectedRealmURL as URL).url,
+      );
     }
-    return this.realms.find(
-      (realm) =>
-        realm.path === new RealmPaths(this.args.selectedRealmURL as URL).url,
-    );
+    if (selectedRealm) {
+      return selectedRealm;
+    }
+
+    // if there is no selected realm then default to the user's personal
+    // realm. Currently the personal realm has not yet been implemented,
+    // until then default to the realm serving the host app if it is writable,
+    // otherwise default to the first writable realm lexically
+    let ownRealm = this.realms.find((r) => r.path === ownRealmURL);
+    if (ownRealm) {
+      return ownRealm;
+    } else {
+      return this.realms[0];
+    }
   }
 }

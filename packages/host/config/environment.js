@@ -1,6 +1,10 @@
 'use strict';
 
 module.exports = function (environment) {
+  const ownRealmURL =
+    environment === 'test'
+      ? 'http://test-realm/test/'
+      : process.env.OWN_REALM_URL || 'http://localhost:4200/'; // this should be provided as an *unresolved* URL
   const ENV = {
     modulePrefix: '@cardstack/host',
     environment,
@@ -34,15 +38,15 @@ module.exports = function (environment) {
     minSaveTaskDurationMs: 1000,
 
     // the fields below may be rewritten by the realm server
-    ownRealmURL:
-      environment === 'test'
-        ? 'http://test-realm/test/'
-        : process.env.OWN_REALM_URL || 'http://localhost:4200/', // this should be provided as an *unresolved* URL
+    ownRealmURL,
     // This is temporary until we have a better way to discover realms besides
     // our own
-    otherRealmURLs: process.env.OTHER_REALM_URLS
-      ? process.env.OTHER_REALM_URLS.split(',').map((u) => u.trim())
-      : [],
+    otherRealmURLs: [
+      ownRealmURL,
+      ...(process.env.OTHER_REALM_URLS
+        ? process.env.OTHER_REALM_URLS.split(',').map((u) => u.trim())
+        : []),
+    ],
     hostsOwnAssets: true,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
