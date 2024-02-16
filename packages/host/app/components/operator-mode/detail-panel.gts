@@ -197,7 +197,7 @@ export default class DetailPanel extends Component<Signature> {
         icon: Copy,
         handler: this.duplicateInstance,
       },
-      ...(this.args.readyFile.realmResource.canWrite
+      ...(this.args.readyFile.realmSession.canWrite
         ? [
             {
               label: 'Delete',
@@ -210,7 +210,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get miscFileActions() {
-    if (this.args.readyFile.realmResource.canWrite) {
+    if (this.args.readyFile.realmSession.canWrite) {
       return [
         {
           label: 'Delete',
@@ -371,7 +371,7 @@ export default class DetailPanel extends Component<Signature> {
                 data-test-current-module-name={{@readyFile.name}}
               >
                 <:actions>
-                  {{#if @readyFile.realmResource.canWrite}}
+                  {{#if @readyFile.realmSession.canWrite}}
                     <IconButton
                       @icon={{IconTrash}}
                       @width='18'

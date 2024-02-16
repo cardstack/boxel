@@ -817,7 +817,7 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     onFetch = (req, body) => {
-      if (req.method !== 'GET') {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
         let json = JSON.parse(body);
         assert.strictEqual(json.data.attributes.firstName, 'Hassan');
         assert.strictEqual(
@@ -936,7 +936,7 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     onFetch = (req, body) => {
-      if (req.method !== 'GET') {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
         let json = JSON.parse(body);
         assert.strictEqual(json.data.attributes.firstName, 'Sakura');
         assert.strictEqual(
