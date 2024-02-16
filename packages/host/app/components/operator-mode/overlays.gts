@@ -261,7 +261,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         );
       });
       renderedCard.element.style.cursor = 'pointer';
-      this.loadRealmSessionResource.perform(renderedCard.card);
+      this.loadRealmSession.perform(renderedCard.card);
     }
 
     return renderedCards;
@@ -318,7 +318,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     },
   );
 
-  private loadRealmSessionResource = task(async (card: CardDef) => {
+  private loadRealmSession = task(async (card: CardDef) => {
     let realmURL = await this.cardService.getRealmURL(card);
     let resource = this.realmSessions.get(realmURL.href);
     if (!resource) {
