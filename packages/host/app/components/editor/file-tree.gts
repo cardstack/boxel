@@ -130,12 +130,12 @@ export default class FileTree extends Component<Signature> {
   @service private declare router: RouterService;
   @tracked private showMask = true;
 
-  private realmSessionResource: RealmSessionResource | undefined;
+  private realmSession: RealmSessionResource | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.hideMask.perform();
-    this.realmSessionResource = getRealmSession(this, {
+    this.realmSession = getRealmSession(this, {
       realmURL: () => this.args.realmURL,
     });
   }
@@ -147,6 +147,6 @@ export default class FileTree extends Component<Signature> {
   });
 
   get canWrite() {
-    return this.realmSessionResource?.canWrite;
+    return this.realmSession?.canWrite;
   }
 }

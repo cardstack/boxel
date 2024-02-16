@@ -203,11 +203,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
   @service private declare cardService: CardService;
   @tracked private currentlyHoveredCard: RenderedCardForOverlayActions | null =
     null;
-  @tracked private realmSessionResourceByCard: TrackedWeakMap<
+  @tracked private realmSessionByCard: TrackedWeakMap<
     CardDef,
     RealmSessionResource
   > = new TrackedWeakMap();
-  private realmSessionResources: Map<string, RealmSessionResource> = new Map();
+  private realmSessions: Map<string, RealmSessionResource> = new Map();
 
   private offset = {
     name: 'offset',
@@ -304,7 +304,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   @action private canWrite(card: CardDef) {
-    return this.realmSessionResourceByCard.get(card)?.canWrite;
+    return this.realmSessionByCard.get(card)?.canWrite;
   }
 
   private viewCard = restartableTask(
@@ -320,12 +320,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
   private loadRealmSessionResource = task(async (card: CardDef) => {
     let realmURL = await this.cardService.getRealmURL(card);
-    let resource = this.realmSessionResources.get(realmURL.href);
+    let resource = this.realmSessions.get(realmURL.href);
     if (!resource) {
       resource = getRealmSession(this, { realmURL: () => realmURL });
       await resource.loaded;
-      this.realmSessionResources.set(realmURL.href, resource);
+      this.realmSessions.set(realmURL.href, resource);
     }
-    this.realmSessionResourceByCard.set(card, resource);
+    this.realmSessionByCard.set(card, resource);
   });
 }
