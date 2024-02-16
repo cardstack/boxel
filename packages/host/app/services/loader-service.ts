@@ -57,7 +57,7 @@ export default class LoaderService extends Service {
       request.url.includes(baseRealm.url) && request.method === 'GET';
     if (
       isGetRequestToBaseRealm ||
-      request.url.includes('_session') ||
+      request.url.endsWith('_session') ||
       request.method === 'HEAD' ||
       request.headers.has('Authorization')
     ) {
