@@ -641,7 +641,7 @@ export class Realm {
     hash.update(challenge);
     hash.update(this.#realmSecretSeed);
     let hashedChallenge = uint8ArrayToHex(await hash.digest());
-    await this.#matrixClient.sendRoomEvent(roomId, 'm.room.message', {
+    await this.#matrixClient.sendEvent(roomId, 'm.room.message', {
       body: `auth-challenge: ${hashedChallenge}`,
       msgtype: 'm.text',
     });
@@ -695,7 +695,7 @@ export class Realm {
       (m) => {
         return (
           m.type === 'm.room.message' &&
-          m.sender === this.#matrixClient.userId &&
+          m.sender === this.#matrixClient.getUserId() &&
           m.content.body.startsWith('auth-challenge:') &&
           m.origin_server_ts > oneMinuteAgo
         );

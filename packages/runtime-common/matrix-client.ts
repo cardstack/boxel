@@ -13,8 +13,12 @@ export class MatrixClient {
     private password: string,
   ) {}
 
-  get userId() {
+  getUserId() {
     return this.access?.userId;
+  }
+
+  isLoggedIn() {
+    return this.access !== undefined;
   }
 
   private async request(
@@ -72,7 +76,7 @@ export class MatrixClient {
     this.access = { accessToken, deviceId, userId };
   }
 
-  async getRooms() {
+  async getJoinedRooms() {
     let response = await this.request('_matrix/client/v3/joined_rooms');
 
     return (await response.json()) as { joined_rooms: string[] };
@@ -144,7 +148,7 @@ export class MatrixClient {
     return json as T;
   }
 
-  async sendRoomEvent<T>(roomId: string, type: string, content: T) {
+  async sendEvent<T>(roomId: string, type: string, content: T) {
     if (!this.access) {
       throw new Error(`Missing matrix access token`);
     }
@@ -211,6 +215,13 @@ export class MatrixClient {
     } else {
       return json.user_id;
     }
+  }
+
+  async sendMessage(roomId: string, message: string) {
+    return this.sendEvent(roomId, 'm.room.message', {
+      body: message,
+      msgtype: 'm.text',
+    });
   }
 }
 

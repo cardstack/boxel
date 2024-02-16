@@ -25,6 +25,8 @@ import {
   generatePatchCallSpecification,
 } from '@cardstack/runtime-common/helpers/ai';
 
+import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
+
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
@@ -236,76 +238,29 @@ export default class MatrixService extends Service {
   }
 
   public async createRealmSession(realmURL: URL) {
+    await this.ready;
+
     let inflightAuth = this.realmSessionTasks.get(realmURL.href);
+
     if (inflightAuth) {
       return inflightAuth;
     }
-    let auth = this._createRealmSession(realmURL);
-    this.realmSessionTasks.set(realmURL.href, auth);
-    return auth;
-  }
 
-  private async _createRealmSession(realmURL: URL) {
-    await this.ready;
-    if (!this.isLoggedIn) {
-      throw new Error(
-        `must be logged in to matrix before a realm session can be created`,
-      );
-    }
+    let realmAuthClient = new RealmAuthClient(realmURL, this.client);
 
-    let initialResponse = await this.loaderService.loader.fetch(
-      `${realmURL.href}_session`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          user: this.userId,
-        }),
-      },
-    );
-    let initialJSON = (await initialResponse.json()) as {
-      room: string;
-      challenge: string;
-    };
-    if (initialResponse.status !== 401) {
-      throw new Error(
-        `unexpected response from POST ${realmURL.href}_session: ${
-          initialResponse.status
-        } - ${JSON.stringify(initialJSON)}`,
-      );
-    }
-    let { room, challenge } = initialJSON;
-    if (!this.rooms.has(room)) {
-      await this.client.joinRoom(room);
-    }
-    await this.sendMessage(room, `auth-response: ${challenge}`);
-    let challengeResponse = await this.loaderService.loader.fetch(
-      `${realmURL.href}_session`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          user: this.userId,
-          challenge,
-        }),
-      },
-    );
-    if (!challengeResponse.ok) {
-      let error = JSON.stringify(await challengeResponse.json());
-      console.error(`client failed realm authentication: ${error}`);
-      throw new Error(
-        `Could not authenticate with realm ${realmURL.href} - ${challengeResponse.status}: ${error}`,
-      );
-    }
-    try {
-      return challengeResponse.headers.get('Authorization')!;
-    } finally {
-      this.realmSessionTasks.delete(realmURL.href);
-    }
+    let jwtPromise = realmAuthClient.getJWT();
+
+    this.realmSessionTasks.set(realmURL.href, jwtPromise);
+
+    jwtPromise
+      .then(() => {
+        this.realmSessionTasks.delete(realmURL.href);
+      })
+      .catch(() => {
+        this.realmSessionTasks.delete(realmURL.href);
+      });
+
+    return jwtPromise;
   }
 
   async createRoom(
