@@ -15,7 +15,7 @@ export default class AiAssistantPanelPopover extends Component<Signature> {
         position: absolute;
         top: 0;
         left: 0;
-        margin-top: var(--boxel-sp);
+        margin-top: var(--boxel-sp-sm);
         width: 24.5rem;
         min-height: 12.5rem;
         max-height: 75vh;
