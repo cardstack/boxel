@@ -18,6 +18,8 @@ import {
   sendMessage,
   getRoomName,
   createRoomWithMessage,
+  deleteRoom,
+  isInRoom,
 } from '../helpers';
 
 test.describe('Room creation', () => {
@@ -34,23 +36,12 @@ test.describe('Room creation', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('it can create new room', async ({ page }) => {
+  test('it can create a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
     let room1 = await getRoomName(page); // Automatically created room
     await assertRooms(page, [room1]);
-    await expect(page.locator(`[data-test-create-room-btn]`)).toBeDisabled();
-    await expect(
-      page.locator(`[data-test-past-sessions-button]`),
-    ).toBeEnabled();
-    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(1);
-
     await sendMessage(page, room1, 'Hello');
-    await expect(page.locator(`[data-test-create-room-btn]`)).toBeEnabled();
-    await expect(
-      page.locator(`[data-test-past-sessions-button]`),
-    ).toBeEnabled();
-    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(0);
 
     let room2 = await createRoom(page);
     await assertRooms(page, [room1, room2]);
@@ -68,6 +59,43 @@ test.describe('Room creation', () => {
 
     let room1New = await getRoomName(page); // Automatically created room
     await assertRooms(page, [room1New]);
+  });
+
+  test('it does not create a new room when another new room is available', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+
+    let room = await getRoomName(page); // Automatically created room
+    await expect(page.locator(`[data-test-create-room-btn]`)).toBeDisabled();
+    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(1);
+    await sendMessage(page, room, 'Hello');
+    await expect(page.locator(`[data-test-create-room-btn]`)).toBeEnabled();
+    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(0);
+
+    let newRoom = await createRoom(page);
+    await expect(page.locator(`[data-test-create-room-btn]`)).toBeDisabled();
+    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(1);
+
+    await openRoom(page, room);
+    await page.locator('[data-test-create-room-btn]').click();
+    expect(await getRoomName(page)).toEqual(newRoom);
+    await assertRooms(page, [room, newRoom]);
+
+    await reloadAndOpenAiAssistant(page);
+    await assertRooms(page, [room, newRoom]);
+
+    await logout(page);
+    await login(page, 'user1', 'pass');
+    await assertRooms(page, [room, newRoom]);
+
+    // user2 should not be able to see user1's room
+    await logout(page);
+    await login(page, 'user2', 'pass');
+    let user2Room = await getRoomName(page);
+    await assertRooms(page, [user2Room]);
+    expect(user2Room).not.toEqual(room);
+    expect(user2Room).not.toEqual(newRoom);
   });
 
   test('it can rename a room', async ({ page }) => {
@@ -140,5 +168,67 @@ test.describe('Room creation', () => {
     await expect(page.locator('[data-test-save-name-button]')).toBeDisabled();
     await page.locator('[data-test-cancel-name-button]').click();
     await expect(page.locator(`[data-test-rename-session]`)).toHaveCount(0);
+  });
+
+  test('it can delete a room', async ({ page }) => {
+    await login(page, 'user1', 'pass');
+    let room = await getRoomName(page);
+    await assertRooms(page, [room]);
+
+    await deleteRoom(page, room);
+
+    await page.waitForTimeout(500); // wait for new room to be created
+    let newRoom = await getRoomName(page);
+    expect(newRoom).not.toEqual(room);
+    await assertRooms(page, [newRoom]);
+  });
+
+  test('it can cancel deleting a room', async ({ page }) => {
+    await login(page, 'user1', 'pass');
+    let room = await getRoomName(page);
+    await assertRooms(page, [room]);
+
+    await page.locator(`[data-test-past-sessions-button]`).click();
+
+    // Here, past sessions could be rerendered because in one case we're creating a new room when opening an AI panel, so we need to wait for the past sessions to settle
+    await page.waitForTimeout(500); // Wait for the sessions to settle after new room is created
+
+    await page
+      .locator(`[data-test-past-session-options-button="${room}"]`)
+      .click();
+    await page.locator(`[data-test-boxel-menu-item-text="Delete"]`).click();
+    await page
+      .locator(
+        `[data-test-delete-modal-container] [data-test-confirm-cancel-button]`,
+      )
+      .click();
+    await page.locator(`[data-test-close-past-sessions]`).click();
+    await assertRooms(page, [room]);
+  });
+
+  test('it opens latest room available (or creates new) when current room is deleted', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomName(page);
+    await sendMessage(page, room1, 'Room 1');
+    let room2 = await createRoomWithMessage(page, 'Room 2');
+    let room3 = await createRoomWithMessage(page, 'Room 3'); // latest room
+    await assertRooms(page, [room1, room2, room3]);
+
+    await isInRoom(page, room3);
+    await deleteRoom(page, room3); // current room is deleted
+    await assertRooms(page, [room1, room2]);
+    await isInRoom(page, room2); // is in latest available room
+
+    await deleteRoom(page, room1); // a different room is deleted
+    await assertRooms(page, [room2]);
+    await isInRoom(page, room2); // remains in same room
+    await deleteRoom(page, room2); // current room is deleted
+
+    await page.waitForTimeout(500); // wait for new room to be created
+    let newRoom = await getRoomName(page);
+    await isInRoom(page, newRoom);
+    await assertRooms(page, [newRoom]);
   });
 });
