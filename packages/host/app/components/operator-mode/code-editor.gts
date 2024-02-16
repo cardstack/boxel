@@ -288,7 +288,7 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   private get readOnly() {
-    return !this.readyFile.realmResource.canWrite;
+    return !this.readyFile.realmSession.canWrite;
   }
 
   <template>
