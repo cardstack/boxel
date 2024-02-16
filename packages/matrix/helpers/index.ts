@@ -230,13 +230,27 @@ export async function logout(page: Page) {
 
 export async function createRoom(page: Page) {
   await page.locator('[data-test-create-room-btn]').click();
-  await page.locator(`[data-test-room-name]`).waitFor();
-  let roomName = await page.locator('[data-test-room-name]').textContent();
-  if (!roomName) {
-    throw new Error('room name is not found');
-  }
+  await page.locator(`[data-test-room]`).waitFor();
+  let roomName = await getRoomName(page);
   await isInRoom(page, roomName);
   return roomName;
+}
+
+export async function createRoomWithMessage(page: Page) {
+  let roomName = await createRoom(page);
+  await sendMessage(page, roomName, 'Hello, world!');
+  return roomName;
+}
+
+export async function getRoomName(page: Page) {
+  await page.locator(`[data-test-room]`).waitFor();
+  let name = await page
+    .locator('[data-test-room]')
+    .getAttribute('data-test-room');
+  if (name == null) {
+    throw new Error('room name is not found');
+  }
+  return name;
 }
 
 export async function isInRoom(page: Page, roomName: string) {

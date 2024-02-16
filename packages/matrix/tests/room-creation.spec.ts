@@ -15,6 +15,9 @@ import {
   reloadAndOpenAiAssistant,
   registerRealmUsers,
   clearLocalStorage,
+  sendMessage,
+  getRoomName,
+  createRoomWithMessage,
 } from '../helpers';
 
 test.describe('Room creation', () => {
@@ -31,14 +34,23 @@ test.describe('Room creation', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('it can create a room', async ({ page }) => {
+  test('it can create new room', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
-    let room1 = (await page
-      .locator(`[data-test-room]`)
-      .getAttribute('data-test-room')) as string;
-
+    let room1 = await getRoomName(page); // Automatically created room
     await assertRooms(page, [room1]);
+    await expect(page.locator(`[data-test-create-room-btn]`)).toBeDisabled();
+    await expect(
+      page.locator(`[data-test-past-sessions-button]`),
+    ).toBeEnabled();
+    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(1);
+
+    await sendMessage(page, room1, 'Hello');
+    await expect(page.locator(`[data-test-create-room-btn]`)).toBeEnabled();
+    await expect(
+      page.locator(`[data-test-past-sessions-button]`),
+    ).toBeEnabled();
+    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(0);
 
     let room2 = await createRoom(page);
     await assertRooms(page, [room1, room2]);
@@ -54,23 +66,18 @@ test.describe('Room creation', () => {
     await logout(page);
     await login(page, 'user2', 'pass');
 
-    let room1New = (await page
-      .locator(`[data-test-room]`)
-      .getAttribute('data-test-room')) as string; // Automatically created room
-
+    let room1New = await getRoomName(page); // Automatically created room
     await assertRooms(page, [room1New]);
   });
 
   test('it can rename a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
-    let room1 = (await page
-      .locator(`[data-test-room]`)
-      .getAttribute('data-test-room')) as string;
-
+    let room1 = await getRoomName(page);
     await assertRooms(page, [room1]);
+    await sendMessage(page, room1, 'Hello');
 
-    let room2 = await createRoom(page);
+    let room2 = await createRoomWithMessage(page);
     let room3 = await createRoom(page);
     await assertRooms(page, [room1, room2, room3]);
 
@@ -94,7 +101,7 @@ test.describe('Room creation', () => {
     await assertRooms(page, [newRoom1, room2, room3]);
 
     await openRoom(page, newRoom1);
-    await expect(page.locator(`[data-test-room-name]`)).toHaveText(newRoom1);
+    await expect(page.locator(`[data-test-room="${newRoom1}"]`)).toHaveCount(1);
 
     await reloadAndOpenAiAssistant(page);
     await assertRooms(page, [newRoom1, room2, room3]);
@@ -107,13 +114,11 @@ test.describe('Room creation', () => {
   test('it can cancel renaming a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
-    let room1 = (await page
-      .locator(`[data-test-room]`)
-      .getAttribute('data-test-room')) as string;
-
+    let room1 = await getRoomName(page);
     await assertRooms(page, [room1]);
+    await sendMessage(page, room1, 'Hello');
 
-    let room2 = await createRoom(page);
+    let room2 = await createRoomWithMessage(page);
     let room3 = await createRoom(page);
     await assertRooms(page, [room1, room2, room3]);
 
@@ -134,6 +139,6 @@ test.describe('Room creation', () => {
     expect(name).toEqual(room1);
     await expect(page.locator('[data-test-save-name-button]')).toBeDisabled();
     await page.locator('[data-test-cancel-name-button]').click();
-    expect(await page.locator(`[data-test-rename-session]`)).toHaveCount(0);
+    await expect(page.locator(`[data-test-rename-session]`)).toHaveCount(0);
   });
 });

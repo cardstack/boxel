@@ -29,7 +29,6 @@ export default class Room extends Component<Signature> {
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room={{this.room.name}}
     >
-      <h3 class='boxel-sr-only' data-test-room-name>{{this.room.name}}</h3>
       <AiAssistantConversation>
         {{#if this.room.messages}}
           <div class='timeline-start' data-test-timeline-start>
