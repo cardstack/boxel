@@ -42,14 +42,14 @@ import type {
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
-import { getRealm, clearAllRealmSessions } from '../resources/realm';
+import { clearAllRealmSessions } from '../resources/realm-session';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-const { matrixURL, ownRealmURL } = ENV;
+const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -230,19 +230,6 @@ export default class MatrixService extends Service {
       try {
         await this._client.startClient();
         await this.initializeRooms();
-
-        // TODO this is a temporary measure to prove that we can obtain a realm session.
-        // ultimately we need to figure out a better approach in terms of when/where we
-        // obtain sessions for realms that we care about. wrapping this in an inner
-        // try/catch so token issues don't trigger a logout
-        try {
-          let realmResource = getRealm(this, {
-            realmURL: () => new URL(ownRealmURL),
-          });
-          await realmResource.loaded;
-        } catch (tokenError) {
-          console.error(`could not obtain realm token`, tokenError);
-        }
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();

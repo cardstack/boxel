@@ -55,7 +55,10 @@ import config from '@cardstack/host/config/environment';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 
-import { type RealmResource, getRealm } from '@cardstack/host/resources/realm';
+import {
+  type RealmSessionResource,
+  getRealmSession,
+} from '@cardstack/host/resources/realm-session';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type {
@@ -110,7 +113,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
-  private realmResource: RealmResource | undefined;
+  private realmSession: RealmSessionResource | undefined;
 
   cardTracker = new ElementTracker<{
     card: CardDef;
@@ -245,7 +248,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get canWrite() {
-    return this.realmResource?.canWrite;
+    return this.realmSession?.canWrite;
   }
 
   private get moreOptionsMenuItems() {
@@ -276,8 +279,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
-    this.realmResource = getRealm(this, { card: () => this.card });
-    await this.realmResource.loaded;
+    this.realmSession = getRealmSession(this, {
+      card: () => this.card,
+    });
+    await this.realmSession.loaded;
   });
 
   private subscribeToCard = task(async () => {

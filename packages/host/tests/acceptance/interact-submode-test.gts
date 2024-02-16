@@ -24,6 +24,7 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
@@ -48,6 +49,23 @@ let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
+  let onFetch: ((req: Request, body: string) => void) | undefined;
+  function wrappedOnFetch() {
+    return async (req: Request) => {
+      if (!onFetch) {
+        return Promise.resolve(req);
+      }
+      let { headers, method } = req;
+      let body = await req.text();
+      onFetch(req, body);
+      // need to return a new request since we just read the body
+      return new Request(req.url, {
+        method,
+        headers,
+        ...(body ? { body } : {}),
+      });
+    };
+  }
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -201,6 +219,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     ({ realm } = await setupAcceptanceTestRealm({
       loader,
+      onFetch: wrappedOnFetch(),
       contents: {
         'address.gts': { Address },
         'person.gts': { Person },
@@ -859,12 +878,34 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+      onFetch = (req, _body) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          let token = req.headers.get('Authorization');
+          assert.notStrictEqual(token, null);
+
+          let claims = claimsFromRawToken(token!);
+          assert.deepEqual(claims.user, '@testuser:staging');
+          assert.strictEqual(claims.realm, 'http://test-realm/test2/');
+          assert.deepEqual(claims.permissions, ['read', 'write']);
+        }
+      };
+
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-edit-button]')
         .doesNotExist();
       assert
         .dom('[data-test-operator-mode-stack="1"] [data-test-edit-button]')
         .exists();
+      await click(
+        '[data-test-operator-mode-stack="1"] [data-test-edit-button]',
+      );
+      await fillIn(
+        '[data-test-operator-mode-stack="1"] [data-test-field="name"] [data-test-boxel-input]',
+        'Updated Ringo',
+      );
+      await click(
+        '[data-test-operator-mode-stack="1"] [data-test-edit-button]',
+      );
     });
 
     test('the delete item in "..." menu of stack item respects realm permissions of the cards in differing realms', async function (assert) {

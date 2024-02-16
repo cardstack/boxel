@@ -716,7 +716,7 @@ export class TestRealmAdapter implements RealmAdapter {
       throw err;
     }
     if (typeof content !== 'string') {
-      throw new Error('treated directory as a file');
+      return undefined;
     }
     return {
       path,
