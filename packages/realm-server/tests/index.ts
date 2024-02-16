@@ -4,3 +4,4 @@ import './loader-test';
 import './indexing-test';
 import './module-syntax-test';
 import './permissions/permission-checker-test';
+import './auth-client-test';
