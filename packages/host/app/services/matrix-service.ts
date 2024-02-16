@@ -64,6 +64,7 @@ export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
+  private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
@@ -250,8 +251,29 @@ export default class MatrixService extends Service {
   }
 
   public async createRealmSession(realmURL: URL) {
+    await this.ready;
+
+    let inflightAuth = this.realmSessionTasks.get(realmURL.href);
+
+    if (inflightAuth) {
+      return inflightAuth;
+    }
+
     let realmAuthClient = new RealmAuthClient(realmURL, this.client);
-    return await realmAuthClient.getJWT();
+
+    let jwtPromise = realmAuthClient.getJWT();
+
+    this.realmSessionTasks.set(realmURL.href, jwtPromise);
+
+    jwtPromise
+      .then(() => {
+        this.realmSessionTasks.delete(realmURL.href);
+      })
+      .catch(() => {
+        this.realmSessionTasks.delete(realmURL.href);
+      });
+
+    return jwtPromise;
   }
 
   async createRoom(

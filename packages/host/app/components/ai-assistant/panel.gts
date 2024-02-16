@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -10,7 +10,6 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 import { restartableTask, timeout } from 'ember-concurrency';
-import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { Velcro } from 'ember-velcro';
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -24,21 +23,21 @@ import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
-import AiAssistantPanelPopover from '@cardstack/host/components/ai-assistant/panel-popover';
 import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
 import RenameSession from '@cardstack/host/components/ai-assistant/rename-session';
 import Room from '@cardstack/host/components/matrix/room';
+import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
 
 import ENV from '@cardstack/host/config/environment';
-import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
+import {
+  isMatrixError,
+  eventDebounceMs,
+} from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type {
-  RoomField,
-  RoomMemberField,
-} from 'https://cardstack.com/base/room';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 import { getRoom, RoomResource } from '../../resources/room';
 
@@ -46,8 +45,6 @@ import assistantIcon from './ai-assist-icon.webp';
 
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
-
-export type AiSessionRoom = { room: RoomField; member: RoomMemberField };
 
 interface Signature {
   Element: HTMLDivElement;
@@ -61,22 +58,22 @@ let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId'; // Local storage key
 
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
-    <Velcro @placement='bottom' @offsetOptions={{-50}} as |pastSessionsVelcro|>
+    <Velcro @placement='bottom' @offsetOptions={{-50}} as |popoverVelcro|>
       <div
         class='ai-assistant-panel'
         data-test-ai-assistant-panel
         ...attributes
       >
         <@resizeHandle />
-        <header>
+        <header class='panel-header'>
           <img alt='AI Assistant' src={{assistantIcon}} />
           <span>Assistant</span>
           <IconButton
+            class='close-ai-panel'
             @variant='primary'
             @icon={{IconX}}
             @width='20px'
             @height='20px'
-            class='close-ai-panel'
             {{on 'click' @onClose}}
             aria-label='Remove'
             data-test-close-ai-assistant
@@ -85,10 +82,11 @@ export default class AiAssistantPanel extends Component<Signature> {
         <div class='menu'>
           <div class='buttons'>
             <Button
+              class='new-session-button'
               @kind='secondary-dark'
               @size='small'
-              class='new-session-button'
               {{on 'click' this.createNewSession}}
+              {{popoverVelcro.hook}}
               data-test-create-room-btn
             >
               New Session
@@ -98,12 +96,12 @@ export default class AiAssistantPanel extends Component<Signature> {
               <LoadingIndicator @color='var(--boxel-light)' />
             {{else}}
               <Button
+                class='past-sessions-button'
                 @kind='secondary-dark'
                 @size='small'
                 {{on 'click' this.displayPastSessions}}
+                {{popoverVelcro.hook}}
                 data-test-past-sessions-button
-                class='past-sessions-button'
-                {{pastSessionsVelcro.hook}}
               >
                 Past Sessions
                 <DropdownArrowFilled width='10' height='10' />
@@ -112,44 +110,24 @@ export default class AiAssistantPanel extends Component<Signature> {
           </div>
 
           {{#if this.isShowingPastSessions}}
-            <AiAssistantPanelPopover
-              {{pastSessionsVelcro.loop}}
-              data-test-past-sessions
-            >
-              <:header>
-                Past Sessions
-                <IconButton
-                  @icon={{DropdownArrowFilled}}
-                  @width='12px'
-                  @height='12px'
-                  {{on 'click' this.hidePastSessions}}
-                  aria-label='Close Past Sessions'
-                  data-test-close-past-sessions
-                />
-              </:header>
-              <:body>
-                <AiAssistantPastSessionsList
-                  @sessions={{this.sortedAiSessionRooms}}
-                  @openSession={{this.enterRoom}}
-                  @renameSession={{this.setRoomToRename}}
-                  @deleteSession={{this.leaveRoom}}
-                  @roomToDelete={{this.roomToDelete}}
-                  @setRoomToDelete={{this.setRoomToDelete}}
-                />
-              </:body>
-            </AiAssistantPanelPopover>
+            <AiAssistantPastSessionsList
+              @sessions={{this.aiSessionRooms}}
+              @roomActions={{this.roomActions}}
+              @onClose={{this.hidePastSessions}}
+              {{popoverVelcro.loop}}
+            />
           {{else if this.roomToRename}}
             <RenameSession
               @room={{this.roomToRename}}
               @onClose={{fn this.setRoomToRename undefined}}
-              {{pastSessionsVelcro.loop}}
+              {{popoverVelcro.loop}}
             />
           {{/if}}
         </div>
 
         {{#if this.doCreateRoom.isRunning}}
           <LoadingIndicator
-            class='create-new-loading'
+            class='loading-new-session'
             @color='var(--boxel-light)'
           />
         {{else if this.currentRoomId}}
@@ -157,8 +135,17 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{/if}}
       </div>
     </Velcro>
+
     {{#if this.roomToDelete}}
-      <FromElseWhere @name='delete-modal' />
+      {{#let this.roomToDelete.roomId this.roomToDelete.name as |id name|}}
+        <DeleteModal
+          @itemToDelete={{id}}
+          @onConfirm={{fn this.leaveRoom id}}
+          @onCancel={{fn this.setRoomToDelete undefined}}
+          @itemInfo={{hash type='room' name=(if name name id) id=id}}
+          @error={{this.roomDeleteError}}
+        />
+      {{/let}}
     {{/if}}
 
     <style>
@@ -195,19 +182,23 @@ export default class AiAssistantPanel extends Component<Signature> {
       :deep(.room-actions) {
         z-index: 1;
       }
-      .ai-assistant-panel header {
+      .panel-header {
         align-items: center;
         display: flex;
         padding: var(--boxel-sp-xs) calc(var(--boxel-sp) / 2) var(--boxel-sp-xs)
           var(--boxel-sp-lg);
         gap: var(--boxel-sp-xs);
       }
-      .ai-assistant-panel header img {
+      .panel-header img {
         height: 20px;
         width: 20px;
       }
-      .ai-assistant-panel header span {
+      .panel-header span {
         font: 700 var(--boxel-font);
+      }
+      .close-ai-panel {
+        --icon-color: var(--boxel-highlight);
+        margin-left: auto;
       }
       .menu {
         padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
@@ -220,21 +211,11 @@ export default class AiAssistantPanel extends Component<Signature> {
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);
       }
-
-      .close-ai-panel {
-        --icon-color: var(--boxel-highlight);
-        margin-left: auto;
-      }
-
       .past-sessions-button svg {
         --icon-color: var(--boxel-light);
         margin-left: var(--boxel-sp-xs);
       }
-      .room-list {
-        padding: 0;
-      }
-
-      .create-new-loading {
+      .loading-new-session {
         padding: var(--boxel-sp);
       }
     </style>
@@ -248,6 +229,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private isShowingPastSessions = false;
   @tracked private roomToRename: RoomField | undefined = undefined;
   @tracked private roomToDelete: RoomField | undefined = undefined;
+  @tracked private roomDeleteError: string | undefined = undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -265,9 +247,9 @@ export default class AiAssistantPanel extends Component<Signature> {
     if (persistedRoomId && this.roomResources.has(persistedRoomId)) {
       this.currentRoomId = persistedRoomId;
     } else {
-      let latestRoom = this.sortedAiSessionRooms[0];
+      let latestRoom = this.aiSessionRooms[0];
       if (latestRoom) {
-        this.currentRoomId = latestRoom.room.roomId;
+        this.currentRoomId = latestRoom.roomId;
       } else {
         this.createNewSession();
       }
@@ -299,16 +281,12 @@ export default class AiAssistantPanel extends Component<Signature> {
       new Date(),
       "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
     )} - ${this.matrixService.userId}`;
-    let newRoomInvite = [aiBotUsername];
-    this.doCreateRoom.perform(newRoomName, newRoomInvite);
+    this.doCreateRoom.perform(newRoomName, [aiBotUsername]);
   }
 
   private doCreateRoom = restartableTask(
-    async (newRoomName: string, newRoomInvite: string[]) => {
-      let newRoomId = await this.matrixService.createRoom(
-        newRoomName,
-        newRoomInvite,
-      );
+    async (name: string, invites: string[], topic?: string) => {
+      let newRoomId = await this.matrixService.createRoom(name, invites, topic);
       this.enterRoom(newRoomId);
     },
   );
@@ -325,31 +303,22 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get aiSessionRooms() {
-    let rooms: AiSessionRoom[] = [];
+    let rooms: RoomField[] = [];
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
         continue;
       }
-      if (resource.room.roomMembers.find((m) => aiBotUserId === m.userId)) {
-        let roomMember = resource.room.joinedMembers.find(
-          (m) => this.matrixService.userId === m.userId,
-        );
-        if (roomMember) {
-          rooms.push({ room: resource.room, member: roomMember });
-        }
+      let { room } = resource;
+      if (
+        room.invitedMembers.find((m) => aiBotUserId === m.userId) &&
+        room.joinedMembers.find((m) => this.matrixService.userId === m.userId)
+      ) {
+        rooms.push(room);
       }
     }
-    return rooms;
-  }
-
-  @cached
-  private get sortedAiSessionRooms() {
+    // member join date is at the time of room creation
     // reverse chronological order
-    return this.aiSessionRooms.sort(
-      (a, b) =>
-        b.member.membershipDateTime.getTime() -
-        a.member.membershipDateTime.getTime(),
-    );
+    return rooms.sort((a, b) => b.created.getTime() - a.created.getTime());
   }
 
   @action
@@ -365,7 +334,16 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   @action private setRoomToDelete(room: RoomField | undefined) {
+    this.roomDeleteError = undefined;
     this.roomToDelete = room;
+  }
+
+  private get roomActions() {
+    return {
+      open: this.enterRoom,
+      rename: this.setRoomToRename,
+      delete: this.setRoomToDelete,
+    };
   }
 
   @action
@@ -374,12 +352,23 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   private doLeaveRoom = restartableTask(async (roomId: string) => {
-    await this.matrixService.client.leave(roomId);
-    await timeout(eventDebounceMs); // this makes it feel a bit more responsive
-    if (this.currentRoomId === roomId) {
-      this.currentRoomId = undefined;
+    try {
+      await this.matrixService.client.leave(roomId);
+      await timeout(eventDebounceMs); // this makes it feel a bit more responsive
+      if (this.currentRoomId === roomId) {
+        this.currentRoomId = undefined;
+        window.localStorage.setItem(currentRoomIdPersistenceKey, '');
+      }
+      this.roomToDelete = undefined;
+      this.hidePastSessions();
+    } catch (e) {
+      console.error(e);
+      this.roomDeleteError = 'Error deleting room';
+      if (isMatrixError(e)) {
+        this.roomDeleteError += `: ${e.data.error}`;
+      } else if (e instanceof Error) {
+        this.roomDeleteError += `: ${e.message}`;
+      }
     }
-    this.roomToDelete = undefined;
-    this.hidePastSessions();
   });
 }
