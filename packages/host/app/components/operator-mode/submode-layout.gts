@@ -62,7 +62,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
 
-  private searchElement: Element | null = null;
+  private searchElement: HTMLElement | null = null;
 
   private get aiAssistantVisibilityClass() {
     return this.isAiAssistantVisible
@@ -146,7 +146,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action
-  private storeSearchElement(element: Element) {
+  private storeSearchElement(element: HTMLElement) {
     this.searchElement = element;
   }
 

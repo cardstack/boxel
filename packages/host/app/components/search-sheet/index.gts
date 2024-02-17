@@ -60,15 +60,15 @@ interface Signature {
     onBlur: () => void;
     onSearch: (term: string) => void;
     onCardSelect: (card: CardDef) => void;
-    onInputInsertion?: (element: Element) => void;
+    onInputInsertion?: (element: HTMLElement) => void;
   };
   Blocks: {};
 }
 
 let elementCallback = modifier(
-  (element, [callback]: [((element: Element) => void) | undefined]) => {
+  (element, [callback]: [((element: HTMLElement) => void) | undefined]) => {
     if (callback) {
-      callback(element);
+      callback(element as HTMLElement);
     }
   },
 );
