@@ -129,12 +129,9 @@ export default class OperatorModeStateService extends Service {
     this.recentCardsService.remove(card.id);
 
     let cardRealmUrl = await this.cardService.getRealmURL(card);
-
-    if (cardRealmUrl) {
-      let realmPaths = new RealmPaths(cardRealmUrl);
-      let cardPath = realmPaths.local(`${card.id}.json`);
-      this.recentFilesService.removeRecentFile(cardPath);
-    }
+    let realmPaths = new RealmPaths(cardRealmUrl);
+    let cardPath = realmPaths.local(`${card.id}.json`);
+    this.recentFilesService.removeRecentFile(cardPath);
     await this.cardService.deleteCard(card);
   }
 

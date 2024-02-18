@@ -14,6 +14,7 @@ import Copy from './icons/copy.gts';
 import DiagonalArrowLeftUp from './icons/diagonal-arrow-left-up.gts';
 import Download from './icons/download.gts';
 import DropdownArrowDown from './icons/dropdown-arrow-down.gts';
+import DropdownArrowFilled from './icons/dropdown-arrow-filled.gts';
 import DropdownArrowUp from './icons/dropdown-arrow-up.gts';
 import Exclamation from './icons/exclamation.gts';
 import Eye from './icons/eye.gts';
@@ -27,6 +28,7 @@ import IconInherit from './icons/icon-inherit.gts';
 import IconLink from './icons/icon-link.gts';
 import IconMinusCircle from './icons/icon-minus-circle.gts';
 import IconPencil from './icons/icon-pencil.gts';
+import IconPencilCrossedOut from './icons/icon-pencil-crossed-out.gts';
 import IconPlus from './icons/icon-plus.gts';
 import IconPlusCircle from './icons/icon-plus-circle.gts';
 import IconSearch from './icons/icon-search.gts';
@@ -55,6 +57,7 @@ export const ALL_ICON_COMPONENTS = [
   DiagonalArrowLeftUp,
   Download,
   DropdownArrowDown,
+  DropdownArrowFilled,
   DropdownArrowUp,
   Exclamation,
   Eye,
@@ -68,6 +71,7 @@ export const ALL_ICON_COMPONENTS = [
   IconLink,
   IconMinusCircle,
   IconPencil,
+  IconPencilCrossedOut,
   IconPlus,
   IconPlusCircle,
   IconSearch,
@@ -97,6 +101,7 @@ export {
   DiagonalArrowLeftUp,
   Download,
   DropdownArrowDown,
+  DropdownArrowFilled,
   DropdownArrowUp,
   Exclamation,
   Eye,
@@ -110,6 +115,7 @@ export {
   IconLink,
   IconMinusCircle,
   IconPencil,
+  IconPencilCrossedOut,
   IconPlus,
   IconPlusCircle,
   IconSearch,

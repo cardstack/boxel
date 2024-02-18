@@ -33,8 +33,15 @@ export async function toggleOperatorMode(page: Page) {
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
   await page.waitForFunction(() =>
-    document.querySelector('[data-test-close-ai-panel]'),
+    document.querySelector('[data-test-close-ai-assistant]'),
   );
+
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-test-room]')
+        ?.getAttribute('data-test-room'),
+  ); // Opening the AI assistant either opens last room or creates one - wait for it to settle
 }
 
 export async function openRoot(page: Page) {
@@ -221,43 +228,55 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function createRoom(page: Page, name?: string) {
-  let roomName: string;
-  await page.locator('[data-test-create-room-mode-btn]').click();
-  if (name) {
-    roomName = name;
-    await page.locator('[data-test-room-name-field]').fill(name);
-  } else {
-    roomName = await page.locator('[data-test-room-name-field]').inputValue();
-  }
+export async function createRoom(page: Page) {
   await page.locator('[data-test-create-room-btn]').click();
+  await page.locator(`[data-test-room-name]`).waitFor();
+  let roomName = await page.locator('[data-test-room-name]').textContent();
+  if (!roomName) {
+    throw new Error('room name is not found');
+  }
   await isInRoom(page, roomName);
   return roomName;
 }
 
 export async function isInRoom(page: Page, roomName: string) {
-  await page.locator(`[data-test-room-name="${roomName}"]`).waitFor();
+  await page.locator(`[data-test-room="${roomName}"]`).waitFor();
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
 }
 
 export async function deleteRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-past-sessions-button]`).click();
+
+  // Here, past sessions could be rerendered because in one case we're creating a new room when opening an AI panel, so we need to wait for the past sessions to settle
+  await page.waitForTimeout(500);
   await page
     .locator(`[data-test-past-session-options-button="${roomName}"]`)
     .click();
+
   await page.locator(`[data-test-boxel-menu-item-text="Delete"]`).click();
   await page
     .locator(
       `[data-test-delete-modal-container] [data-test-confirm-delete-button]`,
     )
     .click();
-  await page.locator(`[data-test-close-past-sessions]`).click();
 }
 
 export async function openRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
   await isInRoom(page, roomName);
+}
+
+export async function openRenameMenu(page: Page, name: string) {
+  await page.locator(`[data-test-past-sessions-button]`).click();
+  await page
+    .locator(`[data-test-past-session-options-button="${name}"]`)
+    .click();
+  await expect(
+    page.locator(`[data-test-boxel-menu-item-text="Rename"]`),
+  ).toHaveCount(1);
+  await page.locator(`[data-test-boxel-menu-item-text="Rename"]`).click();
+  await page.locator(`[data-test-name-field]`).waitFor();
 }
 
 export async function writeMessage(
@@ -269,14 +288,6 @@ export async function writeMessage(
   await expect(
     page.locator(`[data-test-message-field="${roomName}"]`),
   ).toHaveValue(message);
-}
-
-export async function setObjective(page: Page, objectiveURI: string) {
-  await page.locator(`[data-test-set-objective-btn]`).click();
-  await page.locator(`[data-test-select="${objectiveURI}"]`).click();
-  await page.locator('[data-test-card-catalog-go-button]').click();
-  await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
-  await expect(page.locator(`[data-test-objective]`)).toHaveCount(1);
 }
 
 export async function selectCardFromCatalog(page: Page, cardId: string) {
@@ -367,6 +378,7 @@ export async function assertMessages(
 
 export async function assertRooms(page: Page, rooms: string[]) {
   await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
+
   if (rooms && rooms.length > 0) {
     await page.waitForFunction(
       (rooms) =>
@@ -374,12 +386,13 @@ export async function assertRooms(page: Page, rooms: string[]) {
         rooms.length,
       rooms,
     );
-    rooms.map(
-      async (name) =>
-        await expect(
+    await Promise.all(
+      rooms.map((name) =>
+        expect(
           page.locator(`[data-test-joined-room="${name}"]`),
           `the joined room '${name}' is displayed`,
         ).toHaveCount(1),
+      ),
     );
   } else {
     await expect(

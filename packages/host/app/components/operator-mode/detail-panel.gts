@@ -1,4 +1,3 @@
-import { hash, array } from '@ember/helper';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -188,6 +187,42 @@ export default class DetailPanel extends Component<Signature> {
     ];
   }
 
+  private get instanceActions() {
+    if (!this.isCardInstance) {
+      return [];
+    }
+    return [
+      {
+        label: 'Duplicate',
+        icon: Copy,
+        handler: this.duplicateInstance,
+      },
+      ...(this.args.readyFile.realmSession.canWrite
+        ? [
+            {
+              label: 'Delete',
+              icon: IconTrash,
+              handler: () => this.args.delete(this.args.cardInstance),
+            },
+          ]
+        : []),
+    ];
+  }
+
+  private get miscFileActions() {
+    if (this.args.readyFile.realmSession.canWrite) {
+      return [
+        {
+          label: 'Delete',
+          icon: IconTrash,
+          handler: () => this.args.delete(this.codePath),
+        },
+      ];
+    } else {
+      return [];
+    }
+  }
+
   @action private duplicateInstance() {
     if (!this.args.cardInstance) {
       throw new Error('must have a selected card instance');
@@ -336,15 +371,17 @@ export default class DetailPanel extends Component<Signature> {
                 data-test-current-module-name={{@readyFile.name}}
               >
                 <:actions>
-                  <IconButton
-                    @icon={{IconTrash}}
-                    @width='18'
-                    @height='18'
-                    {{on 'click' (fn @delete this.codePath)}}
-                    class='delete-module-button'
-                    aria-label='Delete Module'
-                    data-test-delete-module-button
-                  />
+                  {{#if @readyFile.realmSession.canWrite}}
+                    <IconButton
+                      @icon={{IconTrash}}
+                      @width='18'
+                      @height='18'
+                      {{on 'click' (fn @delete this.codePath)}}
+                      class='delete-module-button'
+                      aria-label='Delete Module'
+                      data-test-delete-module-button
+                    />
+                  {{/if}}
                 </:actions>
               </Header>
               <Selector
@@ -372,16 +409,7 @@ export default class DetailPanel extends Component<Signature> {
                 @name={{@cardInstance.title}}
                 @fileExtension='.JSON'
                 @infoText={{this.lastModified.value}}
-                @actions={{array
-                  (hash
-                    label='Duplicate' handler=this.duplicateInstance icon=Copy
-                  )
-                  (hash
-                    label='Delete'
-                    handler=(fn @delete @cardInstance)
-                    icon=IconTrash
-                  )
-                }}
+                @actions={{this.instanceActions}}
               />
               <div class='chain'>
                 <IconInherit
@@ -471,13 +499,7 @@ export default class DetailPanel extends Component<Signature> {
               @fileURL={{@readyFile.url}}
               @fileExtension={{this.fileExtension}}
               @infoText={{this.lastModified.value}}
-              @actions={{array
-                (hash
-                  label='Delete'
-                  handler=(fn @delete this.codePath)
-                  icon=IconTrash
-                )
-              }}
+              @actions={{this.miscFileActions}}
             />
           </div>
         {{/if}}

@@ -28,7 +28,6 @@ import {
   TestRealmAdapter,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
-  setupSessionsServiceMock,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -76,7 +75,6 @@ module('Integration | card-delete', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupSessionsServiceMock(hooks);
   setupMatrixServiceMock(hooks);
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');

@@ -5,6 +5,7 @@ import {
   fillIn,
   focus,
   blur,
+  setupOnerror,
   triggerEvent,
   triggerKeyEvent,
   typeIn,
@@ -35,7 +36,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupServerSentEvents,
-  setupSessionsServiceMock,
   setupOnSave,
   showSearchResult,
   type TestContextWithSave,
@@ -68,7 +68,6 @@ module('Integration | operator-mode', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupSessionsServiceMock(hooks);
   setupMatrixServiceMock(hooks);
   let noop = () => {};
 
@@ -919,41 +918,6 @@ module('Integration | operator-mode', function (hooks) {
     await percySnapshot(assert);
   });
 
-  test('it can handle an error in a room objective card', async function (assert) {
-    matrixService.roomObjectives.set('testroom', {
-      error: new Error('error rendering room objective'),
-    });
-    matrixService.cardAPI = cardApi;
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
-
-    await operatorModeStateService.restore({
-      stacks: [[]],
-    });
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor('[data-test-open-ai-assistant]');
-    await click('[data-test-open-ai-assistant]');
-    matrixService.createAndJoinRoom('testroom');
-
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
-    await click('[data-test-enter-room="test_a"]');
-    await waitFor('[data-test-objective-error]');
-    assert
-      .dom('[data-test-objective-error]')
-      .hasText('Error: cannot render card : error rendering room objective');
-  });
-
   test('it loads a card and renders its isolated view', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -979,6 +943,62 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-pet="Mango"]');
     assert.dom('[data-test-stack-card]').exists({ count: 2 });
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
+  });
+
+  test('when opening ai panel it opens the most recent room', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    let tinyDelay = () => new Promise((resolve) => setTimeout(resolve, 1)); // Add a tiny artificial delay to ensure rooms are created in the correct order with increasing timestamps
+    await matrixService.createAndJoinRoom('test1', 'test room 1');
+    await tinyDelay();
+    await matrixService.createAndJoinRoom('test2', 'test room 2');
+    await tinyDelay();
+    await matrixService.createAndJoinRoom('test3', 'test room 3');
+
+    await waitFor(`[data-test-open-ai-assistant]`);
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    assert
+      .dom('[data-test-room="test room 3"]')
+      .exists(
+        "test room 3 is the most recently created room and it's opened initially",
+      );
+
+    await click('[data-test-past-sessions-button]');
+    await click('[data-test-enter-room="test room 2"]');
+
+    await click('[data-test-close-ai-assistant]');
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert
+      .dom('[data-test-room="test room 2"]')
+      .exists(
+        "test room 2 is the most recently selected room and it's opened initially",
+      );
+
+    await click('[data-test-close-ai-assistant]');
+    localStorage.setItem(
+      'aiPanelCurrentRoomId',
+      "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
+    );
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert
+      .dom('[data-test-room="test room 3"]')
+      .exists(
+        "test room 3 is the most recently created room and it's opened initially",
+      );
+
+    localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
   });
 
   test<TestContextWithSave>('it auto saves the field value', async function (assert) {
@@ -1011,6 +1031,13 @@ module('Integration | operator-mode', function (hooks) {
 
   // TODO CS-6268 visual indicator for failed auto-save should build off of this test
   test('an error in auto-save is handled gracefully', async function (assert) {
+    let done = assert.async();
+
+    setupOnerror(function (error) {
+      assert.ok(error, 'expected a global error');
+      done();
+    });
+
     await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
 
     await renderComponent(
@@ -1028,8 +1055,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-pet]');
     // Card still runs (our error was designed to only fire during save)
-    // despite save error and there are no uncaught exceptions (which QUnit
-    // fails as a "Global" error)
+    // despite save error
     assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
   });
 

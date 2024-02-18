@@ -1,3 +1,4 @@
+import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -9,7 +10,6 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 import { restartableTask, timeout } from 'ember-concurrency';
-import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { Velcro } from 'ember-velcro';
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -17,21 +17,16 @@ import {
   Button,
   IconButton,
   LoadingIndicator,
-  FieldContainer,
-  BoxelInput,
 } from '@cardstack/boxel-ui/components';
 import { ResizeHandle } from '@cardstack/boxel-ui/components';
-import { not, cssVar } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
-
-import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
-import { DropdownArrowUp } from '@cardstack/boxel-ui/icons';
+import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
-import AiAssistantPanelPopover from '@cardstack/host/components/ai-assistant/panel-popover';
 import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
+import RenameSession from '@cardstack/host/components/ai-assistant/rename-session';
 import Room from '@cardstack/host/components/matrix/room';
+import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
 
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -42,10 +37,7 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type {
-  RoomField,
-  RoomMemberField,
-} from 'https://cardstack.com/base/room';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 import { getRoom, RoomResource } from '../../resources/room';
 
@@ -53,8 +45,6 @@ import assistantIcon from './ai-assist-icon.webp';
 
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
-
-export type AiSessionRoom = { room: RoomField; member: RoomMemberField };
 
 interface Signature {
   Element: HTMLDivElement;
@@ -64,132 +54,98 @@ interface Signature {
   };
 }
 
+let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId'; // Local storage key
+
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
-    <Velcro @placement='bottom' @offsetOptions={{-50}} as |pastSessionsVelcro|>
+    <Velcro @placement='bottom' @offsetOptions={{-50}} as |popoverVelcro|>
       <div
         class='ai-assistant-panel'
         data-test-ai-assistant-panel
         ...attributes
       >
         <@resizeHandle />
-        <header>
+        <header class='panel-header'>
           <img alt='AI Assistant' src={{assistantIcon}} />
           <span>Assistant</span>
           <IconButton
+            class='close-ai-panel'
             @variant='primary'
             @icon={{IconX}}
             @width='20px'
             @height='20px'
-            class='close-ai-panel'
             {{on 'click' @onClose}}
             aria-label='Remove'
-            data-test-close-ai-panel
+            data-test-close-ai-assistant
           />
         </header>
         <div class='menu'>
           <div class='buttons'>
             <Button
+              class='new-session-button'
               @kind='secondary-dark'
               @size='small'
-              class='new-session-button'
-              {{on 'click' this.displayCreateNew}}
-              @disabled={{this.isShowingCreateNew}}
-              data-test-create-room-mode-btn
+              {{on 'click' this.createNewSession}}
+              {{popoverVelcro.hook}}
+              data-test-create-room-btn
             >
               New Session
             </Button>
 
             {{#if this.loadRoomsTask.isRunning}}
-              <LoadingIndicator />
+              <LoadingIndicator @color='var(--boxel-light)' />
             {{else}}
               <Button
+                class='past-sessions-button'
                 @kind='secondary-dark'
                 @size='small'
-                {{on 'click' this.togglePastSessions}}
+                {{on 'click' this.displayPastSessions}}
+                {{popoverVelcro.hook}}
                 data-test-past-sessions-button
-                class='past-sessions-button'
-                {{pastSessionsVelcro.hook}}
               >
                 Past Sessions
-
-                <DropdownArrowDown
-                  width={{20}}
-                  height={{20}}
-                  style={{cssVar icon-color='#fff'}}
-                />
+                <DropdownArrowFilled width='10' height='10' />
               </Button>
             {{/if}}
           </div>
 
-          {{#if this.isShowingCreateNew}}
-            <div class='create-room'>
-              <FieldContainer
-                @label='Room Name'
-                @tag='label'
-                class='create-room__field'
-              >
-                <BoxelInput
-                  @state={{this.roomNameInputState}}
-                  @value={{this.newRoomName}}
-                  @errorMessage={{this.roomNameError}}
-                  @onInput={{this.setNewRoomName}}
-                  data-test-room-name-field
-                />
-              </FieldContainer>
-            </div>
-            <div class='create-button-wrapper'>
-              <Button
-                @kind='secondary-dark'
-                {{on 'click' this.closeCreateRoom}}
-                data-test-create-room-cancel-btn
-              >Cancel</Button>
-              <Button
-                @kind='primary'
-                @disabled={{not this.newRoomName.length}}
-                {{on 'click' this.createNewSession}}
-                data-test-create-room-btn
-              >Create</Button>
-            </div>
-          {{/if}}
-
           {{#if this.isShowingPastSessions}}
-            <AiAssistantPanelPopover {{pastSessionsVelcro.loop}}>
-              <:header>
-                <div class='past-sessions-header'>
-                  Past Sessions
-                  <button
-                    {{on 'click' this.togglePastSessions}}
-                    data-test-close-past-sessions
-                  >
-                    <DropdownArrowUp width={{20}} height={{20}} />
-                  </button>
-                </div>
-              </:header>
-              <:body>
-                <AiAssistantPastSessionsList
-                  @sessions={{this.sortedAiSessionRooms}}
-                  @openSession={{this.enterRoom}}
-                  @deleteSession={{this.leaveRoom}}
-                  @roomToDelete={{this.roomToDelete}}
-                  @setRoomToDelete={{this.setRoomToDelete}}
-                />
-              </:body>
-            </AiAssistantPanelPopover>
+            <AiAssistantPastSessionsList
+              @sessions={{this.aiSessionRooms}}
+              @roomActions={{this.roomActions}}
+              @onClose={{this.hidePastSessions}}
+              {{popoverVelcro.loop}}
+            />
+          {{else if this.roomToRename}}
+            <RenameSession
+              @room={{this.roomToRename}}
+              @onClose={{fn this.setRoomToRename undefined}}
+              {{popoverVelcro.loop}}
+            />
           {{/if}}
         </div>
 
-        {{#unless this.isShowingCreateNew}}
-          {{#if this.doCreateRoom.isRunning}}
-            <LoadingIndicator />
-          {{else if this.currentRoomId}}
-            <Room @roomId={{this.currentRoomId}} />
-          {{/if}}
-        {{/unless}}
+        {{#if this.doCreateRoom.isRunning}}
+          <LoadingIndicator
+            class='loading-new-session'
+            @color='var(--boxel-light)'
+          />
+        {{else if this.currentRoomId}}
+          <Room @roomId={{this.currentRoomId}} />
+        {{/if}}
       </div>
     </Velcro>
+
     {{#if this.roomToDelete}}
-      <FromElseWhere @name='delete-modal' />
+      {{#let this.roomToDelete.roomId this.roomToDelete.name as |id name|}}
+        <DeleteModal
+          @itemToDelete={{id}}
+          @onConfirm={{fn this.leaveRoom id}}
+          @onCancel={{fn this.setRoomToDelete undefined}}
+          @itemInfo={{hash type='room' name=(if name name id) id=id}}
+          @error={{this.roomDeleteError}}
+        />
+      {{/let}}
     {{/if}}
 
     <style>
@@ -226,19 +182,23 @@ export default class AiAssistantPanel extends Component<Signature> {
       :deep(.room-actions) {
         z-index: 1;
       }
-      .ai-assistant-panel header {
+      .panel-header {
         align-items: center;
         display: flex;
         padding: var(--boxel-sp-xs) calc(var(--boxel-sp) / 2) var(--boxel-sp-xs)
           var(--boxel-sp-lg);
         gap: var(--boxel-sp-xs);
       }
-      .ai-assistant-panel header img {
+      .panel-header img {
         height: 20px;
         width: 20px;
       }
-      .ai-assistant-panel header span {
+      .panel-header span {
         font: 700 var(--boxel-font);
+      }
+      .close-ai-panel {
+        --icon-color: var(--boxel-highlight);
+        margin-left: auto;
       }
       .menu {
         padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
@@ -251,37 +211,12 @@ export default class AiAssistantPanel extends Component<Signature> {
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);
       }
-
-      .close-ai-panel {
-        --icon-color: var(--boxel-highlight);
-        margin-left: auto;
-      }
-      .create-room {
-        padding: var(--boxel-sp) 0;
-      }
-      .create-room :deep(.boxel-label) {
-        color: var(--boxel-light);
-      }
-      .create-button-wrapper {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp-xs);
-      }
-      .past-sessions-header {
-        display: flex;
-        justify-content: space-between;
-      }
-
-      .past-sessions-header button {
-        border: 0;
-        background: inherit;
-      }
-
       .past-sessions-button svg {
+        --icon-color: var(--boxel-light);
         margin-left: var(--boxel-sp-xs);
       }
-      .room-list {
-        padding: 0;
+      .loading-new-session {
+        padding: var(--boxel-sp);
       }
     </style>
   </template>
@@ -292,14 +227,33 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
-  @tracked private isShowingCreateNew = false;
-  @tracked private newRoomName = '';
-  @tracked private roomNameError: string | undefined;
+  @tracked private roomToRename: RoomField | undefined = undefined;
   @tracked private roomToDelete: RoomField | undefined = undefined;
+  @tracked private roomDeleteError: string | undefined = undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadRoomsTask.perform();
+  }
+
+  private enterRoomInitially() {
+    if (this.currentRoomId) {
+      return;
+    }
+
+    let persistedRoomId = window.localStorage.getItem(
+      currentRoomIdPersistenceKey,
+    );
+    if (persistedRoomId && this.roomResources.has(persistedRoomId)) {
+      this.currentRoomId = persistedRoomId;
+    } else {
+      let latestRoom = this.aiSessionRooms[0];
+      if (latestRoom) {
+        this.currentRoomId = latestRoom.roomId;
+      } else {
+        this.createNewSession();
+      }
+    }
   }
 
   @cached
@@ -318,124 +272,103 @@ export default class AiAssistantPanel extends Component<Signature> {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
     await Promise.all([...this.roomResources.values()].map((r) => r.loading));
-    if (!this.currentRoomId) {
-      let lastestRoom = this.sortedAiSessionRooms[0];
-      this.enterRoom(lastestRoom?.room.roomId);
-    }
+    this.enterRoomInitially();
   });
-
-  @action private displayCreateNew() {
-    this.newRoomName = this.newRoomAutoName;
-    this.isShowingCreateNew = true;
-  }
-
-  private get roomNameInputState() {
-    return this.roomNameError ? 'invalid' : 'initial';
-  }
-
-  private get newRoomAutoName() {
-    return `${format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")} - ${
-      this.matrixService.userId
-    }`;
-  }
-
-  @action
-  private setNewRoomName(name: string) {
-    this.newRoomName = name;
-    this.roomNameError = undefined;
-  }
 
   @action
   private createNewSession() {
-    let newRoomName = this.newRoomName;
-    let newRoomInvite = [aiBotUsername];
-    this.doCreateRoom.perform(newRoomName, newRoomInvite);
+    let newRoomName = `${format(
+      new Date(),
+      "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
+    )} - ${this.matrixService.userId}`;
+    this.doCreateRoom.perform(newRoomName, [aiBotUsername]);
   }
 
   private doCreateRoom = restartableTask(
-    async (newRoomName: string, newRoomInvite: string[]) => {
-      if (!newRoomName) {
-        throw new Error(
-          `bug: should never get here, create button is disabled when there is no new room name`,
-        );
-      }
-      try {
-        let newRoomId = await this.matrixService.createRoom(
-          newRoomName,
-          newRoomInvite,
-        );
-        this.enterRoom(newRoomId);
-      } catch (e) {
-        if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
-          this.roomNameError = 'Room already exists';
-          return;
-        }
-        throw e;
-      }
-      this.closeCreateRoom();
+    async (name: string, invites: string[], topic?: string) => {
+      let newRoomId = await this.matrixService.createRoom(name, invites, topic);
+      this.enterRoom(newRoomId);
     },
   );
 
   @action
-  private closeCreateRoom() {
-    this.isShowingCreateNew = false;
+  private displayPastSessions() {
+    this.isShowingPastSessions = true;
   }
 
   @action
-  togglePastSessions() {
-    this.isShowingPastSessions = !this.isShowingPastSessions;
+  private hidePastSessions() {
+    this.isShowingPastSessions = false;
   }
 
   @cached
   private get aiSessionRooms() {
-    let rooms: AiSessionRoom[] = [];
+    let rooms: RoomField[] = [];
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
         continue;
       }
-      if (resource.room.roomMembers.find((m) => aiBotUserId === m.userId)) {
-        let roomMember = resource.room.joinedMembers.find(
-          (m) => this.matrixService.userId === m.userId,
-        );
-        if (roomMember) {
-          rooms.push({ room: resource.room, member: roomMember });
-        }
+      let { room } = resource;
+      if (
+        room.invitedMembers.find((m) => aiBotUserId === m.userId) &&
+        room.joinedMembers.find((m) => this.matrixService.userId === m.userId)
+      ) {
+        rooms.push(room);
       }
     }
-    return rooms;
-  }
-
-  @cached
-  private get sortedAiSessionRooms() {
+    // member join date is at the time of room creation
     // reverse chronological order
-    return this.aiSessionRooms.sort(
-      (a, b) =>
-        b.member.membershipDateTime.getTime() -
-        a.member.membershipDateTime.getTime(),
-    );
+    return rooms.sort((a, b) => b.created.getTime() - a.created.getTime());
   }
 
   @action
   private enterRoom(roomId: string) {
     this.currentRoomId = roomId;
-    this.isShowingPastSessions = false;
+    this.hidePastSessions();
+    window.localStorage.setItem(currentRoomIdPersistenceKey, roomId);
+  }
+
+  @action private setRoomToRename(room: RoomField | undefined) {
+    this.roomToRename = room;
+    this.hidePastSessions();
   }
 
   @action private setRoomToDelete(room: RoomField | undefined) {
+    this.roomDeleteError = undefined;
     this.roomToDelete = room;
+  }
+
+  private get roomActions() {
+    return {
+      open: this.enterRoom,
+      rename: this.setRoomToRename,
+      delete: this.setRoomToDelete,
+    };
   }
 
   @action
   private leaveRoom(roomId: string) {
     this.doLeaveRoom.perform(roomId);
-    this.roomToDelete = undefined;
   }
 
   private doLeaveRoom = restartableTask(async (roomId: string) => {
-    await this.matrixService.client.leave(roomId);
-    await timeout(eventDebounceMs); // this makes it feel a bit more responsive
-    if (this.currentRoomId === roomId) {
-      this.currentRoomId = undefined;
+    try {
+      await this.matrixService.client.leave(roomId);
+      await timeout(eventDebounceMs); // this makes it feel a bit more responsive
+      if (this.currentRoomId === roomId) {
+        this.currentRoomId = undefined;
+        window.localStorage.setItem(currentRoomIdPersistenceKey, '');
+      }
+      this.roomToDelete = undefined;
+      this.hidePastSessions();
+    } catch (e) {
+      console.error(e);
+      this.roomDeleteError = 'Error deleting room';
+      if (isMatrixError(e)) {
+        this.roomDeleteError += `: ${e.data.error}`;
+      } else if (e instanceof Error) {
+        this.roomDeleteError += `: ${e.message}`;
+      }
     }
   });
 }

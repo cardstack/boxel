@@ -177,9 +177,8 @@ export default class CardService extends Service {
       });
       // send doc over the wire with absolute URL's. The realm server will convert
       // to relative URL's as it serializes the cards
-      let maybeRealmUrl = await this.getRealmURL(card);
-      let json = await this.saveCardDocument(doc, maybeRealmUrl);
-      let realmURL = new URL(json.data.meta.realmURL!);
+      let realmURL = await this.getRealmURL(card);
+      let json = await this.saveCardDocument(doc, realmURL);
       let isNew = !card.id;
 
       let result: CardDef | undefined;
@@ -210,6 +209,7 @@ export default class CardService extends Service {
       // save has failed. Until that ticket is implemented, the only indication
       // of a failed auto-save will be from the console.
       console.error(`Failed to save ${card.id}: `, err);
+      throw err;
       return;
     } finally {
       api.unsubscribeFromChanges(card, onCardChange);
@@ -379,9 +379,13 @@ export default class CardService extends Service {
     return card[api.realmInfo];
   }
 
-  async getRealmURL(card: CardDef, loader?: Loader): Promise<URL | undefined> {
+  async getRealmURL(card: CardDef, loader?: Loader) {
     let api = await this.getAPI(loader);
-    return card[api.realmURL];
+    // in the case where we get no realm URL from the card, we are dealing with
+    // a new card instance that does not have a realm URL yet. For now let's
+    // assume that the new card instance will reside in the realm that is hosting the app...
+    // TODO change this after implementing CS-6381
+    return card[api.realmURL] ?? new URL(ownRealmURL);
   }
 
   async cardsSettled(loader?: Loader) {

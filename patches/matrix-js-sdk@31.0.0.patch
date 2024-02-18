@@ -1,8 +1,8 @@
 diff --git a/lib/crypto/index.js b/lib/crypto/index.js
-index d1579c21535a3c3bed0b42fb419c4e17e2fc8050..f7a6ba90b899262444d20be636a443697d1ab11b 100644
+index b965c8c5bd8b6eb939c2f449a82e22fd83996369..be9560d26d73e671f84104c9c465ba50dc4a4f82 100644
 --- a/lib/crypto/index.js
 +++ b/lib/crypto/index.js
-@@ -1707,10 +1707,14 @@ class Crypto extends _typedEventEmitter.TypedEventEmitter {
+@@ -1901,10 +1901,14 @@ class Crypto extends _typedEventEmitter.TypedEventEmitter {
      }
      const res = await this.baseApis.uploadKeysRequest(requestBody);
      if (fallbackJson) {
@@ -11,7 +11,7 @@ index d1579c21535a3c3bed0b42fb419c4e17e2fc8050..f7a6ba90b899262444d20be636a44369
          delete this.fallbackCleanup;
          this.olmDevice.forgetOldFallbackKey();
        }, 60 * 60 * 1000);
-+      if (typeof timer.unref === 'function') {
++      if (typeof timer.unref === "function") {
 +        timer.unref();
 +      }
 +      this.fallbackCleanup = timer;

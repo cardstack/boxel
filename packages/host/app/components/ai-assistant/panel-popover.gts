@@ -28,9 +28,18 @@ export default class AiAssistantPanelPopover extends Component<Signature> {
       }
 
       .header {
-        font-size: var(--boxel-font-size-lg);
-        font-weight: 600;
-        padding: var(--boxel-sp-sm);
+        position: relative;
+        padding: var(--boxel-sp);
+        font-size: 1.125rem;
+        font-weight: 700;
+        letter-spacing: var(--boxel-lsp-xs);
+        line-height: 1.2;
+      }
+      .header :deep(button) {
+        transform: rotate(180deg);
+        position: absolute;
+        right: var(--boxel-sp-xs);
+        top: var(--boxel-sp-xs);
       }
 
       .body {
