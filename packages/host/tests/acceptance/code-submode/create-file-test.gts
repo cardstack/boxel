@@ -9,6 +9,7 @@ import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+import type Owner from '@ember/owner';
 
 import {
   percySnapshot,
@@ -19,7 +20,7 @@ import {
   setupServerSentEvents,
   waitForCodeEditor,
   getMonacoContent,
-  visitOperatorMode,
+  visitOperatorMode as _visitOperatorMode,
   TestRealmAdapter,
   type TestContextWithSave,
 } from '../../helpers';
@@ -63,7 +64,7 @@ const files: Record<string, any> = {
     import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
     import StringField from "https://cardstack.com/base/string";
 
-    export default class Pet extends CardDef {
+    export class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
 
@@ -140,6 +141,19 @@ const files: Record<string, any> = {
       },
     },
   },
+  'Pet/mango.json': {
+    data: {
+      attributes: {
+        name: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `../pet`,
+          name: 'Pet',
+        },
+      },
+    },
+  },
 };
 
 const filesB: Record<string, any> = {
@@ -163,7 +177,40 @@ const filesB: Record<string, any> = {
   },
 };
 
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {};
+
 module('Acceptance | code submode | create-file tests', function (hooks) {
+  async function openNewFileModal(
+    menuSelection: string,
+    expectedRealmName = 'Test Workspace A',
+  ) {
+    await waitFor('[data-test-code-mode][data-test-save-idle]');
+    await waitFor('[data-test-new-file-button]');
+    await click('[data-test-new-file-button]');
+    await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="${expectedRealmName}"]`,
+    );
+  }
+
+  async function visitOperatorMode(
+    owner: Owner,
+    codePath = `${testRealmURL}index.json`,
+  ) {
+    let realmService = owner.lookup(
+      'service:realm-info-service',
+    ) as RealmInfoService;
+
+    await realmService.fetchRealmInfo({
+      realmURL: new URL(testRealmURL2),
+    });
+
+    await _visitOperatorMode({
+      submode: 'code',
+      codePath,
+    });
+  }
+
   let adapter: TestRealmAdapter;
 
   setupApplicationTest(hooks);
@@ -171,17 +218,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
-
-  async function openNewFileModal(menuSelection: string) {
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
-    await waitFor('[data-test-new-file-button]');
-    await click('[data-test-new-file-button]');
-    await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
-    await waitFor(
-      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace A"]`,
-    );
-  }
+  setupMatrixServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
@@ -189,6 +226,11 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
+    realmPermissions = {
+      [baseRealm.url]: ['read'],
+      [testRealmURL]: ['read', 'write'],
+      [testRealmURL2]: ['read', 'write'],
+    };
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     await setupAcceptanceTestRealm({
@@ -208,22 +250,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       loader,
       contents: files,
     }));
-
-    let realmService = this.owner.lookup(
-      'service:realm-info-service',
-    ) as RealmInfoService;
-
-    await realmService.fetchRealmInfo({
-      realmURL: new URL(testRealmURL2),
-    });
-
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}index.json`,
-    });
   });
 
   test('new file button has options to create card def, field def, and card instance files', async function (assert) {
+    await visitOperatorMode(this.owner);
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor('[data-test-new-file-button]');
     await click('[data-test-new-file-button]');
@@ -253,6 +283,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
     const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
     assert.expect(13);
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
     await waitFor(`[data-test-selected-type="General Card"]`);
@@ -327,6 +358,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('an error when creating a new card instance is shown', async function (assert) {
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Instance');
     await waitFor(`[data-test-selected-type="General Card"]`);
 
@@ -356,6 +388,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   test<TestContextWithSave>('can create new card-instance file in local realm with card type from a remote realm', async function (assert) {
     assert.expect(8);
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Instance');
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
     await waitFor(`[data-test-selected-type="General Card"]`);
@@ -407,13 +440,14 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from another realm', async function (assert) {
     assert.expect(8);
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Instance');
     await waitFor(`[data-test-selected-type="General Card"]`);
 
     // realm selection
     await click(`[data-test-realm-dropdown-trigger]`);
     await waitFor(
-      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
+      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
     );
     await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
     await waitFor(`[data-test-realm-name="Test Workspace B"]`);
@@ -463,12 +497,13 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from a local realm', async function (assert) {
     assert.expect(8);
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Instance');
 
     // realm selection
     await click(`[data-test-realm-dropdown-trigger]`);
     await waitFor(
-      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
+      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
     );
     await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
     await waitFor(`[data-test-realm-name="Test Workspace B"]`);
@@ -550,6 +585,7 @@ export class TestCard extends CardDef {
   }
   */
 }`.trim();
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
     assert.dom('[data-test-selected-type]').hasText('General Card');
     assert
@@ -591,6 +627,7 @@ export class TestCard extends CardDef {
 
   test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {
     assert.expect(1);
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
     await click('[data-test-select-card-type]');
@@ -645,6 +682,7 @@ export class TestCard extends Person {
   });
 
   test<TestContextWithSave>('an error when creating a new card definition is shown', async function (assert) {
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
     await click('[data-test-select-card-type]');
@@ -674,6 +712,7 @@ export class TestCard extends Person {
 
   test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
     assert.expect(3);
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Field Definition');
     assert.dom('[data-test-selected-type]').hasText('General Field');
     await click('[data-test-select-card-type]');
@@ -730,6 +769,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
   });
 
   test<TestContextWithSave>('an error when creating a new field definition is shown', async function (assert) {
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Field Definition');
     await click('[data-test-select-card-type]');
     await waitFor('[data-test-card-catalog-modal]');
@@ -754,6 +794,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
 
   test<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (assert) {
     assert.expect(1);
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
     // select card type
@@ -810,6 +851,7 @@ export class TestCard extends Pet {
 
   test<TestContextWithSave>('can reconcile a classname collision with the selected name of extending a card definition which uses a default export', async function (assert) {
     assert.expect(1);
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
     // select card type
@@ -865,6 +907,7 @@ export class Pet extends PetParent {
 
   test<TestContextWithSave>('can reconcile a classname collision with a javascript builtin object', async function (assert) {
     assert.expect(1);
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
     // select card type
@@ -920,6 +963,7 @@ export class Map0 extends Pet {
 
   test<TestContextWithSave>('can sanitize display name when creating a new definition', async function (assert) {
     assert.expect(1);
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
     await fillIn('[data-test-display-name-field]', 'Test Card; { }');
@@ -992,6 +1036,7 @@ export class TestCard extends CardDef {
   */
 }`.trim();
 
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
     await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -1044,6 +1089,7 @@ export class TestCard extends CardDef {
   */
 }`.trim();
 
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
     await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -1096,6 +1142,7 @@ export class TestCard extends CardDef {
   */
 }`.trim();
 
+    await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
     await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -1120,4 +1167,146 @@ export class TestCard extends CardDef {
       'the source exists at the correct location',
     );
   });
+
+  module(
+    'when the user lacks write permissions in remote realm',
+    function (hooks) {
+      async function assertRealmDropDownIsCorrect(assert: Assert) {
+        await click(`[data-test-realm-dropdown-trigger]`);
+        await waitFor(
+          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace A"]',
+        );
+        assert
+          .dom('[data-test-selected-realm]')
+          .containsText('Test Workspace A');
+        let menuItems = document
+          .querySelector('[data-test-realm-dropdown-menu]')!
+          .textContent!.replace(/^\s*/gm, '')
+          .trim()
+          .split('\n');
+        assert.deepEqual(
+          menuItems,
+          ['Published Workspace', 'Test Workspace A'], // TODO remove "Published Workspace" after default realm persmissions are no longer wide open
+          'the realm dropdown list is correct',
+        );
+      }
+
+      hooks.beforeEach(async function () {
+        realmPermissions = {
+          [baseRealm.url]: ['read'],
+          [testRealmURL2]: ['read'],
+          [testRealmURL]: ['read', 'write'],
+        };
+      });
+
+      test('read only realm is not present in realm drop down when creating card definition', async function (assert) {
+        await visitOperatorMode(this.owner);
+        await openNewFileModal('Card Definition');
+        await waitFor(`[data-test-selected-type="General Card"]`);
+        await assertRealmDropDownIsCorrect(assert);
+      });
+
+      test('read only realm is not present in realm drop down when creating card instance', async function (assert) {
+        await visitOperatorMode(this.owner);
+        await openNewFileModal('Card Instance');
+        await waitFor(`[data-test-selected-type="General Card"]`);
+        await assertRealmDropDownIsCorrect(assert);
+      });
+
+      test('read only realm is not present in realm drop down when duplicating card instance', async function (assert) {
+        await visitOperatorMode(this.owner, `${testRealmURL}Pet/mango.json`);
+        await waitForCodeEditor();
+        await waitFor(`[data-test-action-button="Duplicate"]`);
+        await click('[data-test-action-button="Duplicate"]');
+        await assertRealmDropDownIsCorrect(assert);
+      });
+
+      test('read only realm is not present in realm drop down when inheriting card definition', async function (assert) {
+        await visitOperatorMode(this.owner, `${testRealmURL}pet.gts`);
+        await waitForCodeEditor();
+        await waitFor(`[data-test-action-button="Inherit"]`);
+        await click('[data-test-action-button="Inherit"]');
+        await assertRealmDropDownIsCorrect(assert);
+      });
+
+      test('read only realm is not present in realm drop down when creating instance of card definition', async function (assert) {
+        await visitOperatorMode(this.owner, `${testRealmURL}pet.gts`);
+        await waitForCodeEditor();
+        await waitFor(`[data-test-action-button="Create Instance"]`);
+        await click('[data-test-action-button="Create Instance"]');
+        await assertRealmDropDownIsCorrect(assert);
+      });
+    },
+  );
+
+  module(
+    'when the user lacks write permissions in local realm',
+    function (hooks) {
+      async function assertRealmDropDownIsCorrect(assert: Assert) {
+        await click(`[data-test-realm-dropdown-trigger]`);
+        await waitFor(
+          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
+        );
+        assert
+          .dom('[data-test-selected-realm]')
+          .containsText('Published Workspace'); // TODO change this to "Test Workspace B" after default realm permissions are no longer wide open
+        let menuItems = document
+          .querySelector('[data-test-realm-dropdown-menu]')!
+          .textContent!.replace(/^\s*/gm, '')
+          .trim()
+          .split('\n');
+        assert.deepEqual(
+          menuItems,
+          ['Published Workspace', 'Test Workspace B'], // TODO remove "Published Workspace" after default realm persmissions are no longer wide open
+          'the realm dropdown list is correct',
+        );
+      }
+
+      hooks.beforeEach(async function () {
+        realmPermissions = {
+          [baseRealm.url]: ['read'],
+          [testRealmURL2]: ['read', 'write'],
+          [testRealmURL]: ['read'],
+        };
+      });
+
+      test('read only realm is not present in realm drop down when creating card definition', async function (assert) {
+        await visitOperatorMode(this.owner);
+        await openNewFileModal('Card Definition', 'Published Workspace'); // TODO change this to "Test Workspace B" after default realm permissions are no longer wide open
+        await waitFor(`[data-test-selected-type="General Card"]`);
+        await assertRealmDropDownIsCorrect(assert);
+      });
+
+      test('read only realm is not present in realm drop down when creating card instance', async function (assert) {
+        await visitOperatorMode(this.owner);
+        await openNewFileModal('Card Instance', 'Published Workspace'); // TODO change this to "Test Workspace B" after default realm permissions are no longer wide open
+        await waitFor(`[data-test-selected-type="General Card"]`);
+        await assertRealmDropDownIsCorrect(assert);
+      });
+
+      test('read only realm is not present in realm drop down when duplicating card instance', async function (assert) {
+        await visitOperatorMode(this.owner, `${testRealmURL}Pet/mango.json`);
+        await waitForCodeEditor();
+        await waitFor(`[data-test-action-button="Duplicate"]`);
+        await click('[data-test-action-button="Duplicate"]');
+        await assertRealmDropDownIsCorrect(assert);
+      });
+
+      test('read only realm is not present in realm drop down when inheriting card definition', async function (assert) {
+        await visitOperatorMode(this.owner, `${testRealmURL}pet.gts`);
+        await waitForCodeEditor();
+        await waitFor(`[data-test-action-button="Inherit"]`);
+        await click('[data-test-action-button="Inherit"]');
+        await assertRealmDropDownIsCorrect(assert);
+      });
+
+      test('read only realm is not present in realm drop down when creating instance of card definition', async function (assert) {
+        await visitOperatorMode(this.owner, `${testRealmURL}pet.gts`);
+        await waitForCodeEditor();
+        await waitFor(`[data-test-action-button="Create Instance"]`);
+        await click('[data-test-action-button="Create Instance"]');
+        await assertRealmDropDownIsCorrect(assert);
+      });
+    },
+  );
 });

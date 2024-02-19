@@ -43,9 +43,7 @@ import {
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
 const testRealm2URL = `http://test-realm/test2/`;
-let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
-  [testRealmURL]: ['read', 'write'],
-};
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {};
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;

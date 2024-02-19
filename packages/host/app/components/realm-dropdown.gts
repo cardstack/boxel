@@ -58,7 +58,7 @@ export default class RealmDropdown extends Component<Signature> {
               @realmIconURL={{this.selectedRealm.iconURL}}
               @realmName={{this.selectedRealm.name}}
             />
-            <div class='selected-item'>
+            <div class='selected-item' data-test-selected-realm>
               {{this.selectedRealm.name}}
             </div>
           {{else}}
