@@ -64,7 +64,7 @@ const files: Record<string, any> = {
     import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
     import StringField from "https://cardstack.com/base/string";
 
-    export class Pet extends CardDef {
+    export default class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
 
@@ -78,7 +78,7 @@ const files: Record<string, any> = {
   'person.gts': `
     import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
     import StringField from "https://cardstack.com/base/string";
-    import { Pet } from "./pet";
+    import Pet from "./pet";
 
     export class Person extends CardDef {
       static displayName = 'Person';
@@ -149,7 +149,7 @@ const files: Record<string, any> = {
       meta: {
         adoptsFrom: {
           module: `../pet`,
-          name: 'Pet',
+          name: 'default',
         },
       },
     },
