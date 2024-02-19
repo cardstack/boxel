@@ -78,7 +78,7 @@ const files: Record<string, any> = {
   'person.gts': `
     import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
     import StringField from "https://cardstack.com/base/string";
-    import Pet from "./pet";
+    import { Pet } from "./pet";
 
     export class Person extends CardDef {
       static displayName = 'Person';
