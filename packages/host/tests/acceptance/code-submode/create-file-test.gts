@@ -1186,7 +1186,7 @@ export class TestCard extends CardDef {
           .split('\n');
         assert.deepEqual(
           menuItems,
-          ['Published Workspace', 'Test Workspace A'], // TODO remove "Published Workspace" after default realm persmissions are no longer wide open
+          ['Test Workspace A'],
           'the realm dropdown list is correct',
         );
       }
@@ -1249,7 +1249,7 @@ export class TestCard extends CardDef {
         );
         assert
           .dom('[data-test-selected-realm]')
-          .containsText('Published Workspace'); // TODO change this to "Test Workspace B" after default realm permissions are no longer wide open
+          .containsText('Test Workspace B');
         let menuItems = document
           .querySelector('[data-test-realm-dropdown-menu]')!
           .textContent!.replace(/^\s*/gm, '')
@@ -1257,7 +1257,7 @@ export class TestCard extends CardDef {
           .split('\n');
         assert.deepEqual(
           menuItems,
-          ['Published Workspace', 'Test Workspace B'], // TODO remove "Published Workspace" after default realm persmissions are no longer wide open
+          ['Test Workspace B'],
           'the realm dropdown list is correct',
         );
       }
@@ -1272,14 +1272,14 @@ export class TestCard extends CardDef {
 
       test('read only realm is not present in realm drop down when creating card definition', async function (assert) {
         await visitOperatorMode(this.owner);
-        await openNewFileModal('Card Definition', 'Published Workspace'); // TODO change this to "Test Workspace B" after default realm permissions are no longer wide open
+        await openNewFileModal('Card Definition', 'Test Workspace B');
         await waitFor(`[data-test-selected-type="General Card"]`);
         await assertRealmDropDownIsCorrect(assert);
       });
 
       test('read only realm is not present in realm drop down when creating card instance', async function (assert) {
         await visitOperatorMode(this.owner);
-        await openNewFileModal('Card Instance', 'Published Workspace'); // TODO change this to "Test Workspace B" after default realm permissions are no longer wide open
+        await openNewFileModal('Card Instance', 'Test Workspace B');
         await waitFor(`[data-test-selected-type="General Card"]`);
         await assertRealmDropDownIsCorrect(assert);
       });
