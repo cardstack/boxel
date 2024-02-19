@@ -326,7 +326,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('displays view all pill if attached card more than 3', async ({ page }) => {
+  test('displays view all pill if attached card more than 4', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     const testCard3 = `${testHost}/type-examples`;
@@ -342,8 +342,8 @@ test.describe('Room messages', () => {
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(3);
 
     await selectCardFromCatalog(page, testCard4);
-    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(3);
-    await expect(page.locator(`[data-test-view-all]`)).toHaveCount(1);
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(4);
+    await expect(page.locator(`[data-test-view-all]`)).toHaveCount(0);
 
     await selectCardFromCatalog(page, testCard5);
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(3);

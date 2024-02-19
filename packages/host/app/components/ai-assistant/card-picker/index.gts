@@ -30,7 +30,7 @@ interface Signature {
   };
 }
 
-const MAX_CARDS_TO_DISPLAY = 3;
+const MAX_CARDS_TO_DISPLAY = 4;
 export default class AiAssistantCardPicker extends Component<Signature> {
   <template>
     <div class='card-picker'>
@@ -163,10 +163,14 @@ export default class AiAssistantCardPicker extends Component<Signature> {
 
   @action
   private shouldDisplayCard(card: CardDef, index: number): boolean {
-    if (this.isViewAllAttachedCards) {
+    if (
+      this.isViewAllAttachedCards ||
+      this.cardsToDisplay.length <= MAX_CARDS_TO_DISPLAY
+    ) {
       return !!card.id;
     } else {
-      return !!card.id && index < MAX_CARDS_TO_DISPLAY;
+      // Displays the first three cards
+      return !!card.id && index < MAX_CARDS_TO_DISPLAY - 1;
     }
   }
 
