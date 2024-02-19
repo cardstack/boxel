@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import { click, fillIn, waitFor } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -9,7 +10,6 @@ import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
-import type Owner from '@ember/owner';
 
 import {
   percySnapshot,
