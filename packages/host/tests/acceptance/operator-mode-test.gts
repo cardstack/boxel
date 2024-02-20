@@ -34,6 +34,7 @@ import {
   MockMatrixService,
   setupMatrixServiceMock,
 } from '../helpers/mock-matrix-service';
+import { setupSessionServiceMock } from '../helpers/mock-session-service';
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -42,6 +43,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupOnSave(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
+  setupSessionServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');

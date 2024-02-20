@@ -24,10 +24,10 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
+import { claimsFromRawToken } from '@cardstack/host/services/session';
 
 import {
   percySnapshot,
@@ -41,6 +41,7 @@ import {
   visitOperatorMode,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupSessionServiceMock } from '../helpers/mock-session-service';
 
 const testRealm2URL = `http://test-realm/test2/`;
 let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {};
@@ -70,7 +71,8 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, () => realmPermissions);
+  setupMatrixServiceMock(hooks);
+  setupSessionServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');
@@ -83,7 +85,6 @@ module('Acceptance | interact submode tests', function (hooks) {
     window.localStorage.removeItem('recent-cards');
     window.localStorage.removeItem('recent-files');
     window.localStorage.removeItem('boxel-session');
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');

@@ -35,6 +35,7 @@ import {
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupSessionServiceMock } from '../../helpers/mock-session-service';
 
 let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
   [testRealmURL]: ['read', 'write'],
@@ -50,7 +51,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, () => realmPermissions);
+  setupMatrixServiceMock(hooks);
+  setupSessionServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');

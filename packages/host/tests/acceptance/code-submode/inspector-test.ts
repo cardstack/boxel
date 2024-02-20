@@ -45,6 +45,7 @@ import {
   setMonacoContent,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupSessionServiceMock } from '../../helpers/mock-session-service';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const realmAFiles: Record<string, any> = {
@@ -407,7 +408,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, () => realmPermissions);
+  setupMatrixServiceMock(hooks);
+  setupSessionServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');

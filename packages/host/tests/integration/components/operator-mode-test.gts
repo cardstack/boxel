@@ -44,6 +44,7 @@ import {
   setupMatrixServiceMock,
   MockMatrixService,
 } from '../../helpers/mock-matrix-service';
+import { setupSessionServiceMock } from '../../helpers/mock-session-service';
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -69,6 +70,7 @@ module('Integration | operator-mode', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
+  setupSessionServiceMock(hooks);
   let noop = () => {};
 
   hooks.afterEach(async function () {

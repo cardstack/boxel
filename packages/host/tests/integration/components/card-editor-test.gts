@@ -31,6 +31,7 @@ import {
   setupIntegrationTestRealm,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupSessionServiceMock } from '../../helpers/mock-session-service';
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -53,6 +54,7 @@ module('Integration | card-editor', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupMatrixServiceMock(hooks);
+  setupSessionServiceMock(hooks);
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;

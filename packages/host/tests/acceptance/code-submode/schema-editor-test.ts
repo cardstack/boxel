@@ -30,6 +30,7 @@ import {
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupSessionServiceMock } from '../../helpers/mock-session-service';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const indexCardSource = `
@@ -232,6 +233,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
+  setupSessionServiceMock(hooks);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');

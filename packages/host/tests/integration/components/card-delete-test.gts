@@ -30,6 +30,7 @@ import {
   setupIntegrationTestRealm,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupSessionServiceMock } from '../../helpers/mock-session-service';
 import { renderComponent } from '../../helpers/render-component';
 
 let loader: Loader;
@@ -76,6 +77,7 @@ module('Integration | card-delete', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
+  setupSessionServiceMock(hooks);
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
   });

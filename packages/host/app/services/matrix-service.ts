@@ -25,8 +25,6 @@ import {
   generatePatchCallSpecification,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
-
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
@@ -42,10 +40,9 @@ import type {
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
-import { clearAllRealmSessions } from '../resources/realm-session';
-
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
+import type SessionService from './session';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -63,8 +60,8 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service private declare session: SessionService;
   @tracked private _client: MatrixClient | undefined;
-  private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
@@ -153,7 +150,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
-      clearAllRealmSessions();
+      this.session.logout();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -235,36 +232,6 @@ export default class MatrixService extends Service {
         await this.logout();
       }
     }
-  }
-
-  public async createRealmSession(realmURL: URL) {
-    await this.ready;
-
-    let inflightAuth = this.realmSessionTasks.get(realmURL.href);
-
-    if (inflightAuth) {
-      return inflightAuth;
-    }
-
-    let realmAuthClient = new RealmAuthClient(
-      realmURL,
-      this.client,
-      this.loaderService.loader,
-    );
-
-    let jwtPromise = realmAuthClient.getJWT();
-
-    this.realmSessionTasks.set(realmURL.href, jwtPromise);
-
-    jwtPromise
-      .then(() => {
-        this.realmSessionTasks.delete(realmURL.href);
-      })
-      .catch(() => {
-        this.realmSessionTasks.delete(realmURL.href);
-      });
-
-    return jwtPromise;
   }
 
   async createRoom(

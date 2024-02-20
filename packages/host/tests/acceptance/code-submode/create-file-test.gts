@@ -25,6 +25,7 @@ import {
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupSessionServiceMock } from '../../helpers/mock-session-service';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
@@ -184,7 +185,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     menuSelection: string,
     expectedRealmName = 'Test Workspace A',
   ) {
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
+    await waitForCodeEditor();
     await waitFor('[data-test-new-file-button]');
     await click('[data-test-new-file-button]');
     await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
@@ -218,7 +219,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, () => realmPermissions);
+  setupMatrixServiceMock(hooks);
+  setupSessionServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');

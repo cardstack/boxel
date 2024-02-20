@@ -31,6 +31,10 @@ class MockClient {
     this.displayname = displayname;
   }
 
+  get isLoggedIn() {
+    return this.userId !== undefined;
+  }
+
   public getProfileInfo(_userId: string | null) {
     return Promise.resolve({
       displayname: this.displayname,
@@ -53,11 +57,7 @@ class MockClient {
     return this.userId;
   }
 }
-function generateMockMatrixService(
-  realmPermissions?: () => {
-    [realmURL: string]: ('read' | 'write')[];
-  },
-) {
+function generateMockMatrixService() {
   class MockMatrixService extends Service implements MockMatrixService {
     @service declare loaderService: LoaderService;
     lastMessageSent: any;
@@ -78,28 +78,6 @@ function generateMockMatrixService(
     }
     get userId() {
       return this.client.getUserId();
-    }
-
-    async createRealmSession(realmURL: URL) {
-      let secret = "shhh! it's a secret";
-      let nowInSeconds = Math.floor(Date.now() / 1000);
-      let expires = nowInSeconds + 60 * 60;
-      let header = { alg: 'none', typ: 'JWT' };
-      let payload = {
-        iat: nowInSeconds,
-        exp: expires,
-        user: this.userId,
-        realm: realmURL.href,
-        permissions: realmPermissions?.()[realmURL.href] ?? ['read', 'write'],
-      };
-      let stringifiedHeader = JSON.stringify(header);
-      let stringifiedPayload = JSON.stringify(payload);
-      let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
-        stringifiedPayload,
-      )}`;
-      // this is our silly JWT--we don't sign with crypto since we are running in the
-      // browser so the secret is the signature
-      return Promise.resolve(`${headerAndPayload}.${secret}`);
     }
 
     async createRoom(
@@ -184,17 +162,9 @@ function generateMockMatrixService(
   return MockMatrixService;
 }
 
-export function setupMatrixServiceMock(
-  hooks: NestedHooks,
-  realmPermissions?: () => {
-    [realmURL: string]: ('read' | 'write')[];
-  },
-) {
+export function setupMatrixServiceMock(hooks: NestedHooks) {
   hooks.beforeEach(function () {
-    this.owner.register(
-      'service:matrixService',
-      generateMockMatrixService(realmPermissions),
-    );
+    this.owner.register('service:matrixService', generateMockMatrixService());
     let matrixService = this.owner.lookup(
       'service:matrixService',
     ) as MockMatrixService;
