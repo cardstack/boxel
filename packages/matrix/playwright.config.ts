@@ -13,7 +13,7 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 1 : 0,
   workers: 1,
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -45,10 +45,10 @@ export default defineConfig({
     },
   ],
   // General timeout per test
-  timeout: 120000,
+  timeout: 30000,
 
   // For expect calls
   expect: {
-    timeout: 60000,
+    timeout: 30000,
   },
 });
