@@ -128,12 +128,21 @@ test.describe('Room messages', () => {
 
   // TODO remove this!!
   test.only('can add a card to a markdown message', async ({ page }) => {
-    test.slow();
+    // from https://github.com/microsoft/playwright/issues/13090 if you are
+    // encountering "target closed" errors on .click() in GH actions but not
+    // locally, using `test.slow()` can work around the issue. which appears to
+    // be that the test takes longer than the global timeout. All the tests that
+    // are selecting a card from the catalog seems to be encountering this.
+    // test.slow();
+
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await createRoom(page);
 
     await page.locator('[data-test-choose-card-btn]').click();
+    await expect(page.locator(`[data-test-select="${testCard}"]`)).toHaveCount(
+      1,
+    ); // this triggers a wait for this element
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
