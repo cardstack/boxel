@@ -617,6 +617,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Add a card to the left stack
       await click('[data-test-add-card-left-stack]');
 
+      assert.dom('[data-test-search-field]').isFocused();
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
