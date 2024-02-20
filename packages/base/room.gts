@@ -457,7 +457,6 @@ export class RoomField extends FieldDef {
         };
         let messageField = undefined;
         if (event.content.msgtype === 'org.boxel.message') {
-          console.log(event.content);
           // Safely skip over cases that don't have attached cards or a data type
           let cardDocs = event.content.data?.attachedCards
             ? event.content.data.attachedCards
