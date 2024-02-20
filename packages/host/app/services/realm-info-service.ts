@@ -107,14 +107,16 @@ export default class RealmInfoService extends Service {
 
         let realmInfo = (await realmInfoResponse.json())?.data
           ?.attributes as RealmInfo;
-        let realmSession = getRealmSession(this, {
-          realmURL: () => new URL(realmURLString!),
-        });
-        await realmSession.loaded;
+        // let realmSession = getRealmSession(this, {
+        //   realmURL: () => new URL(realmURLString!),
+        // });
+        // await realmSession.loaded;
         this.cachedRealmInfos.set(realmURLString, {
           ...realmInfo,
-          canRead: !!realmSession.canRead,
-          canWrite: !!realmSession.canWrite,
+          // canRead: !!realmSession.canRead,
+          // canWrite: !!realmSession.canWrite,
+          canRead: true,
+          canWrite: true,
         });
         return realmInfo;
       }

@@ -51,6 +51,6 @@ export default defineConfig({
 
   // For expect calls
   expect: {
-    timeout: 60000,
+    timeout: 30000,
   },
 });
