@@ -205,6 +205,9 @@ export default class OperatorModeContainer extends Component<Signature> {
       :global(.operator-mode .boxel-modal__inner) {
         display: block;
       }
+      :global(.input-container .invalid + .validation-icon-container) {
+        display: none;
+      }
       .operator-mode {
         min-width: var(--operator-mode-min-width);
       }
