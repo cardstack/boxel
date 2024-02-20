@@ -35,7 +35,7 @@ export default class AiAssistantCardPicker extends Component<Signature> {
   <template>
     <div class='card-picker'>
       {{#each this.cardsToDisplay as |card i|}}
-        {{#if (this.shouldDisplayCard card i)}}
+        {{#if (this.isCardDisplayed card i)}}
           <Pill
             @inert={{true}}
             class={{cn
@@ -81,7 +81,7 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           @inert={{true}}
           class='card-pill view-all'
           data-test-view-all
-          {{on 'click' this.toogleViewAllAttachedCards}}
+          {{on 'click' this.toggleViewAllAttachedCards}}
         >
           <:default>
             <div class='card-title'>
@@ -157,19 +157,20 @@ export default class AiAssistantCardPicker extends Component<Signature> {
   @tracked isViewAllAttachedCards = false;
 
   @action
-  private toogleViewAllAttachedCards() {
+  private toggleViewAllAttachedCards() {
     this.isViewAllAttachedCards = !this.isViewAllAttachedCards;
   }
 
   @action
-  private shouldDisplayCard(card: CardDef, index: number): boolean {
+  private isCardDisplayed(card: CardDef, index: number): boolean {
     if (
       this.isViewAllAttachedCards ||
       this.cardsToDisplay.length <= MAX_CARDS_TO_DISPLAY
     ) {
       return !!card.id;
     } else {
-      // Displays the first three cards
+      // If attached cards more than four,
+      // displays the first three cards.
       return !!card.id && index < MAX_CARDS_TO_DISPLAY - 1;
     }
   }
