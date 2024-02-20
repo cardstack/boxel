@@ -461,15 +461,19 @@ export class RoomField extends FieldDef {
           command: null,
         };
         let messageField = undefined;
-        if (event.content.msgtype === 'org.boxel.card') {
-          let cardDocs = event.content.data.instances;
+        if (event.content.msgtype === 'org.boxel.message') {
+          console.log(event.content);
+          // Safely skip over cases that don't have attached cards or a data type
+          let cardDocs = event.content.data?.attachedCards
+            ? event.content.data.attachedCards
+            : [];
           let attachedCardIds: string[] = [];
           cardDocs.map((c) => {
             if (c.data.id) {
               attachedCardIds.push(c.data.id);
             }
           });
-          if (attachedCardIds.length === 0) {
+          if (attachedCardIds.length < cardDocs.length) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
           messageField = new MessageField({
@@ -649,12 +653,20 @@ interface CardMessageEvent extends BaseMatrixEvent {
       rel_type: string;
       event_id: string;
     };
-    msgtype: 'org.boxel.card';
+    msgtype: 'org.boxel.message';
     format: 'org.matrix.custom.html';
     body: string;
     formatted_body: string;
     data: {
-      instances: LooseSingleCardDocument[];
+      openCards: LooseSingleCardDocument[];
+      attachedCards: LooseSingleCardDocument[];
+      functions: {
+        name: string;
+        description: string;
+        required: string[];
+        parameters: JSONObject;
+      };
+      submode: string;
     };
   };
   unsigned: {
