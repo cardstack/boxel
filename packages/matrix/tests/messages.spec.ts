@@ -133,6 +133,7 @@ test.describe('Room messages', () => {
     await createRoom(page);
 
     await page.locator('[data-test-choose-card-btn]').click();
+    await expect(page.locator(`[data-test-card-catalog]`)).toHaveCount(1); // this triggers a wait for this element
     await expect(page.locator(`[data-test-select="${testCard}"]`)).toHaveCount(
       1,
     ); // this triggers a wait for this element
