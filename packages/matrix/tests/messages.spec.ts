@@ -128,6 +128,7 @@ test.describe('Room messages', () => {
 
   // TODO remove this!!
   test.only('can add a card to a markdown message', async ({ page }) => {
+    test.slow();
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await createRoom(page);
