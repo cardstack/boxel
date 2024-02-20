@@ -42,7 +42,7 @@ module.exports = function (environment) {
     // This is temporary until we have a better way to discover realms besides
     // our own
     otherRealmURLs: [
-      // ownRealmURL,
+      ownRealmURL,
       ...(process.env.OTHER_REALM_URLS
         ? process.env.OTHER_REALM_URLS.split(',').map((u) => u.trim())
         : []),
