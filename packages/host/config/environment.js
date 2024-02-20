@@ -43,7 +43,7 @@ module.exports = function (environment) {
     // our own
     otherRealmURLs: [
       ownRealmURL,
-      ...(environment !== 'test' && process.env.OTHER_REALM_URLS
+      ...(process.env.OTHER_REALM_URLS
         ? process.env.OTHER_REALM_URLS.split(',').map((u) => u.trim())
         : []),
     ],
