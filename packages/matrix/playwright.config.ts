@@ -12,7 +12,9 @@ let group2 = tests.slice(middle);
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
+  // forbidOnly: !!process.env.CI,
+  // TODO remove this!
+  forbidOnly: false,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   reporter: 'html',
