@@ -24,6 +24,7 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
@@ -48,6 +49,23 @@ let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
+  let onFetch: ((req: Request, body: string) => void) | undefined;
+  function wrappedOnFetch() {
+    return async (req: Request) => {
+      if (!onFetch) {
+        return Promise.resolve(req);
+      }
+      let { headers, method } = req;
+      let body = await req.text();
+      onFetch(req, body);
+      // need to return a new request since we just read the body
+      return new Request(req.url, {
+        method,
+        headers,
+        ...(body ? { body } : {}),
+      });
+    };
+  }
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -201,6 +219,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     ({ realm } = await setupAcceptanceTestRealm({
       loader,
+      onFetch: wrappedOnFetch(),
       contents: {
         'address.gts': { Address },
         'person.gts': { Person },
@@ -783,10 +802,6 @@ module('Acceptance | interact submode tests', function (hooks) {
           stacks: [
             [
               {
-                id: `${testRealmURL}Person/fadhlan`,
-                format: 'isolated',
-              },
-              {
                 id: `${testRealmURL}Pet/mango`,
                 format: 'isolated',
               },
@@ -795,6 +810,45 @@ module('Acceptance | interact submode tests', function (hooks) {
         });
 
         assert.dom('[data-test-edit-button]').doesNotExist();
+      });
+
+      test('the delete item is not present in "..." menu of stack item', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+        await waitFor('[data-test-more-options-button]');
+        await click('[data-test-more-options-button]');
+        assert
+          .dom('[data-test-boxel-menu-item-text="Delete"]')
+          .doesNotExist('delete menu item is not rendered');
+      });
+
+      test('the "..."" menu does not exist for card overlay in index view (since delete is the only item in this menu)', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}index`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+        await waitFor(
+          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+        );
+        assert
+          .dom(
+            `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
+          )
+          .doesNotExist('"..." menu does not exist');
       });
     });
   });
@@ -824,12 +878,108 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+      onFetch = (req, _body) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          let token = req.headers.get('Authorization');
+          assert.notStrictEqual(token, null);
+
+          let claims = claimsFromRawToken(token!);
+          assert.deepEqual(claims.user, '@testuser:staging');
+          assert.strictEqual(claims.realm, 'http://test-realm/test2/');
+          assert.deepEqual(claims.permissions, ['read', 'write']);
+        }
+      };
+
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-edit-button]')
         .doesNotExist();
       assert
         .dom('[data-test-operator-mode-stack="1"] [data-test-edit-button]')
         .exists();
+      await click(
+        '[data-test-operator-mode-stack="1"] [data-test-edit-button]',
+      );
+      await fillIn(
+        '[data-test-operator-mode-stack="1"] [data-test-field="name"] [data-test-boxel-input]',
+        'Updated Ringo',
+      );
+      await click(
+        '[data-test-operator-mode-stack="1"] [data-test-edit-button]',
+      );
+    });
+
+    test('the delete item in "..." menu of stack item respects realm permissions of the cards in differing realms', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              id: `${testRealm2URL}Pet/ringo`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await waitFor(
+        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+      );
+      await click(
+        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+      );
+      assert
+        .dom('[data-test-boxel-menu-item-text="Delete"]')
+        .doesNotExist('delete menu item is not rendered');
+
+      await waitFor(
+        '[data-test-operator-mode-stack="1"] [data-test-more-options-button]',
+      );
+      await click(
+        '[data-test-operator-mode-stack="1"] [data-test-more-options-button]',
+      );
+      assert
+        .dom('[data-test-boxel-menu-item-text="Delete"]')
+        .exists('delete menu is rendered');
+    });
+
+    test('the "..."" menu for card overlay in index view respects realm permissions of cards in differing realms', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              id: `${testRealm2URL}index`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await waitFor(
+        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      );
+      assert
+        .dom(
+          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
+        )
+        .doesNotExist('"..." menu does not exist');
+
+      await waitFor(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"]`,
+      );
+      assert
+        .dom(
+          `[data-test-operator-mode-stack="1"] [data-test-overlay-card="${testRealm2URL}Pet/ringo"] button.more-actions`,
+        )
+        .exists('"..." menu exists');
     });
   });
 

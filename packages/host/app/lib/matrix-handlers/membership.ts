@@ -5,7 +5,7 @@ import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/b
 
 import { eventDebounceMs } from '../matrix-utils';
 
-import { type Context, addRoomEvent, recomputeRoomObjective } from './index';
+import { type Context, addRoomEvent } from './index';
 
 export function onMembership(context: Context) {
   return (event: MatrixEvent, member: RoomMember) => {
@@ -84,8 +84,6 @@ async function drainMembership(context: Context) {
         }
       }
     }
-
-    await recomputeRoomObjective(context, roomId);
   }
 
   eventsDrained!();

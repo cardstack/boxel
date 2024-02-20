@@ -604,11 +604,17 @@ export class Realm {
     try {
       json = JSON.parse(body);
     } catch (e) {
-      return badRequest(this, `Request body is not valid JSON`);
+      return badRequest(
+        this,
+        JSON.stringify({ errors: [`Request body is not valid JSON`] }),
+      );
     }
     let { user, challenge } = json as { user?: string; challenge?: string };
     if (!user) {
-      return badRequest(this, `Request body missing 'user' property`);
+      return badRequest(
+        this,
+        JSON.stringify({ errors: [`Request body missing 'user' property`] }),
+      );
     }
 
     if (challenge) {
@@ -635,7 +641,7 @@ export class Realm {
     hash.update(challenge);
     hash.update(this.#realmSecretSeed);
     let hashedChallenge = uint8ArrayToHex(await hash.digest());
-    await this.#matrixClient.sendRoomEvent(roomId, 'm.room.message', {
+    await this.#matrixClient.sendEvent(roomId, 'm.room.message', {
       body: `auth-challenge: ${hashedChallenge}`,
       msgtype: 'm.text',
     });
@@ -664,7 +670,9 @@ export class Realm {
     if (!roomId) {
       return badRequest(
         this,
-        `No challenge previously issued for user ${user}`,
+        JSON.stringify({
+          errors: [`No challenge previously issued for user ${user}`],
+        }),
       );
     }
 
@@ -687,7 +695,7 @@ export class Realm {
       (m) => {
         return (
           m.type === 'm.room.message' &&
-          m.sender === this.#matrixClient.userId &&
+          m.sender === this.#matrixClient.getUserId() &&
           m.content.body.startsWith('auth-challenge:') &&
           m.origin_server_ts > oneMinuteAgo
         );
@@ -708,13 +716,18 @@ export class Realm {
     );
 
     if (!latestAuthChallengeMessage) {
-      return badRequest(this, `No challenge found for user ${user}`);
+      return badRequest(
+        this,
+        JSON.stringify({ errors: [`No challenge found for user ${user}`] }),
+      );
     }
 
     if (!latestAuthResponseMessage) {
       return badRequest(
         this,
-        `No challenge response response found for user ${user}`,
+        JSON.stringify({
+          errors: [`No challenge response response found for user ${user}`],
+        }),
       );
     }
 
@@ -749,9 +762,21 @@ export class Realm {
         },
       });
     } else {
-      return createResponse(this, `user ${user} failed auth challenge`, {
-        status: 401,
-      });
+      return createResponse(
+        this,
+        JSON.stringify({
+          errors: [
+            `user ${user} failed auth challenge: latest challenge message: "${JSON.stringify(
+              latestAuthChallengeMessage,
+            )}", latest response message: "${JSON.stringify(
+              latestAuthResponseMessage,
+            )}"`,
+          ],
+        }),
+        {
+          status: 401,
+        },
+      );
     }
   }
 
@@ -942,6 +967,8 @@ export class Realm {
   ) {
     // If the realm is public readable or writable, do not require a JWT
     if (
+      request.url.endsWith('_session') ||
+      request.method === 'HEAD' ||
       (neededPermission === 'read' &&
         this.#permissions['*']?.includes('read')) ||
       (neededPermission === 'write' &&

@@ -26,6 +26,10 @@ import {
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
+  [testRealmURL]: ['read', 'write'],
+};
+
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
 
@@ -192,13 +196,14 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, () => realmPermissions);
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
   });
 
   hooks.beforeEach(async function () {
+    realmPermissions = { [testRealmURL]: ['read', 'write'] };
     window.localStorage.removeItem('recent-files');
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -338,7 +343,11 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
-    assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
+    assert
+      .dom('[data-test-realm-name]')
+      .hasText(`In ${realmInfo.name}`)
+      .hasAttribute('title', `In ${realmInfo.name}`);
+    assert.dom('[data-test-realm-writable]').exists();
 
     await waitFor('[data-test-file="pet-person.gts"]');
 
@@ -351,6 +360,32 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await click('[data-test-file="Person/1.json"]');
 
     assert.dom('[data-test-person]').exists();
+  });
+
+  module('when the user lacks write permissions', function (hooks) {
+    hooks.beforeEach(function () {
+      realmPermissions = { [testRealmURL]: ['read'] };
+    });
+
+    test('it is reflected in the realm header', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/1`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealmURL}Person/1.json`,
+      });
+
+      await waitForCodeEditor();
+      await waitFor('[data-test-realm-name]');
+      assert.dom('[data-test-realm-not-writable]').exists();
+    });
   });
 
   test('navigating to a file in a different realm causes it to become active in the file tree', async function (assert) {

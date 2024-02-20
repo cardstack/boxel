@@ -28,6 +28,7 @@ import IconInherit from './icons/icon-inherit.gts';
 import IconLink from './icons/icon-link.gts';
 import IconMinusCircle from './icons/icon-minus-circle.gts';
 import IconPencil from './icons/icon-pencil.gts';
+import IconPencilCrossedOut from './icons/icon-pencil-crossed-out.gts';
 import IconPlus from './icons/icon-plus.gts';
 import IconPlusCircle from './icons/icon-plus-circle.gts';
 import IconSearch from './icons/icon-search.gts';
@@ -70,6 +71,7 @@ export const ALL_ICON_COMPONENTS = [
   IconLink,
   IconMinusCircle,
   IconPencil,
+  IconPencilCrossedOut,
   IconPlus,
   IconPlusCircle,
   IconSearch,
@@ -113,6 +115,7 @@ export {
   IconLink,
   IconMinusCircle,
   IconPencil,
+  IconPencilCrossedOut,
   IconPlus,
   IconPlusCircle,
   IconSearch,

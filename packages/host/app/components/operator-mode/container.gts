@@ -166,7 +166,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     >
       <CardCatalogModal />
       {{#if this.loadMatrix.isRunning}}
-        <div class='loading'>
+        <div class='loading' data-test-initializing-operator-mode>
           <LoadingIndicator @color='var(--boxel-light)' />
           <span class='loading__message'>Initializing Operator Mode...</span>
         </div>
@@ -204,6 +204,9 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;
+      }
+      :global(.input-container .invalid + .validation-icon-container) {
+        display: none;
       }
       .operator-mode {
         min-width: var(--operator-mode-min-width);
