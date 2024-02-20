@@ -126,8 +126,7 @@ test.describe('Room messages', () => {
     ).toHaveValue('room 2 message');
   });
 
-  // TODO remove this!!
-  test.only('can add a card to a markdown message', async ({ page }) => {
+  test('can add a card to a markdown message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await createRoom(page);

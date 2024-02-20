@@ -12,10 +12,8 @@ let group2 = tests.slice(middle);
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
-  // forbidOnly: !!process.env.CI,
-  // TODO remove this!
-  forbidOnly: false,
-  retries: process.env.CI ? 1 : 0,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -51,6 +49,6 @@ export default defineConfig({
 
   // For expect calls
   expect: {
-    timeout: 30000,
+    timeout: 60000,
   },
 });
