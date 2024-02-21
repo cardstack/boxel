@@ -1,3 +1,4 @@
+import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -83,6 +84,17 @@ export class RealmSessionResource extends Resource<Args> {
       realm,
       setTimeout(() => {
         sessionExpirations.delete(realm);
+        // There is no guarantee that this resource wont be destroyed by the
+        // time session expires, so we should guard for that. if the session is
+        // unable to be refreshed, the next realm session resource created will
+        // obtain a new session. We could use EC to manage the session refresh,
+        // but then logging out would be very awkward in that you'd need a
+        // mechanism with a different lifetime than this resource to hold
+        // pointers to all the sessions resources' timer task cancellations when
+        // logging out.
+        if (isDestroyed(this) || isDestroying(this)) {
+          return;
+        }
         this.getToken.perform(new URL(realm));
       }, refreshMs) as unknown as number,
     ); // don't use NodeJS Timeout type
