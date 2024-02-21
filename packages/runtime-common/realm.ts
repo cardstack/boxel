@@ -302,7 +302,6 @@ export class Realm {
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.loaderTemplate = loader;
-    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -611,18 +610,6 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  // TODO: why is this handler needed?
-  async maybeHandle(request: Request): Promise<Response | null> {
-    if (!this.paths.inRealm(new URL(request.url))) {
-      return null;
-    }
-    return await this.internalHandle(request, false);
-  }
-
-  async handle(request: Request): Promise<ResponseWithNodeStream> {
-    return this.internalHandle(request, false);
-  }
-
   private async createSession(request: Request) {
     if (!(await this.#matrixClient.isTokenValid())) {
       await this.#matrixClient.login();
@@ -822,13 +809,12 @@ export class Realm {
     );
   }
 
-  private async internalHandle(
-    request: Request,
-    isLocal: boolean, // TODO: is this needed?
-  ): Promise<ResponseWithNodeStream> {
+  async handle(request: Request): Promise<ResponseWithNodeStream> {
     try {
+      let isLocal = this.isRequestFromItself(request);
+
       // local requests are allowed to query the realm as the index is being built up
-      if (!isLocal && !this.isRequestFromItself(request)) {
+      if (!isLocal) {
         await this.ready;
 
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
@@ -876,6 +862,8 @@ export class Realm {
     }
 
     let handle = maybeHandle;
+
+    // TODO: Add authorization check here?
 
     if (
       executableExtensions.some((extension) =>
