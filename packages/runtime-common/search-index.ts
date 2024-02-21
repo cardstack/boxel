@@ -270,6 +270,7 @@ export class SearchIndex {
           realmAuthClient: new RealmAuthClient(
             new URL(targetRealmURLString),
             this.#realm.matrixClient,
+            this.#index.loader,
           ),
         };
 
