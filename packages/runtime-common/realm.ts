@@ -79,6 +79,7 @@ import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 import { MatrixClient, waitForMatrixMessage } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
+import * as crypto from 'crypto';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
@@ -253,6 +254,14 @@ export class Realm {
     return this.paths.url;
   }
 
+  get matrixClient() {
+    return this.#matrixClient;
+  }
+
+  get realmSecretSeed() {
+    return this.#realmSecretSeed;
+  }
+
   get writableFileExtensions(): string[] {
     // We include .json (card instance data) because we want to allow the
     // card instance data to be overwritten directly (by the code editor) and not go
@@ -358,6 +367,19 @@ export class Realm {
     if (!opts?.deferStartUp) {
       this.#startedUp.fulfill((() => this.#startup())());
     }
+  }
+
+  publicEndpoints = [
+    { path: '/_session', method: 'POST' },
+    { path: '/_readiness-check', method: 'GET' },
+  ];
+
+  private isRequestToPublicEndpoint(request: Request) {
+    return this.publicEndpoints.some(
+      (endpoint) =>
+        request.url.endsWith(endpoint.path) &&
+        request.method === endpoint.method,
+    );
   }
 
   // it's only necessary to call this when the realm is using a deferred startup
@@ -584,11 +606,12 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
+  // TODO: why is this handler needed?
   async maybeHandle(request: Request): Promise<Response | null> {
     if (!this.paths.inRealm(new URL(request.url))) {
       return null;
     }
-    return await this.internalHandle(request, true);
+    return await this.internalHandle(request, false);
   }
 
   async handle(request: Request): Promise<ResponseWithNodeStream> {
@@ -780,20 +803,36 @@ export class Realm {
     }
   }
 
+  private isRequestFromItself(request: Request) {
+    // This header is set by the realm itself when it makes requests to itself during indexing (a signed url is used)
+    let header = request.headers.get('X-Boxel-Realm-Signature');
+
+    return (
+      header &&
+      header ===
+        crypto
+          .createHmac('sha256', this.#realmSecretSeed)
+          .update(this.url)
+          .digest('hex')
+    );
+  }
+
   private async internalHandle(
     request: Request,
-    isLocal: boolean,
+    isLocal: boolean, // TODO: is this needed?
   ): Promise<ResponseWithNodeStream> {
     try {
       // local requests are allowed to query the realm as the index is being built up
-      if (!isLocal) {
+      if (!isLocal && !this.isRequestFromItself(request)) {
         await this.ready;
 
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
           request.method,
         );
+
         await this.checkPermission(request, isWrite ? 'write' : 'read');
       }
+
       if (!this.searchIndex) {
         return systemError(this, 'search index is not available');
       }
@@ -804,13 +843,13 @@ export class Realm {
       }
     } catch (e) {
       if (e instanceof AuthenticationError) {
-        return new Response(`Authentication error: ${e.message}`, {
+        return createResponse(this, `Authentication error: ${e.message}`, {
           status: 401,
         });
       }
 
       if (e instanceof AuthorizationError) {
-        return new Response(`Authorization error: ${e.message}`, {
+        return createResponse(this, `Authorization error: ${e.message}`, {
           status: 403,
         });
       }
@@ -967,8 +1006,7 @@ export class Realm {
   ) {
     // If the realm is public readable or writable, do not require a JWT
     if (
-      request.url.endsWith('_session') ||
-      request.method === 'HEAD' ||
+      this.isRequestToPublicEndpoint(request) ||
       (neededPermission === 'read' &&
         this.#permissions['*']?.includes('read')) ||
       (neededPermission === 'write' &&

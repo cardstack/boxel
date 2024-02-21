@@ -136,13 +136,18 @@ export class Loader {
   private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
 
-  static cloneLoader(loader: Loader): Loader {
+  static cloneLoader(loader: Loader, urlHandlers?: RequestHandler[]): Loader {
     let clone = new Loader();
     clone.urlHandlers = loader.urlHandlers;
     clone.urlMappings = loader.urlMappings;
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
     }
+
+    if (urlHandlers) {
+      clone.prependURLHandlers(urlHandlers);
+    }
+
     return clone;
   }
 

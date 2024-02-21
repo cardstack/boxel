@@ -32,6 +32,9 @@ import {
   type Saved,
 } from './card-document';
 
+import { RealmAuthClient } from './realm-auth-client';
+import crypto from 'crypto';
+
 export interface Reader {
   readFileAsText: (
     path: LocalPath,
@@ -160,6 +163,14 @@ export class SearchIndex {
         onInvalidation?: (invalidatedURLs: URL[]) => void,
       ) => Promise<RunState>)
     | undefined;
+  #visitedRealms = new Map<
+    string,
+    {
+      isPublicReadable: boolean;
+      realmAuthClient?: RealmAuthClient;
+      url: string;
+    }
+  >();
 
   constructor(
     realm: Realm,
@@ -179,7 +190,9 @@ export class SearchIndex {
     this.#runner = runner;
     this.#index = {
       realmURL: new URL(realm.url),
-      loader: Loader.cloneLoader(realm.loaderTemplate),
+      loader: Loader.cloneLoader(realm.loaderTemplate, [
+        this.fetchWithAuth.bind(this),
+      ]),
       ignoreMap: new URLMap(),
       ignoreMapContents: new URLMap(),
       instances: new URLMap(),
@@ -190,6 +203,111 @@ export class SearchIndex {
         moduleErrors: 0,
       },
     };
+  }
+
+  private async fetchWithAuth(request: Request) {
+    if (
+      request.url.endsWith('_session') ||
+      request.method === 'HEAD' ||
+      request.headers.has('Authorization') ||
+      request.headers.has('x-boxel-realm-signature')
+    ) {
+      return null; // Prevent infinite recursion when loader.fetch calls this handler again - fetchWithAuth from here on already added what it needed to
+    }
+
+    let isLocal = this.#realm.paths.inRealm(new URL(request.url)); // Will this be a request to itself? If so, add a signature so the realm handler will be able to verify the request so it can be trusted without checking permissions
+    if (isLocal) {
+      // Do not authenticate, just sign the request so the realm handler can verify the request is from itself
+      request.headers.set(
+        'x-boxel-realm-signature',
+        crypto
+          .createHmac('sha256', this.#realm.realmSecretSeed)
+          .update(this.#realm.url)
+          .digest('hex'),
+      );
+      return await this.#index.loader.fetch(request.url, {
+        method: request.method,
+        headers: new Headers(request.headers),
+      });
+    } else {
+      let targetRealm: {
+        isPublicReadable: boolean;
+        realmAuthClient?: RealmAuthClient;
+        url: string;
+      };
+
+      let visitedRealmURLString = Array.from(this.#visitedRealms.keys()).find(
+        (key) => {
+          return request.url.includes(key);
+        },
+      );
+
+      if (visitedRealmURLString) {
+        targetRealm = this.#visitedRealms.get(visitedRealmURLString)!;
+      } else {
+        let targetRealmPingResponse = await this.#index.loader.fetch(
+          request.url,
+          {
+            method: 'HEAD',
+          },
+        );
+
+        let targetRealmURLString =
+          targetRealmPingResponse.headers.get('x-boxel-realm-url');
+        let isPublicReadable = Boolean(
+          targetRealmPingResponse.headers.get('x-boxel-realm-public-readable'),
+        );
+
+        if (!targetRealmURLString) {
+          throw new Error(
+            `The response from ${request.url} needs to include x-boxel-realm-url`,
+          );
+        }
+
+        targetRealm = {
+          isPublicReadable,
+          url: targetRealmURLString,
+          realmAuthClient: new RealmAuthClient(
+            new URL(targetRealmURLString),
+            this.#realm.matrixClient,
+          ),
+        };
+
+        this.#visitedRealms.set(targetRealmURLString, targetRealm);
+      }
+
+      if (!targetRealm || !targetRealm.realmAuthClient) {
+        throw new Error(
+          `bug: should not have been able to get here without a visitedRealm without an auth client`,
+        );
+      }
+
+      if (targetRealm.isPublicReadable && request.method === 'GET') {
+        return null; // No need to add auth header for GET to public readable realms
+      } else {
+        if (!this.#realm.matrixClient.isLoggedIn()) {
+          await this.#realm.matrixClient.login();
+        }
+        let jwt = await targetRealm.realmAuthClient.getJWT(); // This will use a cached JWT from the realm auth client or create a new one if it's expired or about to expire
+        request.headers.set('Authorization', jwt);
+      }
+
+      let isBodyIncluded = ['POST', 'PATCH', 'PUT'].includes(request.method);
+      let body;
+      if (isBodyIncluded) {
+        if (request.headers.get('content-type') === 'application/json') {
+          body = JSON.stringify(await request.json());
+        } else {
+          body = await request.text();
+        }
+      }
+
+      return await this.#index.loader.fetch(request.url, {
+        method: request.method,
+        headers: new Headers(request.headers),
+        body,
+      });
+    }
   }
 
   get stats() {
@@ -216,7 +334,9 @@ export class SearchIndex {
         ignoreMap: current.ignoreMap,
         realmURL: current.realmURL,
         stats: current.stats,
-        loader: Loader.cloneLoader(this.#realm.loaderTemplate),
+        loader: Loader.cloneLoader(this.#realm.loaderTemplate, [
+          this.fetchWithAuth.bind(this),
+        ]),
       };
     });
   }
@@ -245,7 +365,9 @@ export class SearchIndex {
         ignoreMapContents: current.ignoreMapContents,
         realmURL: current.realmURL,
         stats: current.stats,
-        loader: Loader.cloneLoader(this.#realm.loaderTemplate),
+        loader: Loader.cloneLoader(this.#realm.loaderTemplate, [
+          this.fetchWithAuth.bind(this),
+        ]),
       };
     });
   }
