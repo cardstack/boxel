@@ -1145,6 +1145,7 @@ module('Realm Server', function (hooks) {
         }
         if (!maybeId) {
           assert.ok(false, 'new card identifier was undefined');
+          // eslint-disable-next-line qunit/no-early-return
           return;
         }
         let id = maybeId;
