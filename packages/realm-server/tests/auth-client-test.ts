@@ -61,12 +61,13 @@ module('realm-auth-client', function (assert) {
   test('it authenticates and caches the jwt until it expires', async function (assert) {
     let jwtFromClient = await client.getJWT();
 
-    assert.ok(
-      jwtFromClient.split('.').length === 3,
+    assert.strictEqual(
+      jwtFromClient.split('.').length,
+      3,
       'jwtFromClient looks like a jwt',
     );
 
-    assert.equal(
+    assert.strictEqual(
       jwtFromClient,
       await client.getJWT(),
       'jwt is the same which means it is cached until it is about to expire',

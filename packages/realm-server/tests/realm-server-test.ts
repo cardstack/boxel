@@ -657,11 +657,7 @@ module('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let cardFile = join(dir.name, entry);
-        assert.strictEqual(
-          existsSync(cardFile),
-          false,
-          'card json does not exist',
-        );
+        assert.false(existsSync(cardFile), 'card json does not exist');
       });
 
       test('serves a card DELETE request with .json extension in the url', async function (assert) {
@@ -695,11 +691,7 @@ module('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let cardFile = join(dir.name, entry);
-        assert.strictEqual(
-          existsSync(cardFile),
-          false,
-          'card json does not exist',
-        );
+        assert.false(existsSync(cardFile), 'card json does not exist');
       });
     });
 
@@ -959,11 +951,7 @@ module('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let cardFile = join(dir.name, entry);
-        assert.strictEqual(
-          existsSync(cardFile),
-          false,
-          'card module does not exist',
-        );
+        assert.false(existsSync(cardFile), 'card module does not exist');
       });
 
       test('serves a card-source DELETE request for a card instance', async function (assert) {
@@ -996,11 +984,7 @@ module('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let cardFile = join(dir.name, entry);
-        assert.strictEqual(
-          existsSync(cardFile),
-          false,
-          'card instance does not exist',
-        );
+        assert.false(existsSync(cardFile), 'card instance does not exist');
       });
     });
 
