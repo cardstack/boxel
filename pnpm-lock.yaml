@@ -1,5 +1,9 @@
 lockfileVersion: '6.0'
 
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
 overrides:
   '@types/eslint': 8.4.1
   '@embroider/util': 1.12.0
@@ -1720,6 +1724,9 @@ importers:
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.182
+      '@types/matrix-js-sdk':
+        specifier: ^11.0.1
+        version: 11.0.1
       '@types/pluralize':
         specifier: ^0.0.30
         version: 0.0.30
@@ -4537,7 +4544,7 @@ packages:
       '@types/ember__object': ^4.0.4
       '@types/ember__routing': ^4.0.11
       ember-cli-htmlbars: ^6.0.1
-      ember-modifier: ^3.2.7 || ^4.0.0
+      ember-modifier: ^4.1.0
     peerDependenciesMeta:
       '@types/ember__array':
         optional: true
@@ -5168,7 +5175,7 @@ packages:
   /@prettier/sync@0.2.1(prettier@3.1.0-dev):
     resolution: {integrity: sha512-7ls1R6//+GPYD9vof1XaL5psViv83CwpdwlS8oUkWldYgbPhzZ3WgxIQMWqGyBmWPmoBfQg8C7jj7KI/ZuDHhQ==}
     peerDependencies:
-      prettier: ^3.0.0
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     dependencies:
       prettier: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
     dev: true
@@ -5771,7 +5778,6 @@ packages:
 
   /@types/matrix-js-sdk@11.0.1:
     resolution: {integrity: sha512-0cI+IlIf96mxsTgtS9x7Cw2tZKhhkqwAmodKXGW+rf7THmbiM7rvOsRmp3eDik16mRlWrluq2egVFtQ8NGjgPw==}
-    dev: true
 
   /@types/mdast@3.0.14:
     resolution: {integrity: sha512-gVZ04PGgw1qLZKsnWnyFv4ORnaJ+DXLdHTVSFbU8yX6xZ34Bjg4Q32yPkmveUP1yItXReKfB0Aknlh/3zxTKAw==}
@@ -12596,7 +12602,7 @@ packages:
     engines: {node: ^16.0.0 || ^18.0.0 || >=20.0.0}
     peerDependencies:
       ember-template-lint: '>= 4.0.0'
-      prettier: '>= 3.0.0'
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     dependencies:
       '@prettier/sync': 0.2.1(prettier@3.1.0-dev)
       ember-template-lint: 5.11.2
@@ -13417,7 +13423,7 @@ packages:
     peerDependencies:
       eslint: '>=5.0.0'
       eslint-config-prettier: '*'
-      prettier: '>=1.13.0'
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     peerDependenciesMeta:
       eslint-config-prettier:
         optional: true
@@ -13432,10 +13438,10 @@ packages:
     resolution: {integrity: sha512-AgaZCVuYDXHUGxj/ZGu1u8H8CYgDY3iG6w5kUFw4AzMVXzB7VvbKgYR4nATIN+OvUrghMbiDLeimVjVY5ilq3w==}
     engines: {node: ^14.18.0 || >=16.0.0}
     peerDependencies:
-      '@types/eslint': '>=8.0.0'
+      '@types/eslint': 8.4.1
       eslint: '>=8.0.0'
       eslint-config-prettier: '*'
-      prettier: '>=3.0.0'
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     peerDependenciesMeta:
       '@types/eslint':
         optional: true
@@ -13453,10 +13459,10 @@ packages:
     resolution: {integrity: sha512-AgaZCVuYDXHUGxj/ZGu1u8H8CYgDY3iG6w5kUFw4AzMVXzB7VvbKgYR4nATIN+OvUrghMbiDLeimVjVY5ilq3w==}
     engines: {node: ^14.18.0 || >=16.0.0}
     peerDependencies:
-      '@types/eslint': '>=8.0.0'
+      '@types/eslint': 8.4.1
       eslint: '>=8.0.0'
       eslint-config-prettier: '*'
-      prettier: '>=3.0.0'
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     peerDependenciesMeta:
       '@types/eslint':
         optional: true
@@ -19999,7 +20005,7 @@ packages:
     resolution: {integrity: sha512-zJTC+NhEU0kHNnVh7OtcvMmkJmYTgFTist76FP9q07m9+WCvcaunR1sTFIOlGE9TH/5UGm6rlF86Umt9ouorAg==}
     engines: {node: 16.* || 18.* || >= 20}
     peerDependencies:
-      prettier: '>= 3.0.0'
+      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
     dependencies:
       '@babel/core': 7.22.11(supports-color@8.1.1)
       '@glimmer/syntax': 0.84.3
@@ -24858,7 +24864,3 @@ packages:
     dependencies:
       eslint: 8.37.0
     dev: true
-
-settings:
-  autoInstallPeers: true
-  excludeLinksFromLockfile: false
