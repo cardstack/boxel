@@ -1,4 +1,8 @@
-import { registerDestructor } from '@ember/destroyable';
+import {
+  registerDestructor,
+  isDestroyed,
+  isDestroying,
+} from '@ember/destroyable';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -128,6 +132,9 @@ export class RealmSessionResource extends Resource<Args> {
       realm,
       setTimeout(() => {
         sessionExpirations.delete(realm);
+        if (isDestroyed(this) || isDestroying(this)) {
+          return;
+        }
         this.getToken.perform(new URL(realm));
       }, refreshMs) as unknown as number,
     ); // don't use NodeJS Timeout type
