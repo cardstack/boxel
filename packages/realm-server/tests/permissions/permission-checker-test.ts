@@ -24,6 +24,21 @@ module('realm-user-permissions', function (_hooks) {
     });
   });
 
+  module('users-readable realm', function () {
+    let permissionsChecker = new RealmPermissionChecker({
+      users: ['read'],
+      '@matic:boxel-ai': ['read', 'write'],
+    });
+
+    test('user with permission can read but not write', function (assert) {
+      assert.ok(permissionsChecker.can('@matic:boxel-ai', 'read'));
+      assert.ok(permissionsChecker.can('@matic:boxel-ai', 'write'));
+
+      assert.ok(permissionsChecker.can('anyone', 'read'));
+      assert.notOk(permissionsChecker.can('anyone', 'write'));
+    });
+  });
+
   module('user permissioned realm', function () {
     let permissionsChecker = new RealmPermissionChecker({
       '*': ['read'],
