@@ -1,8 +1,7 @@
-import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import window from 'ember-window-mock';
 
@@ -22,8 +21,6 @@ interface Args {
 
 export const sessionLocalStorageKey = 'boxel-session';
 export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
-// This is module scope so that all realm resources can share the realm refresh timers
-const sessionExpirations: Map<string, number> = new Map();
 
 export class RealmSessionResource extends Resource<Args> {
   @tracked private token: JWTPayload | undefined;
@@ -66,39 +63,25 @@ export class RealmSessionResource extends Resource<Args> {
     return this.rawToken;
   }
 
-  private scheduleSessionRefresh() {
+  private scheduleSessionRefresh = restartableTask(async () => {
     if (!this.token) {
       throw new Error(`Cannot schedule session refresh without token`);
     }
     let { realm, exp } = this.token;
-    if (sessionExpirations.has(realm)) {
-      return;
-    }
-
     let expirationMs = exp * 1000; // token expiration is unix time (seconds)
     let refreshMs = Math.max(
       expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
       0,
     );
-    sessionExpirations.set(
-      realm,
-      setTimeout(() => {
-        sessionExpirations.delete(realm);
-        // There is no guarantee that this resource wont be destroyed by the
-        // time session expires, so we should guard for that. if the session is
-        // unable to be refreshed, the next realm session resource created will
-        // obtain a new session. We could use EC to manage the session refresh,
-        // but then logging out would be very awkward in that you'd need a
-        // mechanism with a different lifetime than this resource to hold
-        // pointers to all the sessions resources' timer task cancellations when
-        // logging out.
-        if (isDestroyed(this) || isDestroying(this)) {
-          return;
-        }
-        this.getToken.perform(new URL(realm));
-      }, refreshMs) as unknown as number,
-    ); // don't use NodeJS Timeout type
-  }
+    // use EC timeout so we can gracefully handle clearing timeouts when this
+    // resource is destroyed
+    await timeout(refreshMs);
+    // make sure the token still exists in local storage, otherwise we have been
+    // logged out while we were waiting for the session to expire
+    if (processTokenFromStorage(new URL(realm))) {
+      await this.getToken.perform(new URL(realm));
+    }
+  });
 
   private getTokenForRealmOfCard = restartableTask(async (card: CardDef) => {
     let realmURL = await this.cardService.getRealmURL(card);
@@ -125,12 +108,13 @@ export class RealmSessionResource extends Resource<Args> {
     this.rawToken = rawToken;
     this.token = claimsFromRawToken(rawToken);
     persistRealmSession(rawToken);
-    this.scheduleSessionRefresh();
+    this.scheduleSessionRefresh.perform();
   }
 
   private clearToken(realmURL: URL) {
     this.token = undefined;
     this.rawToken = undefined;
+    this.scheduleSessionRefresh.cancelAll();
     clearRealmSession(realmURL);
   }
 }
@@ -155,10 +139,6 @@ export function getRealmSession(
 
 export function clearAllRealmSessions() {
   window.localStorage.removeItem(sessionLocalStorageKey);
-  for (let [realm, timeout] of sessionExpirations.entries()) {
-    clearTimeout(timeout);
-    sessionExpirations.delete(realm);
-  }
 }
 
 function persistRealmSession(rawToken: string) {
@@ -182,7 +162,6 @@ function clearRealmSession(realmURL: URL) {
   let session = JSON.parse(sessionStr);
   delete session[realmURL.href];
   window.localStorage.setItem(sessionLocalStorageKey, JSON.stringify(session));
-  clearTimeout(sessionExpirations.get(realmURL.href));
 }
 
 export function claimsFromRawToken(rawToken: string): JWTPayload {
