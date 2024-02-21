@@ -5,6 +5,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
+import { clearAllRealmSessions } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -14,6 +15,7 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 import type { RoomField } from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let nonce = 0;
 
 export type MockMatrixService = MatrixService & {
   cardAPI: typeof cardApi;
@@ -29,6 +31,10 @@ class MockClient {
   constructor(userId?: string, displayname?: string) {
     this.userId = userId;
     this.displayname = displayname;
+  }
+
+  get isLoggedIn() {
+    return this.userId !== undefined;
   }
 
   public getProfileInfo(_userId: string | null) {
@@ -57,6 +63,7 @@ function generateMockMatrixService(
   realmPermissions?: () => {
     [realmURL: string]: ('read' | 'write')[];
   },
+  expiresInSec?: () => number,
 ) {
   class MockMatrixService extends Service implements MockMatrixService {
     @service declare loaderService: LoaderService;
@@ -83,13 +90,18 @@ function generateMockMatrixService(
     async createRealmSession(realmURL: URL) {
       let secret = "shhh! it's a secret";
       let nowInSeconds = Math.floor(Date.now() / 1000);
-      let expires = nowInSeconds + 60 * 60;
+      let expires =
+        nowInSeconds +
+        (typeof expiresInSec === 'function' ? expiresInSec() : 60 * 60);
       let header = { alg: 'none', typ: 'JWT' };
       let payload = {
         iat: nowInSeconds,
         exp: expires,
         user: this.userId,
         realm: realmURL.href,
+        // adding a nonce to the test token so that we can tell the difference
+        // between different tokens created in the same second
+        nonce: nonce++,
         permissions: realmPermissions?.()[realmURL.href] ?? ['read', 'write'],
       };
       let stringifiedHeader = JSON.stringify(header);
@@ -186,18 +198,28 @@ function generateMockMatrixService(
 
 export function setupMatrixServiceMock(
   hooks: NestedHooks,
-  realmPermissions?: () => {
-    [realmURL: string]: ('read' | 'write')[];
+  opts?: {
+    realmPermissions?: () => {
+      [realmURL: string]: ('read' | 'write')[];
+    };
+    expiresInSec?: () => number;
   },
 ) {
   hooks.beforeEach(function () {
+    // clear any session refresh timers that may bleed into tests
+    clearAllRealmSessions();
     this.owner.register(
       'service:matrixService',
-      generateMockMatrixService(realmPermissions),
+      generateMockMatrixService(opts?.realmPermissions, opts?.expiresInSec),
     );
     let matrixService = this.owner.lookup(
       'service:matrixService',
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
+  });
+
+  hooks.afterEach(function () {
+    // clear any session refresh timers that may bleed into other tests
+    clearAllRealmSessions();
   });
 }

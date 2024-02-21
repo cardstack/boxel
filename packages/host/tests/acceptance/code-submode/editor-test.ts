@@ -36,9 +36,7 @@ import {
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
-let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
-  [testRealmURL]: ['read', 'write'],
-};
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
 
 module('Acceptance | code submode | editor tests', function (hooks) {
   let realm: Realm;
@@ -50,7 +48,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, () => realmPermissions);
+  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');

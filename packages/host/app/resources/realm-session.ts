@@ -19,8 +19,10 @@ interface Args {
   };
 }
 
-const LOCAL_STORAGE_KEY = 'boxel-session';
-const tokenRefreshPeriod = 5 * 60; // 5 minutes
+export const sessionLocalStorageKey = 'boxel-session';
+export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
+// This is module scope so that all realm resources can share the realm refresh timers
+const sessionExpirations: Map<string, number> = new Map();
 
 export class RealmSessionResource extends Resource<Args> {
   @tracked private token: JWTPayload | undefined;
@@ -40,8 +42,7 @@ export class RealmSessionResource extends Resource<Args> {
     if (realmURL) {
       let rawToken = processTokenFromStorage(realmURL);
       if (rawToken) {
-        this.token = claimsFromRawToken(rawToken);
-        this.rawToken = rawToken;
+        this.setToken(rawToken);
         this.loaded = Promise.resolve();
       }
       if (!this.token) {
@@ -64,12 +65,34 @@ export class RealmSessionResource extends Resource<Args> {
     return this.rawToken;
   }
 
+  private scheduleSessionRefresh() {
+    if (!this.token) {
+      throw new Error(`Cannot schedule session refresh without token`);
+    }
+    let { realm, exp } = this.token;
+    if (sessionExpirations.has(realm)) {
+      return;
+    }
+
+    let expirationMs = exp * 1000; // token expiration is unix time (seconds)
+    let refreshMs = Math.max(
+      expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
+      0,
+    );
+    sessionExpirations.set(
+      realm,
+      setTimeout(() => {
+        sessionExpirations.delete(realm);
+        this.getToken.perform(new URL(realm));
+      }, refreshMs) as unknown as number,
+    ); // don't use NodeJS Timeout type
+  }
+
   private getTokenForRealmOfCard = restartableTask(async (card: CardDef) => {
     let realmURL = await this.cardService.getRealmURL(card);
     let rawToken = processTokenFromStorage(realmURL);
     if (rawToken) {
-      this.token = claimsFromRawToken(rawToken);
-      this.rawToken = rawToken;
+      this.setToken(rawToken);
     } else {
       await this.getToken.perform(realmURL);
     }
@@ -80,15 +103,24 @@ export class RealmSessionResource extends Resource<Args> {
     let rawToken = await this.matrixService.createRealmSession(realmURL);
 
     if (rawToken) {
-      this.token = claimsFromRawToken(rawToken);
-      this.rawToken = rawToken;
-      setRealmSession(realmURL, rawToken);
+      this.setToken(rawToken);
     } else {
-      this.token = undefined;
-      this.rawToken = undefined;
-      clearRealmSession(realmURL);
+      this.clearToken(realmURL);
     }
   });
+
+  private setToken(rawToken: string) {
+    this.rawToken = rawToken;
+    this.token = claimsFromRawToken(rawToken);
+    persistRealmSession(rawToken);
+    this.scheduleSessionRefresh();
+  }
+
+  private clearToken(realmURL: URL) {
+    this.token = undefined;
+    this.rawToken = undefined;
+    clearRealmSession(realmURL);
+  }
 }
 
 export function getRealmSession(
@@ -110,24 +142,34 @@ export function getRealmSession(
 }
 
 export function clearAllRealmSessions() {
-  window.localStorage.removeItem(LOCAL_STORAGE_KEY);
+  window.localStorage.removeItem(sessionLocalStorageKey);
+  for (let timeout of sessionExpirations.values()) {
+    clearTimeout(timeout);
+  }
 }
 
-function setRealmSession(realmURL: URL, rawToken: string) {
-  let sessionStr = window.localStorage.getItem(LOCAL_STORAGE_KEY) ?? '{}';
+function persistRealmSession(rawToken: string) {
+  let sessionStr = window.localStorage.getItem(sessionLocalStorageKey) ?? '{}';
   let session = JSON.parse(sessionStr);
-  session[realmURL.href] = rawToken;
-  window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
+  let { realm } = claimsFromRawToken(rawToken);
+  if (session[realm] !== rawToken) {
+    session[realm] = rawToken;
+    window.localStorage.setItem(
+      sessionLocalStorageKey,
+      JSON.stringify(session),
+    );
+  }
 }
 
 function clearRealmSession(realmURL: URL) {
-  let sessionStr = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+  let sessionStr = window.localStorage.getItem(sessionLocalStorageKey);
   if (!sessionStr) {
     return;
   }
   let session = JSON.parse(sessionStr);
   delete session[realmURL.href];
-  window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
+  window.localStorage.setItem(sessionLocalStorageKey, JSON.stringify(session));
+  clearTimeout(sessionExpirations.get(realmURL.href));
 }
 
 export function claimsFromRawToken(rawToken: string): JWTPayload {
@@ -143,7 +185,7 @@ function processTokenFromStorage(realmURL: URL) {
     if (rawToken) {
       let claims = claimsFromRawToken(rawToken);
       let expiration = claims.exp;
-      if (expiration - tokenRefreshPeriod > Date.now() / 1000) {
+      if (expiration - tokenRefreshPeriodSec > Date.now() / 1000) {
         return rawToken;
       }
     }
@@ -152,7 +194,7 @@ function processTokenFromStorage(realmURL: URL) {
 }
 
 function extractSessionsFromStorage(): Record<string, string> | undefined {
-  let sessionsString = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+  let sessionsString = window.localStorage.getItem(sessionLocalStorageKey);
   if (sessionsString) {
     return JSON.parse(sessionsString);
   }
