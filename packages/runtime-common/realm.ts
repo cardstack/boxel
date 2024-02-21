@@ -361,7 +361,12 @@ export class Realm {
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
       )
-      .get('/.*', SupportedMimeType.HTML, this.respondWithHTML.bind(this));
+      .get('/.*', SupportedMimeType.HTML, this.respondWithHTML.bind(this))
+      .get(
+        '/_readiness-check',
+        SupportedMimeType.RealmInfo,
+        this.readinessCheck.bind(this),
+      );
 
     this.#deferStartup = opts?.deferStartUp ?? false;
     if (!opts?.deferStartUp) {
@@ -1660,6 +1665,14 @@ export class Realm {
       },
       this.#useTestingDomain,
     );
+  }
+
+  private async readinessCheck() {
+    await this.ready;
+    return createResponse(this, null, {
+      headers: { 'content-type': 'text/html' },
+      status: 200,
+    });
   }
 
   get isPublicReadable(): boolean {
