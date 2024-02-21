@@ -326,7 +326,9 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('displays view all pill if attached card more than 4', async ({ page }) => {
+  test('displays view all pill if attached card more than 4', async ({
+    page,
+  }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     const testCard3 = `${testHost}/type-examples`;

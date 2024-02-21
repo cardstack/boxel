@@ -246,7 +246,11 @@ export default class MatrixService extends Service {
       return inflightAuth;
     }
 
-    let realmAuthClient = new RealmAuthClient(realmURL, this.client);
+    let realmAuthClient = new RealmAuthClient(
+      realmURL,
+      this.client,
+      this.loaderService.loader,
+    );
 
     let jwtPromise = realmAuthClient.getJWT();
 
