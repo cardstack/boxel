@@ -1,4 +1,4 @@
-import { isDestroyed, isDestroying } from '@ember/destroyable';
+import { registerDestructor } from '@ember/destroyable';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -24,6 +24,19 @@ export const sessionLocalStorageKey = 'boxel-session';
 export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
 // This is module scope so that all realm resources can share the realm refresh timers
 const sessionExpirations: Map<string, number> = new Map();
+// This is the specific resource that whose timer is managing the session refresh
+const sessionExpirationManagerResources: WeakSet<RealmSessionResource> =
+  new WeakSet();
+// destructors are very particular about accessing member properties, so this
+// allows us to keep track of the realm URL for the resource in a way that is
+// safe to access in the destructor
+const sessionResourceURLs: WeakMap<RealmSessionResource, string> =
+  new WeakMap();
+// This allows us to keep track of all the resources for a realm URL in module
+// scope so that we can promote a new session refresh manager if a session
+// refresh manager is being destroyed. we need to be careful to clean this up as
+// resources are destroyed
+const sessionResources: Map<string, Set<RealmSessionResource>> = new Map();
 
 export class RealmSessionResource extends Resource<Args> {
   @tracked private token: JWTPayload | undefined;
@@ -52,6 +65,30 @@ export class RealmSessionResource extends Resource<Args> {
     } else if (card) {
       this.loaded = this.getTokenForRealmOfCard.perform(card);
     }
+
+    // when a resource is destroyed we need to check to see if it is a resource
+    // whose timer is managing the session refresh and if so promote a new
+    // resource to this job. As well as we need to be careful to cleanup module
+    // scope pointers to the destroyed resource.
+    registerDestructor(this, () => {
+      let realmURL = sessionResourceURLs.get(this);
+      if (!realmURL) {
+        return;
+      }
+      let resources = sessionResources.get(realmURL);
+      resources?.delete(this);
+      if (sessionExpirationManagerResources.has(this)) {
+        // this particular resource was the one whose timer was managing the
+        // session refresh. relinquish the session expiration timer so that
+        // someone else can take over
+        clearTimeout(sessionExpirations.get(realmURL));
+        sessionExpirations.delete(realmURL);
+        let nextManager = [...(resources?.values() ?? [])][0];
+        if (nextManager) {
+          nextManager.scheduleSessionRefresh();
+        }
+      }
+    });
   }
 
   get canRead() {
@@ -72,6 +109,12 @@ export class RealmSessionResource extends Resource<Args> {
     }
     let { realm, exp } = this.token;
     if (sessionExpirations.has(realm)) {
+      let resources = sessionResources.get(realm);
+      if (!resources) {
+        resources = new Set();
+        sessionResources.set(realm, resources);
+      }
+      resources.add(this);
       return;
     }
 
@@ -80,17 +123,11 @@ export class RealmSessionResource extends Resource<Args> {
       expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
       0,
     );
+    sessionExpirationManagerResources.add(this);
     sessionExpirations.set(
       realm,
       setTimeout(() => {
         sessionExpirations.delete(realm);
-        // There is no guarantee that this resource wont be destroyed by the
-        // time the session expires, so we should guard for that. if the session is
-        // unable to be refreshed, the next realm session resource created will
-        // obtain a new session.
-        if (isDestroyed(this) || isDestroying(this)) {
-          return;
-        }
         this.getToken.perform(new URL(realm));
       }, refreshMs) as unknown as number,
     ); // don't use NodeJS Timeout type
@@ -120,6 +157,7 @@ export class RealmSessionResource extends Resource<Args> {
   private setToken(rawToken: string) {
     this.rawToken = rawToken;
     this.token = claimsFromRawToken(rawToken);
+    sessionResourceURLs.set(this, this.token.realm);
     persistRealmSession(rawToken);
     this.scheduleSessionRefresh();
   }
