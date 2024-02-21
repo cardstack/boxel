@@ -2,11 +2,12 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
@@ -29,11 +30,12 @@ interface Signature {
   };
 }
 
+const MAX_CARDS_TO_DISPLAY = 4;
 export default class AiAssistantCardPicker extends Component<Signature> {
   <template>
     <div class='card-picker'>
       {{#each this.cardsToDisplay as |card i|}}
-        {{#if card.id}}
+        {{#if (this.isCardDisplayed card i)}}
           <Pill
             @inert={{true}}
             class={{cn
@@ -69,6 +71,25 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           </Pill>
         {{/if}}
       {{/each}}
+      {{#if
+        (and
+          (gt this.cardsToDisplay.length MAX_CARDS_TO_DISPLAY)
+          (not this.isViewAllAttachedCards)
+        )
+      }}
+        <Pill
+          @inert={{true}}
+          class='card-pill view-all'
+          data-test-view-all
+          {{on 'click' this.toggleViewAllAttachedCards}}
+        >
+          <:default>
+            <div class='card-title'>
+              View All ({{this.cardsToDisplay.length}})
+            </div>
+          </:default>
+        </Pill>
+      {{/if}}
       {{#if this.canDisplayAddButton}}
         <AddButton
           class='attach-button'
@@ -127,8 +148,32 @@ export default class AiAssistantCardPicker extends Component<Signature> {
       .is-autoattached {
         border-style: dashed;
       }
+      .view-all {
+        cursor: pointer;
+      }
     </style>
   </template>
+
+  @tracked isViewAllAttachedCards = false;
+
+  @action
+  private toggleViewAllAttachedCards() {
+    this.isViewAllAttachedCards = !this.isViewAllAttachedCards;
+  }
+
+  @action
+  private isCardDisplayed(card: CardDef, index: number): boolean {
+    if (
+      this.isViewAllAttachedCards ||
+      this.cardsToDisplay.length <= MAX_CARDS_TO_DISPLAY
+    ) {
+      return !!card.id;
+    } else {
+      // If attached cards more than four,
+      // displays the first three cards.
+      return !!card.id && index < MAX_CARDS_TO_DISPLAY - 1;
+    }
+  }
 
   private get cardsToDisplay() {
     let cards = this.args.cardsToAttach ?? [];

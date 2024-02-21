@@ -1,7 +1,7 @@
 {
   "https://cardstack.com/base/": {
     "users": {
-      "*": ["read", "write"]
+      "*": ["read"]
     }
   },
   "http://localhost:4202/node-test/": {

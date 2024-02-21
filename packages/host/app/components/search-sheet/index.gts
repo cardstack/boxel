@@ -9,6 +9,7 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
+import { modifier } from 'ember-modifier';
 
 import debounce from 'lodash/debounce';
 
@@ -59,9 +60,18 @@ interface Signature {
     onBlur: () => void;
     onSearch: (term: string) => void;
     onCardSelect: (card: CardDef) => void;
+    onInputInsertion?: (element: HTMLElement) => void;
   };
   Blocks: {};
 }
+
+let elementCallback = modifier(
+  (element, [callback]: [((element: HTMLElement) => void) | undefined]) => {
+    if (callback) {
+      callback(element as HTMLElement);
+    }
+  },
+);
 
 export default class SearchSheet extends Component<Signature> {
   @tracked searchKey = '';
@@ -299,6 +309,7 @@ export default class SearchSheet extends Component<Signature> {
         @placeholder={{this.placeholderText}}
         @onFocus={{@onFocus}}
         @onInput={{this.setSearchKey}}
+        {{elementCallback @onInputInsertion}}
         {{on 'keydown' this.onSearchInputKeyDown}}
         class='search-sheet__search-input-group'
         data-test-search-field

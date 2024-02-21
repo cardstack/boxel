@@ -1,4 +1,5 @@
 import { TokenClaims } from './realm';
+import { type Loader } from './loader';
 
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)
@@ -15,14 +16,13 @@ export interface RealmAuthMatrixClientInterface {
 }
 
 export class RealmAuthClient {
-  private realmURL: URL;
   private jwt: string | undefined;
-  private matrixClient: RealmAuthMatrixClientInterface;
 
-  constructor(realmURL: URL, matrixClient: RealmAuthMatrixClientInterface) {
-    this.matrixClient = matrixClient;
-    this.realmURL = realmURL;
-  }
+  constructor(
+    private realmURL: URL,
+    private matrixClient: RealmAuthMatrixClientInterface,
+    private loader: Loader,
+  ) {}
 
   async getJWT() {
     let tokenRefreshLeadTimeSeconds = 60;
@@ -98,7 +98,8 @@ export class RealmAuthClient {
     if (!userId) {
       throw new Error('userId is undefined');
     }
-    return fetch(`${this.realmURL.href}_session`, {
+
+    return this.loader.fetch(`${this.realmURL.href}_session`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -110,7 +111,7 @@ export class RealmAuthClient {
   }
 
   private async challengeRequest(challenge: string) {
-    return fetch(`${this.realmURL.href}_session`, {
+    return this.loader.fetch(`${this.realmURL.href}_session`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
