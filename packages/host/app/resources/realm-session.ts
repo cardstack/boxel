@@ -1,7 +1,7 @@
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, timeout } from 'ember-concurrency';
+import { restartableTask, dropTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import window from 'ember-window-mock';
 
@@ -63,7 +63,7 @@ export class RealmSessionResource extends Resource<Args> {
     return this.rawToken;
   }
 
-  private scheduleSessionRefresh = restartableTask(async () => {
+  private scheduleSessionRefresh = dropTask(async () => {
     if (!this.token) {
       throw new Error(`Cannot schedule session refresh without token`);
     }
