@@ -16,7 +16,7 @@
   },
   "https://cardstack.com/base/": {
     "users": {
-      "*": ["read", "write"]
+      "*": ["read"]
     }
   }
 }

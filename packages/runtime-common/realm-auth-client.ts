@@ -1,28 +1,28 @@
 import { TokenClaims } from './realm';
-import { MatrixClient } from './matrix-client';
+import { type Loader } from './loader';
 
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)
 export type JWTPayload = TokenClaims & { iat: number; exp: number };
 
+// This auth client is intended to be used in both the host app and the realm node environment, where we use different matrix client implementations (in host we have the official matrix sdk
+// and in realm we have a custom implementation). This interface is used to enforce compatibility between the two implementations for the mechanisms used for getting a JWT token from the realm server.
+export interface RealmAuthMatrixClientInterface {
+  isLoggedIn(): boolean;
+  getUserId(): string | null | undefined;
+  getJoinedRooms(): Promise<{ joined_rooms: string[] }>;
+  joinRoom(room: string): Promise<any>;
+  sendEvent(room: string, type: string, content: any): Promise<any>;
+}
+
 export class RealmAuthClient {
-  private realmURL: URL;
   private jwt: string | undefined;
-  private matrixClient: MatrixClient;
 
   constructor(
-    matrixUsername: string,
-    matrixPassword: string,
-    matrixURL: URL,
-    realmURL: URL,
-  ) {
-    this.realmURL = realmURL;
-    this.matrixClient = new MatrixClient(
-      matrixURL,
-      matrixUsername,
-      matrixPassword,
-    );
-  }
+    private realmURL: URL,
+    private matrixClient: RealmAuthMatrixClientInterface,
+    private loader: Loader,
+  ) {}
 
   async getJWT() {
     let tokenRefreshLeadTimeSeconds = 60;
@@ -46,7 +46,11 @@ export class RealmAuthClient {
   }
 
   private async createRealmSession() {
-    await this.matrixClient.login();
+    if (!this.matrixClient.isLoggedIn) {
+      throw new Error(
+        `must be logged in to matrix before a realm session can be created`,
+      );
+    }
 
     let initialResponse = await this.initiateSessionRequest();
 
@@ -65,13 +69,13 @@ export class RealmAuthClient {
 
     let { room, challenge } = initialJSON;
 
-    let rooms = (await this.matrixClient.getRooms()).joined_rooms;
+    let { joined_rooms: rooms } = await this.matrixClient.getJoinedRooms();
 
     if (!rooms.includes(room)) {
       await this.matrixClient.joinRoom(room);
     }
 
-    await this.matrixClient.sendRoomEvent(room, 'm.room.message', {
+    await this.matrixClient.sendEvent(room, 'm.room.message', {
       body: `auth-response: ${challenge}`,
       msgtype: 'm.text',
     });
@@ -90,25 +94,25 @@ export class RealmAuthClient {
   }
 
   private async initiateSessionRequest() {
-    return fetch(`${this.realmURL.href}_session`, {
+    return this.loader.fetch(`${this.realmURL.href}_session`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        user: this.matrixClient.userId,
+        user: this.matrixClient.getUserId(),
       }),
     });
   }
 
   private async challengeRequest(challenge: string) {
-    return fetch(`${this.realmURL.href}_session`, {
+    return this.loader.fetch(`${this.realmURL.href}_session`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        user: this.matrixClient.userId,
+        user: this.matrixClient.getUserId(),
         challenge,
       }),
     });

@@ -17,7 +17,6 @@ import {
   Loader,
   getCard,
   type LooseSingleCardDocument,
-  type CodeRef,
 } from '@cardstack/runtime-common';
 //@ts-expect-error cached type not available yet
 import { cached } from '@glimmer/tracking';
@@ -445,15 +444,11 @@ export class RoomField extends FieldDef {
         }
 
         let author = upsertRoomMember({ room: this, userId: event.sender });
-        let formattedMessage =
-          event.content.msgtype === 'org.boxel.objective'
-            ? `<em>${author.name} has set the room objectives</em>`
-            : event.content.formatted_body;
         let cardArgs = {
           author,
           created: new Date(event.origin_server_ts),
           message: event.content.body,
-          formattedMessage,
+          formattedMessage: event.content.formatted_body,
           index,
           // These are not guaranteed to exist in the event
           transactionId: event.unsigned?.transaction_id || null,
@@ -486,6 +481,7 @@ export class RoomField extends FieldDef {
           }
           messageField = new MessageField({
             ...cardArgs,
+            formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
             command: new PatchField({
               commandType: command.type,
               payload: command,
@@ -665,31 +661,11 @@ interface CardMessageEvent extends BaseMatrixEvent {
   };
 }
 
-interface ObjectiveEvent extends BaseMatrixEvent {
-  type: 'm.room.message';
-  content: {
-    'm.relates_to'?: {
-      rel_type: string;
-      event_id: string;
-    };
-    msgtype: 'org.boxel.objective';
-    body: string;
-    ref: CodeRef;
-  };
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
-  };
-}
-
 export type MatrixEvent =
   | RoomCreateEvent
   | MessageEvent
   | CommandEvent
   | CardMessageEvent
-  | ObjectiveEvent
   | RoomNameEvent
   | RoomTopicEvent
   | InviteEvent

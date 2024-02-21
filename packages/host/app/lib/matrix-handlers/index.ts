@@ -5,19 +5,13 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 
-import {
-  type LooseCardResource,
-  type MatrixCardError,
-  baseRealm,
-  isMatrixCardError,
-} from '@cardstack/runtime-common';
+import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/room';
-import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
 
 import type LoaderService from '../../services/loader-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
@@ -48,7 +42,6 @@ export interface EventSendingContext {
 }
 
 export interface Context extends EventSendingContext {
-  roomObjectives: Map<string, RoomObjectiveField | MatrixCardError>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
@@ -109,20 +102,5 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       ...(resolvedRoom.events ?? []),
       event as unknown as DiscreteMatrixEvent,
     ];
-  }
-}
-
-// our reactive system doesn't cascade "up" through our consumers. meaning that
-// when a card's contained field is another card and the interior card's field
-// changes, the consuming card's computeds will not automatically recompute. To
-// work around that, we are performing the assignment of the interior card to
-// the consuming card again which will trigger the consuming card's computeds to
-// pick up the interior card's updated fields. In this case the consuming
-// card/field is the RoomObjectiveField and the interior field is the RoomField.
-export async function recomputeRoomObjective(context: Context, roomId: string) {
-  let room = await context.rooms.get(roomId);
-  let objective = context.roomObjectives.get(roomId);
-  if (objective && room && !isMatrixCardError(objective)) {
-    objective.room = room;
   }
 }

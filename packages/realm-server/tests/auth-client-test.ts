@@ -1,9 +1,12 @@
 import { module, test } from 'qunit';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
+import {
+  RealmAuthClient,
+  type RealmAuthMatrixClientInterface,
+} from '@cardstack/runtime-common/realm-auth-client';
+import { Loader } from '@cardstack/runtime-common';
 import jwt from 'jsonwebtoken';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 function createJWT(expiresIn: string | number) {
   return jwt.sign({}, 'secret', { expiresIn });
@@ -13,29 +16,32 @@ module('realm-auth-client', function (assert) {
   let client: RealmAuthClient;
 
   assert.beforeEach(function () {
-    client = new RealmAuthClient(
-      'user',
-      'password',
-      new URL('http://testmatrix.com/'),
-      new URL('http://testrealm.com/'),
-    ) as any;
     let mockMatrixClient = {
-      async login() {
-        return Promise.resolve();
+      isLoggedIn() {
+        return true;
       },
-      async getRooms() {
+      getUserId() {
+        return 'userId';
+      },
+      async getJoinedRooms() {
         return Promise.resolve({ joined_rooms: [] });
       },
       async joinRoom() {
         return Promise.resolve();
       },
-      async sendRoomEvent() {
+      async sendEvent() {
         return Promise.resolve();
       },
-    };
+    } as RealmAuthMatrixClientInterface;
+    let loader = new Loader();
+
+    client = new RealmAuthClient(
+      new URL('http://testrealm.com/'),
+      mockMatrixClient,
+      loader,
+    ) as any;
 
     // [] notation is a hack to make TS happy so we can set private properties with mocks
-    client['matrixClient'] = mockMatrixClient as unknown as MatrixClient;
     client['initiateSessionRequest'] = async function (): Promise<Response> {
       return {
         status: 401,
@@ -81,7 +87,7 @@ module('realm-auth-client', function (assert) {
   });
 
   test('it refreshes the jwt if it expired in the client', async function (assert) {
-    let jwtFromClient = createJWT(Date.now() / 1000 - 1); // Expired 1 second ago
+    let jwtFromClient = createJWT(-1); // Expired 1 second ago
     client['jwt'] = jwtFromClient;
     assert.notEqual(jwtFromClient, await client.getJWT(), 'jwt got refreshed');
   });

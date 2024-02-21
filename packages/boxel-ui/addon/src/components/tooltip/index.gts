@@ -56,6 +56,7 @@ export default class Tooltip extends Component<Signature> {
         {{velcro.hook}}
         {{on 'mouseenter' this.onMouseEnter}}
         {{on 'mouseleave' this.onMouseLeave}}
+        ...attributes
       >
         {{yield to='trigger'}}
       </div>

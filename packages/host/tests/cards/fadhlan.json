@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "id": "http://localhost:4202/test/fadhlan",
+    "attributes": {
+      "firstName": "Fadhlan",
+      "lastName": "Ridhwanallah"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./person",
+        "name": "Person"
+      }
+    }
+  }
+}

@@ -11,34 +11,68 @@ import {
   RealmPaths,
 } from '@cardstack/runtime-common';
 
+import { getRealmSession } from '@cardstack/host/resources/realm-session';
+
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 const waiter = buildWaiter('realm-info-service:waiter');
 
+type RealmInfoWithPermissions = RealmInfo & {
+  canRead: boolean;
+  canWrite: boolean;
+};
+
 export default class RealmInfoService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  cachedRealmURLsForFileURL: TrackedMap<string, string> = new TrackedMap(); // Has the file url already been resolved to a realm url?
-  cachedRealmInfos: TrackedMap<string, RealmInfo> = new TrackedMap(); // Has the realm url already been resolved to a realm info?
+  cachedRealmURLsForURL: Map<string, string> = new Map(); // Has the file url already been resolved to a realm url?
+  cachedRealmInfos: TrackedMap<string, RealmInfoWithPermissions> =
+    new TrackedMap(); // Has the realm url already been resolved to a realm info?
+  cachedPublicReadableRealms: Map<string, boolean> = new Map();
 
-  async fetchRealmURL(fileURL: string): Promise<string> {
-    if (this.cachedRealmURLsForFileURL.has(fileURL)) {
-      return this.cachedRealmURLsForFileURL.get(fileURL)!;
+  async fetchRealmURL(url: string): Promise<URL | undefined> {
+    let realmURLString = this.getRealmURLFromCache(url);
+    if (!realmURLString) {
+      let response = await this.loaderService.loader.fetch(url, {
+        method: 'HEAD',
+      });
+      realmURLString = response.headers.get('x-boxel-realm-url') ?? undefined;
     }
-
-    let response = await this.loaderService.loader.fetch(fileURL);
-    let realmURL = response.headers.get('x-boxel-realm-url');
-
-    if (!realmURL) {
-      throw new Error(
-        'Could not find realm URL in response headers (x-boxel-realm-url)',
-      );
+    let realmURL;
+    if (realmURLString) {
+      this.cachedRealmURLsForURL.set(url, realmURLString);
+      realmURL = new URL(realmURLString);
     }
-
-    this.cachedRealmURLsForFileURL.set(fileURL, realmURL);
 
     return realmURL;
+  }
+
+  private getRealmURLFromCache(url: string) {
+    let realmURLString = this.cachedRealmURLsForURL.get(url);
+    if (!realmURLString) {
+      realmURLString = Array.from(this.cachedRealmURLsForURL.values()).find(
+        (realmURL) => url.includes(realmURL),
+      );
+    }
+    return realmURLString;
+  }
+
+  async isPublicReadable(realmURL: URL): Promise<boolean> {
+    let realmURLString = realmURL.href;
+    if (this.cachedPublicReadableRealms.has(realmURLString)) {
+      return this.cachedPublicReadableRealms.get(realmURLString)!;
+    }
+
+    let response = await this.loaderService.loader.fetch(realmURL, {
+      method: 'HEAD',
+    });
+    let isPublicReadable = Boolean(
+      response.headers.get('x-boxel-realm-public-readable'),
+    );
+    this.cachedPublicReadableRealms.set(realmURLString, isPublicReadable);
+
+    return isPublicReadable;
   }
 
   // When realmUrl is provided, it will fetch realm info from that url, otherwise it will first
@@ -56,7 +90,12 @@ export default class RealmInfoService extends Service {
     try {
       let realmURLString = realmURL
         ? realmURL.href
-        : await this.fetchRealmURL(fileURL!);
+        : (await this.fetchRealmURL(fileURL!))?.href;
+      if (!realmURLString) {
+        throw new Error(
+          'Could not find realm URL in response headers (x-boxel-realm-url)',
+        );
+      }
 
       if (this.cachedRealmInfos.has(realmURLString)) {
         return this.cachedRealmInfos.get(realmURLString)!;
@@ -66,8 +105,17 @@ export default class RealmInfoService extends Service {
           { headers: { Accept: SupportedMimeType.RealmInfo } },
         );
 
-        let realmInfo = (await realmInfoResponse.json())?.data?.attributes;
-        this.cachedRealmInfos.set(realmURLString, realmInfo);
+        let realmInfo = (await realmInfoResponse.json())?.data
+          ?.attributes as RealmInfo;
+        let realmSession = getRealmSession(this, {
+          realmURL: () => new URL(realmURLString!),
+        });
+        await realmSession.loaded;
+        this.cachedRealmInfos.set(realmURLString, {
+          ...realmInfo,
+          canRead: !!realmSession.canRead,
+          canWrite: !!realmSession.canWrite,
+        });
         return realmInfo;
       }
     } finally {

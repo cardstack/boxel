@@ -626,8 +626,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-submode-switcher] button');
       await click('[data-test-boxel-menu-item-text="Code"]');
 
-      assert.dom('[data-test-submode-switcher] button').hasText('Code');
+      await waitFor('[data-test-submode-switcher]');
       assert.dom('[data-test-code-mode]').exists();
+      assert.dom('[data-test-submode-switcher] button').hasText('Code');
 
       // Submode is reflected in the URL
       assert.operatorModeParametersMatch(currentURL(), {
@@ -657,6 +658,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-boxel-menu-item-text="Interact"]');
 
       // Stacks are restored
+      await waitFor('[data-test-operator-mode-stack]');
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
 
       // Submode is reflected in the URL
