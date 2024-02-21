@@ -143,8 +143,9 @@ export function getRealmSession(
 
 export function clearAllRealmSessions() {
   window.localStorage.removeItem(sessionLocalStorageKey);
-  for (let timeout of sessionExpirations.values()) {
+  for (let [realm, timeout] of sessionExpirations.entries()) {
     clearTimeout(timeout);
+    sessionExpirations.delete(realm);
   }
 }
 

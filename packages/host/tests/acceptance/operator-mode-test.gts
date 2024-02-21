@@ -692,7 +692,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   module('realm session expiration', function () {
-    let refreshInSec = 1;
+    let refreshInSec = 2;
 
     hooks.beforeEach(async function () {
       sessionExpirationSec = tokenRefreshPeriodSec + refreshInSec;
@@ -711,12 +711,8 @@ module('Acceptance | operator mode tests', function (hooks) {
       await waitFor('[data-test-operator-mode-stack]');
       let originalToken = window.localStorage.getItem(sessionLocalStorageKey);
       await waitUntil(
-        () => {
-          return (
-            window.localStorage.getItem(sessionLocalStorageKey) !==
-            originalToken
-          );
-        },
+        () =>
+          window.localStorage.getItem(sessionLocalStorageKey) !== originalToken,
         { timeout: refreshInSec * 3 * 1000 },
       );
 
