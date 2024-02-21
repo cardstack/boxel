@@ -25,15 +25,15 @@
   position: absolute;
   font: var(--boxel-tooltip-font, var(--boxel-font-xs));
   z-index: 5;
+}
 
-  .message {
-    padding: 0;
-    color: inherit;
-    background-color: transparent;
-    border: 0;
-  }
+.ember-application .monaco-editor .monaco-editor-overlaymessage .message {
+  padding: 0;
+  color: inherit;
+  background-color: transparent;
+  border: 0;
+}
 
-  .anchor.top, .anchor.below {
-      display: none;
-  }
+.ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.top, .ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.below {
+  display: none;
 }
