@@ -615,7 +615,11 @@ export class Realm {
     if (!this.paths.inRealm(new URL(request.url))) {
       return null;
     }
-    return await this.handle(request);
+    return await this.internalHandle(request, true);
+  }
+
+  async handle(request: Request): Promise<ResponseWithNodeStream> {
+    return this.internalHandle(request, false);
   }
 
   private async createSession(request: Request) {
@@ -817,11 +821,17 @@ export class Realm {
     );
   }
 
-  async handle(request: Request): Promise<ResponseWithNodeStream> {
+  private async internalHandle(
+    request: Request,
+    isLocal: boolean,
+  ): Promise<ResponseWithNodeStream> {
     try {
       // local requests are allowed to query the realm as the index is being built up
-      let isLocal = this.isRequestFromItself(request);
+      isLocal = isLocal || this.isRequestFromItself(request);
 
+      if (request.url.includes('drafts/author')) {
+        debugger;
+      }
       if (!isLocal) {
         await this.ready;
 

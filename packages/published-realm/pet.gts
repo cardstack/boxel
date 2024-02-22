@@ -1,8 +1,10 @@
+import { Author as AuthorCard } from 'http://localhost:4201/drafts/author';
 import {
   contains,
   field,
   CardDef,
   Component,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import NumberCard from 'https://cardstack.com/base/number';
@@ -21,6 +23,7 @@ export class Pet extends CardDef {
       return this.firstName;
     },
   });
+  @field authorbio = linksTo(AuthorCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <GridContainer

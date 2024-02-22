@@ -303,6 +303,13 @@ export class SearchIndex {
         }
       }
 
+      if (
+        this.#realm.url.includes('published') &&
+        request.url.includes('drafts/author')
+      ) {
+        debugger;
+      }
+
       return await this.#index.loader.fetch(request.url, {
         method: request.method,
         headers: new Headers(request.headers),
