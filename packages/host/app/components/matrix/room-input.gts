@@ -2,6 +2,7 @@ import { Input } from '@ember/component';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 import { TrackedMap } from 'tracked-built-ins';
@@ -30,6 +31,7 @@ export default class RoomInput extends Component<RoomArgs> {
     />
 
     <AiAssistantCardPicker
+      @autoAttachedCard={{this.autoAttachedCard}}
       @maxNumberOfCards={{5}}
       @cardsToAttach={{this.cardsToAttach}}
       @chooseCard={{this.chooseCard}}
@@ -45,6 +47,7 @@ export default class RoomInput extends Component<RoomArgs> {
     </label>
   </template>
 
+  @tracked private isAutoAttachedCardDisplayed = true;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
@@ -69,7 +72,17 @@ export default class RoomInput extends Component<RoomArgs> {
 
   @action
   private sendMessage() {
-    this.doSendMessage.perform(this.messageToSend, this.cardsToAttach);
+    let cards = [];
+    if (this.cardsToAttach) {
+      cards.push(...this.cardsToAttach);
+    }
+    if (this.autoAttachedCard) {
+      cards.push(this.autoAttachedCard);
+    }
+    this.doSendMessage.perform(
+      this.messageToSend,
+      cards.length ? cards : undefined,
+    );
   }
 
   @action
@@ -82,8 +95,20 @@ export default class RoomInput extends Component<RoomArgs> {
 
   @action
   private removeCard(card: CardDef) {
-    let cards = this.cardsToAttach?.filter((c) => c.id !== card.id);
-    this.cardsToSend.set(this.args.roomId, cards?.length ? cards : undefined);
+    // If card doesn't exis in `cardsToAttch`,
+    // then it is an auto-attached card.
+    const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
+    if (cardIndex === -1 && this.autoAttachedCard?.id === card.id) {
+      this.isAutoAttachedCardDisplayed = false;
+    } else {
+      if (cardIndex && cardIndex !== -1) {
+        this.cardsToAttach?.splice(cardIndex, 1);
+      }
+      this.cardsToSend.set(
+        this.args.roomId,
+        this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+      );
+    }
   }
 
   private doSendMessage = restartableTask(
@@ -107,4 +132,15 @@ export default class RoomInput extends Component<RoomArgs> {
       );
     },
   );
+
+  private get autoAttachedCard(): CardDef | undefined {
+    let stackItems = this.operatorModeStateService.topMostStackItems();
+    let topMostCard = stackItems[stackItems.length - 1].card;
+    let card = this.cardsToAttach?.find((c) => c.id === topMostCard.id);
+    if (!this.isAutoAttachedCardDisplayed || card) {
+      return undefined;
+    }
+
+    return topMostCard;
+  }
 }

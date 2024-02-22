@@ -353,4 +353,40 @@ test.describe('Room messages', () => {
     await expect(page.locator(`[data-test-view-all]`)).toHaveCount(0);
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(5);
   });
+
+  test('displays auto-attached card', async ({ page }) => {
+    const testCard1 = `${testHost}/hassan`;
+    const testCard2 = `${testHost}/mango`;
+
+    await login(page, 'user1', 'pass');
+    await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`).click();
+    await createRoom(page);
+
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
+    await page.locator(`[data-test-selected-card]`).hover();
+    await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText('Topmost card is shared automatically');
+    
+    await selectCardFromCatalog(page, testCard2);
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(2);
+
+    // Do not auto-attach a card if it has been selected
+    await page.locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`).click();
+    await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard2}']`).click();
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
+
+    await page.locator(`[data-test-stack-card='${testCard2}'] [data-test-close-button]`).click();
+    await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`).click();
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(2);
+
+    await page.locator('[data-test-send-message-btn]').click();
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        cards: [
+          { id: testCard1, title: 'Hassan' },
+          { id: testCard2, title: 'Mango' },
+        ],
+      },
+    ]);
+  });
 });
