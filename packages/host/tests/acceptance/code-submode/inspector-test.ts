@@ -395,7 +395,7 @@ const localInheritSource = `
   }
 `;
 
-let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {};
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
 
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
@@ -407,7 +407,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, () => realmPermissions);
+  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
