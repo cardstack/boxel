@@ -37,14 +37,6 @@ export default class RoomInput extends Component<RoomArgs> {
       @chooseCard={{this.chooseCard}}
       @removeCard={{this.removeCard}}
     />
-    <label>
-      <Input
-        @type='checkbox'
-        @checked={{this.shareCurrentContext}}
-        data-test-share-context
-      />
-      Allow access to the cards you can see at the top of your stacks
-    </label>
   </template>
 
   @tracked private isAutoAttachedCardDisplayed = true;
