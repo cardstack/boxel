@@ -319,7 +319,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     ) {
       return id;
     }
-    return;
+    return undefined;
   }
 
   @action
