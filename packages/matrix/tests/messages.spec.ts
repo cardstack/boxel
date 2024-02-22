@@ -347,7 +347,7 @@ test.describe('Room messages', () => {
     const testCard5 = `${testHost}/van-gogh`;
 
     await login(page, 'user1', 'pass');
-    await createRoom(page);
+    await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
