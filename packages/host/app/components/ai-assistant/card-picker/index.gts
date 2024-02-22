@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 
 import { AddButton, IconButton, Tooltip } from '@cardstack/boxel-ui/components';
-import { and, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
+import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
@@ -120,7 +120,7 @@ export default class AiAssistantCardPicker extends Component<Signature> {
               </:trigger>
 
               <:content>
-                {{#if (eq card.id @autoAttachedCard.id)}}
+                {{#if (this.isAutoAttachedCard card)}}
                   Topmost card is shared automatically
                 {{/if}}
               </:content>
