@@ -98,7 +98,10 @@ export default class RoomInput extends Component<RoomArgs> {
     // If card doesn't exis in `cardsToAttch`,
     // then it is an auto-attached card.
     const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
-    if (cardIndex === -1 && this.autoAttachedCard?.id === card.id) {
+    if (
+      !cardIndex ||
+      (cardIndex === -1 && this.autoAttachedCard?.id === card.id)
+    ) {
       this.isAutoAttachedCardDisplayed = false;
     } else {
       if (cardIndex && cardIndex !== -1) {

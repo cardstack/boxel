@@ -357,10 +357,11 @@ test.describe('Room messages', () => {
   test('displays auto-attached card', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
+    const testCard3 = `${testHost}/type-examples`;
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`).click();
-    await createRoom(page);
+    await createRoom(page, false);
 
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
     await page.locator(`[data-test-selected-card]`).hover();
@@ -385,6 +386,28 @@ test.describe('Room messages', () => {
         cards: [
           { id: testCard1, title: 'Hassan' },
           { id: testCard2, title: 'Mango' },
+        ],
+      },
+    ]);
+
+    // Remove auto-attached card
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
+    await page.locator(`[data-test-selected-card='${testCard1}'] [data-test-remove-card-btn]`).click();
+    await selectCardFromCatalog(page, testCard3);
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
+    await page.locator('[data-test-send-message-btn]').click();
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        cards: [
+          { id: testCard1, title: 'Hassan' },
+          { id: testCard2, title: 'Mango' },
+        ],
+      },
+      {
+        from: 'user1',
+        cards: [
+          { id: testCard3, title: 'Type Examples' },
         ],
       },
     ]);

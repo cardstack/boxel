@@ -228,7 +228,7 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function createRoom(page: Page) {
+export async function createRoom(page: Page, removeAutoAttachedCard: boolean = true) {
   await page.locator('[data-test-create-room-btn]').click();
   await page.locator(`[data-test-room-name]`).waitFor();
   let roomName = await page.locator('[data-test-room-name]').textContent();
@@ -236,6 +236,9 @@ export async function createRoom(page: Page) {
     throw new Error('room name is not found');
   }
   await isInRoom(page, roomName);
+  if (removeAutoAttachedCard) {
+    await page.locator(`[data-test-selected-card] [data-test-remove-card-btn]`).click();
+  }
   return roomName;
 }
 
