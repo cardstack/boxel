@@ -11,16 +11,24 @@ import {
   RealmPaths,
 } from '@cardstack/runtime-common';
 
+import { getRealmSession } from '@cardstack/host/resources/realm-session';
+
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 const waiter = buildWaiter('realm-info-service:waiter');
 
+type RealmInfoWithPermissions = RealmInfo & {
+  canRead: boolean;
+  canWrite: boolean;
+};
+
 export default class RealmInfoService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   cachedRealmURLsForURL: Map<string, string> = new Map(); // Has the file url already been resolved to a realm url?
-  cachedRealmInfos: TrackedMap<string, RealmInfo> = new TrackedMap(); // Has the realm url already been resolved to a realm info?
+  cachedRealmInfos: TrackedMap<string, RealmInfoWithPermissions> =
+    new TrackedMap(); // Has the realm url already been resolved to a realm info?
   cachedPublicReadableRealms: Map<string, boolean> = new Map();
 
   async fetchRealmURL(url: string): Promise<URL | undefined> {
@@ -97,8 +105,17 @@ export default class RealmInfoService extends Service {
           { headers: { Accept: SupportedMimeType.RealmInfo } },
         );
 
-        let realmInfo = (await realmInfoResponse.json())?.data?.attributes;
-        this.cachedRealmInfos.set(realmURLString, realmInfo);
+        let realmInfo = (await realmInfoResponse.json())?.data
+          ?.attributes as RealmInfo;
+        let realmSession = getRealmSession(this, {
+          realmURL: () => new URL(realmURLString!),
+        });
+        await realmSession.loaded;
+        this.cachedRealmInfos.set(realmURLString, {
+          ...realmInfo,
+          canRead: !!realmSession.canRead,
+          canWrite: !!realmSession.canWrite,
+        });
         return realmInfo;
       }
     } finally {

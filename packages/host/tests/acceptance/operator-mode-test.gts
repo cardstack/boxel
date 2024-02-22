@@ -19,6 +19,10 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { baseRealm, primitive } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import {
+  tokenRefreshPeriodSec,
+  sessionLocalStorageKey,
+} from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
@@ -35,13 +39,15 @@ import {
   setupMatrixServiceMock,
 } from '../helpers/mock-matrix-service';
 
+let sessionExpirationSec: number;
+
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { expiresInSec: () => sessionExpirationSec });
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-cards');
@@ -51,6 +57,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-cards');
     window.localStorage.removeItem('recent-files');
+    sessionExpirationSec = 60 * 60;
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
@@ -626,8 +633,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-submode-switcher] button');
       await click('[data-test-boxel-menu-item-text="Code"]');
 
-      assert.dom('[data-test-submode-switcher] button').hasText('Code');
+      await waitFor('[data-test-submode-switcher]');
       assert.dom('[data-test-code-mode]').exists();
+      assert.dom('[data-test-submode-switcher] button').hasText('Code');
 
       // Submode is reflected in the URL
       assert.operatorModeParametersMatch(currentURL(), {
@@ -657,6 +665,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-boxel-menu-item-text="Interact"]');
 
       // Stacks are restored
+      await waitFor('[data-test-operator-mode-stack]');
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
 
       // Submode is reflected in the URL
@@ -679,6 +688,41 @@ module('Acceptance | operator mode tests', function (hooks) {
         fileView: 'inspector',
         openDirs: { [testRealmURL]: ['Pet/'] },
       });
+    });
+  });
+
+  module('realm session expiration', function () {
+    let refreshInSec = 2;
+
+    hooks.beforeEach(async function () {
+      sessionExpirationSec = tokenRefreshPeriodSec + refreshInSec;
+    });
+
+    test('realm session refreshes within 5 minute window of expiration', async function (assert) {
+      await visit('/');
+
+      // Enter operator mode
+      await triggerEvent(document.body, 'keydown', {
+        code: 'Key.',
+        key: '.',
+        ctrlKey: true,
+      });
+
+      await waitFor('[data-test-operator-mode-stack]');
+      let originalToken = window.localStorage.getItem(sessionLocalStorageKey);
+      await waitUntil(
+        () =>
+          window.localStorage.getItem(sessionLocalStorageKey) !== originalToken,
+        { timeout: refreshInSec * 3 * 1000 },
+      );
+
+      let newToken = window.localStorage.getItem(sessionLocalStorageKey);
+      assert.ok(newToken, 'new session token obtained');
+      assert.notEqual(
+        originalToken,
+        newToken,
+        'new session token is different than original session token',
+      );
     });
   });
 });

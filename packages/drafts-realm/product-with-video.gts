@@ -1,4 +1,4 @@
-import { Product, ProductDetail, ProductImages, formatUsd } from './product';
+import { Product, ProductDetail, ProductImages } from './product';
 import {
   Component,
   field,
@@ -7,6 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { MonetaryAmountAtom } from './monetary-amount';
 
 // https://v.etsystatic.com/video/upload/s--nMgoUlxI--/ac_none,c_crop,du_15,h_960,q_auto:good,w_720,x_0,y_0/IMG_2082_dnw70f
 
@@ -40,7 +41,9 @@ class Isolated extends Component<typeof ProductWithVideo> {
           </span>
         </div>
         <h1 class='title'>{{@model.title}}</h1>
-        <div class='price'>{{formatUsd @model.unitPriceCents}}</div>
+        <div class='price'>
+          <MonetaryAmountAtom @model={{@model.unitPrice}} />
+        </div>
         {{#if @model.videoUrl}}
           <div class='video-container'>
             <video controls aria-label='Product video' aria-hidden='false'>

@@ -2,10 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
+      "locale": "en-US",
       "sign": "$",
       "name": "U.S. Dollar",
       "symbol": "USD",
-      "logoURL": "../invoice-assets/currency-usd.png"
+      "logoURL": "https://i.imgur.com/JIL3hND.png"
     },
     "meta": {
       "adoptsFrom": {

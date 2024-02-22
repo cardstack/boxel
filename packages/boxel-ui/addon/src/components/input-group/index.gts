@@ -13,6 +13,7 @@ import {
   type AccessoriesBlockArg,
   Button as ButtonAccessory,
   IconButton as IconButtonAccessory,
+  Select as SelectAccessory,
   Text as TextAccessory,
 } from './accessories/index.gts';
 import {
@@ -78,9 +79,10 @@ export default class InputGroup extends Component<Signature> {
     {{#let
       (and (eq @state 'invalid') (bool @errorMessage))
       (hash
-        Text=TextAccessory
         Button=(component ButtonAccessory kind='secondary-light')
         IconButton=IconButtonAccessory
+        Select=SelectAccessory
+        Text=TextAccessory
       )
       (hash Input=InputControl Textarea=TextareaControl)
       as |shouldShowErrorMessage Accessories Controls|

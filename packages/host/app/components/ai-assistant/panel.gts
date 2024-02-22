@@ -341,7 +341,8 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       let { room } = resource;
       if (
-        room.invitedMembers.find((m) => aiBotUserId === m.userId) &&
+        (room.invitedMembers.find((m) => aiBotUserId === m.userId) ||
+          room.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
         room.joinedMembers.find((m) => this.matrixService.userId === m.userId)
       ) {
         rooms.push(room);

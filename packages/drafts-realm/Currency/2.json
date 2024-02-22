@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "locale": "en-IE",
+      "sign": "€",
+      "name": "Euro",
+      "symbol": "EUR",
+      "logoURL": "https://i.imgur.com/7pDUUVh.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../asset",
+        "name": "Currency"
+      }
+    }
+  }
+}
