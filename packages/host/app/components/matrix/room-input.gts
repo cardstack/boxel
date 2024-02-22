@@ -1,4 +1,3 @@
-import { Input } from '@ember/component';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -43,11 +42,11 @@ export default class RoomInput extends Component<RoomArgs> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
-  private shareCurrentContext = false;
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, CardDef[] | undefined> =
     new TrackedMap();
+  private lastTopMostCard: CardDef | undefined;
 
   private get messageToSend() {
     return this.messagesToSend.get(this.args.roomId) ?? '';
@@ -111,14 +110,12 @@ export default class RoomInput extends Component<RoomArgs> {
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
       let context = undefined;
-      if (this.shareCurrentContext) {
-        context = {
-          submode: this.operatorModeStateService.state.submode,
-          openCards: this.operatorModeStateService
-            .topMostStackItems()
-            .map((stackItem) => stackItem.card),
-        };
-      }
+      context = {
+        submode: this.operatorModeStateService.state.submode,
+        openCards: this.operatorModeStateService
+          .topMostStackItems()
+          .map((stackItem) => stackItem.card),
+      };
       await this.matrixService.sendMessage(
         this.args.roomId,
         message,
@@ -128,9 +125,22 @@ export default class RoomInput extends Component<RoomArgs> {
     },
   );
 
+  @action
+  private setLastTopMostCard(card: CardDef) {
+    if (this.lastTopMostCard?.id !== card.id) {
+      this.lastTopMostCard = card;
+      this.isAutoAttachedCardDisplayed = true;
+    }
+  }
+
   private get autoAttachedCard(): CardDef | undefined {
     let stackItems = this.operatorModeStateService.topMostStackItems();
-    let topMostCard = stackItems[stackItems.length - 1].card;
+    let topMostCard = stackItems[stackItems.length - 1]?.card;
+    if (!topMostCard) {
+      return undefined;
+    }
+    this.setLastTopMostCard(topMostCard);
+
     let card = this.cardsToAttach?.find((c) => c.id === topMostCard.id);
     if (!this.isAutoAttachedCardDisplayed || card) {
       return undefined;

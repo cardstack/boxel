@@ -357,7 +357,6 @@ test.describe('Room messages', () => {
   test('displays auto-attached card', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
-    const testCard3 = `${testHost}/type-examples`;
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`).click();
@@ -389,21 +388,32 @@ test.describe('Room messages', () => {
         ],
       },
     ]);
+  });
 
-    // Remove auto-attached card
+  test('can remove auto-attached card', async ({ page }) => {
+    const testCard1 = `${testHost}/hassan`;
+    const testCard2 = `${testHost}/mango`;
+    const testCard3 = `${testHost}/type-examples`;
+
+    await login(page, 'user1', 'pass');
+    await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`).click();
+    await createRoom(page, false);
+
+    // If user removes the auto-attached card,
+    // and then opens another card in the stack,
+    // the card will be attached automatically.
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
     await page.locator(`[data-test-selected-card='${testCard1}'] [data-test-remove-card-btn]`).click();
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
+    await page.locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`).click();
+    await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard2}']`).click();
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
+    await page.locator(`[data-test-selected-card='${testCard2}'] [data-test-remove-card-btn]`).click();
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
     await selectCardFromCatalog(page, testCard3);
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
     await page.locator('[data-test-send-message-btn]').click();
     await assertMessages(page, [
-      {
-        from: 'user1',
-        cards: [
-          { id: testCard1, title: 'Hassan' },
-          { id: testCard2, title: 'Mango' },
-        ],
-      },
       {
         from: 'user1',
         cards: [
