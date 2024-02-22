@@ -4,10 +4,10 @@ export function balanceInCurrency(
   balance: number | null | undefined,
   payment: TokenField | CurrencyField | null | undefined,
 ) {
-  if (balance == null || payment?.exchangeRate == null) {
+  if (balance == null || payment == null) {
     return 0;
   }
-  let total = balance * payment.exchangeRate;
+  let total = balance;
   if (payment.name === 'USD') {
     return formatUSD(total);
   } else {

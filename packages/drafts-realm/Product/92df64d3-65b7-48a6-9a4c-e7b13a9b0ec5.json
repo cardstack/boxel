@@ -10,8 +10,12 @@
         "https://i.etsystatic.com/14024996/r/il/d812cd/1946487050/il_794xN.1946487050_suco.jpg",
         "https://i.etsystatic.com/14024996/r/il/3d1f28/2002648593/il_794xN.2002648593_mx8z.jpg"
       ],
-      "unitPriceCents": 11309,
-      "usShippingCostCents": 0,
+      "unitPrice": {
+        "amount": 99
+      },
+      "shippingCost": {
+        "amount": 0
+      },
       "leadTimeDays": 8,
       "deliveryWindowDays": 6,
       "isReturnable": true,
@@ -23,6 +27,16 @@
       "seller": {
         "links": {
           "self": "../Seller/703dfdde-8279-42de-ab57-3cdd1d8695bc"
+        }
+      },
+      "unitPrice.currency": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Currency/2"
+        }
+      },
+      "shippingCost.currency": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Currency/2"
         }
       }
     },

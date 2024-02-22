@@ -24,6 +24,7 @@ import { on } from '@ember/modifier';
 // @ts-ignore
 import { action } from '@ember/object';
 import {
+  // @ts-ignore
   type CardRef,
   LooseSingleCardDocument,
   createNewCard,
@@ -244,6 +245,9 @@ class Isolated extends Component<typeof Claim> {
 
       let transactionDoc: LooseSingleCardDocument = {
         data: {
+          meta: {
+            adoptsFrom: transactionCardRef,
+          },
           attributes: transactionCardAttributes,
           relationships: {
             chain: {
