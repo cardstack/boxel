@@ -28,7 +28,9 @@
     "@types/uuid": "^9.0.4",
     "@types/yargs": "^17.0.10",
     "basic-auth": "^2.0.1",
+    "concurrently": "^8.0.1",
     "date-fns": "^2.28.0",
+    "eslint-plugin-qunit": "^7.3.4",
     "ethers": "^6.6.2",
     "eventsource": "^2.0.2",
     "fastboot": "^4.1.0",
@@ -81,7 +83,11 @@
     "start:development": "./scripts/start-development.sh",
     "start:production": "./scripts/start-production.sh",
     "wait": "sleep 10000000",
-    "lint": "glint"
+    "lint": "concurrently \"npm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"npm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix",
+    "lint:glint": "glint"
   },
   "volta": {
     "extends": "../../package.json"

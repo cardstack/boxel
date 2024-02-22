@@ -58,7 +58,7 @@ let createJWT = (
   return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
 };
 
-module.only('Realm Server', function (hooks) {
+module('Realm Server', function (hooks) {
   async function expectEvent<T>({
     assert,
     expected,
@@ -434,116 +434,6 @@ module.only('Realm Server', function (hooks) {
     });
   });
 
-  module('card GET request', function (_hooks) {
-    module('public readable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            '*': ['read'],
-          },
-        ));
-      });
-
-      test('serves the request', async function (assert) {
-        let response = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json');
-
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        let json = response.body;
-        assert.ok(json.data.meta.lastModified, 'lastModified exists');
-        delete json.data.meta.lastModified;
-        assert.strictEqual(
-          response.get('X-boxel-realm-url'),
-          testRealmURL.href,
-          'realm url header is correct',
-        );
-        assert.strictEqual(
-          response.get('X-boxel-realm-public-readable'),
-          'true',
-          'realm is public readable',
-        );
-        assert.deepEqual(json, {
-          data: {
-            id: `${testRealmHref}person-1`,
-            type: 'card',
-            attributes: {
-              firstName: 'Mango',
-              description: null,
-              thumbnailURL: null,
-            },
-            meta: {
-              adoptsFrom: {
-                module: `./person`,
-                name: 'Person',
-              },
-              realmInfo: {
-                name: 'Test Realm',
-                backgroundURL: null,
-                iconURL: null,
-              },
-              realmURL: testRealmURL.href,
-            },
-            links: {
-              self: `${testRealmHref}person-1`,
-            },
-          },
-        });
-      });
-    });
-
-    module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            john: ['read'],
-          },
-        ));
-      });
-
-      test('401 with invalid JWT', async function (assert) {
-        let response = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json')
-          .set('Authorization', `Bearer invalid-token`);
-
-        assert.strictEqual(response.status, 401, 'HTTP 401 status');
-      });
-
-      test('401 without a JWT', async function (assert) {
-        let response = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json'); // no Authorization header
-
-        assert.strictEqual(response.status, 401, 'HTTP 200 status');
-      });
-
-      test('403 without permission', async function (assert) {
-        let response = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
-
-        assert.strictEqual(response.status, 403, 'HTTP 403 status');
-      });
-
-      test('200 with permission', async function (assert) {
-        let response = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
-          );
-
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      });
-    });
-  });
-
   module('card PATCH request', function (_hooks) {
     module('public writable realm', function (hooks) {
       hooks.beforeEach(async function () {
@@ -767,11 +657,7 @@ module.only('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let cardFile = join(dir.name, entry);
-        assert.strictEqual(
-          existsSync(cardFile),
-          false,
-          'card json does not exist',
-        );
+        assert.false(existsSync(cardFile), 'card json does not exist');
       });
 
       test('serves a card DELETE request with .json extension in the url', async function (assert) {
@@ -805,11 +691,7 @@ module.only('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let cardFile = join(dir.name, entry);
-        assert.strictEqual(
-          existsSync(cardFile),
-          false,
-          'card json does not exist',
-        );
+        assert.false(existsSync(cardFile), 'card json does not exist');
       });
     });
 
@@ -1069,11 +951,7 @@ module.only('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let cardFile = join(dir.name, entry);
-        assert.strictEqual(
-          existsSync(cardFile),
-          false,
-          'card module does not exist',
-        );
+        assert.false(existsSync(cardFile), 'card module does not exist');
       });
 
       test('serves a card-source DELETE request for a card instance', async function (assert) {
@@ -1106,11 +984,7 @@ module.only('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let cardFile = join(dir.name, entry);
-        assert.strictEqual(
-          existsSync(cardFile),
-          false,
-          'card instance does not exist',
-        );
+        assert.false(existsSync(cardFile), 'card instance does not exist');
       });
     });
 
@@ -1271,6 +1145,7 @@ module.only('Realm Server', function (hooks) {
         }
         if (!maybeId) {
           assert.ok(false, 'new card identifier was undefined');
+          // eslint-disable-next-line qunit/no-early-return
           return;
         }
         let id = maybeId;

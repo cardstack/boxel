@@ -1,4 +1,4 @@
-import { Product, ProductDetail, ProductImages, formatUsd } from './product';
+import { Product, ProductDetail, ProductImages } from './product';
 import {
   Component,
   field,
@@ -8,6 +8,7 @@ import {
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { RatingsSummary as RatingsSummaryField } from './ratings-summary';
+import { MonetaryAmountAtom } from './monetary-amount';
 
 class Isolated extends Component<typeof VideoProduct> {
   @tracked activeImage = this.args.model.images?.[0];
@@ -40,7 +41,9 @@ class Isolated extends Component<typeof VideoProduct> {
           <@fields.ratingsSummary @format='atom' />
         </div>
         <h1 class='title'>{{@model.title}}</h1>
-        <div class='price'>{{formatUsd @model.unitPriceCents}}</div>
+        <div class='price'><MonetaryAmountAtom
+            @model={{@model.unitPrice}}
+          /></div>
         {{#if @model.videoUrl}}
           <div class='video-container'>
             <video controls aria-label='Product video' aria-hidden='false'>

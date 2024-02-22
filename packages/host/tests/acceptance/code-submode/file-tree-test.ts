@@ -26,9 +26,7 @@ import {
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
-let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {
-  [testRealmURL]: ['read', 'write'],
-};
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -196,7 +194,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, () => realmPermissions);
+  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');
