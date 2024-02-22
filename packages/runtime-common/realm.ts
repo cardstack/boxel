@@ -302,6 +302,7 @@ export class Realm {
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.loaderTemplate = loader;
+    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -610,6 +611,13 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
+  async maybeHandle(request: Request): Promise<Response | null> {
+    if (!this.paths.inRealm(new URL(request.url))) {
+      return null;
+    }
+    return await this.handle(request);
+  }
+
   private async createSession(request: Request) {
     if (!(await this.#matrixClient.isTokenValid())) {
       await this.#matrixClient.login();
@@ -811,9 +819,9 @@ export class Realm {
 
   async handle(request: Request): Promise<ResponseWithNodeStream> {
     try {
+      // local requests are allowed to query the realm as the index is being built up
       let isLocal = this.isRequestFromItself(request);
 
-      // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
         await this.ready;
 
