@@ -10,6 +10,8 @@ module('realm-user-permissions', function (_hooks) {
     test('anyone can read but not write', function (assert) {
       assert.ok(permissionsChecker.can('anyone', 'read'));
       assert.notOk(permissionsChecker.can('anyone', 'write'));
+
+      assert.deepEqual(permissionsChecker.for('anyone'), ['read']);
     });
   });
 
@@ -21,6 +23,8 @@ module('realm-user-permissions', function (_hooks) {
     test('anyone can read and write', function (assert) {
       assert.ok(permissionsChecker.can('anyone', 'read'));
       assert.ok(permissionsChecker.can('anyone', 'write'));
+
+      assert.deepEqual(permissionsChecker.for('anyone'), ['read', 'write']);
     });
   });
 
@@ -34,8 +38,15 @@ module('realm-user-permissions', function (_hooks) {
       assert.ok(permissionsChecker.can('@matic:boxel-ai', 'read'));
       assert.ok(permissionsChecker.can('@matic:boxel-ai', 'write'));
 
+      assert.deepEqual(permissionsChecker.for('@matic:boxel-ai'), [
+        'read',
+        'write',
+      ]);
+
       assert.ok(permissionsChecker.can('anyone', 'read'));
       assert.notOk(permissionsChecker.can('anyone', 'write'));
+
+      assert.deepEqual(permissionsChecker.for('anyone'), ['read']);
     });
   });
 
@@ -51,6 +62,13 @@ module('realm-user-permissions', function (_hooks) {
 
       assert.ok(permissionsChecker.can('@matic:boxel-ai', 'write'));
       assert.notOk(permissionsChecker.can('anyone', 'write'));
+
+      assert.deepEqual(permissionsChecker.for('@matic:boxel-ai'), [
+        'read',
+        'write',
+      ]);
+
+      assert.deepEqual(permissionsChecker.for('anyone'), ['read']);
     });
   });
 });

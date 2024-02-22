@@ -744,7 +744,7 @@ export class Realm {
     hash.update(this.#realmSecretSeed);
     let hashedResponse = uint8ArrayToHex(await hash.digest());
     if (hashedResponse === challenge) {
-      let permissions = this.#permissions[user] ?? this.#permissions['*'] ?? [];
+      let permissions = new RealmPermissionChecker(this.#permissions).for(user);
       let jwt = this.#adapter.createJWT(
         {
           user,
