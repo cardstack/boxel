@@ -95,16 +95,16 @@ export default class RoomInput extends Component<RoomArgs> {
 
   @action
   private removeCard(card: CardDef) {
-    // If card doesn't exis in `cardsToAttch`,
+    // If card doesn't exist in `cardsToAttch`,
     // then it is an auto-attached card.
     const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
     if (
-      !cardIndex ||
+      cardIndex == undefined ||
       (cardIndex === -1 && this.autoAttachedCard?.id === card.id)
     ) {
       this.isAutoAttachedCardDisplayed = false;
     } else {
-      if (cardIndex && cardIndex !== -1) {
+      if (cardIndex != undefined && cardIndex !== -1) {
         this.cardsToAttach?.splice(cardIndex, 1);
       }
       this.cardsToSend.set(
