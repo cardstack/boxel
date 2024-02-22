@@ -37,6 +37,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
+  CardMessageContent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -318,12 +319,17 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: MatrixSDK.IContent,
+    content: CardMessageContent,
   ) {
     if (content.data) {
-      content.data = JSON.stringify(content.data);
+      const encodedContent = {
+        ...content,
+        data: JSON.stringify(content.data),
+      };
+      await this.client.sendEvent(roomId, eventType, encodedContent);
+    } else {
+      await this.client.sendEvent(roomId, eventType, content);
     }
-    await this.client.sendEvent(roomId, eventType, content);
   }
 
   async sendMessage(

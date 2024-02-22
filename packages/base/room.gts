@@ -643,18 +643,29 @@ interface CommandEvent extends BaseMatrixEvent {
 
 interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: {
-    'm.relates_to'?: {
-      rel_type: string;
-      event_id: string;
-    };
-    msgtype: 'org.boxel.message';
-    format: 'org.matrix.custom.html';
-    body: string;
-    formatted_body: string;
-    data: {
+  content: CardMessageContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
+export interface CardMessageContent {
+  'm.relates_to'?: {
+    rel_type: string;
+    event_id: string;
+  };
+  msgtype: 'org.boxel.message';
+  format: 'org.matrix.custom.html';
+  body: string;
+  formatted_body: string;
+  data: {
+    attachedCards: LooseSingleCardDocument[];
+    context: {
+      card: LooseSingleCardDocument;
       openCards: LooseSingleCardDocument[];
-      attachedCards: LooseSingleCardDocument[];
       functions: {
         name: string;
         description: string;
@@ -663,12 +674,6 @@ interface CardMessageEvent extends BaseMatrixEvent {
       };
       submode: string;
     };
-  };
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
   };
 }
 
