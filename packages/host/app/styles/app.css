@@ -12,3 +12,28 @@
 .link:hover {
   color: var(--boxel-highlight-hover);
 }
+
+/* Style Monaco read-only tooltip, copied from packages/boxel-ui/addon/src/components/tooltip/index.gts */
+.ember-application .monaco-editor .monaco-editor-overlaymessage {
+  background-color: rgb(0 0 0 / 80%);
+  box-shadow: 0 0 0 1px var(--boxel-light-500);
+  color: var(--boxel-light);
+  text-align: center;
+  border-radius: var(--boxel-border-radius-sm);
+  padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
+  width: max-content;
+  position: absolute;
+  font: var(--boxel-tooltip-font, var(--boxel-font-xs));
+  z-index: 5;
+}
+
+.ember-application .monaco-editor .monaco-editor-overlaymessage .message {
+  padding: 0;
+  color: inherit;
+  background-color: transparent;
+  border: 0;
+}
+
+.ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.top, .ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.below {
+  display: none;
+}

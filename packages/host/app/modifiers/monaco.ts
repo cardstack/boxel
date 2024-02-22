@@ -20,6 +20,7 @@ interface Signature {
       onCursorPositionChange?: (position: MonacoSDK.Position) => void;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
       language?: string;
+      readOnly?: boolean;
       monacoSDK: typeof MonacoSDK;
     };
   };
@@ -46,6 +47,7 @@ export default class Monaco extends Modifier<Signature> {
       initialCursorPosition,
       onCursorPositionChange,
       onSetup,
+      readOnly,
       monacoSDK,
     }: Signature['Args']['Named'],
   ) {
@@ -66,6 +68,7 @@ export default class Monaco extends Modifier<Signature> {
     } else {
       let editorOptions: MonacoSDK.editor.IStandaloneEditorConstructionOptions =
         {
+          readOnly,
           value: content,
           language,
           scrollBeyondLastLine: false,

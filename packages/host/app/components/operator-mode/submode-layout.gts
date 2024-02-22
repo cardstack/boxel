@@ -62,6 +62,8 @@ export default class SubmodeLayout extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
 
+  private searchElement: HTMLElement | null = null;
+
   private get aiAssistantVisibilityClass() {
     return this.isAiAssistantVisible
       ? 'ai-assistant-open'
@@ -118,6 +120,7 @@ export default class SubmodeLayout extends Component<Signature> {
       this.searchSheetMode = SearchSheetModes.SearchPrompt;
     }
 
+    this.searchElement?.focus();
     this.args.onSearchSheetOpened?.();
   }
 
@@ -140,6 +143,11 @@ export default class SubmodeLayout extends Component<Signature> {
   private onListPanelContextChange(listPanelContext: PanelContext[]) {
     this.panelWidths.submodePanel = listPanelContext[0]?.lengthPx;
     this.panelWidths.aiAssistantPanel = listPanelContext[1]?.lengthPx;
+  }
+
+  @action
+  private storeSearchElement(element: HTMLElement) {
+    this.searchElement = element;
   }
 
   <template>
@@ -221,6 +229,7 @@ export default class SubmodeLayout extends Component<Signature> {
       @onFocus={{this.openSearchSheetToPrompt}}
       @onSearch={{this.expandSearchToShowResults}}
       @onCardSelect={{this.handleCardSelectFromSearch}}
+      @onInputInsertion={{this.storeSearchElement}}
     />
 
     <style>
