@@ -268,6 +268,10 @@ module('Acceptance | interact submode tests', function (hooks) {
           iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
         },
         'Pet/ringo.json': new Pet({ name: 'Ringo' }),
+        'Person/hassan.json': new Person({
+          firstName: 'Hassan',
+          pet: mangoPet,
+        }),
       },
     });
   });
@@ -791,6 +795,33 @@ module('Acceptance | interact submode tests', function (hooks) {
       await deferred.promise;
     });
 
+    test('embedded card from writable realm shows pencil icon in edit mode', async (assert) => {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealm2URL}Person/hassan`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+      assert
+        .dom(
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+        )
+        .exists();
+      await click(
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="edit"]`,
+        )
+        .exists('linked card now rendered as a stack item in edit format');
+    });
+
     module('when the user lacks write permissions', function (hooks) {
       hooks.beforeEach(async function () {
         realmPermissions = { [testRealmURL]: ['read'] };
@@ -848,6 +879,38 @@ module('Acceptance | interact submode tests', function (hooks) {
             `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
           )
           .doesNotExist('"..." menu does not exist');
+      });
+
+      test('embedded card from read-only realm does not show pencil icon in edit mode', async (assert) => {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealm2URL}Person/hassan`,
+                format: 'edit',
+              },
+            ],
+          ],
+        });
+        assert
+          .dom(`[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
+          .exists();
+        assert
+          .dom(
+            `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+          )
+          .doesNotExist('edit icon not displayed for linked card');
+        await click(
+          `[data-test-links-to-editor="pet"] [data-test-field-component-card]`,
+        );
+        await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
+        assert
+          .dom(
+            `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="isolated"]`,
+          )
+          .exists(
+            'linked card now rendered as a stack item in isolated (non-edit) format',
+          );
       });
     });
   });
