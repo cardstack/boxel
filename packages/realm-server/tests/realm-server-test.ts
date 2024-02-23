@@ -58,7 +58,7 @@ let createJWT = (
   return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
 };
 
-module.only('Realm Server', function (hooks) {
+module('Realm Server', function (hooks) {
   async function expectEvent<T>({
     assert,
     expected,

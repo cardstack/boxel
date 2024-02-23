@@ -160,7 +160,13 @@ export class RealmServer {
     });
 
     setupCloseHandler(ctxt.res, request);
-    let realmResponse = await realm.handle(request);
+
+    // if (request.url.includes('drafts/author')) {
+    //   debugger;
+    // }
+
+    let realmResponse = await realm.handle(request); // entrypoint of the request
+
     let { status, statusText, headers, body, nodeStream } = realmResponse;
     ctxt.status = status;
     ctxt.message = statusText;

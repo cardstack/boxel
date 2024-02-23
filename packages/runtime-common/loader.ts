@@ -119,7 +119,7 @@ export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');
   private modules = new Map<string, Module>();
-  private urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
+  urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
 
   // use a tuple array instead of a map so that we can support reversing
   // different resolutions back to the same URL. the resolution that we apply
