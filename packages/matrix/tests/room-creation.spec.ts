@@ -32,7 +32,8 @@ test.describe('Room creation', () => {
     await registerUser(synapse, 'user2', 'pass');
     await clearLocalStorage(page);
   });
-  test.afterEach(async () => {
+  test.afterEach(async ({ page }) => {
+    await clearLocalStorage(page);
     await synapseStop(synapse.synapseId);
   });
 
