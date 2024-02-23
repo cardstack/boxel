@@ -26,7 +26,7 @@ export default class LoaderService extends Service {
 
   reset() {
     if (this.loader) {
-      this.loader = Loader.cloneLoader(this.loader);
+      this.loader = this.loader.clone();
       shimExternals(this.loader);
     } else {
       this.loader = this.makeInstance();
