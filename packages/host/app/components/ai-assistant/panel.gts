@@ -210,11 +210,12 @@ export default class AiAssistantPanel extends Component<Signature> {
         position: absolute;
         right: var(--boxel-sp-xs);
         top: var(--boxel-sp-sm);
+        z-index: 1;
       }
       .header-buttons {
         position: relative;
         align-items: center;
-        display: flex;
+        display: inline-flex;
       }
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);
