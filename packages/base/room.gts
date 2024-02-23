@@ -13,6 +13,7 @@ import DateTimeField from './datetime';
 import NumberField from './number';
 import MarkdownField from './markdown';
 import Modifier from 'ember-modifier';
+import { type Schema } from '@cardstack/runtime-common/helpers/ai';
 import {
   Loader,
   getCard,
@@ -664,15 +665,13 @@ export interface CardMessageContent {
   data: {
     attachedCards: LooseSingleCardDocument[];
     context: {
-      card: LooseSingleCardDocument;
       openCards: LooseSingleCardDocument[];
       functions: {
         name: string;
         description: string;
-        required: string[];
-        parameters: JSONObject;
-      };
-      submode: string;
+        parameters: Schema;
+      }[];
+      submode: string | undefined;
     };
   };
 }

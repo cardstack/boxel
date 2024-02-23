@@ -50,7 +50,7 @@ type EnumSchema = {
   enum: any[];
 };
 
-type Schema =
+export type Schema =
   | EmptySchema
   | ArraySchema
   | ObjectSchema
@@ -127,22 +127,22 @@ function getPrimitiveType(
 }
 
 /**
- * From a card definition, generate a JSON Schema that can be used to
+ *  From a card or field definition, generate a JSON Schema that can be used to
  *  define the shape of a patch call. Fields that cannot be automatically
  *  identified may be omitted from the schema.
  *
  *  This is a subset of JSON Schema.
  *
- * @param def - The card to generate the patch call specification for.
+ * @param def - The field to generate the patch call specification for.
  * @param cardApi - The card API to use to generate the patch call specification
  * @param mappings - A map of field definitions to JSON schema
  * @returns The generated patch call specification as JSON schema
  */
-export function generatePatchCallSpecification(
+function generatePatchCallSpecification(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
-) {
+): Schema | undefined {
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
     return getPrimitiveType(def, mappings);
@@ -189,4 +189,32 @@ export function generatePatchCallSpecification(
     }
   }
   return schema;
+}
+
+/**
+ *  From a card definition, generate a JSON Schema that can be used to
+ *  define the shape of a patch call. Fields that cannot be automatically
+ *  identified may be omitted from the schema.
+ *
+ *  This is a subset of JSON Schema.
+ *
+ * @param def - The card to generate the patch call specification for.
+ * @param cardApi - The card API to use to generate the patch call specification
+ * @param mappings - A map of field definitions to JSON schema
+ * @returns The generated patch call specification as JSON schema
+ */
+export function generateCardPatchCallSpecification(
+  def: typeof CardAPI.CardDef,
+  cardApi: typeof CardAPI,
+  mappings: Map<typeof CardAPI.FieldDef, Schema>,
+): Schema {
+  let schema = generatePatchCallSpecification(def, cardApi, mappings);
+  if (schema == undefined) {
+    return {
+      type: 'object',
+      properties: {},
+    };
+  } else {
+    return schema;
+  }
 }

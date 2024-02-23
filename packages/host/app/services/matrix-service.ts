@@ -22,7 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
-  generatePatchCallSpecification,
+  generateCardPatchCallSpecification,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
@@ -353,8 +353,8 @@ export default class MatrixService extends Service {
       let mappings = await basicMappings(this.loaderService.loader);
 
       // Limiting support to modifying the top of just one stack
-      let patchSpec = generatePatchCallSpecification(
-        context!.openCards[0].constructor,
+      let patchSpec = generateCardPatchCallSpecification(
+        context!.openCards[0].constructor as typeof CardDef,
         this.cardAPI,
         mappings,
       );
@@ -386,7 +386,8 @@ export default class MatrixService extends Service {
     }
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: 'org.boxel.message',
-      body,
+      body: body || '',
+      format: 'org.matrix.custom.html',
       formatted_body: html,
       data: {
         attachedCards: serializedAttachedCards,
