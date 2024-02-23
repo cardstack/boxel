@@ -45,7 +45,9 @@ export default class LoaderService extends Service {
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),
     );
+
     loader.prependURLHandlers([(req) => this.fetchWithAuth(req)]);
+
     shimExternals(loader);
 
     return loader;

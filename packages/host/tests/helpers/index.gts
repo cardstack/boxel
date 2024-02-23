@@ -536,10 +536,23 @@ async function setupTestRealm({
     permissions: { '*': ['read', 'write'] },
     realmSecretSeed: "shhh! it's a secret",
   });
-  loader.prependURLHandlers([
-    (req) => sourceFetchRedirectHandle(req, adapter, realm),
-    (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
-  ]);
+
+  // debugger;
+  // loader.prependURLHandlers([
+  //   (req) => sourceFetchRedirectHandle(req, adapter, realm),
+  //   (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
+  // ]);
+
+  if (loader.urlHandlers.length < 2) {
+    loader.registerURLHandler((req) =>
+      sourceFetchRedirectHandle(req, adapter, realm),
+    );
+    loader.registerURLHandler((req) =>
+      sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
+    );
+
+    loader.registerURLHandler(realm.maybeHandle.bind(realm));
+  }
 
   await realm.ready;
   return { realm, adapter };

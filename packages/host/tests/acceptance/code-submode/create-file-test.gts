@@ -233,6 +233,12 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     };
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
+
+    // Is it really ok to use the same loader in host and in realm?
+    ({ adapter } = await setupAcceptanceTestRealm({
+      loader,
+      contents: files,
+    }));
     await setupAcceptanceTestRealm({
       loader,
       contents: filesB,
@@ -547,6 +553,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
 
     await click('[data-test-create-card-instance]');
+    await this.pauseTest();
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert
