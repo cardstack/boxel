@@ -79,7 +79,10 @@ module('Acceptance | interact submode tests', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    realmPermissions = { [testRealmURL]: ['read', 'write'] };
+    realmPermissions = {
+      [testRealmURL]: ['read', 'write'],
+      [testRealm2URL]: ['read', 'write'],
+    };
     window.localStorage.removeItem('recent-cards');
     window.localStorage.removeItem('recent-files');
     window.localStorage.removeItem('boxel-session');
@@ -824,7 +827,10 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     module('when the user lacks write permissions', function (hooks) {
       hooks.beforeEach(async function () {
-        realmPermissions = { [testRealmURL]: ['read'] };
+        realmPermissions = {
+          [testRealmURL]: ['read'],
+          [testRealm2URL]: ['read', 'write'],
+        };
       });
 
       test('the edit button is hidden when the user lacks permissions', async function (assert) {
