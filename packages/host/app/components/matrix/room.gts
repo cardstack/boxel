@@ -29,18 +29,18 @@ export default class Room extends Component<Signature> {
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room={{this.room.name}}
     >
-      <AiAssistantConversation>
-        {{#if this.room.messages}}
+      {{#if this.room.messages}}
+        <AiAssistantConversation>
           <div class='timeline-start' data-test-timeline-start>
             - Beginning of conversation -
           </div>
           {{#each this.room.messages as |message i|}}
             <RoomMessage @message={{message}} data-test-message-idx={{i}} />
           {{/each}}
-        {{else}}
-          <NewSession data-test-no-messages />
-        {{/if}}
-      </AiAssistantConversation>
+        </AiAssistantConversation>
+      {{else}}
+        <NewSession data-test-no-messages />
+      {{/if}}
 
       <footer class='room-actions'>
         <RoomInput @roomId={{@roomId}} @roomName={{this.room.name}} />
