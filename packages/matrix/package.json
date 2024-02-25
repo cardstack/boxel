@@ -26,7 +26,7 @@
     "register-bot-user": "MATRIX_USERNAME=aibot MATRIX_PASSWORD=pass ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-test-user": "MATRIX_USERNAME=user MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-realm-users": "./scripts/register-realm-users.sh",
-    "register-test-admin": "MATRIX_IS_ADMIN=TRUE MATRIX_USERNAME=admin MATRIX_PASSWORD=password ",
+    "register-test-admin": "MATRIX_IS_ADMIN=TRUE MATRIX_USERNAME=admin MATRIX_PASSWORD=password pnpm register-test-user",
     "register-test-admin-and-token": "pnpm run register-test-admin && ts-node --transpileOnly ./scripts/register-test-token.ts",
     "register-all": "pnpm register-test-admin-and-token && pnpm register-realm-users && pnpm register-bot-user",
     "test": "./scripts/test.sh all",
