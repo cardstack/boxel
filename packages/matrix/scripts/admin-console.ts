@@ -1,18 +1,19 @@
 import * as childProcess from 'child_process';
 
 import { loginUser } from '../docker/synapse';
+
 export const adminUsername = 'admin';
 export const adminPassword = 'password';
 
 let username = process.env.MATRIX_USERNAME || adminUsername;
 let password = process.env.MATRIX_PASSWORD || adminPassword;
-let isAdmin = process.env.MATRIX_IS_ADMIN;
 
 (async () => {
   return new Promise<string>((resolve, reject) => {
     childProcess.exec(
-      `docker exec boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${username} -p ${password} ${isAdmin === 'TRUE' ? `--admin` : `--no-admin`}`,
+      `docker run --name synapse-admin -p 8080:80 -d awesometechnologies/synapse-admin && docker start synapse-admin`,
       async (err, stdout) => {
+        console.log(stdout);
         if (err) {
           if (stdout.includes('User ID already taken')) {
             let cred = await loginUser(username, password);

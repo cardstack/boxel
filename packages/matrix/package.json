@@ -20,18 +20,20 @@
     "start:smtp": "ts-node --transpileOnly ./scripts/smtp.ts start",
     "stop:smtp": "ts-node --transpileOnly ./scripts/smtp.ts stop",
     "assert-smtp-running": "if [ \"`docker ps -f name='boxel-smtp' --format '{{.Names}}'`\" = 'boxel-smtp' ]; then echo 'SMTP is already running'; else pnpm run start:smtp; fi",
-    "start:admin": "docker start synapse-admin",
     "start:host-pre-built": "cd ../host && pnpm start --path ./dist",
+    "start:admin-console": "ts-node --transpileOnly ./scripts/admin-console",
     "stop:admin": "docker stop synapse-admin",
-    "register-bot-user": "USERNAME=aibot PASSWORD=pass ts-node --transpileOnly ./scripts/register-test-user.ts",
-    "register-test-user": "USERNAME=user PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
+    "register-bot-user": "MATRIX_USERNAME=aibot MATRIX_PASSWORD=pass ts-node --transpileOnly ./scripts/register-test-user.ts",
+    "register-test-user": "MATRIX_USERNAME=user MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-realm-users": "./scripts/register-realm-users.sh",
-    "register-test-admin": "ts-node --transpileOnly ./scripts/register-test-user.ts",
-    "register-test-token": "pnpm run register-test-admin && ts-node --transpileOnly ./scripts/register-test-token.ts",
+    "register-test-admin": "MATRIX_IS_ADMIN=TRUE MATRIX_USERNAME=admin MATRIX_PASSWORD=password ",
+    "register-test-admin-and-token": "pnpm run register-test-admin && ts-node --transpileOnly ./scripts/register-test-token.ts",
+    "register-all": "pnpm register-test-admin-and-token && pnpm register-realm-users && pnpm register-bot-user",
     "test": "./scripts/test.sh all",
     "test:group": "./scripts/test.sh",
     "wait": "sleep 10000000",
-    "lint": "glint"
+    "lint": "glint",
+    "clean": "rm -rf ./synapse-data" 
   },
   "volta": {
     "extends": "../../package.json"
