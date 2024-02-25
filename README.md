@@ -81,7 +81,6 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                     | ✅                  | 🚫                   |
 
-
 #### Using `start:development`
 
 You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /drafts realm.
@@ -136,12 +135,8 @@ First you must create an administrative user:
    docker exec -it boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u admin -p your_admin_password --admin
    ```
    Alternatively, you can execute `pnpm register-test-admin` and utilize the following credentials: `user: admin` and `password: password`.
-3. Run the docker container:
-   ```
-   docker run --name synapse-admin -p 8080:80 -d awesometechnologies/synapse-admin
-   ```
 
-After you have created an administrative user and have created the docker container you can start the admin console by executing the following in the packages/matrix workspace:
+After you have created an administrative user and can start the admin console by executing the following in the packages/matrix workspace:
 
 ```
 pnpm start:admin
