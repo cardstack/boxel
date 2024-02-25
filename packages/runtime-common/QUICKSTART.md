@@ -76,10 +76,8 @@ To build the entire repository and run the application, follow these steps:
 At the root execute the following 
 
 ```
-pnpm clear-caches 
-cd ./packages/matrix
-rm -rf synapse-data
+pnpm clear-caches
+rm -rf ./packages/matrix/synapse-data
 docker ps -a --format '{{.Names}}' | grep -E 'boxel-smtp|boxel-synapse|synapse-admin' | xargs -r docker stop
 docker ps -a --format '{{.Names}}' | grep -E 'boxel-smtp|boxel-synapse|synapse-admin' | xargs -r docker rm -v
-cd ../..
 ```
