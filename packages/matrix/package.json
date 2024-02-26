@@ -21,7 +21,7 @@
     "stop:smtp": "ts-node --transpileOnly ./scripts/smtp.ts stop",
     "assert-smtp-running": "if [ \"`docker ps -f name='boxel-smtp' --format '{{.Names}}'`\" = 'boxel-smtp' ]; then echo 'SMTP is already running'; else pnpm run start:smtp; fi",
     "start:host-pre-built": "cd ../host && pnpm start --path ./dist",
-    "start:admin-console": "ts-node --transpileOnly ./scripts/admin-console",
+    "start:admin": "ts-node --transpileOnly ./scripts/admin",
     "stop:admin": "docker stop synapse-admin",
     "register-bot-user": "MATRIX_USERNAME=aibot MATRIX_PASSWORD=pass ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-test-user": "MATRIX_USERNAME=user MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",

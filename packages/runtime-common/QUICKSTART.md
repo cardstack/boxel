@@ -50,7 +50,7 @@ To build the entire repository and run the application, follow these steps:
 
    ```zsh
    cd ./packages/matrix
-   pnpm start:admin-console
+   pnpm start:admin
    ``` 
 
   Visit http://localhost:8080. Type in Username: admin Password: password Homeserver URL: http://localhost:8008
