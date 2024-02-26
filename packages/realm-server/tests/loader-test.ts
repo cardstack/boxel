@@ -77,6 +77,7 @@ module('loader', function (hooks) {
 
   test('supports import.meta', async function (assert) {
     let loader = new Loader();
+    loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let realm = await createRealm(
       loader,
       dir.name,
@@ -89,7 +90,7 @@ module('loader', function (hooks) {
       'http://example.com/',
     );
     loader.registerURLHandler(realm.maybeHandle.bind(realm));
-    loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+
     await realm.ready;
 
     let { checkImportMeta, myLoader } = await loader.import<{
