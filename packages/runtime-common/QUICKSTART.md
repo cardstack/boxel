@@ -2,7 +2,10 @@
 
 To build the entire repository and run the application, follow these steps:
 
-1. Install [volta](https://volta.sh/) 
+1. The 2 main system dependencies to install are:
+
+- [volta](https://docs.volta.sh/guide/getting-started)
+- [docker](https://docs.docker.com/get-docker/)
 
 2. Clone the repo:
 
@@ -17,7 +20,7 @@ To build the entire repository and run the application, follow these steps:
    pnpm install
    ```
 
-6. Build the boxel-ui:
+4. Build the boxel-ui:
 
    ```zsh
    cd ./packages/boxel-ui/addon
@@ -25,45 +28,47 @@ To build the entire repository and run the application, follow these steps:
    pnpm build
    ```
 
-7. Build the host:
+5. Build the host:
 
    ```zsh
    cd ./packages/host
    pnpm start
    ```
 
-8. Run the realm server:
+6. Run the realm server:
 
    ```zsh
    cd ./packages/realm-server
    pnpm start:all
    ```
 
-9. Register ALL 
+7. Register ALL
 
    ```zsh
    cd ./packages/matrix
-   pnpm register-all 
+   pnpm register-all
    ```
 
-10. Verify registration 
+8. Verify registration
 
-   ```zsh
-   cd ./packages/matrix
-   pnpm start:admin
-   ``` 
+```zsh
+cd ./packages/matrix
+pnpm start:admin
+```
 
-  Visit http://localhost:8080. Type in Username: admin Password: password Homeserver URL: http://localhost:8008
+Visit http://localhost:8080. Type in Username: admin Password: password Homeserver URL: http://localhost:8008
 
-11. Host App  
-   - Visit http://localhost:4201/
-   - Create new user 
-   - When prompted for password, keyin "dev-token"
+11. Host App
+
+- Visit http://localhost:4201/
+- Create new user
+- When prompted for password, keyin "dev-token"
 
 12. Validate email for login:
-   - Visit SMTP UI at http://localhost:5001/ 
-   - Validate email
-   - Go back to Host and login
+
+- Visit SMTP UI at http://localhost:5001/
+- Validate email
+- Go back to Host and login
 
 13. Run ai bot (Optional):
 
@@ -71,9 +76,9 @@ To build the entire repository and run the application, follow these steps:
     OPENAI_KEY=*** pnpm start
     ```
 
-## Cleanup command 
+## Cleanup command
 
-At the root execute the following 
+If you experience issues, you can start from scratch by running this command
 
 ```
 pnpm clear-caches
