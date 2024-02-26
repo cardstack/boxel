@@ -54,8 +54,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
   <template>
     {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
       {{#let
-        renderedCard.card (this.isSelected renderedCard.card)
-        as |card isSelected|
+        renderedCard.card
+        (this.isSelected renderedCard.card)
+        (this.canWrite renderedCard.card)
+        as |card isSelected canWrite|
       }}
         <div
           class={{cn
@@ -71,6 +73,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           {{#if (this.isIncludeHeader renderedCard)}}
             <OperatorModeOverlayItemHeader
               @item={{renderedCard}}
+              @canWrite={{canWrite}}
               @openOrSelectCard={{this.openOrSelectCard}}
             />
             <IconButton
@@ -102,45 +105,43 @@ export default class OperatorModeOverlays extends Component<Signature> {
               @icon={{EyeIcon}}
               aria-label='preview card'
             />
-            {{#let (this.canWrite card) as |canWrite|}}
-              {{! Since there is just one item in the drop down, if that one item 
+            {{! Since there is just one item in the drop down, if that one item 
                   cannot be shown then we just don't show the drop down. This should 
                   change if we add more items in the dropdown }}
-              {{#if canWrite}}
-                <BoxelDropdown>
-                  <:trigger as |bindings|>
-                    <IconButton
-                      {{on
-                        'mouseenter'
-                        (fn this.setCurrentlyHoveredCard renderedCard)
-                      }}
-                      {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-                      class='hover-button more-actions'
-                      @icon={{ThreeDotsHorizontal}}
-                      aria-label='more actions'
-                      {{bindings}}
-                    />
-                  </:trigger>
-                  <:content as |dd|>
-                    <Menu
-                      @closeMenu={{dd.close}}
-                      @items={{array
-                        (menuItem
-                          'Delete'
-                          (fn @publicAPI.delete card)
-                          icon=IconTrash
-                          dangerous=true
-                        )
-                      }}
-                      {{on
-                        'mouseenter'
-                        (fn this.setCurrentlyHoveredCard renderedCard)
-                      }}
-                    />
-                  </:content>
-                </BoxelDropdown>
-              {{/if}}
-            {{/let}}
+            {{#if canWrite}}
+              <BoxelDropdown>
+                <:trigger as |bindings|>
+                  <IconButton
+                    {{on
+                      'mouseenter'
+                      (fn this.setCurrentlyHoveredCard renderedCard)
+                    }}
+                    {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
+                    class='hover-button more-actions'
+                    @icon={{ThreeDotsHorizontal}}
+                    aria-label='more actions'
+                    {{bindings}}
+                  />
+                </:trigger>
+                <:content as |dd|>
+                  <Menu
+                    @closeMenu={{dd.close}}
+                    @items={{array
+                      (menuItem
+                        'Delete'
+                        (fn @publicAPI.delete card)
+                        icon=IconTrash
+                        dangerous=true
+                      )
+                    }}
+                    {{on
+                      'mouseenter'
+                      (fn this.setCurrentlyHoveredCard renderedCard)
+                    }}
+                  />
+                </:content>
+              </BoxelDropdown>
+            {{/if}}
           {{/if}}
         </div>
       {{/let}}
@@ -304,7 +305,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   @action private canWrite(card: CardDef) {
-    return this.realmSessionByCard.get(card)?.canWrite;
+    return !!this.realmSessionByCard.get(card)?.canWrite;
   }
 
   private viewCard = restartableTask(
@@ -314,6 +315,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
       fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
       fieldName?: string,
     ) => {
+      let canWrite = this.canWrite(card);
+      format = canWrite ? format : 'isolated';
       await this.args.publicAPI.viewCard(card, format, fieldType, fieldName);
     },
   );
