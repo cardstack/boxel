@@ -230,16 +230,29 @@ export async function logout(page: Page) {
 
 export async function createRoom(page: Page, removeAutoAttachedCard: boolean = true) {
   await page.locator('[data-test-create-room-btn]').click();
-  await page.locator(`[data-test-room-name]`).waitFor();
-  let roomName = await page.locator('[data-test-room-name]').textContent();
-  if (!roomName) {
-    throw new Error('room name is not found');
-  }
+  let roomName = await getRoomName(page);
   await isInRoom(page, roomName);
   if (removeAutoAttachedCard) {
     await page.locator(`[data-test-selected-card] [data-test-remove-card-btn]`).click();
   }
   return roomName;
+}
+
+export async function createRoomWithMessage(page: Page, message?: string) {
+  let roomName = await createRoom(page);
+  await sendMessage(page, roomName, message ?? 'Hello, world!');
+  return roomName;
+}
+
+export async function getRoomName(page: Page) {
+  await page.locator(`[data-test-room-settled]`).waitFor();
+  let name = await page
+    .locator('[data-test-room]')
+    .getAttribute('data-test-room');
+  if (name == null) {
+    throw new Error('room name is not found');
+  }
+  return name;
 }
 
 export async function isInRoom(page: Page, roomName: string) {

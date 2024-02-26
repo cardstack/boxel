@@ -92,7 +92,6 @@ export class Search extends Resource<Args> {
   private search = restartableTask(async (query: Query) => {
     this._instances = flatMap(
       await Promise.all(
-        // use a Set since the default URL may actually be the base realm
         this.realmsToSearch.map(
           async (realm) => await this.cardService.search(query, new URL(realm)),
         ),

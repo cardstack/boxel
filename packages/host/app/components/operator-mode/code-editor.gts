@@ -287,6 +287,10 @@ export default class CodeEditor extends Component<Signature> {
     return undefined;
   }
 
+  private get readOnly() {
+    return !this.readyFile.realmSession.canWrite;
+  }
+
   <template>
     {{#if this.isReady}}
       {{#if this.readyFile.isBinary}}
@@ -303,6 +307,7 @@ export default class CodeEditor extends Component<Signature> {
             language=this.language
             initialCursorPosition=this.initialMonacoCursorPosition
             onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
+            readOnly=this.readOnly
           }}
         ></div>
       {{/if}}

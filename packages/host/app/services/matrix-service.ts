@@ -22,7 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
-  generatePatchCallSpecification,
+  generateCardPatchCallSpecification,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
@@ -37,6 +37,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
+  CardMessageContent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -246,7 +247,11 @@ export default class MatrixService extends Service {
       return inflightAuth;
     }
 
-    let realmAuthClient = new RealmAuthClient(realmURL, this.client);
+    let realmAuthClient = new RealmAuthClient(
+      realmURL,
+      this.client,
+      this.loaderService.loader,
+    );
 
     let jwtPromise = realmAuthClient.getJWT();
 
@@ -314,24 +319,33 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: MatrixSDK.IContent,
+    content: CardMessageContent,
   ) {
     if (content.data) {
-      content.data = JSON.stringify(content.data);
+      const encodedContent = {
+        ...content,
+        data: JSON.stringify(content.data),
+      };
+      await this.client.sendEvent(roomId, eventType, encodedContent);
+    } else {
+      await this.client.sendEvent(roomId, eventType, content);
     }
-    await this.client.sendEvent(roomId, eventType, content);
   }
 
   async sendMessage(
     roomId: string,
     body: string | undefined,
-    cards?: CardDef[],
+    attachedCards: CardDef[] = [],
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
+    let functions = [];
+    let serializedOpenCards: LooseSingleCardDocument[] = [];
+    let serializedAttachedCards: LooseSingleCardDocument[] = [];
+    let currentSubMode = context?.submode;
     if (context?.submode === 'interact') {
       // Serialize the top of all cards on all stacks
-      let serializedCards = await Promise.all(
+      serializedOpenCards = await Promise.all(
         context!.openCards.map(async (card) => {
           return await this.cardService.serializeCard(card);
         }),
@@ -339,45 +353,51 @@ export default class MatrixService extends Service {
       let mappings = await basicMappings(this.loaderService.loader);
 
       // Limiting support to modifying the top of just one stack
-      let patchSpec = generatePatchCallSpecification(
-        context!.openCards[0].constructor,
+      let patchSpec = generateCardPatchCallSpecification(
+        context!.openCards[0].constructor as typeof CardDef,
         this.cardAPI,
         mappings,
       );
-      await this.sendEvent(roomId, 'm.room.message', {
-        msgtype: 'org.boxel.message',
-        body,
-        formatted_body: html,
-        data: {
-          context: {
-            openCards: serializedCards,
-            cardSpec: patchSpec,
-            submode: context.submode,
+
+      functions.push({
+        name: 'patchCard',
+        description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+        parameters: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+            },
+            card_id: {
+              type: 'string',
+              const: context!.openCards[0].id, // Force the valid card_id to be the id of the card being patched
+            },
+            attributes: patchSpec,
           },
+          required: ['card_id', 'attributes', 'description'],
         },
       });
-      return;
     }
 
-    let serializedCards: LooseSingleCardDocument[] = [];
-    if (cards?.length) {
-      serializedCards = await Promise.all(
-        cards.map(async (c) => await this.cardService.serializeCard(c)),
+    if (attachedCards?.length) {
+      serializedAttachedCards = await Promise.all(
+        attachedCards.map(async (c) => await this.cardService.serializeCard(c)),
       );
-
-      body = body ?? '';
-      body += cards.map((c) => `Card: ${c.title ?? 'Untitled'}, ${c.id}`);
     }
-    if (cards?.length) {
-      await this.sendEvent(roomId, 'm.room.message', {
-        msgtype: 'org.boxel.card',
-        body,
-        formatted_body: html,
-        data: { instances: serializedCards },
-      });
-    } else {
-      await this.client.sendHtmlMessage(roomId, body ?? '', html);
-    }
+    await this.sendEvent(roomId, 'm.room.message', {
+      msgtype: 'org.boxel.message',
+      body: body || '',
+      format: 'org.matrix.custom.html',
+      formatted_body: html,
+      data: {
+        attachedCards: serializedAttachedCards,
+        context: {
+          openCards: serializedOpenCards,
+          functions: functions,
+          submode: currentSubMode,
+        },
+      },
+    });
   }
 
   async initializeRooms() {

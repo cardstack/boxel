@@ -4,6 +4,7 @@ import {
   login,
   logout,
   createRoom,
+  getRoomName,
   openRoom,
   assertMessages,
   writeMessage,
@@ -32,11 +33,8 @@ test.describe('Room messages', () => {
   });
   test(`it can send a message in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass');
-    let room1 = await createRoom(page);
-    let room2 = await createRoom(page);
-    await openRoom(page, room1);
-
-    await expect(page.locator('[data-test-timeline-start]')).toHaveCount(1);
+    let room1 = await getRoomName(page);
+    await expect(page.locator('[data-test-timeline-start]')).toHaveCount(0);
     await expect(page.locator('[data-test-no-messages]')).toHaveCount(1);
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
     await assertMessages(page, []);
@@ -46,7 +44,11 @@ test.describe('Room messages', () => {
 
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
     await expect(page.locator('[data-test-no-messages]')).toHaveCount(0);
+    await expect(page.locator('[data-test-timeline-start]')).toHaveCount(1);
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+
+    let room2 = await createRoom(page);
+    await openRoom(page, room1);
 
     await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
@@ -73,7 +75,7 @@ test.describe('Room messages', () => {
     const totalMessageCount = 20;
 
     await login(page, 'user1', 'pass');
-    let room1 = await createRoom(page);
+    let room1 = await getRoomName(page);
 
     for (let i = 1; i <= totalMessageCount; i++) {
       await sendMessage(page, room1, `message ${i}`);
@@ -90,7 +92,7 @@ test.describe('Room messages', () => {
 
   test(`it can send a markdown message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
-    let room1 = await createRoom(page);
+    let room1 = await getRoomName(page);
     await sendMessage(page, room1, 'message with _style_');
     await assertMessages(page, [
       {
@@ -105,11 +107,22 @@ test.describe('Room messages', () => {
 
   test(`it can create a room specific pending message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
-    let room1 = await createRoom(page);
+    let room1 = await getRoomName(page);
+    await sendMessage(page, room1, 'Hello');
     let room2 = await createRoom(page);
     await openRoom(page, room1);
 
     await writeMessage(page, room1, 'room 1 message');
+    await openRoom(page, room2);
+    await expect(
+      page.locator(`[data-test-message-field="${room2}"]`),
+    ).toHaveValue('');
+
+    await openRoom(page, room1);
+    await expect(
+      page.locator(`[data-test-message-field="${room1}"]`),
+    ).toHaveValue('room 1 message');
+
     await openRoom(page, room2);
     await expect(
       page.locator(`[data-test-message-field="${room2}"]`),
@@ -129,8 +142,7 @@ test.describe('Room messages', () => {
   test('can add a card to a markdown message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
-    await createRoom(page);
-
+    await page.locator(`[data-test-room-settled]`).waitFor();
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
@@ -156,8 +168,7 @@ test.describe('Room messages', () => {
   test('can send only a card as a message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
-    let room1 = await createRoom(page);
-
+    let room1 = await getRoomName(page);
     await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
       {
@@ -170,7 +181,7 @@ test.describe('Room messages', () => {
   test('can send cards with types unsupported by matrix', async ({ page }) => {
     const testCard = `${testHost}/type-examples`;
     await login(page, 'user1', 'pass');
-    let room1 = await createRoom(page);
+    let room1 = await getRoomName(page);
 
     // Send a card that contains a type that matrix doesn't support
     await sendMessage(page, room1, undefined, [testCard]);
@@ -186,7 +197,7 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     await login(page, 'user1', 'pass');
-    await createRoom(page);
+    await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard);
     await selectCardFromCatalog(page, testCard2);
@@ -251,7 +262,7 @@ test.describe('Room messages', () => {
     };
 
     await login(page, 'user1', 'pass');
-    let room1 = await createRoom(page);
+    let room1 = await getRoomName(page);
 
     await sendMessage(page, room1, 'message 1', [testCard1]);
     await assertMessages(page, [message1]);
@@ -282,7 +293,7 @@ test.describe('Room messages', () => {
     };
 
     await login(page, 'user1', 'pass');
-    let room1 = await createRoom(page);
+    let room1 = await getRoomName(page);
 
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
@@ -305,7 +316,7 @@ test.describe('Room messages', () => {
     const testCard3 = `${testHost}/type-examples`;
 
     await login(page, 'user1', 'pass');
-    await createRoom(page);
+    await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard2);
     await selectCardFromCatalog(page, testCard1);
@@ -326,7 +337,9 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('displays view all pill if attached card more than 4', async ({ page }) => {
+  test('displays view all pill if attached card more than 4', async ({
+    page,
+  }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     const testCard3 = `${testHost}/type-examples`;
@@ -334,7 +347,7 @@ test.describe('Room messages', () => {
     const testCard5 = `${testHost}/van-gogh`;
 
     await login(page, 'user1', 'pass');
-    await createRoom(page);
+    await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);

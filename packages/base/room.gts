@@ -13,6 +13,7 @@ import DateTimeField from './datetime';
 import NumberField from './number';
 import MarkdownField from './markdown';
 import Modifier from 'ember-modifier';
+import { type Schema } from '@cardstack/runtime-common/helpers/ai';
 import {
   Loader,
   getCard,
@@ -456,15 +457,18 @@ export class RoomField extends FieldDef {
           command: null,
         };
         let messageField = undefined;
-        if (event.content.msgtype === 'org.boxel.card') {
-          let cardDocs = event.content.data.instances;
+        if (event.content.msgtype === 'org.boxel.message') {
+          // Safely skip over cases that don't have attached cards or a data type
+          let cardDocs = event.content.data?.attachedCards
+            ? event.content.data.attachedCards
+            : [];
           let attachedCardIds: string[] = [];
           cardDocs.map((c) => {
             if (c.data.id) {
               attachedCardIds.push(c.data.id);
             }
           });
-          if (attachedCardIds.length === 0) {
+          if (attachedCardIds.length < cardDocs.length) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
           messageField = new MessageField({
@@ -640,24 +644,35 @@ interface CommandEvent extends BaseMatrixEvent {
 
 interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: {
-    'm.relates_to'?: {
-      rel_type: string;
-      event_id: string;
-    };
-    msgtype: 'org.boxel.card';
-    format: 'org.matrix.custom.html';
-    body: string;
-    formatted_body: string;
-    data: {
-      instances: LooseSingleCardDocument[];
-    };
-  };
+  content: CardMessageContent;
   unsigned: {
     age: number;
     transaction_id: string;
     prev_content?: any;
     prev_sender?: string;
+  };
+}
+
+export interface CardMessageContent {
+  'm.relates_to'?: {
+    rel_type: string;
+    event_id: string;
+  };
+  msgtype: 'org.boxel.message';
+  format: 'org.matrix.custom.html';
+  body: string;
+  formatted_body: string;
+  data: {
+    attachedCards: LooseSingleCardDocument[];
+    context: {
+      openCards: LooseSingleCardDocument[];
+      functions: {
+        name: string;
+        description: string;
+        parameters: Schema;
+      }[];
+      submode: string | undefined;
+    };
   };
 }
 

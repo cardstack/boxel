@@ -1,3 +1,4 @@
+import { A } from '@ember/array';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { later } from '@ember/runloop';
@@ -63,6 +64,17 @@ export default class BoxelInputGroupUsage extends Component {
     later(() => {
       this.isShowingCopiedConfirmation = false;
     }, 1000);
+  }
+
+  @tracked selectExampleItems = A(
+    [...new Array(10)].map((_, idx) => `Item - ${idx}`),
+  ) as Array<string>;
+
+  @tracked selectExampleSelectedItem: string | null = null;
+  @tracked selectExamplePlaceholder = 'Select Item';
+
+  @action selectExampleOnSelectItem(item: string | null): void {
+    this.selectExampleSelectedItem = item;
   }
 
   <template>
@@ -308,6 +320,20 @@ export default class BoxelInputGroupUsage extends Component {
           <:after as |Accessories|>
             <Accessories.Button>Button</Accessories.Button>
             <Accessories.Button>Button</Accessories.Button>
+          </:after>
+        </BoxelInputGroup>
+        <BoxelInputGroup @placeholder='Input with a select menu'>
+          <:after as |Accessories|>
+            <Accessories.Select
+              @placeholder={{this.selectExamplePlaceholder}}
+              @selected={{this.selectExampleSelectedItem}}
+              @onChange={{this.selectExampleOnSelectItem}}
+              @options={{this.selectExampleItems}}
+              @dropdownClass='boxel-select-usage-dropdown'
+              as |item itemCssClass|
+            >
+              <div class={{itemCssClass}}>{{item}}</div>
+            </Accessories.Select>
           </:after>
         </BoxelInputGroup>
       </:example>

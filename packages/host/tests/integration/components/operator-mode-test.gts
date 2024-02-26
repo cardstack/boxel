@@ -807,9 +807,9 @@ module('Integration | operator-mode', function (hooks) {
       content: {
         body: 'card with error',
         formatted_body: 'card with error',
-        msgtype: 'org.boxel.card',
+        msgtype: 'org.boxel.message',
         data: JSON.stringify({
-          instances: [
+          attachedCards: [
             {
               data: {
                 id: 'http://this-is-not-a-real-card.com',

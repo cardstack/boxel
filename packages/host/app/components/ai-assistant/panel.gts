@@ -17,8 +17,9 @@ import {
   Button,
   IconButton,
   LoadingIndicator,
+  ResizeHandle,
 } from '@cardstack/boxel-ui/components';
-import { ResizeHandle } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
@@ -54,7 +55,9 @@ interface Signature {
   };
 }
 
-let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId'; // Local storage key
+// Local storage keys
+let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
+let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
 
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
@@ -66,8 +69,17 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header class='panel-header'>
-          <img alt='AI Assistant' src={{assistantIcon}} />
-          <span>Assistant</span>
+          {{#if this.currentRoom.messages}}
+            <div class='panel-title-group'>
+              <img
+                alt='AI Assistant'
+                src={{assistantIcon}}
+                width='20'
+                height='20'
+              />
+              <h3 class='panel-title-text'>Assistant</h3>
+            </div>
+          {{/if}}
           <IconButton
             class='close-ai-panel'
             @variant='primary'
@@ -75,18 +87,16 @@ export default class AiAssistantPanel extends Component<Signature> {
             @width='20px'
             @height='20px'
             {{on 'click' @onClose}}
-            aria-label='Remove'
+            aria-label='Close AI Assistant'
             data-test-close-ai-assistant
           />
-        </header>
-        <div class='menu'>
-          <div class='buttons'>
+          <div class='header-buttons' {{popoverVelcro.hook}}>
             <Button
               class='new-session-button'
               @kind='secondary-dark'
               @size='small'
+              @disabled={{not this.currentRoom.messages.length}}
               {{on 'click' this.createNewSession}}
-              {{popoverVelcro.hook}}
               data-test-create-room-btn
             >
               New Session
@@ -100,7 +110,6 @@ export default class AiAssistantPanel extends Component<Signature> {
                 @kind='secondary-dark'
                 @size='small'
                 {{on 'click' this.displayPastSessions}}
-                {{popoverVelcro.hook}}
                 data-test-past-sessions-button
               >
                 Past Sessions
@@ -108,22 +117,22 @@ export default class AiAssistantPanel extends Component<Signature> {
               </Button>
             {{/if}}
           </div>
+        </header>
 
-          {{#if this.isShowingPastSessions}}
-            <AiAssistantPastSessionsList
-              @sessions={{this.aiSessionRooms}}
-              @roomActions={{this.roomActions}}
-              @onClose={{this.hidePastSessions}}
-              {{popoverVelcro.loop}}
-            />
-          {{else if this.roomToRename}}
-            <RenameSession
-              @room={{this.roomToRename}}
-              @onClose={{fn this.setRoomToRename undefined}}
-              {{popoverVelcro.loop}}
-            />
-          {{/if}}
-        </div>
+        {{#if this.isShowingPastSessions}}
+          <AiAssistantPastSessionsList
+            @sessions={{this.aiSessionRooms}}
+            @roomActions={{this.roomActions}}
+            @onClose={{this.hidePastSessions}}
+            {{popoverVelcro.loop}}
+          />
+        {{else if this.roomToRename}}
+          <RenameSession
+            @room={{this.roomToRename}}
+            @onClose={{fn this.setRoomToRename undefined}}
+            {{popoverVelcro.loop}}
+          />
+        {{/if}}
 
         {{#if this.doCreateRoom.isRunning}}
           <LoadingIndicator
@@ -151,7 +160,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     <style>
       .ai-assistant-panel {
         display: grid;
-        grid-template-rows: auto auto 1fr;
+        grid-template-rows: auto 1fr;
         background-color: var(--boxel-ai-purple);
         border: none;
         color: var(--boxel-light);
@@ -173,9 +182,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       :deep(.separator-horizontal:not(:hover) > button) {
         display: none;
       }
-      :deep(.room-info) {
-        padding: var(--boxel-sp) var(--boxel-sp-lg);
-      }
       :deep(.ai-assistant-conversation) {
         padding: var(--boxel-sp) var(--boxel-sp-lg);
       }
@@ -183,30 +189,33 @@ export default class AiAssistantPanel extends Component<Signature> {
         z-index: 1;
       }
       .panel-header {
+        position: relative;
+        padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
+          var(--boxel-sp-lg);
+      }
+      .panel-title-group {
         align-items: center;
         display: flex;
-        padding: var(--boxel-sp-xs) calc(var(--boxel-sp) / 2) var(--boxel-sp-xs)
-          var(--boxel-sp-lg);
         gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp);
       }
-      .panel-header img {
-        height: 20px;
-        width: 20px;
-      }
-      .panel-header span {
+      .panel-title-text {
+        margin: 0;
+        color: var(--boxel-light);
         font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp);
       }
       .close-ai-panel {
         --icon-color: var(--boxel-highlight);
-        margin-left: auto;
+        position: absolute;
+        right: var(--boxel-sp-xs);
+        top: var(--boxel-sp-sm);
+        z-index: 1;
       }
-      .menu {
-        padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
+      .header-buttons {
         position: relative;
-      }
-      .buttons {
         align-items: center;
-        display: flex;
+        display: inline-flex;
       }
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);
@@ -256,6 +265,12 @@ export default class AiAssistantPanel extends Component<Signature> {
     }
   }
 
+  private get currentRoom() {
+    return this.currentRoomId
+      ? this.roomResources.get(this.currentRoomId)?.room
+      : undefined;
+  }
+
   @cached
   private get roomResources() {
     let resources = new TrackedMap<string, RoomResource>();
@@ -277,6 +292,10 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @action
   private createNewSession() {
+    if (this.newSessionId) {
+      this.enterRoom(this.newSessionId!);
+      return;
+    }
     let newRoomName = `${format(
       new Date(),
       "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
@@ -287,9 +306,22 @@ export default class AiAssistantPanel extends Component<Signature> {
   private doCreateRoom = restartableTask(
     async (name: string, invites: string[], topic?: string) => {
       let newRoomId = await this.matrixService.createRoom(name, invites, topic);
+      window.localStorage.setItem(newSessionIdPersistenceKey, newRoomId);
       this.enterRoom(newRoomId);
     },
   );
+
+  private get newSessionId() {
+    let id = window.localStorage.getItem(newSessionIdPersistenceKey);
+    if (
+      id &&
+      this.roomResources.has(id) &&
+      this.roomResources.get(id)?.room?.messages.length === 0
+    ) {
+      return id;
+    }
+    return undefined;
+  }
 
   @action
   private displayPastSessions() {
@@ -310,7 +342,8 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       let { room } = resource;
       if (
-        room.invitedMembers.find((m) => aiBotUserId === m.userId) &&
+        (room.invitedMembers.find((m) => aiBotUserId === m.userId) ||
+          room.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
         room.joinedMembers.find((m) => this.matrixService.userId === m.userId)
       ) {
         rooms.push(room);
@@ -355,9 +388,20 @@ export default class AiAssistantPanel extends Component<Signature> {
     try {
       await this.matrixService.client.leave(roomId);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
+      this.roomResources.delete(roomId);
+
+      if (this.newSessionId === roomId) {
+        window.localStorage.removeItem(newSessionIdPersistenceKey);
+      }
+
       if (this.currentRoomId === roomId) {
-        this.currentRoomId = undefined;
-        window.localStorage.setItem(currentRoomIdPersistenceKey, '');
+        window.localStorage.removeItem(currentRoomIdPersistenceKey);
+        let latestRoom = this.aiSessionRooms[0];
+        if (latestRoom) {
+          this.enterRoom(latestRoom.roomId);
+        } else {
+          this.createNewSession();
+        }
       }
       this.roomToDelete = undefined;
       this.hidePastSessions();
