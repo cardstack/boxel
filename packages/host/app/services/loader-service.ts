@@ -110,7 +110,7 @@ export default class LoaderService extends Service {
     if (!response.ok && response.status === 403) {
       await realmSession.refreshToken();
       if (!realmSession.rawRealmToken) {
-        return;
+        return null;
       }
       request.headers.set('Authorization', realmSession.rawRealmToken);
       response = await this.loader.fetch(request.url, {
