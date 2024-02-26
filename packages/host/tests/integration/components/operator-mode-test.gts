@@ -48,8 +48,7 @@ import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
-let setCardInOperatorModeState: (card: string) => Promise<void>;
-
+let setCardInOperatorModeState: (cardURL?: string) => Promise<void>;
 let loader: Loader;
 
 module('Integration | operator-mode', function (hooks) {
@@ -73,10 +72,14 @@ module('Integration | operator-mode', function (hooks) {
 
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
+    localStorage.removeItem('aiPanelCurrentRoomId');
+    localStorage.removeItem('aiPanelNewSessionId');
   });
 
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
+    localStorage.removeItem('aiPanelCurrentRoomId');
+    localStorage.removeItem('aiPanelNewSessionId');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     matrixService = this.owner.lookup(
       'service:matrixService',
@@ -646,276 +649,338 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    setCardInOperatorModeState = async (cardURL: string) => {
+    setCardInOperatorModeState = async (cardURL?: string) => {
       let operatorModeStateService = this.owner.lookup(
         'service:operator-mode-state-service',
       ) as OperatorModeStateService;
-
       await operatorModeStateService.restore({
-        stacks: [
-          [
-            {
-              id: cardURL,
-              format: 'isolated',
-            },
-          ],
-        ],
+        stacks: cardURL ? [[{ id: cardURL, format: 'isolated' }]] : [[]],
       });
     };
   });
 
-  test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
-    assert.expect(4);
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-    await click('[data-test-open-ai-assistant]');
-
-    matrixService.createAndJoinRoom('testroom');
-
-    addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: 'testroom',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        body: 'i am the body',
-        msgtype: 'org.boxel.command',
-        formatted_body: 'A patch',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          command: {
-            type: 'patch',
-            id: `${testRealmURL}Person/fadhlan`,
-            patch: {
-              attributes: { firstName: 'Dave' },
-            },
-          },
-        }),
-      },
-    });
-
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
-    await click('[data-test-enter-room="test_a"]');
-
-    await waitFor('[data-test-command-apply]');
-    this.onSave((_, json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
+  module('matrix', function () {
+    async function openAiAssistant(): Promise<string> {
+      await waitFor('[data-test-open-ai-assistant]');
+      await click('[data-test-open-ai-assistant]');
+      await waitFor('[data-test-room-settled]');
+      let roomId = document
+        .querySelector('[data-test-room-id]')
+        ?.getAttribute('data-test-room-id');
+      if (!roomId) {
+        throw new Error('Expected a room ID');
       }
-      assert.strictEqual(json.data.attributes?.firstName, 'Dave');
-    });
-    await click('[data-test-command-apply]');
-    await waitFor('[data-test-patch-card-idle]');
+      return roomId;
+    }
 
-    assert.dom('[data-test-person]').hasText('Dave');
-  });
+    test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
+      assert.expect(4);
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
 
-  test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
+      await waitFor('[data-test-person]');
+      assert.dom('[data-test-boxel-header-title]').hasText('Person');
+      assert.dom('[data-test-person]').hasText('Fadhlan');
 
-    await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-    await click('[data-test-open-ai-assistant]');
-
-    matrixService.createAndJoinRoom('testroom');
-
-    addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: 'testroom',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        body: 'i am the body',
-        msgtype: 'org.boxel.command',
-        formatted_body: 'A patch',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          command: {
-            type: 'patch',
-            id: `${testRealmURL}Person/anotherPerson`,
-            patch: {
-              attributes: { firstName: 'Dave' },
+      let roomId = await openAiAssistant();
+      addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          body: 'i am the body',
+          msgtype: 'org.boxel.command',
+          formatted_body: 'A patch',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
             },
-          },
-        }),
-      },
+          }),
+        },
+      });
+
+      await waitFor('[data-test-command-apply]');
+      this.onSave((_, json) => {
+        if (typeof json === 'string') {
+          throw new Error('expected JSON save data');
+        }
+        assert.strictEqual(json.data.attributes?.firstName, 'Dave');
+      });
+      await click('[data-test-command-apply]');
+      await waitFor('[data-test-patch-card-idle]');
+
+      assert.dom('[data-test-person]').hasText('Dave');
     });
 
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
-    await click('[data-test-enter-room="test_a"]');
+    test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
 
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-command-apply]');
+      await waitFor('[data-test-person]');
+      assert.dom('[data-test-boxel-header-title]').hasText('Person');
+      assert.dom('[data-test-person]').hasText('Fadhlan');
 
-    await waitFor('[data-test-person="Fadhlan"]');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-  });
+      let roomId = await openAiAssistant();
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          body: 'i am the body',
+          msgtype: 'org.boxel.command',
+          formatted_body: 'A patch',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/anotherPerson`,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
+          }),
+        },
+      });
 
-  test('it sends regular messages without any context while the share checkbox is unticked', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
+      await waitFor('[data-test-command-apply]');
+      await click('[data-test-command-apply]');
 
-    await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-    await click('[data-test-open-ai-assistant]');
-
-    matrixService.createAndJoinRoom('testroom');
-
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
-    await click('[data-test-enter-room="test_a"]');
-
-    // Add some text so that we can click the send button
-    // Do not share the context here
-    assert.dom('[data-test-message-field="test_a"]').exists();
-    await fillIn('[data-test-message-field="test_a"]', 'hello');
-
-    // Send message
-    await click('[data-test-send-message-btn]');
-    assert.deepEqual(matrixService.lastMessageSent, {
-      body: 'hello',
-      cards: undefined,
-      context: undefined,
-      roomId: 'testroom',
+      await waitFor('[data-test-person="Fadhlan"]');
+      assert.dom('[data-test-person]').hasText('Fadhlan');
     });
-  });
 
-  test('sends the top stack cards when context sharing is on', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
+    test('it sends regular messages without any context while the share checkbox is unticked', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
 
-    await waitFor('[data-test-boxel-header-title]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Pet');
-    await click('[data-test-open-ai-assistant]');
+      await waitFor('[data-test-person]');
+      assert.dom('[data-test-boxel-header-title]').hasText('Person');
+      assert.dom('[data-test-person]').hasText('Fadhlan');
 
-    matrixService.createAndJoinRoom('testroom');
+      let roomId = await openAiAssistant();
 
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
-    await click('[data-test-enter-room="test_a"]');
+      // Add some text so that we can click the send button
+      // Do not share the context here
+      assert.dom(`[data-test-message-field="${roomId}"]`).exists();
+      await fillIn(`[data-test-message-field="${roomId}"]`, 'hello');
 
-    // Add some text so that we can click the send button
-    assert.dom('[data-test-message-field="test_a"]').exists();
-    await fillIn('[data-test-message-field="test_a"]', 'hello');
-    // Set sharing the context to true
-    await click('[data-test-share-context]');
-
-    // Send message
-    await click('[data-test-send-message-btn]');
-    // Checking the object itself has issues due to serialisation
-    // checking we're sharing the correct card should be enough
-    assert.equal(matrixService.lastMessageSent.context.openCards.length, 1);
-    assert.equal(matrixService.lastMessageSent.context.submode, 'interact');
-    assert.equal(
-      matrixService.lastMessageSent.context.openCards[0].id,
-      'http://test-realm/test/Pet/mango',
-    );
-  });
-
-  test('it can handle an error in a card attached to a matrix message', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
-
-    await operatorModeStateService.restore({
-      stacks: [[]],
+      // Send message
+      await click('[data-test-send-message-btn]');
+      assert.deepEqual(matrixService.lastMessageSent, {
+        body: 'hello',
+        cards: undefined,
+        context: undefined,
+        roomId,
+      });
     });
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
 
-    await waitFor('[data-test-open-ai-assistant]');
-    await click('[data-test-open-ai-assistant]');
-    matrixService.createAndJoinRoom('testroom');
-    addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: 'testroom',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
-      content: {
-        body: 'card with error',
-        formatted_body: 'card with error',
-        msgtype: 'org.boxel.card',
-        data: JSON.stringify({
-          instances: [
-            {
-              data: {
-                id: 'http://this-is-not-a-real-card.com',
-                type: 'card',
-                attributes: {
-                  firstName: 'Boom',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: 'http://not-a-real-card.com',
-                    name: 'Boom',
+    test('sends the top stack cards when context sharing is on', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      await waitFor('[data-test-boxel-header-title]');
+      assert.dom('[data-test-boxel-header-title]').hasText('Pet');
+
+      let roomId = await openAiAssistant();
+
+      // Add some text so that we can click the send button
+      assert.dom(`[data-test-message-field="${roomId}"]`).exists();
+      await fillIn(`[data-test-message-field="${roomId}"]`, 'hello');
+      // Set sharing the context to true
+      await click('[data-test-share-context]');
+
+      // Send message
+      await click('[data-test-send-message-btn]');
+      // Checking the object itself has issues due to serialisation
+      // checking we're sharing the correct card should be enough
+      assert.equal(matrixService.lastMessageSent.context.openCards.length, 1);
+      assert.equal(matrixService.lastMessageSent.context.submode, 'interact');
+      assert.equal(
+        matrixService.lastMessageSent.context.openCards[0].id,
+        'http://test-realm/test/Pet/mango',
+      );
+    });
+
+    test('it can handle an error in a card attached to a matrix message', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      let roomId = await openAiAssistant();
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
+        content: {
+          body: 'card with error',
+          formatted_body: 'card with error',
+          msgtype: 'org.boxel.card',
+          data: JSON.stringify({
+            instances: [
+              {
+                data: {
+                  id: 'http://this-is-not-a-real-card.com',
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boom',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://not-a-real-card.com',
+                      name: 'Boom',
+                    },
                   },
                 },
               },
-            },
-          ],
-        }),
-      },
+            ],
+          }),
+        },
+      });
+
+      await waitFor('[data-test-card-error]');
+      assert
+        .dom('[data-test-card-error]')
+        .containsText(
+          'Error: cannot render card http://this-is-not-a-real-card.com/: status: 500 - Failed to fetch.',
+        );
+      await percySnapshot(assert);
     });
 
-    await waitFor('[data-test-past-sessions-button]');
-    await click('[data-test-past-sessions-button]');
-    await click('[data-test-enter-room="test_a"]');
-    await waitFor('[data-test-card-error]');
-    assert
-      .dom('[data-test-card-error]')
-      .containsText(
-        'Error: cannot render card http://this-is-not-a-real-card.com/: status: 500 - Failed to fetch.',
+    test('it can handle an error during room creation', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+            <div class='invisible' data-test-throw-room-error />
+            <style>
+              .invisible {
+                display: none;
+              }
+            </style>
+          </template>
+        },
       );
-    await percySnapshot(assert);
+
+      await waitFor('[data-test-open-ai-assistant]');
+      await click('[data-test-open-ai-assistant]');
+      await waitFor('[data-test-new-session]');
+      assert.dom('[data-test-room-error]').exists();
+      assert.dom('[data-test-room]').doesNotExist();
+      assert.dom('[data-test-past-sessions-button]').isDisabled();
+      await percySnapshot(assert); // error state
+
+      document.querySelector('[data-test-throw-room-error]')?.remove();
+      await click('[data-test-room-error] > button');
+      await waitFor('[data-test-room]');
+      assert.dom('[data-test-room-error]').doesNotExist();
+      assert.dom('[data-test-past-sessions-button]').isEnabled();
+      await percySnapshot(assert); // new room state
+    });
+
+    test('when opening ai panel it opens the most recent room', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      let tinyDelay = () => new Promise((resolve) => setTimeout(resolve, 1)); // Add a tiny artificial delay to ensure rooms are created in the correct order with increasing timestamps
+      await matrixService.createAndJoinRoom('test1', 'test room 1');
+      await tinyDelay();
+      await matrixService.createAndJoinRoom('test2', 'test room 2');
+      await tinyDelay();
+      await matrixService.createAndJoinRoom('test3', 'test room 3');
+
+      await waitFor(`[data-test-open-ai-assistant]`);
+      await click('[data-test-open-ai-assistant]');
+      await waitFor(`[data-room-settled]`);
+
+      assert
+        .dom('[data-test-room="test room 3"]')
+        .exists(
+          "test room 3 is the most recently created room and it's opened initially",
+        );
+
+      await click('[data-test-past-sessions-button]');
+      await click('[data-test-enter-room="test room 2"]');
+
+      await click('[data-test-close-ai-assistant]');
+      await click('[data-test-open-ai-assistant]');
+      await waitFor(`[data-room-settled]`);
+      assert
+        .dom('[data-test-room="test room 2"]')
+        .exists(
+          "test room 2 is the most recently selected room and it's opened initially",
+        );
+
+      await click('[data-test-close-ai-assistant]');
+      localStorage.setItem(
+        'aiPanelCurrentRoomId',
+        "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
+      );
+      await click('[data-test-open-ai-assistant]');
+      await waitFor(`[data-room-settled]`);
+      assert
+        .dom('[data-test-room="test room 3"]')
+        .exists(
+          "test room 3 is the most recently created room and it's opened initially",
+        );
+
+      localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
+    });
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
@@ -943,62 +1008,6 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-pet="Mango"]');
     assert.dom('[data-test-stack-card]').exists({ count: 2 });
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
-  });
-
-  test('when opening ai panel it opens the most recent room', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    let tinyDelay = () => new Promise((resolve) => setTimeout(resolve, 1)); // Add a tiny artificial delay to ensure rooms are created in the correct order with increasing timestamps
-    await matrixService.createAndJoinRoom('test1', 'test room 1');
-    await tinyDelay();
-    await matrixService.createAndJoinRoom('test2', 'test room 2');
-    await tinyDelay();
-    await matrixService.createAndJoinRoom('test3', 'test room 3');
-
-    await waitFor(`[data-test-open-ai-assistant]`);
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-
-    assert
-      .dom('[data-test-room="test room 3"]')
-      .exists(
-        "test room 3 is the most recently created room and it's opened initially",
-      );
-
-    await click('[data-test-past-sessions-button]');
-    await click('[data-test-enter-room="test room 2"]');
-
-    await click('[data-test-close-ai-assistant]');
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-    assert
-      .dom('[data-test-room="test room 2"]')
-      .exists(
-        "test room 2 is the most recently selected room and it's opened initially",
-      );
-
-    await click('[data-test-close-ai-assistant]');
-    localStorage.setItem(
-      'aiPanelCurrentRoomId',
-      "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
-    );
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-    assert
-      .dom('[data-test-room="test room 3"]')
-      .exists(
-        "test room 3 is the most recently created room and it's opened initially",
-      );
-
-    localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
   });
 
   test<TestContextWithSave>('it auto saves the field value', async function (assert) {

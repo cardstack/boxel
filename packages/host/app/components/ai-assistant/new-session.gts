@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+
 import { Button } from '@cardstack/boxel-ui/components';
 
 import assistantIcon from './ai-assist-icon@2x.webp';
@@ -19,7 +20,7 @@ export default class NewSession extends Component<Signature> {
         <h2 class='title-text'>Assistant</h2>
       </div>
       {{#if @errorAction}}
-        <div>
+        <div data-test-room-error>
           <p class='message error'>
             We've encountered an error, please try again later.
           </p>
