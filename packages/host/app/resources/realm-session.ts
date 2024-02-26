@@ -95,6 +95,14 @@ export class RealmSessionResource extends Resource<Args> {
     });
   }
 
+  async refreshToken() {
+    if (!this.token) {
+      throw new Error(`Cannot do session refresh without token`);
+    }
+    let { realm } = this.token;
+    return await this.getToken.perform(new URL(realm));
+  }
+
   get canRead() {
     return this.token?.permissions?.includes('read');
   }

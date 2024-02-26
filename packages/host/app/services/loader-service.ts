@@ -98,11 +98,29 @@ export default class LoaderService extends Service {
     } else {
       body = await request.text();
     }
-    return await this.loader.fetch(request.url, {
+    let response = await this.loader.fetch(request.url, {
       method: request.method,
       headers: new Headers(request.headers),
       body,
     });
+
+    // Obtaining a new JWT
+    // if receiving `Authorization` error,
+    // which means user permissions is updated from the server.
+    if (!response.ok && response.status === 403) {
+      await realmSession.refreshToken();
+      if (!realmSession.rawRealmToken) {
+        return;
+      }
+      request.headers.set('Authorization', realmSession.rawRealmToken);
+      response = await this.loader.fetch(request.url, {
+        method: request.method,
+        headers: new Headers(request.headers),
+        body,
+      });
+    }
+
+    return response;
   }
 
   private async getRealmSession(realmURL: URL) {

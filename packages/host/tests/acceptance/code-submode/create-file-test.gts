@@ -243,7 +243,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           throw new Error('A deliberate fetch error');
         }
 
-        return req;
+        return { req, res: null };
       },
     });
     ({ adapter } = await setupAcceptanceTestRealm({

@@ -414,7 +414,10 @@ export async function setupAcceptanceTestRealm({
   loader: Loader;
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<Request>;
+  onFetch?: (req: Request) => Promise<{
+    req: Request;
+    res: Response | null;
+  }>;
 }) {
   return await setupTestRealm({
     loader,
@@ -434,7 +437,10 @@ export async function setupIntegrationTestRealm({
   loader: Loader;
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<Request>;
+  onFetch?: (req: Request) => Promise<{
+    req: Request;
+    res: Response | null;
+  }>;
 }) {
   return await setupTestRealm({
     loader,
@@ -445,6 +451,7 @@ export async function setupIntegrationTestRealm({
   });
 }
 
+export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
   loader,
   contents,
@@ -455,7 +462,10 @@ async function setupTestRealm({
   loader: Loader;
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<Request>;
+  onFetch?: (req: Request) => Promise<{
+    req: Request;
+    res: Response | null;
+  }>;
   isAcceptanceTest?: boolean;
 }) {
   realmURL = realmURL ?? testRealmURL;
@@ -513,10 +523,15 @@ async function setupTestRealm({
     loader.registerURLHandler(async (req: Request) => {
       let token = waiter.beginAsync();
       try {
-        req = await onFetch(req);
+        let { req: newReq, res } = await onFetch(req);
+        if (res) {
+          return res;
+        }
+        req = newReq;
       } finally {
         waiter.endAsync(token);
       }
+
       return realm.maybeHandle(req);
     });
   }
@@ -534,7 +549,7 @@ async function setupTestRealm({
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
     permissions: { '*': ['read', 'write'] },
-    realmSecretSeed: "shhh! it's a secret",
+    realmSecretSeed: testRealmSecretSeed,
   });
   loader.prependURLHandlers([
     (req) => sourceFetchRedirectHandle(req, adapter, realm),
@@ -583,6 +598,29 @@ type FilesForTestAdapter = Record<
   string | LooseSingleCardDocument | CardDocFiles | RealmInfo
 >;
 
+export function createJWT(
+  claims: TokenClaims,
+  expiration: string,
+  secret: string,
+) {
+  let nowInSeconds = Math.floor(Date.now() / 1000);
+  let expires = nowInSeconds + ms(expiration) / 1000;
+  let header = { alg: 'none', typ: 'JWT' };
+  let payload = {
+    iat: nowInSeconds,
+    exp: expires,
+    ...claims,
+  };
+  let stringifiedHeader = JSON.stringify(header);
+  let stringifiedPayload = JSON.stringify(payload);
+  let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
+    stringifiedPayload,
+  )}`;
+  // this is our silly JWT--we don't sign with crypto since we are running in the
+  // browser so the secret is the signature
+  return `${headerAndPayload}.${secret}`;
+}
+
 class TokenExpiredError extends Error {}
 class JsonWebTokenError extends Error {}
 
@@ -615,22 +653,7 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   createJWT(claims: TokenClaims, expiration: string, secret: string) {
-    let nowInSeconds = Math.floor(Date.now() / 1000);
-    let expires = nowInSeconds + ms(expiration) / 1000;
-    let header = { alg: 'none', typ: 'JWT' };
-    let payload = {
-      iat: nowInSeconds,
-      exp: expires,
-      ...claims,
-    };
-    let stringifiedHeader = JSON.stringify(header);
-    let stringifiedPayload = JSON.stringify(payload);
-    let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
-      stringifiedPayload,
-    )}`;
-    // this is our silly JWT--we don't sign with crypto since we are running in the
-    // browser so the secret is the signature
-    return `${headerAndPayload}.${secret}`;
+    return createJWT(claims, expiration, secret);
   }
 
   verifyJWT(
