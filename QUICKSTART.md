@@ -4,8 +4,8 @@ To build the entire repository and run the application, follow these steps:
 
 1. The 2 main system dependencies to install are:
 
-- [volta](https://docs.volta.sh/guide/getting-started)
-- [docker](https://docs.docker.com/get-docker/)
+   - [volta](https://docs.volta.sh/guide/getting-started)
+   - [docker](https://docs.docker.com/get-docker/)
 
 2. Clone the repo:
 
