@@ -56,13 +56,13 @@ cd ./packages/matrix
 pnpm start:admin
 ```
 
-Visit http://localhost:8080. Type in Username: admin Password: password Homeserver URL: http://localhost:8008
+Visit http://localhost:8080. Type in Username = "admin", Password: "password" Homeserver URL: http://localhost:8008
 
 11. Host App
 
 - Visit http://localhost:4201/
 - Create new user
-- When prompted for password, keyin "dev-token"
+- When prompted for an authentication token, type in "dev-token"
 
 12. Validate email for login:
 
