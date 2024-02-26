@@ -80,29 +80,29 @@ interface OpenAIPromptMessage {
 }
 
 export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
-  let cards = [];
+  let relevantCards: Map<string, any> = new Map();
   for (let event of history) {
     if (event.sender !== aiBotUserId) {
       let content = event.content;
-      // If a user has uploaded a card, add it to the context
-      // It's the best we have
-      if (content.msgtype === 'org.boxel.card') {
-        cards.push(content.data.instances);
-      } else if (content.msgtype === 'org.boxel.message') {
-        // If a user has switched to sharing their current context
-        // and they have open cards then use those
-        const context = content.data.context;
-        if (context.openCards.length > 0) {
-          cards = context.openCards.map((card: { data: any }) => card.data);
+      if (content.msgtype === 'org.boxel.message') {
+        const context = content.data?.context;
+        const attachedCards = content.data?.attachedCards || [];
+        const openCards = context?.openCards || [];
+        for (let card of attachedCards) {
+          relevantCards.set(card.data.id, card.data);
         }
-      } else {
-        // The user hasn't shared any cards in this message so we shouldn't use any.
-        // This can happen if the user turns off sharing their current open cards.
-        cards = [];
+        for (let card of openCards) {
+          relevantCards.set(card.data.id, card.data);
+        }
       }
     }
   }
-  return cards;
+
+  // Return the cards in a consistent manner
+  let sortedCards = Array.from(relevantCards.values()).sort((a, b) => {
+    return a.id.localeCompare(b.id);
+  });
+  return sortedCards;
 }
 
 export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
@@ -117,27 +117,9 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
   const content = lastMessage.content;
   if (
     content.msgtype === 'org.boxel.message' &&
-    content.data.context.cardSpec
+    content.data?.context?.functions
   ) {
-    return [
-      {
-        name: 'patchCard',
-        description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-        parameters: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-            },
-            card_id: {
-              type: 'string',
-            },
-            attributes: content.data.context.cardSpec,
-          },
-          required: ['card_id', 'attributes', 'description'],
-        },
-      },
-    ];
+    return content.data.context.functions;
   } else {
     // There are no open cards in this message so we shouldn't use any functions.
     return [];
