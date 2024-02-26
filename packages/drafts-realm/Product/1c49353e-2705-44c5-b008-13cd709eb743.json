@@ -10,8 +10,12 @@
         "https://i.etsystatic.com/16364929/r/il/56284f/1541707445/il_1588xN.1541707445_e3fh.jpg",
         "https://i.etsystatic.com/16364929/r/il/83c065/1494228636/il_1588xN.1494228636_a9lq.jpg"
       ],
-      "unitPriceCents": 1500,
-      "usShippingCostCents": 0,
+      "unitPrice": {
+        "amount": 15
+      },
+      "shippingCost": {
+        "amount": 0
+      },
       "leadTimeDays": 6,
       "deliveryWindowDays": 7,
       "isReturnable": false,
@@ -23,6 +27,16 @@
       "seller": {
         "links": {
           "self": "../Seller/3c27ee4e-acea-4d88-bf8c-b5700360ddea"
+        }
+      },
+      "unitPrice.currency": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Currency/1"
+        }
+      },
+      "shippingCost.currency": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Currency/1"
         }
       }
     },

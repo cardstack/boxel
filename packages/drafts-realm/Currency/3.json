@@ -2,11 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
-      "locale": "en-US",
-      "sign": "$",
-      "name": "U.S. Dollar",
-      "symbol": "USD",
-      "logoURL": "https://i.imgur.com/JIL3hND.png"
+      "locale": "en-IN",
+      "sign": "₹",
+      "name": "Indian Rupee",
+      "symbol": "INR",
+      "logoURL": "https://i.imgur.com/sSUPndr.png"
     },
     "meta": {
       "adoptsFrom": {

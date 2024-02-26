@@ -177,14 +177,14 @@ const filesB: Record<string, any> = {
   },
 };
 
-let realmPermissions: { [realmURL: string]: ('read' | 'write')[] } = {};
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
 
 module('Acceptance | code submode | create-file tests', function (hooks) {
   async function openNewFileModal(
     menuSelection: string,
     expectedRealmName = 'Test Workspace A',
   ) {
-    await waitFor('[data-test-code-mode][data-test-save-idle]');
+    await waitForCodeEditor();
     await waitFor('[data-test-new-file-button]');
     await click('[data-test-new-file-button]');
     await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
@@ -218,7 +218,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, () => realmPermissions);
+  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
   hooks.afterEach(async function () {
     window.localStorage.removeItem('recent-files');

@@ -4,11 +4,8 @@ import {
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import {
-  Product as ProductCard,
-  formatUsd,
-  EmbeddedProductComponent,
-} from './product';
+import { Product as ProductCard, EmbeddedProductComponent } from './product';
+import { MonetaryAmountAtom } from './monetary-amount';
 import GlimmerComponent from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -39,7 +36,7 @@ class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponent
           {{@model.title}}
         </div>
         <div class='price'>
-          {{formatUsd @model.unitPriceCents}}
+          <MonetaryAmountAtom @model={{@model.unitPrice}} />
         </div>
         <button {{on 'click' (fn @viewProduct @model)}}>Shop this item</button>
       </div>
@@ -219,6 +216,8 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
 
 
 
