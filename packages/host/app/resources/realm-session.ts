@@ -127,6 +127,7 @@ export class RealmSessionResource extends Resource<Args> {
       expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
       0,
     );
+
     sessionExpirationManagerResources.add(this);
     sessionExpirations.set(
       realm,

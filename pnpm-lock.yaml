@@ -1739,6 +1739,9 @@ importers:
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.182
+      '@types/matrix-js-sdk':
+        specifier: ^11.0.1
+        version: 11.0.1
       '@types/pluralize':
         specifier: ^0.0.30
         version: 0.0.30
@@ -5797,7 +5800,6 @@ packages:
 
   /@types/matrix-js-sdk@11.0.1:
     resolution: {integrity: sha512-0cI+IlIf96mxsTgtS9x7Cw2tZKhhkqwAmodKXGW+rf7THmbiM7rvOsRmp3eDik16mRlWrluq2egVFtQ8NGjgPw==}
-    dev: true
 
   /@types/mdast@3.0.14:
     resolution: {integrity: sha512-gVZ04PGgw1qLZKsnWnyFv4ORnaJ+DXLdHTVSFbU8yX6xZ34Bjg4Q32yPkmveUP1yItXReKfB0Aknlh/3zxTKAw==}

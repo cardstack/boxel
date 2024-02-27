@@ -34,6 +34,7 @@ export async function createRealm(
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   realmURL = testRealm,
   permissions: RealmPermissions = { '*': ['read', 'write'] },
+  matrixConfig = testMatrix,
 ): Promise<Realm> {
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
@@ -56,7 +57,7 @@ export async function createRealm(
     runnerOptsMgr: manager,
     getIndexHTML: async () =>
       readFileSync(join(distPath, 'index.html')).toString(),
-    matrix: testMatrix,
+    matrix: matrixConfig,
     permissions,
     realmSecretSeed: "shhh! it's a secret",
   });
@@ -94,6 +95,7 @@ export async function runTestRealmServer(
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   testRealmURL: URL,
   permissions?: RealmPermissions,
+  matrixConfig = testMatrix,
 ) {
   let testRealm = await createRealm(
     loader,
@@ -101,6 +103,7 @@ export async function runTestRealmServer(
     flatFiles,
     testRealmURL.href,
     permissions,
+    matrixConfig,
   );
   await testRealm.ready;
   let testRealmServer = await new RealmServer([testRealm]).listen(

@@ -11,9 +11,12 @@ export function createResponse(
     headers: {
       ...init?.headers,
       'X-Boxel-Realm-Url': realm.url,
-      ...(realm.isPublicReadable && { 'X-Boxel-Realm-Public-Readable': 'true' }),
+      ...(realm.isPublicReadable && {
+        'X-Boxel-Realm-Public-Readable': 'true',
+      }),
       vary: 'Accept',
-      'Access-Control-Expose-Headers': 'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,Authorization',
+      'Access-Control-Expose-Headers':
+        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Signature,Authorization',
       ...(relaxDocumentDomain
         ? {
             // we use this header to permit cross origin communication to

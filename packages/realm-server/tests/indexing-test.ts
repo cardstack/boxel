@@ -11,6 +11,7 @@ import {
   testRealm,
   setupCardLogs,
   setupBaseRealmServer,
+  runTestRealmServer,
 } from './helpers';
 import isEqual from 'lodash/isEqual';
 import { shimExternals } from '../lib/externals';
@@ -556,5 +557,63 @@ module('indexing', function (hooks) {
       }),
       'indexed correct number of files',
     );
+  });
+
+  // eslint-disable-next-line qunit/no-only
+  test('will get an authorization error when trying to index a card from another realm without permissions', async function (assert) {
+    let privateTestRealmLoader = new Loader();
+    privateTestRealmLoader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/'),
+    );
+    shimExternals(privateTestRealmLoader);
+
+    await runTestRealmServer(
+      privateTestRealmLoader,
+      dirSync().name,
+      {
+        'secret.gts': `
+          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+
+          export class Secret extends CardDef {
+            @field value = contains(StringCard);
+          }
+      `,
+      },
+      new URL('http://127.0.0.1:4445/test'),
+      { nobody: ['read', 'write'] },
+      {
+        url: new URL(`http://localhost:8008`),
+        username: 'test_realm',
+        password: 'password',
+      },
+    );
+
+    privateTestRealmLoader.registerURLHandler(realm.maybeHandle.bind(realm));
+
+    await realm.write(
+      'secret-retriever.gts',
+      `
+          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+          import { Secret as SecretCard } from "http://127.0.0.1:4445/test";
+
+          export class SecretRetriever extends CardDef {
+            @field secretValue = linksTo(SecretCard);
+          }
+        `,
+    );
+
+    assert.ok(
+      isEqual(realm.searchIndex.stats, {
+        instancesIndexed: 0,
+        instanceErrors: 0,
+        moduleErrors: 1,
+      }),
+      'has a module error',
+    );
+
+    let { data: result } = await realm.searchIndex.search({});
+    debugger;
   });
 });

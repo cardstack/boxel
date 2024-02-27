@@ -119,7 +119,7 @@ export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');
   private modules = new Map<string, Module>();
-  private urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
+  urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
 
   // use a tuple array instead of a map so that we can support reversing
   // different resolutions back to the same URL. the resolution that we apply
@@ -136,13 +136,14 @@ export class Loader {
   private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
 
-  static cloneLoader(loader: Loader): Loader {
+  clone(): Loader {
     let clone = new Loader();
-    clone.urlHandlers = loader.urlHandlers;
-    clone.urlMappings = loader.urlMappings;
-    for (let [moduleIdentifier, module] of loader.moduleShims) {
+    clone.urlHandlers = [...this.urlHandlers];
+    clone.urlMappings = [...this.urlMappings];
+    for (let [moduleIdentifier, module] of this.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
     }
+
     return clone;
   }
 
@@ -150,6 +151,7 @@ export class Loader {
     this.urlMappings.push([from.href, to.href]);
   }
 
+  // todo: consolidate param (array or not) with the other way (prepend) and rename
   registerURLHandler(handler: RequestHandler) {
     this.urlHandlers.push(handler);
   }
@@ -510,6 +512,7 @@ export class Loader {
       }
       return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
     } catch (err: any) {
+      debugger;
       let url =
         urlOrRequest instanceof Request
           ? urlOrRequest.url

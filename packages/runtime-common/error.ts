@@ -139,10 +139,7 @@ export function serializableError(err: any): any {
   return result;
 }
 
-export function responseWithError(
-  realm: Realm,
-  error: CardError,
-): Response {
+export function responseWithError(realm: Realm, error: CardError): Response {
   return createResponse(
     realm,
     JSON.stringify({ errors: [serializableError(error)] }),
@@ -154,10 +151,7 @@ export function responseWithError(
   );
 }
 
-export function methodNotAllowed(
-  realm: Realm,
-  request: Request,
-): Response {
+export function methodNotAllowed(realm: Realm, request: Request): Response {
   return responseWithError(
     realm,
     new CardError(`${request.method} not allowed for ${request.url}`, {
@@ -171,30 +165,15 @@ export function notFound(
   request: Request,
   message = `Could not find ${request.url}`,
 ): Response {
-  return responseWithError(
-    realm,
-    new CardError(message, { status: 404 }),
-  );
+  return responseWithError(realm, new CardError(message, { status: 404 }));
 }
 
-export function badRequest(
-  realm: Realm,
-  message: string,
-): Response {
-  return responseWithError(
-    realm,
-    new CardError(message, { status: 400 }),
-  );
+export function badRequest(realm: Realm, message: string): Response {
+  return responseWithError(realm, new CardError(message, { status: 400 }));
 }
 
-export function systemUnavailable(
-  realm: Realm,
-  message: string,
-): Response {
-  return responseWithError(
-    realm,
-    new CardError(message, { status: 503 }),
-  );
+export function systemUnavailable(realm: Realm, message: string): Response {
+  return responseWithError(realm, new CardError(message, { status: 503 }));
 }
 
 export function systemError(
