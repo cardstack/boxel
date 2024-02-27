@@ -38,12 +38,13 @@ export default class NewSession extends Component<Signature> {
         </p>
         {{#if @sendPrompt}}
           <ul class='prompts'>
-            {{#each this.prompts as |prompt|}}
+            {{#each this.prompts as |prompt i|}}
               <li>
                 <Button
                   class='prompt'
                   @kind='text-only'
                   {{on 'click' (fn @sendPrompt prompt)}}
+                  data-test-prompt={{i}}
                 >
                   {{prompt}}
                 </Button>
