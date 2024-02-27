@@ -53,6 +53,7 @@ import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import { WebMessageStream, messageCloseHandler } from './stream';
 import visitOperatorMode from './visit-operator-mode';
+import LoaderService from '@cardstack/host/services/loader-service';
 
 export { percySnapshot };
 export { visitOperatorMode };
@@ -513,13 +514,18 @@ async function setupTestRealm({
     loader.registerURLHandler(async (req: Request) => {
       let token = waiter.beginAsync();
       try {
-        req = await onFetch(req);
+        await onFetch(req);
       } finally {
         waiter.endAsync(token);
       }
-      return realm.maybeHandle(req);
+      return null;
     });
   }
+
+  // loader.prependURLHandlers([
+  //   (req) => sourceFetchRedirectHandle(req, adapter, realm),
+  //   (req) => sourceFetchReturnUrlHandle(req, realm),
+  // ]);
 
   realm = new Realm({
     url: realmURL,
@@ -538,21 +544,10 @@ async function setupTestRealm({
   });
 
   // debugger;
-  // loader.prependURLHandlers([
-  //   (req) => sourceFetchRedirectHandle(req, adapter, realm),
-  //   (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
-  // ]);
 
-  if (loader.urlHandlers.length < 2) {
-    loader.registerURLHandler((req) =>
-      sourceFetchRedirectHandle(req, adapter, realm),
-    );
-    loader.registerURLHandler((req) =>
-      sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
-    );
-
-    loader.registerURLHandler(realm.maybeHandle.bind(realm));
-  }
+  // We are intentionally adding this after creating realm to resolve the testing urls for the host app
+  // The loader inside the realm is cloned off of this loader
+  loader.registerURLHandler(realm.maybeHandle.bind(realm));
 
   await realm.ready;
   return { realm, adapter };
@@ -884,10 +879,10 @@ function isCardSourceFetch(request: Request) {
 
 export async function sourceFetchReturnUrlHandle(
   request: Request,
-  defaultHandle: (req: Request) => Promise<Response | null>,
+  realm: Realm,
 ) {
   if (isCardSourceFetch(request)) {
-    let r = await defaultHandle(request);
+    let r = await realm.maybeHandle(request);
     if (r) {
       return new MockRedirectedResponse(r.body, r, request.url) as Response;
     }
@@ -900,6 +895,9 @@ export async function sourceFetchRedirectHandle(
   adapter: RealmAdapter,
   realm: Realm,
 ) {
+  if (!realm.paths.inRealm(new URL(request.url))) {
+    return null;
+  }
   let urlParts = new URL(request.url).pathname.split('.');
   if (
     isCardSourceFetch(request) &&

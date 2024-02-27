@@ -151,6 +151,7 @@ export class Loader {
     this.urlMappings.push([from.href, to.href]);
   }
 
+  // todo: consolidate param (array or not) with the other way (prepend) and rename
   registerURLHandler(handler: RequestHandler) {
     this.urlHandlers.push(handler);
   }
@@ -511,6 +512,7 @@ export class Loader {
       }
       return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
     } catch (err: any) {
+      debugger;
       let url =
         urlOrRequest instanceof Request
           ? urlOrRequest.url

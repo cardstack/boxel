@@ -99,7 +99,7 @@ export class MatrixClient {
 
   async createDM(invite: string): Promise<string> {
     if (invite === this.access!.userId) {
-      throw new Error(`Cannot create DM with self`);
+      throw new Error(`Cannot create DM with self ${invite}`);
     }
     let response = await this.request('_matrix/client/v3/createRoom', 'POST', {
       body: JSON.stringify({ invite: [invite], is_direct: true }),
