@@ -21,7 +21,7 @@ export default class NewSession extends Component<Signature> {
       </div>
       {{#if @errorAction}}
         <div data-test-room-error>
-          <p class='message error'>
+          <p class='message'>
             We've encountered an error, please try again later.
           </p>
           <Button @size='small' @kind='primary' {{on 'click' @errorAction}}>
@@ -29,10 +29,17 @@ export default class NewSession extends Component<Signature> {
           </Button>
         </div>
       {{else}}
-        <p class='message'>Boxel Assistant is an AI that produces tailored
-          responses by merging analytics and cognitive computing. Build a
-          website, batch edit photos or streamline your workflows - all with
-          just a few simple text prompts.</p>
+        <p class='message'>
+          Boxel Assistant is an AI that produces tailored responses by merging
+          analytics and cognitive computing. Build a website, batch edit photos
+          or streamline your workflows - all with just a few simple text
+          prompts.
+        </p>
+        <ul class='prompts'>
+          <li>What kind of things can AI do?</li>
+          <li>Do I have to use AI with Boxel?</li>
+          <li>Will my data be safe?</li>
+        </ul>
       {{/if}}
     </div>
 
@@ -41,11 +48,11 @@ export default class NewSession extends Component<Signature> {
         display: flex;
         flex-direction: column;
         justify-content: center;
+        gap: var(--boxel-sp-xl);
         height: 100%;
         padding: var(--boxel-sp) var(--boxel-sp-lg);
-      }
-      .intro > * + * {
-        margin-top: var(--boxel-sp-xl);
+        color: var(--boxel-light);
+        letter-spacing: var(--boxel-lsp);
       }
       .title-group {
         display: flex;
@@ -57,17 +64,20 @@ export default class NewSession extends Component<Signature> {
         font-weight: 700;
         font-size: 1.625rem;
         line-height: 1.25;
-        letter-spacing: var(--boxel-lsp);
       }
       .message {
+        margin: 0;
         padding: var(--boxel-sp-4xs);
-        color: var(--boxel-light);
         font: 700 var(--boxel-font);
         line-height: 1.5;
-        letter-spacing: var(--boxel-lsp-xs);
       }
-      .error {
-        margin-top: 0;
+      .prompts {
+        margin: 0;
+        padding-left: var(--boxel-sp);
+        font: 500 var(--boxel-font-sm);
+      }
+      .prompts > li + li {
+        margin-top: var(--boxel-sp);
       }
     </style>
   </template>
