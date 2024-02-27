@@ -42,14 +42,14 @@ To build the entire repository and run the application, follow these steps:
    pnpm start:all
    ```
 
-7. Register ALL
+7. Register ALL:
 
    ```zsh
    cd ./packages/matrix
    pnpm register-all
    ```
 
-8. Verify registration
+8. Verify registration:
 
 ```zsh
 cd ./packages/matrix
@@ -61,7 +61,7 @@ Visit http://localhost:8080. Type in Username = "admin", Password: "password" Ho
 11. Host App
 
 - Visit http://localhost:4201/
-- Create new user
+- Enter the registration flow and create a Boxel Account
 - When prompted for an authentication token, type in "dev-token"
 
 12. Validate email for login:
