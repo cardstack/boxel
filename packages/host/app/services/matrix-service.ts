@@ -12,6 +12,7 @@ import {
   type EmittedEvents,
   type IEvent,
   type MatrixClient,
+  type ISendEventResponse,
 } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -19,6 +20,7 @@ import {
   type LooseSingleCardDocument,
   sanitizeHtml,
   aiBotUsername,
+  splitStringIntoChunks,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
@@ -38,6 +40,7 @@ import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
+  CardFragmentContent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -53,6 +56,7 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const DEFAULT_PAGE_SIZE = 50;
+const MAX_CARD_SIZE_KB = 60;
 
 export type Event = Partial<IEvent>;
 
@@ -319,16 +323,16 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent,
+    content: CardMessageContent | CardFragmentContent,
   ) {
     if (content.data) {
       const encodedContent = {
         ...content,
         data: JSON.stringify(content.data),
       };
-      await this.client.sendEvent(roomId, eventType, encodedContent);
+      return await this.client.sendEvent(roomId, eventType, encodedContent);
     } else {
-      await this.client.sendEvent(roomId, eventType, content);
+      return await this.client.sendEvent(roomId, eventType, content);
     }
   }
 
@@ -384,20 +388,71 @@ export default class MatrixService extends Service {
         attachedCards.map(async (c) => await this.cardService.serializeCard(c)),
       );
     }
+    let attachedCardsEventIds: string[] = [];
+    if (serializedAttachedCards.length > 0) {
+      for (let attachedCard of serializedAttachedCards) {
+        let eventIds = await this.sendCardFragments(roomId, attachedCard);
+        attachedCardsEventIds.push(eventIds[0].event_id); // we only care about the first fragment
+      }
+    }
+    let openCardsEventIds: string[] = [];
+    if (serializedOpenCards.length > 0) {
+      for (let openCard of serializedOpenCards) {
+        let eventIds = await this.sendCardFragments(roomId, openCard);
+        openCardsEventIds.push(eventIds[0].event_id); // we only care about the first fragment
+      }
+    }
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: 'org.boxel.message',
       body: body || '',
       format: 'org.matrix.custom.html',
       formatted_body: html,
       data: {
-        attachedCards: serializedAttachedCards,
+        attachedCardsEventIds,
         context: {
-          openCards: serializedOpenCards,
+          openCardsEventIds,
           functions: functions,
           submode: currentSubMode,
         },
       },
-    });
+    } as CardMessageContent);
+  }
+
+  private async sendCardFragments(
+    roomId: string,
+    card: LooseSingleCardDocument,
+  ): Promise<ISendEventResponse[]> {
+    let fragments = splitStringIntoChunks(
+      JSON.stringify(card),
+      MAX_CARD_SIZE_KB,
+    );
+    let responses: ISendEventResponse[] = [];
+    for (let [index, cardFragment] of fragments.entries()) {
+      let response = await this.sendEvent(roomId, 'm.room.message', {
+        ...(responses.length > 0
+          ? {
+              'm.relates_to': {
+                event_id: responses[responses.length - 1].event_id,
+                rel_type: 'append',
+              },
+            }
+          : {}),
+        msgtype: 'org.boxel.cardFragment' as const,
+        format: 'org.boxel.card' as const,
+        body: `card fragment ${index + 1} of ${fragments.length}`,
+        formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
+        data: {
+          ...(responses.length > 0
+            ? { firstFragment: responses[0].event_id }
+            : {}),
+          cardFragment,
+          index,
+          totalParts: fragments.length,
+        },
+      } as CardFragmentContent);
+      responses.push(response);
+    }
+    return responses;
   }
 
   async initializeRooms() {
