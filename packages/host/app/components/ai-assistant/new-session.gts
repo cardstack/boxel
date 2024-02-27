@@ -21,7 +21,7 @@ export default class NewSession extends Component<Signature> {
         <h2 class='title-text'>Assistant</h2>
       </div>
       {{#if @errorAction}}
-        <div data-test-room-error>
+        <div class='error-section' data-test-room-error>
           <p class='message'>
             We've encountered an error, please try again later.
           </p>
@@ -110,6 +110,9 @@ export default class NewSession extends Component<Signature> {
       }
       .prompt:hover:not(:disabled) {
         color: var(--boxel-highlight);
+      }
+      .error-section > * + * {
+        margin-top: var(--boxel-sp-sm);
       }
     </style>
   </template>
