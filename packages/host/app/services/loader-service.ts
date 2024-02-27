@@ -104,9 +104,9 @@ export default class LoaderService extends Service {
       body,
     });
 
-    // We will get a 403 from the server in two cases. The first one is when the request is not allowed, 
+    // We will get a 403 from the server in two cases. The first one is when the request is not allowed,
     // and the second one is when the JWT has expired or the permissions in the JWY payload differ
-    // from what is configured on the server (e.g. someone changed permissions for the user during the life 
+    // from what is configured on the server (e.g. someone changed permissions for the user during the life
     // of the JWT). The latter case is solved by trying to refresh the token.
     if (!response.ok && response.status === 403) {
       await realmSession.refreshToken();
