@@ -53,7 +53,7 @@ let createJWT = (
   realm: Realm,
   user: string,
   realmUrl: string,
-  permissions = [],
+  permissions: RealmPermissions['user'] = [],
 ) => {
   return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
 };
@@ -391,6 +391,19 @@ module('Realm Server', function (hooks) {
           .post('/')
           .send({})
           .set('Accept', 'application/vnd.card+json'); // no Authorization header
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('401 permissions have been updated', async function (assert) {
+        let response = await request
+          .post('/')
+          .send({})
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
+          );
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });

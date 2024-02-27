@@ -866,7 +866,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           realmPermissions = { [testRealmURL]: ['read'] };
         });
 
-        test('retrieve a new JWT if recevive 403 error', async function (assert) {
+        test('retrieve a new JWT if recevive 401 error', async function (assert) {
           let token = createJWT(
             {
               user: '@testuser:staging',
@@ -900,7 +900,7 @@ module('Acceptance | interact submode tests', function (hooks) {
               req.headers.get('Authorization') === token
             ) {
               return new Response(`Authorization error`, {
-                status: 403,
+                status: 401,
               });
             }
 
