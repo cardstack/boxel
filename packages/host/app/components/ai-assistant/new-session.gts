@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
@@ -6,15 +7,15 @@ import { Button } from '@cardstack/boxel-ui/components';
 import assistantIcon from './ai-assist-icon@2x.webp';
 
 interface Signature {
-  Element: HTMLElement;
   Args: {
+    sendPrompt?: (message: string) => void;
     errorAction?: () => void;
   };
 }
 
 export default class NewSession extends Component<Signature> {
   <template>
-    <div class='intro' data-test-new-session ...attributes>
+    <div class='intro' data-test-new-session>
       <div class='title-group'>
         <img alt='AI Assistant' src={{assistantIcon}} width='40' height='40' />
         <h2 class='title-text'>Assistant</h2>
@@ -35,11 +36,21 @@ export default class NewSession extends Component<Signature> {
           or streamline your workflows - all with just a few simple text
           prompts.
         </p>
-        <ul class='prompts'>
-          <li>What kind of things can AI do?</li>
-          <li>Do I have to use AI with Boxel?</li>
-          <li>Will my data be safe?</li>
-        </ul>
+        {{#if @sendPrompt}}
+          <ul class='prompts'>
+            {{#each this.prompts as |prompt|}}
+              <li>
+                <Button
+                  class='prompt'
+                  @kind='text-only'
+                  {{on 'click' (fn @sendPrompt prompt)}}
+                >
+                  {{prompt}}
+                </Button>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
       {{/if}}
     </div>
 
@@ -74,11 +85,25 @@ export default class NewSession extends Component<Signature> {
       .prompts {
         margin: 0;
         padding-left: var(--boxel-sp);
-        font: 500 var(--boxel-font-sm);
       }
       .prompts > li + li {
-        margin-top: var(--boxel-sp);
+        margin-top: var(--boxel-sp-xxs);
+      }
+      .prompt {
+        color: var(--boxel-light);
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
+        padding-left: var(--boxel-sp-xxs);
+      }
+      .prompt:hover:not(:disabled) {
+        color: var(--boxel-highlight);
       }
     </style>
   </template>
+
+  private prompts = [
+    'What kind of things can AI do?',
+    'Do I have to use AI with Boxel?',
+    'Will my data be safe?',
+  ];
 }

@@ -34,8 +34,7 @@ test.describe('Room messages', () => {
   test(`it can send a message in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await expect(page.locator('[data-test-timeline-start]')).toHaveCount(0);
-    await expect(page.locator('[data-test-no-messages]')).toHaveCount(1);
+    await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
     await assertMessages(page, []);
 
@@ -43,8 +42,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-send-message-btn]').click();
 
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
-    await expect(page.locator('[data-test-no-messages]')).toHaveCount(0);
-    await expect(page.locator('[data-test-timeline-start]')).toHaveCount(1);
+    await expect(page.locator('[data-test-new-session]')).toHaveCount(0);
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
     let room2 = await createRoom(page);
