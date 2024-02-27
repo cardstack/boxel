@@ -84,11 +84,23 @@ export default class NewSession extends Component<Signature> {
         line-height: 1.5;
       }
       .prompts {
+        list-style-type: none;
         margin: 0;
-        padding-left: var(--boxel-sp);
+        padding-left: 0;
       }
       .prompts > li + li {
         margin-top: var(--boxel-sp-xxs);
+      }
+      .prompt::before {
+        display: inline-block;
+        margin-right: var(--boxel-sp-sm);
+        content: '?';
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: 50%;
+        background-color: var(--boxel-highlight);
+        color: var(--boxel-dark);
+        font: 500 var(--boxel-font);
       }
       .prompt {
         color: var(--boxel-light);
