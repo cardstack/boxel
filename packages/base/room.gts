@@ -665,7 +665,7 @@ export interface CardMessageContent {
   data: {
     attachedCards: LooseSingleCardDocument[];
     context: {
-      openCards: LooseSingleCardDocument[];
+      openCardIds: LooseSingleCardDocument[];
       functions: {
         name: string;
         description: string;
