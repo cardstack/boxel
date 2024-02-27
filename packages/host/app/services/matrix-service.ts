@@ -58,7 +58,7 @@ export type Event = Partial<IEvent>;
 
 export type OperatorModeContext = {
   submode: Submode;
-  openCards: CardDef[];
+  openCardIds: string[];
 };
 
 export default class MatrixService extends Service {
@@ -345,38 +345,40 @@ export default class MatrixService extends Service {
     let currentSubMode = context?.submode;
     if (context?.submode === 'interact') {
       // Serialize the top of all cards on all stacks
-      serializedOpenCards = await Promise.all(
-        context!.openCards.map(async (card) => {
-          return await this.cardService.serializeCard(card);
-        }),
-      );
       let mappings = await basicMappings(this.loaderService.loader);
-
-      // Limiting support to modifying the top of just one stack
-      let patchSpec = generateCardPatchCallSpecification(
-        context!.openCards[0].constructor as typeof CardDef,
-        this.cardAPI,
-        mappings,
+      // Open cards are attached automaticaly
+      // If they are not attached, the user is not allowing us to
+      // modify them
+      let openCardDefs = attachedCards.filter((c) =>
+        context.openCardIds.includes(c.id),
       );
+      // Generate function calls for patching currently open cards
+      for (let openCardDef of openCardDefs) {
+        let patchSpec = generateCardPatchCallSpecification(
+          openCardDef.constructor as typeof CardDef,
+          this.cardAPI,
+          mappings,
+        );
 
-      functions.push({
-        name: 'patchCard',
-        description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-        parameters: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
+        functions.push({
+          name: 'patchCard',
+          description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+          parameters: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+              },
+              card_id: {
+                type: 'string',
+                const: openCardDef.id, // Force the valid card_id to be the id of the card being patched
+              },
+              attributes: patchSpec,
             },
-            card_id: {
-              type: 'string',
-              const: context!.openCards[0].id, // Force the valid card_id to be the id of the card being patched
-            },
-            attributes: patchSpec,
+            required: ['card_id', 'attributes', 'description'],
           },
-          required: ['card_id', 'attributes', 'description'],
-        },
-      });
+        });
+      }
     }
 
     if (attachedCards?.length) {
@@ -392,7 +394,7 @@ export default class MatrixService extends Service {
       data: {
         attachedCards: serializedAttachedCards,
         context: {
-          openCards: serializedOpenCards,
+          openCardIds: serializedOpenCards,
           functions: functions,
           submode: currentSubMode,
         },

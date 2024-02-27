@@ -112,9 +112,9 @@ export default class RoomInput extends Component<RoomArgs> {
       let context = undefined;
       context = {
         submode: this.operatorModeStateService.state.submode,
-        openCards: this.operatorModeStateService
+        openCardIds: this.operatorModeStateService
           .topMostStackItems()
-          .map((stackItem) => stackItem.card),
+          .map((stackItem) => stackItem.card.id),
       };
       await this.matrixService.sendMessage(
         this.args.roomId,
