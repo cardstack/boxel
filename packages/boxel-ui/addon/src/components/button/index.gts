@@ -199,13 +199,21 @@ export default class ButtonComponent extends Component<Signature> {
         .kind-secondary-dark:not(:disabled) {
           /* transparent on dark background */
           --boxel-button-color: transparent;
-          --boxel-button-border: 1px solid var(--boxel-purple-400);
+          --boxel-button-border: 1px solid var(--boxel-400);
           --boxel-button-text-color: var(--boxel-light);
         }
 
         .kind-secondary-dark:not(:disabled):hover,
         .kind-secondary-dark:not(:disabled):active {
           --boxel-button-border: 1px solid var(--boxel-light);
+        }
+
+        .kind-secondary-dark:disabled,
+        a.kind-secondary-dark:not([href]),
+        a.kind-secondary-dark[href=''],
+        a.kind-secondary-dark.disabled-link {
+          --boxel-button-color: transparent;
+          opacity: 0.35;
         }
 
         .kind-secondary-light:not(:disabled) {
