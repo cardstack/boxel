@@ -14,7 +14,7 @@ If the user request is unclear, you may ask clarifying questions. \
 You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
 If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
 \
-If you need access to the cards the user can see, you can ask them to "send their open cards" to you.';
+If you need access to the cards the user can see, you can ask them to attach the cards.';
 
 type CommandMessage = {
   type: 'command';
@@ -85,13 +85,8 @@ export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
     if (event.sender !== aiBotUserId) {
       let content = event.content;
       if (content.msgtype === 'org.boxel.message') {
-        const context = content.data?.context;
         const attachedCards = content.data?.attachedCards || [];
-        const openCards = context?.openCards || [];
         for (let card of attachedCards) {
-          relevantCards.set(card.data.id, card.data);
-        }
-        for (let card of openCards) {
           relevantCards.set(card.data.id, card.data);
         }
       }
@@ -110,7 +105,7 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
   const userMessages = history.filter((event) => event.sender !== aiBotUserId);
   // Get the last message
   if (userMessages.length === 0) {
-    // If the user has sent no messages, there are no open cards so we shouldn't use any functions.
+    // If the user has sent no messages, there are no relevant functions to return
     return [];
   }
   const lastMessage = userMessages[userMessages.length - 1];
@@ -121,7 +116,7 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
   ) {
     return content.data.context.functions;
   } else {
-    // There are no open cards in this message so we shouldn't use any functions.
+    // If it's a different message type, or there are no functions, return an empty array
     return [];
   }
 }
@@ -229,7 +224,7 @@ export function getModifyPrompt(
   }
   if (functions.length == 0) {
     systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and tick "Allow access to the cards you can see at the top of your stacks" ';
+      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached';
   }
 
   let messages: OpenAIPromptMessage[] = [

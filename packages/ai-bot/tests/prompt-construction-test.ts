@@ -116,115 +116,6 @@ module('getModifyPrompt', () => {
     });
   });
 
-  test('Gets only the latest version of cards shared in context', () => {
-    const history: IRoomEvent[] = [
-      {
-        type: 'm.room.message',
-        sender: '@ian:localhost',
-        content: {
-          msgtype: 'org.boxel.message',
-          body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
-          data: {
-            context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
-                    attributes: {
-                      firstName: 'Original Name',
-                      thumbnailURL: null,
-                    },
-                    relationships: {
-                      friend: {
-                        links: {
-                          self: './2',
-                        },
-                        data: {
-                          type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
-                        },
-                      },
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../friend',
-                        name: 'Friend',
-                      },
-                    },
-                  },
-                },
-              ],
-              submode: 'interact',
-            },
-          },
-        },
-        origin_server_ts: 1696813813166,
-        unsigned: {
-          age: 115498,
-        },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
-      },
-      {
-        type: 'm.room.message',
-        sender: '@ian:localhost',
-        content: {
-          msgtype: 'org.boxel.message',
-          body: 'set the location to home',
-          data: {
-            context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
-                    attributes: {
-                      firstName: 'Changed Name',
-                      thumbnailURL: null,
-                    },
-                    relationships: {
-                      friend: {
-                        links: {
-                          self: './2',
-                        },
-                        data: {
-                          type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
-                        },
-                      },
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../friend',
-                        name: 'Friend',
-                      },
-                    },
-                  },
-                },
-              ],
-              submode: 'interact',
-            },
-          },
-        },
-        origin_server_ts: 1696813813167,
-        unsigned: {
-          age: 115498,
-        },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
-      },
-    ];
-
-    const relevantCards = getRelevantCards(history, '@aibot:localhost');
-    assert.equal(relevantCards.length, 1);
-    assert.equal(
-      relevantCards[0],
-      history[1].content.data.context.openCards[0]['data'],
-    );
-  });
-
   test('Gets only the latest version of cards uploaded', () => {
     const history: IRoomEvent[] = [
       {
@@ -345,7 +236,7 @@ module('getModifyPrompt', () => {
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
-              openCards: [],
+              openCardIds: [],
               submode: 'interact',
             },
           },
@@ -365,7 +256,7 @@ module('getModifyPrompt', () => {
           body: 'set the location to home',
           data: {
             context: {
-              openCards: [],
+              openCardIds: [],
               submode: 'interact',
             },
           },
@@ -487,114 +378,6 @@ module('getModifyPrompt', () => {
     assert.equal(relevantCards.length, 2);
   });
 
-  test('Open cards add to attached cards', () => {
-    const history: IRoomEvent[] = [
-      {
-        type: 'm.room.message',
-        event_id: '1',
-        origin_server_ts: 1234567890,
-        content: {
-          msgtype: 'org.boxel.message',
-          body: 'Hey',
-          data: {
-            attachedCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/1',
-                  attributes: {
-                    firstName: 'Terry',
-                    lastName: 'Pratchett',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../author',
-                      name: 'Author',
-                    },
-                  },
-                },
-              },
-            ],
-          },
-        },
-        sender: '@user:localhost',
-      },
-      {
-        type: 'm.room.message',
-        event_id: '1',
-        origin_server_ts: 1234567890,
-        content: {
-          msgtype: 'org.boxel.message',
-          body: 'Hey',
-          data: {
-            attachedCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/2',
-                  attributes: {
-                    firstName: 'Mr',
-                    lastName: 'T',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../author',
-                      name: 'Author',
-                    },
-                  },
-                },
-              },
-            ],
-          },
-        },
-        sender: '@user:localhost',
-      },
-      {
-        type: 'm.room.message',
-        sender: '@ian:localhost',
-        content: {
-          msgtype: 'org.boxel.message',
-          body: 'set the location to home',
-          data: {
-            context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Meeting/2',
-                    attributes: {
-                      location: 'Work',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../meeting',
-                        name: 'Meeting',
-                      },
-                    },
-                  },
-                },
-              ],
-              submode: 'interact',
-            },
-          },
-        },
-        origin_server_ts: 1696813813167,
-        unsigned: {
-          age: 115498,
-        },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
-      },
-    ];
-    const relevantCards = getRelevantCards(history, '@aibot:localhost');
-    assert.equal(relevantCards.length, 3);
-    assert.deepEqual(relevantCards, [
-      history[0].content.data.attachedCards[0]['data'],
-      history[1].content.data.attachedCards[0]['data'],
-      history[2].content.data.context.openCards[0]['data'],
-    ]);
-  });
-
   test('If a user stops sharing their context keep it in the system prompt', () => {
     const history: IRoomEvent[] = [
       {
@@ -605,36 +388,37 @@ module('getModifyPrompt', () => {
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
-            context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
-                    attributes: {
-                      firstName: 'Hassan',
-                      thumbnailURL: null,
-                    },
-                    relationships: {
-                      friend: {
-                        links: {
-                          self: './2',
-                        },
-                        data: {
-                          type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
-                        },
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Friend/1',
+                  attributes: {
+                    firstName: 'Hassan',
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './2',
                       },
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../friend',
-                        name: 'Friend',
+                      data: {
+                        type: 'card',
+                        id: 'http://localhost:4201/drafts/Friend/2',
                       },
                     },
                   },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../friend',
+                      name: 'Friend',
+                    },
+                  },
                 },
-              ],
+              },
+            ],
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
               submode: 'interact',
             },
           },
@@ -664,11 +448,11 @@ module('getModifyPrompt', () => {
     assert.equal(relevantCards.length, 1);
     assert.equal(
       relevantCards[0],
-      history[0].content.data.context.openCards[0]['data'],
+      history[0].content.data.attachedCards[0]['data'],
     );
   });
 
-  test('If a user stops sharing their context then ignore function calls', () => {
+  test('If there are no functions in the last message from the user, store none', () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
@@ -679,35 +463,7 @@ module('getModifyPrompt', () => {
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
-                    attributes: {
-                      firstName: 'Hassan',
-                      thumbnailURL: null,
-                    },
-                    relationships: {
-                      friend: {
-                        links: {
-                          self: './2',
-                        },
-                        data: {
-                          type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
-                        },
-                      },
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../friend',
-                        name: 'Friend',
-                      },
-                    },
-                  },
-                },
-              ],
+              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
               functions: [
                 getPatchFunction('http://localhost:4201/drafts/Friend/1', {
                   firstName: { type: 'string' },
@@ -742,7 +498,7 @@ module('getModifyPrompt', () => {
     assert.equal(functions.length, 0);
   });
 
-  test('Create patch function calls when there is a cardSpec', () => {
+  test("Don't break when there is an older format type with open cards", () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
@@ -829,6 +585,65 @@ module('getModifyPrompt', () => {
     });
   });
 
+  test('Create patch function calls when there is a cardSpec', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          data: {
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
+              functions: [
+                getPatchFunction('http://localhost:4201/drafts/Friend/1', {
+                  firstName: { type: 'string' },
+                }),
+              ],
+              submode: 'interact',
+            },
+          },
+        },
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+
+    const functions = getFunctions(history, '@aibot:localhost');
+    assert.equal(functions.length, 1);
+    assert.deepEqual(functions[0], {
+      name: 'patchCard',
+      description: 'description',
+      parameters: {
+        type: 'object',
+        properties: {
+          description: {
+            type: 'string',
+          },
+          card_id: {
+            type: 'string',
+            const: 'http://localhost:4201/drafts/Friend/1',
+          },
+          attributes: {
+            type: 'object',
+            properties: {
+              firstName: {
+                type: 'string',
+              },
+            },
+          },
+        },
+        required: ['card_id', 'attributes', 'description'],
+      },
+    });
+  });
+
   test('Gets only the latest functions', () => {
     const history: IRoomEvent[] = [
       {
@@ -840,35 +655,7 @@ module('getModifyPrompt', () => {
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
-                    attributes: {
-                      firstName: 'Hassan',
-                      thumbnailURL: null,
-                    },
-                    relationships: {
-                      friend: {
-                        links: {
-                          self: './2',
-                        },
-                        data: {
-                          type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
-                        },
-                      },
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../friend',
-                        name: 'Friend',
-                      },
-                    },
-                  },
-                },
-              ],
+              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
               functions: [
                 getPatchFunction('http://localhost:4201/drafts/Friend/1', {
                   firstName: { type: 'string' },
@@ -893,23 +680,7 @@ module('getModifyPrompt', () => {
           body: 'set the location to home',
           data: {
             context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Meeting/2',
-                    attributes: {
-                      location: 'Work',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../meeting',
-                        name: 'Meeting',
-                      },
-                    },
-                  },
-                },
-              ],
+              openCardIds: ['http://localhost:4201/drafts/Meeting/2'],
               functions: [
                 getPatchFunction('http://localhost:4201/drafts/Meeting/2', {
                   location: { type: 'string' },
