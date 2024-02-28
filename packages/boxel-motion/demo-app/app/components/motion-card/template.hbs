@@ -1,0 +1,18 @@
+{{! template-lint-disable no-invalid-interactive}}
+<div
+  {{on "click" this.handleClick}}
+  class="card"
+  {{sprite id=@identifier role="card"}}
+  ...attributes
+>
+  {{#if (has-block)}}
+    <div
+      class="content"
+      {{sprite role="card-content" id=(concat @identifier "-content")}}
+    >
+      {{yield}}
+    </div>
+  {{/if}}
+
+  <footer class="footer"></footer>
+</div>

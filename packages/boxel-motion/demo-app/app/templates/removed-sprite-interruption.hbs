@@ -1,0 +1,27 @@
+<div class="container">
+  <AnimationContext
+    @use={{this.transition}}
+    @id="double-render-demo"
+    class="double-render"
+  >
+    {{#if this.isShowing}}
+      <div {{sprite id="item"}} class="sprite">
+        Item
+      </div>
+    {{/if}}
+    <div class="count">
+      {{this.count}}
+    </div>
+  </AnimationContext>
+  <div class="buttons">
+    <button type="button" {{on "click" this.increment}} class="button">
+      Increment
+    </button>
+    <button type="button" {{on "click" this.hide}} class="button">
+      Remove
+    </button>
+    <button type="button" {{on "click" this.show}} class="button">
+      Insert
+    </button>
+  </div>
+</div>
