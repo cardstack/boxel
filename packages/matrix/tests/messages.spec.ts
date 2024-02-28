@@ -372,23 +372,43 @@ test.describe('Room messages', () => {
     const testCard2 = `${testHost}/mango`;
 
     await login(page, 'user1', 'pass');
-    await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`).click();
-    await createRoom(page, false);
+
+    await page
+      .locator(
+        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+      )
+      .click();
+    // Make sure we've got an open room
+    await getRoomName(page);
 
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
     await page.locator(`[data-test-selected-card]`).hover();
-    await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText('Topmost card is shared automatically');
-    
+    await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+      'Topmost card is shared automatically',
+    );
+
     await selectCardFromCatalog(page, testCard2);
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(2);
 
     // Do not auto-attach a card if it has been selected
-    await page.locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`).click();
-    await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard2}']`).click();
+    await page
+      .locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`)
+      .click();
+    await page
+      .locator(
+        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard2}']`,
+      )
+      .click();
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
 
-    await page.locator(`[data-test-stack-card='${testCard2}'] [data-test-close-button]`).click();
-    await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`).click();
+    await page
+      .locator(`[data-test-stack-card='${testCard2}'] [data-test-close-button]`)
+      .click();
+    await page
+      .locator(
+        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+      )
+      .click();
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(2);
 
     await page.locator('[data-test-send-message-btn]').click();
@@ -409,19 +429,38 @@ test.describe('Room messages', () => {
     const testCard3 = `${testHost}/type-examples`;
 
     await login(page, 'user1', 'pass');
-    await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`).click();
-    await createRoom(page, false);
+    await page
+      .locator(
+        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+      )
+      .click();
+    // Make sure we've got an open room
+    await getRoomName(page);
 
     // If user removes the auto-attached card,
     // and then opens another card in the stack,
     // the card will be attached automatically.
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
-    await page.locator(`[data-test-selected-card='${testCard1}'] [data-test-remove-card-btn]`).click();
+    await page
+      .locator(
+        `[data-test-selected-card='${testCard1}'] [data-test-remove-card-btn]`,
+      )
+      .click();
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
-    await page.locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`).click();
-    await page.locator(`[data-test-stack-item-content] [data-test-cards-grid-item='${testCard2}']`).click();
+    await page
+      .locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`)
+      .click();
+    await page
+      .locator(
+        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard2}']`,
+      )
+      .click();
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
-    await page.locator(`[data-test-selected-card='${testCard2}'] [data-test-remove-card-btn]`).click();
+    await page
+      .locator(
+        `[data-test-selected-card='${testCard2}'] [data-test-remove-card-btn]`,
+      )
+      .click();
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
     await selectCardFromCatalog(page, testCard3);
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
@@ -429,9 +468,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [
       {
         from: 'user1',
-        cards: [
-          { id: testCard3, title: 'Type Examples' },
-        ],
+        cards: [{ id: testCard3, title: 'Type Examples' }],
       },
     ]);
   });
