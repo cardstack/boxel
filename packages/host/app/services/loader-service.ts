@@ -98,11 +98,30 @@ export default class LoaderService extends Service {
     } else {
       body = await request.text();
     }
-    return await this.loader.fetch(request.url, {
+    let response = await this.loader.fetch(request.url, {
       method: request.method,
       headers: new Headers(request.headers),
       body,
     });
+
+    // We will get a 401 from the server in two cases. The first one is when the request is not allowed,
+    // and the second one is when the JWT has expired or the permissions in the JWY payload differ
+    // from what is configured on the server (e.g. someone changed permissions for the user during the life
+    // of the JWT). The latter case is solved by trying to refresh the token.
+    if (!response.ok && response.status === 401) {
+      await realmSession.refreshToken();
+      if (!realmSession.rawRealmToken) {
+        return null;
+      }
+      request.headers.set('Authorization', realmSession.rawRealmToken);
+      response = await this.loader.fetch(request.url, {
+        method: request.method,
+        headers: new Headers(request.headers),
+        body,
+      });
+    }
+
+    return response;
   }
 
   private async getRealmSession(realmURL: URL) {
