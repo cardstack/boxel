@@ -961,14 +961,14 @@ module('Acceptance | interact submode tests', function (hooks) {
             ],
           });
 
-          // Mock `Authorization` error response from the server.
+          // Mock `Authentication` error response from the server.
           onFetch = (req, _body) => {
             if (
               req.method !== 'GET' &&
               req.method !== 'HEAD' &&
               req.headers.get('Authorization') === token
             ) {
-              return new Response(`Authorization error`, {
+              return new Response(`Authentication error`, {
                 status: 401,
               });
             }

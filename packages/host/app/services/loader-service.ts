@@ -104,10 +104,10 @@ export default class LoaderService extends Service {
       body,
     });
 
-    // We will get a 401 from the server in two cases. The first one is when the request is not allowed,
-    // and the second one is when the JWT has expired or the permissions in the JWY payload differ
+    // We will get a 401 from the server in three cases. When the token is invalid,
+    // the JWT is expired, and the permissions in the JWT payload differ
     // from what is configured on the server (e.g. someone changed permissions for the user during the life
-    // of the JWT). The latter case is solved by trying to refresh the token.
+    // of the JWT). In those cases, we have to retrieve a new JWT.
     if (!response.ok && response.status === 401) {
       await realmSession.refreshToken();
       if (!realmSession.rawRealmToken) {
