@@ -427,6 +427,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       contents: realmAFiles,
       realmURL: testRealmURL2,
     });
+
     ({ realm, adapter } = await setupAcceptanceTestRealm({
       loader,
       contents: {
@@ -878,6 +879,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   test<TestContextWithSave>('can duplicate an instance in different realm', async function (assert) {
     assert.expect(11);
+
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',

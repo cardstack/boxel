@@ -413,6 +413,12 @@ export class Realm {
         method: 'HEAD',
       });
 
+      if (!targetRealmPingResponse.ok) {
+        throw new Error(
+          `The response from ${request.url} needs to be 200 OK for a HEAD request`,
+        );
+      }
+
       let targetRealmURLString =
         targetRealmPingResponse.headers.get('x-boxel-realm-url');
       let isPublicReadable = Boolean(

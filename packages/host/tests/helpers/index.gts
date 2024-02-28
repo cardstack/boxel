@@ -522,10 +522,10 @@ async function setupTestRealm({
     });
   }
 
-  // loader.prependURLHandlers([
-  //   (req) => sourceFetchRedirectHandle(req, adapter, realm),
-  //   (req) => sourceFetchReturnUrlHandle(req, realm),
-  // ]);
+  loader.prependURLHandlers([
+    (req) => sourceFetchRedirectHandle(req, adapter, realm),
+    (req) => sourceFetchReturnUrlHandle(req, realm),
+  ]);
 
   realm = new Realm({
     url: realmURL,
@@ -871,9 +871,10 @@ export function diff(
 
 function isCardSourceFetch(request: Request) {
   return (
-    request.method === 'GET' &&
-    request.headers.get('Accept') === SupportedMimeType.CardSource &&
-    request.url.includes(testRealmURL)
+    ['GET', 'HEAD'].includes(request.method) &&
+    (request.headers.get('Accept') === SupportedMimeType.CardSource ||
+      request.headers.get('Accept') === SupportedMimeType.CardJson) &&
+    request.url.includes('test-realm')
   );
 }
 
@@ -926,6 +927,7 @@ export async function sourceFetchRedirectHandle(
           'last-modified': formatRFC7231(ref.lastModified),
         },
       });
+
       return new MockRedirectedResponse(r.body, r, responseUrl) as Response;
     }
   }

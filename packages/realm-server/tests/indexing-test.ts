@@ -614,6 +614,5 @@ module('indexing', function (hooks) {
     );
 
     let { data: result } = await realm.searchIndex.search({});
-    debugger;
   });
 });

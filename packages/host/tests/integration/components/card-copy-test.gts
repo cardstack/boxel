@@ -32,6 +32,8 @@ import {
   type TestContextWithSave,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
+  sourceFetchRedirectHandle,
+  sourceFetchReturnUrlHandle,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -153,8 +155,8 @@ module('Integration | card-copy', function (hooks) {
         </template>
       };
     }
-
-    ({ realm: realm1 } = await setupIntegrationTestRealm({
+    let adapter1: any;
+    ({ realm: realm1, adapter: adapter1 } = await setupIntegrationTestRealm({
       loader,
       onFetch: wrappedOnFetch(),
       contents: {
@@ -266,6 +268,11 @@ module('Integration | card-copy', function (hooks) {
         },
       },
     }));
+
+    realm1.loader.prependURLHandlers([
+      (req) => sourceFetchRedirectHandle(req, adapter1, realm2),
+      (req) => sourceFetchReturnUrlHandle(req, realm2),
+    ]);
 
     // write in the new record last because it's link didn't exist until realm2 was created
     await realm1.write(
@@ -632,6 +639,7 @@ module('Integration | card-copy', function (hooks) {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
+      debugger;
       id = url.href.split('/').pop()!;
       assert.true(uuidValidate(id), 'card identifier is UUID');
       assert.strictEqual(json.data.id, `${testRealm2URL}Pet/${id}`);

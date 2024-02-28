@@ -243,19 +243,29 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       loader,
       contents: filesB,
       realmURL: testRealmURL2,
-      onFetch: async (req: Request) => {
-        // Some tests need a simulated creation failure
-        if (req.url.includes('fetch-failure')) {
+      // onFetch: async (req: Request) => {
+      //   // Some tests need a simulated creation failure
+      //   if (req.url.includes('fetch-failure')) {
+      //     throw new Error('A deliberate fetch error');
+      //   }
+
+      //   return req;
+      // },
+    });
+
+    loader.prependURLHandlers([
+      async (request: Request) => {
+        if (request.url.includes('fetch-failure')) {
           throw new Error('A deliberate fetch error');
         }
-
-        return req;
+        return null;
       },
-    });
-    ({ adapter } = await setupAcceptanceTestRealm({
-      loader,
-      contents: files,
-    }));
+    ]);
+
+    // ({ adapter } = await setupAcceptanceTestRealm({
+    //   loader,
+    //   contents: files,
+    // }));
   });
 
   test('new file button has options to create card def, field def, and card instance files', async function (assert) {
@@ -553,7 +563,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
 
     await click('[data-test-create-card-instance]');
-    await this.pauseTest();
+
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert
@@ -704,6 +714,7 @@ export class TestCard extends Person {
 
     await click('[data-test-create-definition]');
 
+    // await this.pauseTest();
     await waitFor('[data-test-create-file-modal] [data-test-error-message]');
     assert
       .dom('[data-test-create-file-modal] [data-test-error-message]')
