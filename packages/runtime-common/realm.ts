@@ -992,7 +992,7 @@ export class Realm {
       );
       
       let permissions = realmPermissionChecker.getUserPermissions(token.user);
-      if (token.permissions.length > 0 && JSON.stringify(token.permissions.sort()) === JSON.stringify(permissions.sort())) {
+      if (JSON.stringify(token.permissions.sort()) !== JSON.stringify(permissions.sort())) {
         throw new AuthenticationError(
           'User permissions have been updated. Please refresh the token',
         );
