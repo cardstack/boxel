@@ -1,0 +1,40 @@
+<div class="page">
+  <button
+    type="button"
+    {{on "click" (fn (mut this.showLevel2) (not this.showLevel2))}}
+  >{{if this.showLevel2 "Hide" "Show"}} level 2</button>
+  <button
+    type="button"
+    {{on "click" (fn (mut this.showLevel3) (not this.showLevel3))}}
+  >{{if this.showLevel3 "Hide" "Show"}} level 3</button>
+
+  <AnimationContext
+    @id="level-1"
+    @use={{this.level1Transition}}
+    class="level-1-context"
+  >
+    {{#if this.showLevel2}}
+      <div {{sprite id="level-2-sprite"}}>Level 2 Sprite</div>
+      <AnimationContext
+        @id="level-2"
+        {{sprite id="level-2-context"}}
+        @use={{this.level2Transition}}
+        class="level-2-context"
+      >
+        {{#if this.showLevel3}}
+          <AnimationContext
+            @id="level-3"
+            {{sprite id="level-3-context"}}
+            @use={{this.level3Transition}}
+            class="level-3-context"
+          >
+            <div
+              {{sprite id="level-3-sprite"}}
+              class="level-3-sprite"
+            >Level 3 Sprite</div>
+          </AnimationContext>
+        {{/if}}
+      </AnimationContext>
+    {{/if}}
+  </AnimationContext>
+</div>

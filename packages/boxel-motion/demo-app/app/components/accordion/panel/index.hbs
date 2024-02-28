@@ -1,0 +1,65 @@
+<AnimationContext
+  class="accordion-panel-animation-context"
+  @use={{this.resizePanels}}
+>
+  <div
+    class="accordion-panel-container"
+    {{sprite
+      id=(concat @id "-accordion-panel-container")
+      role="accordion-panel-container"
+    }}
+  >
+    <h3 class="accordion-panel-header">
+      <button
+        aria-expanded={{if @expanded "true" "false"}}
+        {{! we don't allow closing by pressing an opened accordion just yet }}
+        aria-disabled={{if @expanded "true" "false"}}
+        class="Accordion-trigger"
+        aria-controls={{concat @id "-section"}}
+        id={{concat @id "-trigger"}}
+        type="button"
+        data-is-accordion-trigger="true"
+        {{on "click" (fn @trigger @id)}}
+      >
+        <span class="Accordion-title">
+          {{@title}}
+          <span class="Accordion-icon"></span>
+        </span>
+      </button>
+    </h3>
+    {{#if @expanded}}
+      <div
+        {{sprite
+          id=(concat @id "-accordion-panel-content")
+          role="accordion-panel-content"
+        }}
+        id={{concat @id "-section"}}
+        role="region"
+        aria-labelledby={{concat @id "-trigger"}}
+        class="Accordion-panel"
+      >
+        <div>
+          {{! Variable content within section, may include any type of markup or interactive widgets. }}
+          <fieldset>
+            {{#each @fields as |field|}}
+              <p>
+                <label for={{concat @id "-" field}}>
+                  {{field}}
+                  :
+                </label>
+                <input
+                  type="text"
+                  value=""
+                  name={{field}}
+                  id={{concat @id "-" field}}
+                  class="required"
+                  aria-required="true"
+                />
+              </p>
+            {{/each}}
+          </fieldset>
+        </div>
+      </div>
+    {{/if}}
+  </div>
+</AnimationContext>
