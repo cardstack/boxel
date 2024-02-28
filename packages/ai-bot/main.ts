@@ -7,7 +7,7 @@ import {
   ISendEventResponse,
   Room,
   MatrixClient,
-  IRoomEvent,
+  // IRoomEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
@@ -18,8 +18,10 @@ import {
   getFunctions,
   getStartOfConversation,
   shouldSetRoomTitle,
+  type OpenAIPromptMessage,
 } from './helpers';
 import { OpenAIError } from 'openai/error';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 
 let log = logger('ai-bot');
 
@@ -75,6 +77,9 @@ async function sendMessage(
   );
 }
 
+// TODO we might want to think about how to handle patches that are larger than
+// 65KB (the maximum matrix event size), such that we split them into fragments
+// like we split cards into fragments
 async function sendOption(
   client: MatrixClient,
   room: Room,
@@ -109,7 +114,7 @@ async function sendOption(
   );
 }
 
-function getResponse(history: IRoomEvent[], aiBotUsername: string) {
+function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
   let functions = getFunctions(history, aiBotUsername);
   let messages = getModifyPrompt(history, aiBotUsername, functions);
   if (functions.length === 0) {
@@ -155,7 +160,7 @@ async function sendError(
 async function setTitle(
   client: MatrixClient,
   room: Room,
-  history: IRoomEvent[],
+  history: DiscreteMatrixEvent[],
   userId: string,
 ) {
   let startOfConversation = [
@@ -164,7 +169,7 @@ async function setTitle(
       content: `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words. 
               Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
               Explain the general actions and user intent.`,
-    },
+    } as OpenAIPromptMessage,
     ...getStartOfConversation(history, userId),
   ];
   startOfConversation.push({
@@ -196,7 +201,7 @@ async function handleDebugCommands(
   eventBody: string,
   client: MatrixClient,
   room: Room,
-  history: IRoomEvent[],
+  history: DiscreteMatrixEvent[],
   userId: string,
 ) {
   // Explicitly set the room name
@@ -301,6 +306,9 @@ Common issues are:
       if (event.getType() !== 'm.room.message') {
         return; // only print messages
       }
+      if (event.getContent().msgtype === 'org.boxel.cardFragment') {
+        return; // don't respond to card fragments, we just gather these in our history
+      }
       if (event.getSender() === aiBotUserId) {
         return;
       }
@@ -311,11 +319,11 @@ Common issues are:
       );
 
       let initial = await client.roomInitialSync(room!.roomId, 1000);
-      let eventList = initial!.messages?.chunk || [];
+      let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
       log.info(eventList);
 
       log.info('Total event list', eventList.length);
-      let history: IRoomEvent[] = constructHistory(eventList);
+      let history: DiscreteMatrixEvent[] = constructHistory(eventList);
       log.info("Compressed into just the history that's ", history.length);
 
       // To assist debugging, handle explicit commands

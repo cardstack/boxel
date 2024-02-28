@@ -612,6 +612,20 @@ interface RoomCreateEvent extends RoomStateEvent {
   };
 }
 
+interface RoomJoinRules extends RoomStateEvent {
+  type: 'm.room.join_rules';
+  content: {
+    // TODO
+  };
+}
+
+interface RoomPowerLevels extends RoomStateEvent {
+  type: 'm.room.power_levels';
+  content: {
+    // TODO
+  };
+}
+
 interface RoomNameEvent extends RoomStateEvent {
   type: 'm.room.name';
   content: {
@@ -756,6 +770,8 @@ export interface CardFragmentContent {
 
 export type MatrixEvent =
   | RoomCreateEvent
+  | RoomJoinRules
+  | RoomPowerLevels
   | MessageEvent
   | CommandEvent
   | CardMessageEvent

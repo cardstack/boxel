@@ -373,7 +373,8 @@ export function splitStringIntoChunks(str: string, maxSizeKB: number) {
     while (endIndex < str.length && byteLength < maxSizeBytes) {
       let charCode = str.charCodeAt(endIndex);
       // we use this approach so that we can have an isomorphic means of
-      // determining the byte size for strings
+      // determining the byte size for strings, as well as, using Blob (in the
+      // browser) to calculate string byte size is pretty expensive
       byteLength += charCode < 0x0080 ? 1 : charCode < 0x0800 ? 2 : 3;
       endIndex++;
     }
