@@ -24,6 +24,7 @@ import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
+import NewSession from '@cardstack/host/components/ai-assistant/new-session';
 import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
 import RenameSession from '@cardstack/host/components/ai-assistant/rename-session';
 import Room from '@cardstack/host/components/matrix/room';
@@ -109,6 +110,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 class='past-sessions-button'
                 @kind='secondary-dark'
                 @size='small'
+                @disabled={{this.displayRoomError}}
                 {{on 'click' this.displayPastSessions}}
                 data-test-past-sessions-button
               >
@@ -134,7 +136,9 @@ export default class AiAssistantPanel extends Component<Signature> {
           />
         {{/if}}
 
-        {{#if this.doCreateRoom.isRunning}}
+        {{#if this.displayRoomError}}
+          <NewSession @errorAction={{this.createNewSession}} />
+        {{else if this.doCreateRoom.isRunning}}
           <LoadingIndicator
             class='loading-new-session'
             @color='var(--boxel-light)'
@@ -239,6 +243,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private roomToRename: RoomField | undefined = undefined;
   @tracked private roomToDelete: RoomField | undefined = undefined;
   @tracked private roomDeleteError: string | undefined = undefined;
+  @tracked private displayRoomError = false;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -292,6 +297,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @action
   private createNewSession() {
+    this.displayRoomError = false;
     if (this.newSessionId) {
       this.enterRoom(this.newSessionId!);
       return;
@@ -304,10 +310,16 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   private doCreateRoom = restartableTask(
-    async (name: string, invites: string[], topic?: string) => {
-      let newRoomId = await this.matrixService.createRoom(name, invites, topic);
-      window.localStorage.setItem(newSessionIdPersistenceKey, newRoomId);
-      this.enterRoom(newRoomId);
+    async (name: string, invites: string[]) => {
+      try {
+        let newRoomId = await this.matrixService.createRoom(name, invites);
+        window.localStorage.setItem(newSessionIdPersistenceKey, newRoomId);
+        this.enterRoom(newRoomId);
+      } catch (e) {
+        console.error(e);
+        this.displayRoomError = true;
+        this.currentRoomId = undefined;
+      }
     },
   );
 
