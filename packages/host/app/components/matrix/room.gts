@@ -121,9 +121,8 @@ export default class Room extends Component<Signature> {
     return this.cardsToSend.get(this.args.roomId);
   }
 
-  @action sendPrompt(message: string) {
-    this.setMessage(message);
-    this.sendMessage();
+  @action sendPrompt(prompt: string) {
+    this.doSendMessage.perform(prompt); // sends the prompt only
   }
 
   @action
