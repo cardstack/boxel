@@ -852,7 +852,7 @@ module('Integration | operator-mode', function (hooks) {
       );
 
       let roomId = await openAiAssistant();
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
         state_key: 'state',
@@ -883,7 +883,7 @@ module('Integration | operator-mode', function (hooks) {
           }),
         },
       });
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event2',
         room_id: roomId,
         state_key: 'state',
