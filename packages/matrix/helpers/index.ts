@@ -356,38 +356,40 @@ export async function assertMessages(
         page.locator(`[data-test-message-idx="${index}"] .content`),
       ).toContainText(message);
     }
-    if (cards?.length) {
-      await expect(
-        page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
-        ),
-      ).toHaveCount(1);
-      await expect(
-        page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-card]`,
-        ),
-      ).toHaveCount(cards.length);
-      cards.map(async (card) => {
-        if (card.title) {
-          if (message != null && card.title.includes(message)) {
-            throw new Error(
-              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
-            );
+    if (cards) {
+      if (cards.length) {
+        await expect(
+          page.locator(
+            `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+          ),
+        ).toHaveCount(1);
+        await expect(
+          page.locator(
+            `[data-test-message-idx="${index}"] [data-test-message-card]`,
+          ),
+        ).toHaveCount(cards.length);
+        cards.map(async (card) => {
+          if (card.title) {
+            if (message != null && card.title.includes(message)) {
+              throw new Error(
+                `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
+              );
+            }
+            // note: attached cards are in atom format (which display the title by default)
+            await expect(
+              page.locator(
+                `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"]`,
+              ),
+            ).toContainText(card.title);
           }
-          // note: attached cards are in atom format (which display the title by default)
-          await expect(
-            page.locator(
-              `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"]`,
-            ),
-          ).toContainText(card.title);
-        }
-      });
-    } else {
-      await expect(
-        page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
-        ),
-      ).toHaveCount(0);
+        });
+      } else {
+        await expect(
+          page.locator(
+            `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+          ),
+        ).toHaveCount(0);
+      }
     }
   }
 }
