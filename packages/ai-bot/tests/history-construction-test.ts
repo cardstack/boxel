@@ -208,8 +208,9 @@ module('constructHistory', () => {
     assert.deepEqual(result, history);
   });
 
-  test('should return an array of DiscreteMarixEvent objects with no duplicates based on event_id even when m.relates_to is present and include senders and origin_server_ts', () => {
+  test('should return an array of DiscreteMatrixEvent objects with no duplicates based on event_id even when m.relates_to is present and include senders and origin_server_ts', () => {
     const history: DiscreteMatrixEvent[] = [
+      // this event will _not_ replace event_id 2 since it's timestamp is before event_id 2
       {
         event_id: '1',
         type: 'm.room.message',
@@ -265,6 +266,7 @@ module('constructHistory', () => {
           transaction_id: '3',
         },
       },
+      // this event _will_ replace event_id 3 since it's timestamp is after event_id 3
       {
         event_id: '4',
         type: 'm.room.message',
@@ -314,8 +316,8 @@ module('constructHistory', () => {
         content: {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
-          body: 'yo',
-          formatted_body: 'yo',
+          body: 'hi',
+          formatted_body: 'hi',
         },
         sender: 'user2',
         origin_server_ts: 1629876543220,
@@ -366,5 +368,168 @@ module('constructHistory', () => {
     ]);
   });
 
-  test('should reassemble card fragments', () => {});
+  test('should reassemble card fragments', () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.cardFragment',
+          format: 'org.boxel.card',
+          formatted_body: '',
+          body: '',
+          data: {
+            cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Ter`,
+            index: 0,
+            totalParts: 2,
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+      },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 1234567900,
+        content: {
+          'm.relates_to': {
+            rel_type: 'append',
+            event_id: '1',
+          },
+          msgtype: 'org.boxel.cardFragment',
+          format: 'org.boxel.card',
+          formatted_body: '',
+          body: '',
+          data: {
+            cardFragment: `ry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
+            index: 1,
+            totalParts: 2,
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '2',
+        },
+      },
+      {
+        type: 'm.room.message',
+        event_id: '3',
+        origin_server_ts: 1234567910,
+        content: {
+          msgtype: 'org.boxel.cardFragment',
+          format: 'org.boxel.card',
+          formatted_body: '',
+          body: '',
+          data: {
+            cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Mango","lastName":"Abdel-Rahman"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
+            index: 1,
+            totalParts: 1,
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '3',
+        },
+      },
+      {
+        type: 'm.room.message',
+        event_id: '4',
+        origin_server_ts: 1234567920,
+        content: {
+          msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          formatted_body: 'Hey',
+          data: {
+            context: {
+              functions: [],
+              submode: undefined,
+              openCardsEventIds: ['3'],
+            },
+            attachedCardsEventIds: ['1'],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '4',
+        },
+      },
+    ];
+
+    const result = constructHistory(history);
+    assert.deepEqual(result, [
+      {
+        type: 'm.room.message',
+        event_id: '4',
+        origin_server_ts: 1234567920,
+        content: {
+          msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          formatted_body: 'Hey',
+          data: {
+            context: {
+              functions: [],
+              submode: undefined,
+              openCardsEventIds: ['3'],
+              openCards: [
+                {
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/drafts/Author/1',
+                    attributes: {
+                      firstName: 'Mango',
+                      lastName: 'Abdel-Rahman',
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../author',
+                        name: 'Author',
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+            attachedCardsEventIds: ['1'],
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Terry',
+                    lastName: 'Pratchett',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '4',
+        },
+      },
+    ]);
+  });
 });

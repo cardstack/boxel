@@ -87,6 +87,11 @@ export function constructHistory(history: IRoomEvent[]) {
     const existingEvent = latestEventsMap.get(eventId);
     if (
       !existingEvent ||
+      // we check the timestamps of the events because the existing event may
+      // itself be an already replaced event. The idea is that you can perform
+      // multiple replacements on an event. In order to prevent backing out a
+      // subsequent replacement we also assert that the replacement timestamp is
+      // after the event that it is replacing
       existingEvent.origin_server_ts < event.origin_server_ts
     ) {
       latestEventsMap.set(eventId, event);
