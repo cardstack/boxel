@@ -228,12 +228,17 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function createRoom(page: Page, removeAutoAttachedCard: boolean = true) {
+export async function createRoom(
+  page: Page,
+  removeAutoAttachedCard: boolean = true,
+) {
   await page.locator('[data-test-create-room-btn]').click();
   let roomName = await getRoomName(page);
   await isInRoom(page, roomName);
   if (removeAutoAttachedCard) {
-    await page.locator(`[data-test-selected-card] [data-test-remove-card-btn]`).click();
+    await page
+      .locator(`[data-test-selected-card] [data-test-remove-card-btn]`)
+      .click();
   }
   return roomName;
 }
@@ -356,40 +361,38 @@ export async function assertMessages(
         page.locator(`[data-test-message-idx="${index}"] .content`),
       ).toContainText(message);
     }
-    if (cards) {
-      if (cards.length) {
-        await expect(
-          page.locator(
-            `[data-test-message-idx="${index}"] [data-test-message-cards]`,
-          ),
-        ).toHaveCount(1);
-        await expect(
-          page.locator(
-            `[data-test-message-idx="${index}"] [data-test-message-card]`,
-          ),
-        ).toHaveCount(cards.length);
-        cards.map(async (card) => {
-          if (card.title) {
-            if (message != null && card.title.includes(message)) {
-              throw new Error(
-                `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
-              );
-            }
-            // note: attached cards are in atom format (which display the title by default)
-            await expect(
-              page.locator(
-                `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"]`,
-              ),
-            ).toContainText(card.title);
+    if (cards?.length) {
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+        ),
+      ).toHaveCount(1);
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] [data-test-message-card]`,
+        ),
+      ).toHaveCount(cards.length);
+      cards.map(async (card) => {
+        if (card.title) {
+          if (message != null && card.title.includes(message)) {
+            throw new Error(
+              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
+            );
           }
-        });
-      } else {
-        await expect(
-          page.locator(
-            `[data-test-message-idx="${index}"] [data-test-message-cards]`,
-          ),
-        ).toHaveCount(0);
-      }
+          // note: attached cards are in atom format (which display the title by default)
+          await expect(
+            page.locator(
+              `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"]`,
+            ),
+          ).toContainText(card.title);
+        }
+      });
+    } else {
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+        ),
+      ).toHaveCount(0);
     }
   }
 }
