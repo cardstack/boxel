@@ -1,3 +1,4 @@
+import { FPS } from './behaviors/base.ts';
 import SpringBehavior from './behaviors/spring.ts';
 import StaticBehavior from './behaviors/static.ts';
 import TweenBehavior from './behaviors/tween.ts';
@@ -18,6 +19,7 @@ export {
   AnimationsService,
   AnimationTimeline,
   Changeset,
+  FPS,
   ISpriteModifier,
   OrchestrationMatrix,
   SpringBehavior,

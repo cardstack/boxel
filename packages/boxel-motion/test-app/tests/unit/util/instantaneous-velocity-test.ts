@@ -1,4 +1,4 @@
-import instantaneousVelocity from '@cardstack/boxel-motion/utils/instantaneous-velocity';
+import { instantaneousVelocity } from '@cardstack/boxel-motion/utils';
 import { module, test } from 'qunit';
 
 module('Unit | Util | instantaneousVelocity', function () {

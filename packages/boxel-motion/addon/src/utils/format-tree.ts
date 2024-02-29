@@ -7,15 +7,15 @@ function stringLength(str: string) {
 
 export interface Options {
   /**
-   * The function used to format the guides. Mainly used for adding
-   * colours to the guides (e.g. using chalk).
-   */
-  guideFormat?: (guide: string) => string;
-  /**
    * The split string to use to separate the tree and the extra string.
    * @default ' | '
    */
   extraSplit?: string;
+  /**
+   * The function used to format the guides. Mainly used for adding
+   * colours to the guides (e.g. using chalk).
+   */
+  guideFormat?: (guide: string) => string;
   /**
    * Whether the text should be displayed inset into the guides or not.
    *
@@ -67,17 +67,17 @@ export interface Options {
 
 export interface TreeNode {
   /**
-   * The text for this node.
+   * The children nodes to add under this one.
    */
-  text: string;
+  children?: TreeNode[];
   /**
    * The extra text to align to the right of the tree.
    */
   extra?: string;
   /**
-   * The children nodes to add under this one.
+   * The text for this node.
    */
-  children?: TreeNode[];
+  text: string;
 }
 
 /**
@@ -105,7 +105,7 @@ export function formatTree(
   tree: TreeNode | TreeNode[],
   options: Options = {},
 ): string[] {
-  let toBuild: Array<{ line: string; extra?: string }> = [];
+  let toBuild: Array<{ extra?: string; line: string }> = [];
   let shouldFirstCap = true;
   let inset = options.inset || 0;
 

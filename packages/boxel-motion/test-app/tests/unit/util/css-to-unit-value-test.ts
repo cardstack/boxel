@@ -1,4 +1,4 @@
-import { parse } from '@cardstack/boxel-motion/utils/css-to-unit-value';
+import { parseCssToUnitValue as parse } from '@cardstack/boxel-motion/utils';
 import { module, test } from 'qunit';
 
 module('Unit | Util | CssToUnitValue', function () {

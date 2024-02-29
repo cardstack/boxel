@@ -7,10 +7,12 @@ import {
   TweenBehavior,
   WaitBehavior,
 } from '@cardstack/boxel-motion';
-import { FPS } from '@cardstack/boxel-motion/behaviors/base';
-import { constructKeyframe } from '@cardstack/boxel-motion/models/transition-runner';
-import { Snapshot } from '@cardstack/boxel-motion/utils/measurement';
-import { Keyframe } from '@cardstack/boxel-motion/value';
+import { FPS } from '@cardstack/boxel-motion';
+import { type Keyframe } from '@cardstack/boxel-motion/models';
+import {
+  constructKeyframe,
+  type Snapshot,
+} from '@cardstack/boxel-motion/utils';
 import { module, test } from 'qunit';
 
 function getMockSprite() {
