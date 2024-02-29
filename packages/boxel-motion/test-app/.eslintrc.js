@@ -39,10 +39,6 @@ module.exports = {
     ],
     'prefer-let/prefer-let': 2,
     'prefer-const': 'off',
-    '@typescript-eslint/no-unused-vars': [
-      'error',
-      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-    ],
   },
   overrides: [
     // node files

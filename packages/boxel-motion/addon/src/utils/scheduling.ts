@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { schedule, cancel } from '@ember/runloop';
+import { cancel, schedule } from '@ember/runloop';
 import { EmberRunTimer } from '@ember/runloop/types';
 
 const cancellation: WeakMap<

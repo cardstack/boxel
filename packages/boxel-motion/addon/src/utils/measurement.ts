@@ -2,10 +2,10 @@ import { assert } from '@ember/debug';
 
 export type MeasuredSpeed = number; // pixels per second
 export type BoundsVelocity = {
+  height: MeasuredSpeed;
+  width: MeasuredSpeed;
   x: MeasuredSpeed;
   y: MeasuredSpeed;
-  width: MeasuredSpeed;
-  height: MeasuredSpeed;
 };
 
 export interface Snapshot {
@@ -81,9 +81,9 @@ function runWithAnimationOffset(offset: number, playAnimations: boolean) {
 }
 
 export type DocumentPositionArgs = {
-  withAnimations: boolean;
-  withAnimationOffset: number;
   playAnimations: boolean;
+  withAnimationOffset: number;
+  withAnimations: boolean;
 };
 export function getDocumentPosition(
   element: HTMLElement,

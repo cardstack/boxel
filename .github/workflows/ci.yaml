@@ -29,15 +29,16 @@ jobs:
         # This addition to each step causes the job to proceed even if one lint job fails so we can see all errors
         if: always()
         run: pnpm run lint
-        working-directory: packages/boxel-motion
+        working-directory: packages/boxel-motion/addon
+      - name: Build Boxel Motion
+        # To faciliate linting of projects that depend on Boxel Motion
+        if: always()
+        run: pnpm run build
+        working-directory: packages/boxel-motion/addon
       - name: Lint Boxel Motion Test App
         if: always()
         run: pnpm run lint
-        working-directory: packages/boxel-motion-test-app
-      - name: Lint Boxel Motion Demo App
-        if: always()
-        run: pnpm run lint
-        working-directory: packages/boxel-motion-demo-app
+        working-directory: packages/boxel-motion/test-app
       - name: Lint Boxel UI
         if: always()
         run: pnpm run lint
@@ -86,9 +87,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
-      - name: Run Tests
-        run: pnpm run test:ember
-        working-directory: packages/boxel-motion-test-app
+      - name: Build boxel-motion
+        run: pnpm build
+        working-directory: packages/boxel-motion/addon
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/boxel-motion/test-app
 
   boxel-ui-test:
     name: Boxel UI Tests

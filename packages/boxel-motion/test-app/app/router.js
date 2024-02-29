@@ -6,5 +6,20 @@ export default class Router extends EmberRouter {
   rootURL = config.rootURL;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-Router.map(function () {});
+Router.map(function () {
+  this.route('interruption');
+  this.route('prune-and-graft');
+  this.route('routes', function () {
+    this.route('other');
+  });
+  this.route('motion-study', function () {
+    this.route('details', { path: '/:id' });
+  });
+  this.route('accordion');
+  this.route('nested-contexts');
+  this.route('nested-sprites');
+  this.route('removed-sprite-interruption');
+  this.route('simple-orchestration');
+  this.route('list');
+  this.route('in-out');
+});

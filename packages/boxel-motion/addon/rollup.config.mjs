@@ -19,7 +19,9 @@ export default {
       'index.js',
       'easings/cosine.js',
       'easings/linear.js',
+      'models.js',
       'modifiers.js',
+      'utils.js',
     ]),
 
     // These are the modules that should get reexported into the traditional

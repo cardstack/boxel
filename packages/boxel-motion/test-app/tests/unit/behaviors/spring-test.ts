@@ -1,4 +1,4 @@
-import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import { SpringBehavior } from '@cardstack/boxel-motion';
 import { module, test } from 'qunit';
 
 module('Unit | Behaviors | Spring', function () {
