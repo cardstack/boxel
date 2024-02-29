@@ -5,6 +5,7 @@ import {
   baseRealm,
   LooseSingleCardDocument,
   Realm,
+  RealmPermissions,
 } from '@cardstack/runtime-common';
 import {
   createRealm,
@@ -16,6 +17,7 @@ import {
 import isEqual from 'lodash/isEqual';
 import { shimExternals } from '../lib/externals';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
+import { Server } from 'http';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -27,6 +29,9 @@ function trimCardContainer(text: string) {
     '$1',
   );
 }
+
+const testRealmURL = new URL('http://127.0.0.1:4444/');
+const testRealm2URL = new URL('http://127.0.0.1:4445/');
 
 setGracefulCleanup();
 // Using the node tests for indexing as it is much easier to support the dynamic
@@ -558,18 +563,23 @@ module('indexing', function (hooks) {
       'indexed correct number of files',
     );
   });
+});
 
-  // eslint-disable-next-line qunit/no-only
-  test('will get an authorization error when trying to index a card from another realm without permissions', async function (assert) {
-    let privateTestRealmLoader = new Loader();
-    privateTestRealmLoader.addURLMapping(
+module('permissioned realm', function (hooks) {
+  let testRealm2: Realm;
+  let testRealmServer: Server;
+  let testRealmServer2: Server;
+
+  let runProviderRealmServer = async (permissions: RealmPermissions) => {
+    let testLoader1 = new Loader();
+    testLoader1.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/'),
     );
-    shimExternals(privateTestRealmLoader);
+    shimExternals(testLoader1);
 
-    await runTestRealmServer(
-      privateTestRealmLoader,
+    ({ testRealmServer } = await runTestRealmServer(
+      testLoader1,
       dirSync().name,
       {
         'secret.gts': `
@@ -581,38 +591,81 @@ module('indexing', function (hooks) {
           }
       `,
       },
-      new URL('http://127.0.0.1:4445/test'),
-      { nobody: ['read', 'write'] },
+      new URL(testRealmURL),
+      permissions,
       {
         url: new URL(`http://localhost:8008`),
         username: 'test_realm',
         password: 'password',
       },
+    ));
+  };
+
+  let runConsumerRealmServer = async (permissions: RealmPermissions) => {
+    let testLoader2 = new Loader();
+    testLoader2.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/'),
     );
+    shimExternals(testLoader2);
 
-    privateTestRealmLoader.registerURLHandler(realm.maybeHandle.bind(realm));
-
-    await realm.write(
-      'secret-retriever.gts',
-      `
+    ({ testRealmServer: testRealmServer2, testRealm: testRealm2 } =
+      await runTestRealmServer(
+        testLoader2,
+        dirSync().name,
+        {
+          'secret-retriever.gts': `
           import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-          import { Secret as SecretCard } from "http://127.0.0.1:4445/test";
+          import { Secret as SecretCard } from "${testRealmURL.href}secret";
 
           export class SecretRetriever extends CardDef {
             @field secretValue = linksTo(SecretCard);
           }
         `,
-    );
+        },
+        new URL(testRealm2URL),
+        permissions,
+        {
+          url: new URL(`http://localhost:8008`),
+          username: 'node-test_realm',
+          password: 'password',
+        },
+      ));
+  };
+
+  hooks.afterEach(function () {
+    testRealmServer.close();
+    testRealmServer2.close();
+  });
+
+  test('has a module error when trying to index a card from another realm without permissions', async function (assert) {
+    await runProviderRealmServer({ nobody: ['read', 'write'] });
+    await runConsumerRealmServer({ '*': ['read', 'write'] });
 
     assert.ok(
-      isEqual(realm.searchIndex.stats, {
+      isEqual(testRealm2.searchIndex.stats, {
         instancesIndexed: 0,
         instanceErrors: 0,
         moduleErrors: 1,
       }),
       'has a module error',
     );
+  });
 
-    let { data: result } = await realm.searchIndex.search({});
+  test('has no module errors when trying to index a card from another realm when permission is given', async function (assert) {
+    await runProviderRealmServer({
+      '@node-test_realm:localhost': ['read', 'write'],
+    });
+    await runConsumerRealmServer({ '*': ['read', 'write'] });
+
+    await testRealm2.reindex();
+    assert.ok(
+      isEqual(testRealm2.searchIndex.stats, {
+        instancesIndexed: 0,
+        instanceErrors: 0,
+        moduleErrors: 0,
+      }),
+      'has no module errors',
+    );
   });
 });
