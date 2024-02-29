@@ -10,6 +10,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { AiAssistantConversation } from '../ai-assistant/message';
+import NewSession from '../ai-assistant/new-session';
 
 import RoomInput from './room-input';
 import RoomMessage from './room-message';
@@ -27,21 +28,20 @@ export default class Room extends Component<Signature> {
       data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room={{this.room.name}}
+      data-test-room-id={{this.room.roomId}}
     >
-      <header class='room-info'>
-        <h3 class='room-name' data-test-room-name>{{this.room.name}}</h3>
-      </header>
-
-      <AiAssistantConversation>
-        <div class='timeline-start' data-test-timeline-start>
-          - Beginning of conversation -
-        </div>
-        {{#each this.room.messages as |message i|}}
-          <RoomMessage @message={{message}} data-test-message-idx={{i}} />
-        {{else}}
-          <div data-test-no-messages>(No messages)</div>
-        {{/each}}
-      </AiAssistantConversation>
+      {{#if this.room.messages}}
+        <AiAssistantConversation>
+          <div class='timeline-start' data-test-timeline-start>
+            - Beginning of conversation -
+          </div>
+          {{#each this.room.messages as |message i|}}
+            <RoomMessage @message={{message}} data-test-message-idx={{i}} />
+          {{/each}}
+        </AiAssistantConversation>
+      {{else}}
+        <NewSession data-test-no-messages />
+      {{/if}}
 
       <footer class='room-actions'>
         <RoomInput @roomId={{@roomId}} @roomName={{this.room.name}} />
@@ -51,29 +51,13 @@ export default class Room extends Component<Signature> {
     <style>
       .room {
         display: grid;
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: 1fr auto;
         height: 100%;
         overflow: hidden;
       }
-
-      .room-info {
-        border-bottom: var(--boxel-border);
-        padding: var(--boxel-sp);
-      }
-
-      .room-name {
-        margin-top: 0;
-      }
-
-      .error {
-        color: var(--boxel-danger);
-        font-weight: 'bold';
-      }
-
       .timeline-start {
         padding-bottom: var(--boxel-sp);
       }
-
       .room-actions {
         box-shadow: var(--boxel-box-shadow);
       }

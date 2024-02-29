@@ -19,7 +19,7 @@ let nonce = 0;
 
 export type MockMatrixService = MatrixService & {
   cardAPI: typeof cardApi;
-  createAndJoinRoom(roomId: string, roomName?: string): Promise<void>;
+  createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
   lastMessageSent: any;
 };
 
@@ -119,7 +119,10 @@ function generateMockMatrixService(
       _invites: string[], // these can be local names
       _topic?: string,
     ): Promise<string> {
-      return name;
+      if (document.querySelector('[data-test-throw-room-error]')) {
+        throw new Error('Intentional error thrown');
+      }
+      return await this.createAndJoinRoom(name);
     }
 
     async sendMessage(
@@ -149,9 +152,7 @@ function generateMockMatrixService(
         event_id: 'eventname',
         room_id: roomId,
         type: 'm.room.name',
-        content: {
-          name: name || 'test_a',
-        },
+        content: { name: name ?? roomId },
       });
 
       await addRoomEvent(this, {
@@ -180,7 +181,7 @@ function generateMockMatrixService(
         },
       });
 
-      addRoomEvent(this, {
+      await addRoomEvent(this, {
         event_id: 'eventinvite',
         room_id: roomId,
         type: 'm.room.member',
@@ -191,6 +192,8 @@ function generateMockMatrixService(
           membership: 'invite',
         },
       });
+
+      return roomId;
     }
   }
   return MockMatrixService;

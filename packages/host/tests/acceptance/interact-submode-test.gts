@@ -30,11 +30,13 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import {
+  createJWT,
   percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
   testRealmURL,
+  testRealmSecretSeed,
   type TestContextWithSSE,
   type TestContextWithSave,
   setupAcceptanceTestRealm,
@@ -47,21 +49,27 @@ let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
-  let onFetch: ((req: Request, body: string) => void) | undefined;
+  let onFetch: ((req: Request, body: string) => Response | null) | undefined;
   function wrappedOnFetch() {
     return async (req: Request) => {
       if (!onFetch) {
-        return Promise.resolve(req);
+        return Promise.resolve({
+          req,
+          res: null,
+        });
       }
       let { headers, method } = req;
       let body = await req.text();
-      onFetch(req, body);
+      let res = onFetch(req, body) ?? null;
       // need to return a new request since we just read the body
-      return new Request(req.url, {
-        method,
-        headers,
-        ...(body ? { body } : {}),
-      });
+      return {
+        req: new Request(req.url, {
+          method,
+          headers,
+          ...(body ? { body } : {}),
+        }),
+        res,
+      };
     };
   }
 
@@ -79,7 +87,10 @@ module('Acceptance | interact submode tests', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    realmPermissions = { [testRealmURL]: ['read', 'write'] };
+    realmPermissions = {
+      [testRealmURL]: ['read', 'write'],
+      [testRealm2URL]: ['read', 'write'],
+    };
     window.localStorage.removeItem('recent-cards');
     window.localStorage.removeItem('recent-files');
     window.localStorage.removeItem('boxel-session');
@@ -268,6 +279,10 @@ module('Acceptance | interact submode tests', function (hooks) {
           iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
         },
         'Pet/ringo.json': new Pet({ name: 'Ringo' }),
+        'Person/hassan.json': new Person({
+          firstName: 'Hassan',
+          pet: mangoPet,
+        }),
       },
     });
   });
@@ -791,9 +806,39 @@ module('Acceptance | interact submode tests', function (hooks) {
       await deferred.promise;
     });
 
+    test('embedded card from writable realm shows pencil icon in edit mode', async (assert) => {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealm2URL}Person/hassan`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+      assert
+        .dom(
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+        )
+        .exists();
+      await click(
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="edit"]`,
+        )
+        .exists('linked card now rendered as a stack item in edit format');
+    });
+
     module('when the user lacks write permissions', function (hooks) {
       hooks.beforeEach(async function () {
-        realmPermissions = { [testRealmURL]: ['read'] };
+        realmPermissions = {
+          [testRealmURL]: ['read'],
+          [testRealm2URL]: ['read', 'write'],
+        };
       });
 
       test('the edit button is hidden when the user lacks permissions', async function (assert) {
@@ -849,7 +894,109 @@ module('Acceptance | interact submode tests', function (hooks) {
           )
           .doesNotExist('"..." menu does not exist');
       });
+
+      test('embedded card from read-only realm does not show pencil icon in edit mode', async (assert) => {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealm2URL}Person/hassan`,
+                format: 'edit',
+              },
+            ],
+          ],
+        });
+        assert
+          .dom(`[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
+          .exists();
+        assert
+          .dom(
+            `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+          )
+          .doesNotExist('edit icon not displayed for linked card');
+        await click(
+          `[data-test-links-to-editor="pet"] [data-test-field-component-card]`,
+        );
+        await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
+        assert
+          .dom(
+            `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="isolated"]`,
+          )
+          .exists(
+            'linked card now rendered as a stack item in isolated (non-edit) format',
+          );
+      });
     });
+
+    module(
+      'when permission is updated after user has obtained the token',
+      function (hooks) {
+        hooks.beforeEach(async function () {
+          realmPermissions = { [testRealmURL]: ['read'] };
+        });
+
+        test('retrieve a new JWT if recevive 401 error', async function (assert) {
+          let token = createJWT(
+            {
+              user: '@testuser:staging',
+              realm: testRealmURL,
+              permissions: ['read', 'write'],
+            },
+            '7d',
+            testRealmSecretSeed,
+          );
+          let session = {
+            [`${testRealmURL}`]: token,
+          };
+          window.localStorage.setItem('boxel-session', JSON.stringify(session));
+
+          await visitOperatorMode({
+            stacks: [
+              [
+                {
+                  id: `${testRealmURL}Pet/mango`,
+                  format: 'isolated',
+                },
+              ],
+            ],
+          });
+
+          // Mock `Authentication` error response from the server.
+          onFetch = (req, _body) => {
+            if (
+              req.method !== 'GET' &&
+              req.method !== 'HEAD' &&
+              req.headers.get('Authorization') === token
+            ) {
+              return new Response(`Authentication error`, {
+                status: 401,
+              });
+            }
+
+            return null;
+          };
+          assert
+            .dom('[data-test-operator-mode-stack] [data-test-edit-button]')
+            .exists();
+          await click(
+            '[data-test-operator-mode-stack] [data-test-edit-button]',
+          );
+          await fillIn(
+            '[data-test-operator-mode-stack] [data-test-field="name"] [data-test-boxel-input]',
+            'Updated Ringo',
+          );
+          await click(
+            '[data-test-operator-mode-stack] [data-test-edit-button]',
+          );
+
+          let newToken = window.localStorage.getItem('boxel-session');
+          let claims = claimsFromRawToken(newToken!);
+          assert.notStrictEqual(newToken, token);
+          assert.strictEqual(claims.user, '@testuser:staging');
+          assert.deepEqual(claims.permissions, ['read']);
+        });
+      },
+    );
   });
 
   module('2 stacks with differing permissions', function (hooks) {
@@ -887,6 +1034,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           assert.strictEqual(claims.realm, 'http://test-realm/test2/');
           assert.deepEqual(claims.permissions, ['read', 'write']);
         }
+        return null;
       };
 
       assert

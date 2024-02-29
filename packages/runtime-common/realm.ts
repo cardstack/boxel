@@ -990,6 +990,13 @@ export class Realm {
       let realmPermissionChecker = new RealmPermissionChecker(
         this.#permissions,
       );
+      
+      let permissions = realmPermissionChecker.for(token.user);
+      if (JSON.stringify(token.permissions.sort()) !== JSON.stringify(permissions.sort())) {
+        throw new AuthenticationError(
+          'User permissions have been updated. Please refresh the token',
+        );
+      }
 
       if (!realmPermissionChecker.can(token.user, neededPermission)) {
         throw new AuthorizationError(

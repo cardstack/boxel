@@ -53,7 +53,7 @@ let createJWT = (
   realm: Realm,
   user: string,
   realmUrl: string,
-  permissions = [],
+  permissions: RealmPermissions['user'] = [],
 ) => {
   return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
 };
@@ -252,7 +252,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -395,6 +395,19 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
+      test('401 permissions have been updated', async function (assert) {
+        let response = await request
+          .post('/')
+          .send({})
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
+          );
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
       test('403 without permission', async function (assert) {
         let response = await request
           .post('/')
@@ -426,7 +439,10 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
           );
 
         assert.strictEqual(response.status, 201, 'HTTP 201 status');
@@ -610,7 +626,10 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -731,7 +750,10 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
           );
 
         assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -904,7 +926,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+source')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1023,7 +1045,10 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+source')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
           );
 
         assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -1350,7 +1375,10 @@ module('Realm Server', function (hooks) {
           .send(`//TEST UPDATE\n${cardSrc}`)
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
           );
 
         assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -1468,7 +1496,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1571,7 +1599,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1667,7 +1695,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref)}`,
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');

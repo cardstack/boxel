@@ -12,7 +12,7 @@ import {
   Menu,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
-import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, menuItem, and } from '@cardstack/boxel-ui/helpers';
 
 import {
   IconPencil,
@@ -34,6 +34,7 @@ import { type RenderedCardForOverlayActions } from './stack-item';
 
 interface Signature {
   item: RenderedCardForOverlayActions;
+  canWrite: boolean;
   openOrSelectCard: (
     card: CardDef,
     format?: Format,
@@ -68,8 +69,9 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
       </div>
 
       <div class='header-actions'>
-        {{! Offer to edit embedded card only when the stack item is in edit mode  }}
-        {{#if (eq @item.stackItem.format 'edit')}}
+        {{! Offer to edit embedded card only when the stack item is in edit 
+            mode and you can write to the card in question }}
+        {{#if (and @canWrite (eq @item.stackItem.format 'edit'))}}
           <IconButton
             @icon={{IconPencil}}
             @width='24px'
