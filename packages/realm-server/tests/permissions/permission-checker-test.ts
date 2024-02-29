@@ -1,7 +1,7 @@
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import { module, test } from 'qunit';
 
-module.only('realm-user-permissions', function (_hooks) {
+module('realm-user-permissions', function (_hooks) {
   module('world-readable realm', function () {
     let permissionsChecker = new RealmPermissionChecker({
       '*': ['read'],

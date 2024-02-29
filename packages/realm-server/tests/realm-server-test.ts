@@ -263,6 +263,74 @@ module('Realm Server', function (hooks) {
         );
       });
     });
+
+    module('allows matrix users', function (hooks) {
+      hooks.beforeEach(async function () {
+        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
+          {
+            users: ['read'],
+          },
+        ));
+      });
+
+      test('401 with invalid JWT', async function (assert) {
+        let response = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', `Bearer invalid-token`);
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        assert.strictEqual(
+          response.get('X-boxel-realm-public-readable'),
+          undefined,
+          'realm is not public readable',
+        );
+      });
+
+      test('401 without a JWT', async function (assert) {
+        let response = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json'); // no Authorization header
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        assert.strictEqual(
+          response.get('X-boxel-realm-public-readable'),
+          undefined,
+          'realm is not public readable',
+        );
+      });
+
+      test('200 with permission', async function (assert) {
+        let response1 = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
+          );
+
+        assert.strictEqual(response1.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response1.get('X-boxel-realm-public-readable'),
+          undefined,
+          'realm is not public readable',
+        );
+
+        let response2 = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'jane', testRealmHref, ['read'])}`,
+          );
+        assert.strictEqual(response2.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response2.get('X-boxel-realm-public-readable'),
+          undefined,
+          'realm is not public readable',
+        );
+      });
+    });
   });
 
   module('card POST request', function (_hooks) {
@@ -446,6 +514,77 @@ module('Realm Server', function (hooks) {
           );
 
         assert.strictEqual(response.status, 201, 'HTTP 201 status');
+      });
+    });
+
+    module('allows matrix users', function (hooks) {
+      hooks.beforeEach(async function () {
+        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
+          {
+            users: ['read', 'write'],
+          },
+        ));
+      });
+
+      test('401 with invalid JWT', async function (assert) {
+        let response = await request
+          .post('/')
+          .send({})
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', `Bearer invalid-token`);
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('401 without a JWT', async function (assert) {
+        let response = await request
+          .post('/')
+          .send({})
+          .set('Accept', 'application/vnd.card+json'); // no Authorization header
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('201 with permission', async function (assert) {
+        let data = {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        };
+        let response1 = await request
+          .post('/')
+          .send(data)
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
+          );
+
+        assert.strictEqual(response1.status, 201, 'HTTP 201 status');
+
+        let response2 = await request
+          .post('/')
+          .send(data)
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'jane', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
+          );
+
+        assert.strictEqual(response2.status, 201, 'HTTP 201 status');
       });
     });
   });
@@ -635,6 +774,70 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
       });
     });
+
+    module('allows matrix users', function (hooks) {
+      hooks.beforeEach(async function () {
+        ({ testRealm, testRealmServer, request, dir } =
+          await setupPermissionedRealm({
+            users: ['read', 'write'],
+          }));
+      });
+
+      test('401 with invalid JWT', async function (assert) {
+        let response = await request
+          .patch('/person-1')
+          .send({})
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', `Bearer invalid-token`);
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('200 with permission', async function (assert) {
+        let data = {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person.gts',
+                name: 'Person',
+              },
+            },
+          },
+        };
+
+        let response1 = await request
+          .patch('/person-1')
+          .send(data)
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
+          );
+
+        assert.strictEqual(response1.status, 200, 'HTTP 200 status');
+
+        let response2 = await request
+          .patch('/person-1')
+          .send(data)
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'jane', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
+          );
+
+        assert.strictEqual(response2.status, 200, 'HTTP 200 status');
+      });
+    });
   });
 
   module('card DELETE request', function (_hooks) {
@@ -757,6 +960,53 @@ module('Realm Server', function (hooks) {
           );
 
         assert.strictEqual(response.status, 204, 'HTTP 204 status');
+      });
+    });
+
+    module('allows matrix users', function (hooks) {
+      hooks.beforeEach(async function () {
+        ({ testRealm, testRealmServer, request, dir } =
+          await setupPermissionedRealm({
+            users: ['read', 'write'],
+          }));
+      });
+
+      test('401 with invalid JWT', async function (assert) {
+        let response = await request
+          .delete('/person-1')
+
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', `Bearer invalid-token`);
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('204 with permission', async function (assert) {
+        let response1 = await request
+          .delete('/person-1')
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
+          );
+
+        assert.strictEqual(response1.status, 204, 'HTTP 204 status');
+
+        let response2 = await request
+          .delete('/person-2')
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'jane', testRealmHref, [
+              'read',
+              'write',
+            ])}`,
+          );
+
+        assert.strictEqual(response2.status, 204, 'HTTP 204 status');
       });
     });
   });
