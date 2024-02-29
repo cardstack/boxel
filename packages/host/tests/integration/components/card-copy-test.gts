@@ -53,17 +53,20 @@ module('Integration | card-copy', function (hooks) {
   function wrappedOnFetch() {
     return async (req: Request) => {
       if (!onFetch) {
-        return Promise.resolve(req);
+        return Promise.resolve({ req, res: null });
       }
       let { headers, method } = req;
       let body = await req.text();
       onFetch(req, body);
       // need to return a new request since we just read the body
-      return new Request(req.url, {
-        method,
-        headers,
-        ...(body ? { body } : {}),
-      });
+      return {
+        req: new Request(req.url, {
+          method,
+          headers,
+          ...(body ? { body } : {}),
+        }),
+        res: null,
+      };
     };
   }
 

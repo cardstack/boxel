@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import {
-  generatePatchCallSpecification,
+  generateCardPatchCallSpecification,
   basicMappings,
 } from '@cardstack/runtime-common/helpers/ai';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -77,7 +77,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field bigIntegerField = contains(BigIntegerField);
     }
 
-    let schema = generatePatchCallSpecification(BasicCard, cardApi, mappings);
+    let schema = generateCardPatchCallSpecification(
+      BasicCard,
+      cardApi,
+      mappings,
+    );
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -105,7 +109,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field containerField = contains(InternalField);
     }
 
-    let schema = generatePatchCallSpecification(BasicCard, cardApi, mappings);
+    let schema = generateCardPatchCallSpecification(
+      BasicCard,
+      cardApi,
+      mappings,
+    );
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -133,7 +141,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field containerField = contains(InternalField);
     }
 
-    let schema = generatePatchCallSpecification(TestCard, cardApi, mappings);
+    let schema = generateCardPatchCallSpecification(
+      TestCard,
+      cardApi,
+      mappings,
+    );
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -163,7 +175,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field simpleField = contains(StringField);
     }
 
-    let schema = generatePatchCallSpecification(TestCard, cardApi, mappings);
+    let schema = generateCardPatchCallSpecification(
+      TestCard,
+      cardApi,
+      mappings,
+    );
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -190,7 +206,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field skipField = contains(NewField);
     }
 
-    let schema = generatePatchCallSpecification(TestCard, cardApi, mappings);
+    let schema = generateCardPatchCallSpecification(
+      TestCard,
+      cardApi,
+      mappings,
+    );
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -215,7 +235,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field keepField = contains(NewField);
     }
 
-    let schema = generatePatchCallSpecification(TestCard, cardApi, mappings);
+    let schema = generateCardPatchCallSpecification(
+      TestCard,
+      cardApi,
+      mappings,
+    );
     assert.deepEqual(schema, {
       type: 'object',
       properties: {
@@ -244,7 +268,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field containingField = contains(ContainingField);
     }
 
-    let schema = generatePatchCallSpecification(TestCard, cardApi, mappings);
+    let schema = generateCardPatchCallSpecification(
+      TestCard,
+      cardApi,
+      mappings,
+    );
 
     assert.deepEqual(schema, {
       type: 'object',
