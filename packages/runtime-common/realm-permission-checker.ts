@@ -8,11 +8,13 @@ export default class RealmPermissionChecker {
   }
 
   can(username: string, action: 'read' | 'write') {
-    let userPermissions = [
+    return this.getUserPermissions(username).includes(action);
+  }
+
+  getUserPermissions(username: string) {
+    return [
       ...(this.realmPermissions['*'] || []),
       ...(this.realmPermissions[username] || []),
     ];
-
-    return userPermissions.includes(action);
   }
 }
