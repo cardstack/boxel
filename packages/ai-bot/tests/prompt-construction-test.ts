@@ -26,6 +26,8 @@ function getPatchFunction(cardId: string, properties: any) {
   };
 }
 
+// TODO refactor all the attachedCards[] and openCards[] event data to use fragment events
+
 module('getModifyPrompt', () => {
   test('should generate a prompt from the user', () => {
     const history: DiscreteMatrixEvent[] = [

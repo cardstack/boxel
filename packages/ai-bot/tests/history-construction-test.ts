@@ -344,8 +344,8 @@ module('constructHistory', () => {
         origin_server_ts: 1629876543240,
         room_id: 'room1',
         unsigned: {
-          age: 1002,
-          transaction_id: '3',
+          age: 1003,
+          transaction_id: '4',
         },
       },
       {
