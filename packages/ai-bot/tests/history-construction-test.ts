@@ -1,5 +1,6 @@
 import { module, test, assert } from 'qunit';
 import { constructHistory } from '../helpers';
+import { type IRoomEvent } from 'matrix-js-sdk';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 
 module('constructHistory', () => {
@@ -369,7 +370,10 @@ module('constructHistory', () => {
   });
 
   test('should reassemble card fragments', () => {
-    const history: DiscreteMatrixEvent[] = [
+    // we can't use the DiscreteMatrixEvent type here because we need to start
+    // from the wire-format which serializes the data.content to a string for
+    // safe transport over the wire
+    const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -379,11 +383,11 @@ module('constructHistory', () => {
           format: 'org.boxel.card',
           formatted_body: '',
           body: '',
-          data: {
+          data: JSON.stringify({
             cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Ter`,
             index: 0,
             totalParts: 2,
-          },
+          }),
         },
         sender: '@user:localhost',
         room_id: 'room1',
@@ -405,11 +409,12 @@ module('constructHistory', () => {
           format: 'org.boxel.card',
           formatted_body: '',
           body: '',
-          data: {
+          data: JSON.stringify({
+            firstFragment: '1',
             cardFragment: `ry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
             index: 1,
             totalParts: 2,
-          },
+          }),
         },
         sender: '@user:localhost',
         room_id: 'room1',
@@ -427,11 +432,11 @@ module('constructHistory', () => {
           format: 'org.boxel.card',
           formatted_body: '',
           body: '',
-          data: {
+          data: JSON.stringify({
             cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Mango","lastName":"Abdel-Rahman"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
             index: 1,
             totalParts: 1,
-          },
+          }),
         },
         sender: '@user:localhost',
         room_id: 'room1',
@@ -449,14 +454,13 @@ module('constructHistory', () => {
           format: 'org.matrix.custom.html',
           body: 'Hey',
           formatted_body: 'Hey',
-          data: {
+          data: JSON.stringify({
             context: {
               functions: [],
-              submode: undefined,
               openCardsEventIds: ['3'],
             },
             attachedCardsEventIds: ['1'],
-          },
+          }),
         },
         sender: '@user:localhost',
         room_id: 'room1',
@@ -481,7 +485,6 @@ module('constructHistory', () => {
           data: {
             context: {
               functions: [],
-              submode: undefined,
               openCardsEventIds: ['3'],
               openCards: [
                 {

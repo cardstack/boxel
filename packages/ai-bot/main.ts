@@ -7,7 +7,6 @@ import {
   ISendEventResponse,
   Room,
   MatrixClient,
-  // IRoomEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';

@@ -3,7 +3,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
 } from 'https://cardstack.com/base/room';
-import { IRoomEvent } from 'matrix-js-sdk';
+import { type IRoomEvent } from 'matrix-js-sdk';
 
 const MODIFY_SYSTEM_MESSAGE =
   '\
