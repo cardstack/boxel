@@ -37,7 +37,7 @@ export default class Directory extends Component<Args> {
               {{scrollIntoViewModifier
                 (fileIsSelected entryPath this.operatorModeStateService)
                 container='file-tree'
-                key=(concat @realmURL entryPath)
+                key=this.scrollPositionKey
               }}
               class='file
                 {{if
@@ -149,6 +149,10 @@ export default class Directory extends Component<Args> {
   @action
   toggleDirectory(entryPath: string) {
     this.operatorModeStateService.toggleOpenDir(entryPath);
+  }
+
+  private get scrollPositionKey() {
+    return this.operatorModeStateService.state.codePath?.toString();
   }
 }
 
