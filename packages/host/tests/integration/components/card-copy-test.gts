@@ -156,6 +156,9 @@ module('Integration | card-copy', function (hooks) {
       };
     }
     let adapter1: any;
+    let adapter2: any;
+
+    // this would accept a virtual network class (instead of the loader), make the realm accept the VN and then use its fetch method to intercept requests
     ({ realm: realm1, adapter: adapter1 } = await setupIntegrationTestRealm({
       loader,
       onFetch: wrappedOnFetch(),
@@ -231,7 +234,7 @@ module('Integration | card-copy', function (hooks) {
       },
     }));
 
-    ({ realm: realm2 } = await setupIntegrationTestRealm({
+    ({ realm: realm2, adapter: adapter2 } = await setupIntegrationTestRealm({
       loader,
       realmURL: testRealm2URL,
       contents: {
@@ -269,10 +272,8 @@ module('Integration | card-copy', function (hooks) {
       },
     }));
 
-    realm1.loader.prependURLHandlers([
-      (req) => sourceFetchRedirectHandle(req, adapter1, realm2),
-      (req) => sourceFetchReturnUrlHandle(req, realm2),
-    ]);
+    realm1.loader.prependURLHandlers([realm2.maybeHandle.bind(realm2)]);
+    // realm2.loader.prependURLHandlers([realm2.maybeHandle.bind(realm2)]);
 
     // write in the new record last because it's link didn't exist until realm2 was created
     await realm1.write(
@@ -639,10 +640,11 @@ module('Integration | card-copy', function (hooks) {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      debugger;
+
       id = url.href.split('/').pop()!;
       assert.true(uuidValidate(id), 'card identifier is UUID');
       assert.strictEqual(json.data.id, `${testRealm2URL}Pet/${id}`);
+      debugger;
       assert.strictEqual(json.data.attributes?.firstName, 'Mango');
       assert.deepEqual(json.data.meta.adoptsFrom, {
         module: `${testRealmURL}pet`,
