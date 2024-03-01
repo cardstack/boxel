@@ -30,7 +30,11 @@ interface Signature {
 
 export default class RenameSession extends Component<Signature> {
   <template>
-    <AiAssistantPanelPopover data-test-rename-session ...attributes>
+    <AiAssistantPanelPopover
+      @onClose={{@onClose}}
+      data-test-rename-session
+      ...attributes
+    >
       <:header>Rename Session</:header>
       <:body>
         <div class='rename-field'>

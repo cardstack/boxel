@@ -20,7 +20,11 @@ interface Signature {
 
 export default class AiAssistantPastSessionsList extends Component<Signature> {
   <template>
-    <AiAssistantPanelPopover data-test-past-sessions ...attributes>
+    <AiAssistantPanelPopover
+      @onClose={{@onClose}}
+      data-test-past-sessions
+      ...attributes
+    >
       <:header>
         Past Sessions
         <IconButton
