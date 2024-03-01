@@ -306,6 +306,14 @@ export class Realm {
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.loaderTemplate.registerURLHandler(this.fetchWithAuth.bind(this));
 
+    // registerURLHandler should be kept the same in the refactor
+    // virtual network class with bound fetch
+    // make loader have optional constructor argument (which is fetch implementation)
+    // should enable us to delete those redirect handlers
+    // realm takes fetch implementation in the constructor
+    // last fetch in the handlers should be the custom fetch implementation
+    // first fix the redirects
+
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,

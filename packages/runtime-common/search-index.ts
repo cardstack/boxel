@@ -128,6 +128,8 @@ type CurrentIndex = RunState & {
 // a map that is unique for the index run. When the server visits fastboot it
 // will provide the indexer route with the id for the fastboot global that is
 // specific to the index run.
+
+// main goal: loaders need to be isolated, VN are shared
 let optsId = 0;
 export class RunnerOptionsManager {
   #opts = new Map<number, RunnerOpts>();

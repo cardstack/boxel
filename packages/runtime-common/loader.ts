@@ -136,10 +136,11 @@ export class Loader {
   private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
 
+  // consider adding reset
   clone(): Loader {
     let clone = new Loader();
     clone.urlHandlers = [...this.urlHandlers];
-    clone.urlMappings = [...this.urlMappings];
+    clone.urlMappings = [...this.urlMappings]; // refactor: these two stay, previously it was sharing but that will be implemented in the VN
     for (let [moduleIdentifier, module] of this.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
     }
@@ -507,7 +508,7 @@ export class Loader {
           this.asUnresolvedRequest(urlOrRequest, init),
         );
         if (result) {
-          return result;
+          return result; // refactor: if status 302, recurse (behave like the real redirect behaves (url property etc))
         }
       }
       return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
