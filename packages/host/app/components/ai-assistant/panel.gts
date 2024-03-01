@@ -131,7 +131,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{else if this.roomToRename}}
           <RenameSession
             @room={{this.roomToRename}}
-            @onClose={{fn this.setRoomToRename undefined}}
+            @onClose={{this.onCloseRename}}
             {{popoverVelcro.loop}}
           />
         {{/if}}
@@ -367,15 +367,22 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   @action
-  private enterRoom(roomId: string) {
+  private enterRoom(roomId: string, hidePastSessionsList = true) {
     this.currentRoomId = roomId;
-    this.hidePastSessions();
+    if (hidePastSessionsList) {
+      this.hidePastSessions();
+    }
     window.localStorage.setItem(currentRoomIdPersistenceKey, roomId);
   }
 
   @action private setRoomToRename(room: RoomField | undefined) {
     this.roomToRename = room;
     this.hidePastSessions();
+  }
+
+  @action private onCloseRename() {
+    this.roomToRename = undefined;
+    this.displayPastSessions();
   }
 
   @action private setRoomToDelete(room: RoomField | undefined) {
@@ -410,13 +417,12 @@ export default class AiAssistantPanel extends Component<Signature> {
         window.localStorage.removeItem(currentRoomIdPersistenceKey);
         let latestRoom = this.aiSessionRooms[0];
         if (latestRoom) {
-          this.enterRoom(latestRoom.roomId);
+          this.enterRoom(latestRoom.roomId, false);
         } else {
           this.createNewSession();
         }
       }
       this.roomToDelete = undefined;
-      this.hidePastSessions();
     } catch (e) {
       console.error(e);
       this.roomDeleteError = 'Error deleting room';
