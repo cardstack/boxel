@@ -47,13 +47,13 @@ module('realm-user-permissions', function (_hooks) {
   module('users-readable realm', function () {
     let permissionsChecker = new RealmPermissionChecker(
       {
-        users: ['read', 'write'],
+        users: ['read'],
         '@matic:boxel-ai': ['read', 'write'],
       },
       mockMatrixClient,
     );
 
-    test('matrix user can read and write', async function (assert) {
+    test('matrix user can read but not write', async function (assert) {
       assert.ok(await permissionsChecker.can('@matic:boxel-ai', 'read'));
       assert.ok(await permissionsChecker.can('@matic:boxel-ai', 'write'));
 
@@ -64,11 +64,12 @@ module('realm-user-permissions', function (_hooks) {
 
       matrixUserProfile = { displayname: 'Not Matic' };
       assert.ok(await permissionsChecker.can('@not-matic:boxel-ai', 'read'));
-      assert.ok(await permissionsChecker.can('@not-matic:boxel-ai', 'write'));
+      assert.notOk(
+        await permissionsChecker.can('@not-matic:boxel-ai', 'write'),
+      );
 
       assert.deepEqual(await permissionsChecker.for('@not-matic:boxel-ai'), [
         'read',
-        'write',
       ]);
     });
 
@@ -82,12 +83,10 @@ module('realm-user-permissions', function (_hooks) {
       ]);
 
       matrixUserProfile = undefined;
-      assert.notOk(await permissionsChecker.can('@not-matic:boxel-ai', 'read'));
-      assert.notOk(
-        await permissionsChecker.can('@not-matic:boxel-ai', 'write'),
-      );
+      assert.notOk(await permissionsChecker.can('anyone', 'read'));
+      assert.notOk(await permissionsChecker.can('anyone', 'write'));
 
-      assert.deepEqual(await permissionsChecker.for('@not-matic:boxel-ai'), []);
+      assert.deepEqual(await permissionsChecker.for('anyone'), []);
     });
   });
 
