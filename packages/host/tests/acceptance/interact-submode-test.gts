@@ -30,11 +30,13 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import {
+  createJWT,
   percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
   testRealmURL,
+  testRealmSecretSeed,
   type TestContextWithSSE,
   type TestContextWithSave,
   setupAcceptanceTestRealm,
@@ -47,21 +49,27 @@ let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
-  let onFetch: ((req: Request, body: string) => void) | undefined;
+  let onFetch: ((req: Request, body: string) => Response | null) | undefined;
   function wrappedOnFetch() {
     return async (req: Request) => {
       if (!onFetch) {
-        return Promise.resolve(req);
+        return Promise.resolve({
+          req,
+          res: null,
+        });
       }
       let { headers, method } = req;
       let body = await req.text();
-      onFetch(req, body);
+      let res = onFetch(req, body) ?? null;
       // need to return a new request since we just read the body
-      return new Request(req.url, {
-        method,
-        headers,
-        ...(body ? { body } : {}),
-      });
+      return {
+        req: new Request(req.url, {
+          method,
+          headers,
+          ...(body ? { body } : {}),
+        }),
+        res,
+      };
     };
   }
 
@@ -919,6 +927,76 @@ module('Acceptance | interact submode tests', function (hooks) {
           );
       });
     });
+
+    module(
+      'when permission is updated after user has obtained the token',
+      function (hooks) {
+        hooks.beforeEach(async function () {
+          realmPermissions = { [testRealmURL]: ['read'] };
+        });
+
+        test('retrieve a new JWT if recevive 401 error', async function (assert) {
+          let token = createJWT(
+            {
+              user: '@testuser:staging',
+              realm: testRealmURL,
+              permissions: ['read', 'write'],
+            },
+            '7d',
+            testRealmSecretSeed,
+          );
+          let session = {
+            [`${testRealmURL}`]: token,
+          };
+          window.localStorage.setItem('boxel-session', JSON.stringify(session));
+
+          await visitOperatorMode({
+            stacks: [
+              [
+                {
+                  id: `${testRealmURL}Pet/mango`,
+                  format: 'isolated',
+                },
+              ],
+            ],
+          });
+
+          // Mock `Authentication` error response from the server.
+          onFetch = (req, _body) => {
+            if (
+              req.method !== 'GET' &&
+              req.method !== 'HEAD' &&
+              req.headers.get('Authorization') === token
+            ) {
+              return new Response(`Authentication error`, {
+                status: 401,
+              });
+            }
+
+            return null;
+          };
+          assert
+            .dom('[data-test-operator-mode-stack] [data-test-edit-button]')
+            .exists();
+          await click(
+            '[data-test-operator-mode-stack] [data-test-edit-button]',
+          );
+          await fillIn(
+            '[data-test-operator-mode-stack] [data-test-field="name"] [data-test-boxel-input]',
+            'Updated Ringo',
+          );
+          await click(
+            '[data-test-operator-mode-stack] [data-test-edit-button]',
+          );
+
+          let newToken = window.localStorage.getItem('boxel-session');
+          let claims = claimsFromRawToken(newToken!);
+          assert.notStrictEqual(newToken, token);
+          assert.strictEqual(claims.user, '@testuser:staging');
+          assert.deepEqual(claims.permissions, ['read']);
+        });
+      },
+    );
   });
 
   module('2 stacks with differing permissions', function (hooks) {
@@ -956,6 +1034,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           assert.strictEqual(claims.realm, 'http://test-realm/test2/');
           assert.deepEqual(claims.permissions, ['read', 'write']);
         }
+        return null;
       };
 
       assert

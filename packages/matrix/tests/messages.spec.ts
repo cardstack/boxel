@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { registerUser } from '../docker/synapse';
 import {
   login,
@@ -31,20 +31,27 @@ test.describe('Room messages', () => {
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
   });
+  async function removeAutoAttachedCard(page: Page) {
+    await page
+      .locator(
+        `[data-test-selected-card][data-test-autoattached-card] [data-test-remove-card-btn]`,
+      )
+      .click();
+    await page.locator(`[data-test-room-settled]`).waitFor();
+  }
   test(`it can send a message in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await expect(page.locator('[data-test-timeline-start]')).toHaveCount(0);
-    await expect(page.locator('[data-test-no-messages]')).toHaveCount(1);
+    await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
+    await removeAutoAttachedCard(page);
     await assertMessages(page, []);
 
     await writeMessage(page, room1, 'Message 1');
     await page.locator('[data-test-send-message-btn]').click();
 
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
-    await expect(page.locator('[data-test-no-messages]')).toHaveCount(0);
-    await expect(page.locator('[data-test-timeline-start]')).toHaveCount(1);
+    await expect(page.locator('[data-test-new-session]')).toHaveCount(0);
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
     let room2 = await createRoom(page);
@@ -93,6 +100,7 @@ test.describe('Room messages', () => {
   test(`it can send a markdown message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
+    await removeAutoAttachedCard(page);
     await sendMessage(page, room1, 'message with _style_');
     await assertMessages(page, [
       {
@@ -143,6 +151,8 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
+    await removeAutoAttachedCard(page);
+
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
@@ -169,6 +179,7 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
+    await removeAutoAttachedCard(page);
     await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
       {
@@ -182,6 +193,7 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/type-examples`;
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
+    await removeAutoAttachedCard(page);
 
     // Send a card that contains a type that matrix doesn't support
     await sendMessage(page, room1, undefined, [testCard]);
@@ -198,6 +210,7 @@ test.describe('Room messages', () => {
     const testCard2 = `${testHost}/mango`;
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
+    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard);
     await selectCardFromCatalog(page, testCard2);
@@ -263,6 +276,7 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
+    await removeAutoAttachedCard(page);
 
     await sendMessage(page, room1, 'message 1', [testCard1]);
     await assertMessages(page, [message1]);
@@ -294,6 +308,7 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
+    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
@@ -317,6 +332,7 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
+    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard2);
     await selectCardFromCatalog(page, testCard1);
@@ -348,6 +364,7 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
+    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
@@ -471,5 +488,23 @@ test.describe('Room messages', () => {
         cards: [{ id: testCard3, title: 'Type Examples' }],
       },
     ]);
+  });
+
+  test('it can send the prompts on new-session room as chat message on click', async ({
+    page,
+  }) => {
+    const prompt = {
+      from: 'user1',
+      message: 'Do I have to use AI with Boxel?', // a prompt on new-session template
+    };
+    await login(page, 'user1', 'pass');
+    await page.locator(`[data-test-room-settled]`).waitFor();
+
+    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(1);
+    await expect(page.locator(`[data-test-prompt]`)).toHaveCount(3);
+
+    await page.locator(`[data-test-prompt="1"]`).click();
+    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(0);
+    await assertMessages(page, [prompt]);
   });
 });

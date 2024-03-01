@@ -36,6 +36,7 @@ class CardPill extends Component<CardPillSignature> {
       class={{cn 'card-pill' is-autoattached=@isAutoAttachedCard}}
       data-test-pill-index={{@index}}
       data-test-selected-card={{@card.id}}
+      data-test-autoattached-card={{@isAutoAttachedCard}}
     >
       <:icon>
         <RealmInfoProvider @fileURL={{@card.id}}>
