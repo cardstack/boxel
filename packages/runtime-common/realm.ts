@@ -744,7 +744,7 @@ export class Realm {
     hash.update(this.#realmSecretSeed);
     let hashedResponse = uint8ArrayToHex(await hash.digest());
     if (hashedResponse === challenge) {
-      let permissions = new RealmPermissionChecker(this.#permissions).for(user);
+      let permissions = await (new RealmPermissionChecker(this.#permissions, this.#matrixClient)).for(user);
       let jwt = this.#adapter.createJWT(
         {
           user,
@@ -989,16 +989,17 @@ export class Realm {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
       let realmPermissionChecker = new RealmPermissionChecker(
         this.#permissions,
+        this.#matrixClient
       );
       
-      let permissions = realmPermissionChecker.for(token.user);
+      let permissions = await realmPermissionChecker.for(token.user);
       if (JSON.stringify(token.permissions.sort()) !== JSON.stringify(permissions.sort())) {
         throw new AuthenticationError(
           'User permissions have been updated. Please refresh the token',
         );
       }
 
-      if (!realmPermissionChecker.can(token.user, neededPermission)) {
+      if (!(await realmPermissionChecker.can(token.user, neededPermission))) {
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
         );
