@@ -36,3 +36,21 @@ index 9115598fd769bad15ed23293a68d617d5dbf21a5..95c28e59d8414dbc0837f5c85c98dd96
    return controller.signal;
  }
  function anySignal(signals) {
+diff --git a/lib/sync.js b/lib/sync.js
+index f59265e1089ce832c0be8a23aa19813c2d4738cc..e9b70f2b75a89bb561fc420f03b5106a55f34e09 100644
+--- a/lib/sync.js
++++ b/lib/sync.js
+@@ -747,6 +747,13 @@ class SyncApi {
+         nextSyncToken: data.next_batch,
+         catchingUp: this.catchingUp
+       };
++
++      if (syncToken === data.next_batch) {
++        // there are no updates and we are just idle--wait before 
++        // continuing so that idle syncs don't DDoS the server
++        await new Promise(r => setTimeout(r, 1000));
++      }
++
+       if (this.syncOpts.crypto) {
+         // tell the crypto module we're about to process a sync
+         // response
