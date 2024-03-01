@@ -367,7 +367,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   @action
-  private enterRoom(roomId: string, hidePastSessions: boolean = true) {
+  private enterRoom(roomId: string, hidePastSessions = true) {
     this.currentRoomId = roomId;
     if (hidePastSessions) {
       this.hidePastSessions();
