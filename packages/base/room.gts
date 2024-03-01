@@ -234,7 +234,7 @@ class PatchField extends FieldDef {
 export class MessageField extends FieldDef {
   @field author = contains(RoomMemberField);
   @field message = contains(MarkdownField);
-  @field formattedMessage = contains(StringField);
+  @field formattedMessage = contains(MarkdownField);
   @field created = contains(DateTimeField);
   @field attachedCardIds = containsMany(StringField);
   @field index = contains(NumberField);
