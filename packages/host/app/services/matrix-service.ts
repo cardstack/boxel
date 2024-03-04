@@ -21,6 +21,8 @@ import {
   sanitizeHtml,
   aiBotUsername,
   splitStringIntoChunks,
+  baseRealm,
+  loaderFor,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
@@ -34,6 +36,7 @@ import ENV from '@cardstack/host/config/environment';
 
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
+import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
@@ -351,7 +354,12 @@ export default class MatrixService extends Service {
       // Serialize the top of all cards on all stacks
       serializedOpenCards = await Promise.all(
         context!.openCards.map(async (card) => {
-          return await this.cardService.serializeCard(card);
+          let { Base64ImageField } = await loaderFor(card).import<{
+            Base64ImageField: typeof Base64ImageFieldType;
+          }>(`${baseRealm.url}base64-image`);
+          return await this.cardService.serializeCard(card, {
+            omitFields: [Base64ImageField],
+          });
         }),
       );
       let mappings = await basicMappings(this.loaderService.loader);
@@ -385,7 +393,14 @@ export default class MatrixService extends Service {
 
     if (attachedCards?.length) {
       serializedAttachedCards = await Promise.all(
-        attachedCards.map(async (c) => await this.cardService.serializeCard(c)),
+        attachedCards.map(async (card) => {
+          let { Base64ImageField } = await loaderFor(card).import<{
+            Base64ImageField: typeof Base64ImageFieldType;
+          }>(`${baseRealm.url}base64-image`);
+          return await this.cardService.serializeCard(card, {
+            omitFields: [Base64ImageField],
+          });
+        }),
       );
     }
     let attachedCardsEventIds: string[] = [];
