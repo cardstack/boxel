@@ -179,7 +179,7 @@ export class SearchIndex {
     this.#runner = runner;
     this.#index = {
       realmURL: new URL(realm.url),
-      loader: Loader.cloneLoader(realm.loaderTemplate),
+      loader: this.#realm.loaderTemplate.clone(),
       ignoreMap: new URLMap(),
       ignoreMapContents: new URLMap(),
       instances: new URLMap(),
@@ -216,7 +216,7 @@ export class SearchIndex {
         ignoreMap: current.ignoreMap,
         realmURL: current.realmURL,
         stats: current.stats,
-        loader: Loader.cloneLoader(this.#realm.loaderTemplate),
+        loader: this.#realm.loaderTemplate.clone(),
       };
     });
   }
@@ -245,7 +245,7 @@ export class SearchIndex {
         ignoreMapContents: current.ignoreMapContents,
         realmURL: current.realmURL,
         stats: current.stats,
-        loader: Loader.cloneLoader(this.#realm.loaderTemplate),
+        loader: this.#realm.loaderTemplate.clone(),
       };
     });
   }

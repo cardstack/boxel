@@ -83,6 +83,8 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
 
+import { shimExternals } from '../realm-server/lib/externals';
+
 export type RealmInfo = {
   name: string;
   backgroundURL: string | null;
@@ -265,23 +267,27 @@ export class Realm {
     {
       url,
       adapter,
-      loader,
+      _loader,
       indexRunner,
       runnerOptsMgr,
       getIndexHTML,
       matrix,
       realmSecretSeed,
       permissions,
+      urlMappings,
+      contents,
     }: {
       url: string;
       adapter: RealmAdapter;
-      loader: Loader;
+      loader: Loader | null;
       indexRunner: IndexRunner;
       runnerOptsMgr: RunnerOptionsManager;
       getIndexHTML: () => Promise<string>;
       matrix: { url: URL; username: string; password: string };
       permissions: RealmPermissions;
       realmSecretSeed: string;
+      urlMappings: [URL, URL][];
+      contents: {};
     },
     opts?: Options,
   ) {
@@ -292,8 +298,17 @@ export class Realm {
     this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
+
+    let loader = new Loader();
+    shimExternals(loader);
+    for (let [from, to] of urlMappings) {
+      loader.addURLMapping(from, to);
+    }
+
     this.loaderTemplate = loader;
+
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
+
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -359,6 +374,10 @@ export class Realm {
       this.#startedUp.fulfill((() => this.#startup())());
     }
   }
+
+  // applyContents(loader) {
+
+  // }
 
   // it's only necessary to call this when the realm is using a deferred startup
   async start() {
@@ -990,9 +1009,12 @@ export class Realm {
       let realmPermissionChecker = new RealmPermissionChecker(
         this.#permissions,
       );
-      
+
       let permissions = realmPermissionChecker.getUserPermissions(token.user);
-      if (JSON.stringify(token.permissions.sort()) !== JSON.stringify(permissions.sort())) {
+      if (
+        JSON.stringify(token.permissions.sort()) !==
+        JSON.stringify(permissions.sort())
+      ) {
         throw new AuthenticationError(
           'User permissions have been updated. Please refresh the token',
         );

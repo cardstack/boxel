@@ -114,16 +114,16 @@ if (
 
 let log = logger('main');
 
-let loader = new Loader();
-shimExternals(loader);
+// let loader = new Loader();
+// shimExternals(loader);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),
   new URL(String(toUrls[i]), `http://localhost:${port}`),
 ]);
-for (let [from, to] of urlMappings) {
-  loader.addURLMapping(from, to);
-}
+// for (let [from, to] of urlMappings) {
+//   loader.addURLMapping(from, to);
+// }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: string | URL;
 if (distURL) {
@@ -164,7 +164,7 @@ if (distURL) {
         {
           url,
           adapter: new NodeAdapter(resolve(String(path))),
-          loader,
+          loader: null,
           indexRunner: getRunner,
           runnerOptsMgr: manager,
           getIndexHTML: async () =>
@@ -172,6 +172,7 @@ if (distURL) {
           matrix: { url: new URL(matrixURL), username, password },
           realmSecretSeed: REALM_SECRET_SEED,
           permissions: realmPermissions.users,
+          urlMappings: urlMappings,
         },
         {
           deferStartUp: true,

@@ -406,7 +406,6 @@ interface RealmContents {
     | string;
 }
 export async function setupAcceptanceTestRealm({
-  loader,
   contents,
   realmURL,
   onFetch,
@@ -420,7 +419,6 @@ export async function setupAcceptanceTestRealm({
   }>;
 }) {
   return await setupTestRealm({
-    loader,
     contents,
     realmURL,
     onFetch,
@@ -443,7 +441,6 @@ export async function setupIntegrationTestRealm({
   }>;
 }) {
   return await setupTestRealm({
-    loader,
     contents,
     realmURL,
     onFetch,
@@ -453,7 +450,6 @@ export async function setupIntegrationTestRealm({
 
 export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
-  loader,
   contents,
   realmURL,
   onFetch,
@@ -517,29 +513,29 @@ async function setupTestRealm({
     'service:local-indexer',
   ) as unknown as MockLocalIndexer;
   let realm: Realm;
-  if (onFetch) {
-    // we need to register this before the realm is created so
-    // that it is in prime position in the url handlers list
-    loader.registerURLHandler(async (req: Request) => {
-      let token = waiter.beginAsync();
-      try {
-        let { req: newReq, res } = await onFetch(req);
-        if (res) {
-          return res;
-        }
-        req = newReq;
-      } finally {
-        waiter.endAsync(token);
-      }
+  // if (onFetch) {
+  //   // we need to register this before the realm is created so
+  //   // that it is in prime position in the url handlers list
+  //   loader.registerURLHandler(async (req: Request) => {
+  //     let token = waiter.beginAsync();
+  //     try {
+  //       let { req: newReq, res } = await onFetch(req);
+  //       if (res) {
+  //         return res;
+  //       }
+  //       req = newReq;
+  //     } finally {
+  //       waiter.endAsync(token);
+  //     }
 
-      return realm.maybeHandle(req);
-    });
-  }
+  //     return realm.maybeHandle(req);
+  //   });
+  // }
 
   realm = new Realm({
     url: realmURL,
     adapter,
-    loader,
+    loader: null,
     indexRunner: async (optsId) => {
       let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
       await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
@@ -551,10 +547,10 @@ async function setupTestRealm({
     permissions: { '*': ['read', 'write'] },
     realmSecretSeed: testRealmSecretSeed,
   });
-  loader.prependURLHandlers([
-    (req) => sourceFetchRedirectHandle(req, adapter, realm),
-    (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
-  ]);
+  // loader.prependURLHandlers([
+  //   (req) => sourceFetchRedirectHandle(req, adapter, realm),
+  //   (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
+  // ]);
 
   await realm.ready;
   return { realm, adapter };
