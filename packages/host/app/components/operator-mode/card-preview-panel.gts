@@ -1,7 +1,10 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
@@ -13,10 +16,15 @@ import {
   IconButton,
   Menu as BoxelMenu,
   Tooltip,
+  Menu,
 } from '@cardstack/boxel-ui/components';
 
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
-import { IconLink, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
+import {
+  DropdownArrowDown,
+  IconLink,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
@@ -38,6 +46,7 @@ interface Signature {
 }
 
 export default class CardPreviewPanel extends Component<Signature> {
+  @tracked footerWidthPx = 0;
   private scrollPositions = new Map<string, number>();
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.args.card.id);
@@ -54,6 +63,14 @@ export default class CardPreviewPanel extends Component<Signature> {
 
   private get format(): Format {
     return this.args.format ?? 'isolated';
+  }
+
+  @action setFooterWidthPx(footerWidthPx: number) {
+    this.footerWidthPx = footerWidthPx;
+  }
+
+  get footerButtonsCollapsed() {
+    return this.footerWidthPx < 500; // Set as needed. This is around where the buttons in the footer start to overflow.
   }
 
   <template>
@@ -121,30 +138,77 @@ export default class CardPreviewPanel extends Component<Signature> {
       <Preview @card={{@card}} @format={{this.format}} />
     </div>
 
-    <div class='preview-footer' data-test-code-mode-card-preview-footer>
+    <div
+      class='preview-footer'
+      {{ResizeModifier setFooterWidthPx=this.setFooterWidthPx}}
+      data-test-code-mode-card-preview-footer
+    >
       <div class='footer-buttons'>
-        <button
-          class='footer-button {{if (eq this.format "isolated") "active"}}'
-          {{on 'click' (fn @setFormat 'isolated')}}
-          data-test-preview-card-footer-button-isolated
-        >Isolated</button>
-        <button
-          class='footer-button {{if (eq this.format "atom") "active"}}'
-          {{on 'click' (fn @setFormat 'atom')}}
-          data-test-preview-card-footer-button-atom
-        >
-          Atom</button>
-        <button
-          class='footer-button {{if (eq this.format "embedded") "active"}}'
-          {{on 'click' (fn @setFormat 'embedded')}}
-          data-test-preview-card-footer-button-embedded
-        >
-          Embedded</button>
-        <button
-          class='footer-button {{if (eq this.format "edit") "active"}}'
-          {{on 'click' (fn @setFormat 'edit')}}
-          data-test-preview-card-footer-button-edit
-        >Edit</button>
+        {{#if this.footerButtonsCollapsed}}
+          <BoxelDropdown>
+            <:trigger as |bindings|>
+              <button class='footer-button format-dropdown-button' {{bindings}}>
+                <span>{{capitalize this.format}}</span>
+                <DropdownArrowDown
+                  class='arrow-icon'
+                  width='18px'
+                  height='18px'
+                />
+              </button>
+            </:trigger>
+            <:content as |dd|>
+              <Menu
+                class='format-dropdown-menu'
+                @items={{array
+                  (menuItem
+                    'Isolated'
+                    (fn @setFormat 'isolated')
+                    selected=(eq this.format 'isolated')
+                  )
+                  (menuItem
+                    'Atom'
+                    (fn @setFormat 'atom')
+                    selected=(eq this.format 'atom')
+                  )
+                  (menuItem
+                    'Embedded'
+                    (fn @setFormat 'embedded')
+                    selected=(eq this.format 'embedded')
+                  )
+                  (menuItem
+                    'Edit'
+                    (fn @setFormat 'edit')
+                    selected=(eq this.format 'edit')
+                  )
+                }}
+                @closeMenu={{dd.close}}
+              />
+            </:content>
+          </BoxelDropdown>
+        {{else}}
+          <button
+            class='footer-button {{if (eq this.format "isolated") "active"}}'
+            {{on 'click' (fn @setFormat 'isolated')}}
+            data-test-preview-card-footer-button-isolated
+          >Isolated</button>
+          <button
+            class='footer-button {{if (eq this.format "atom") "active"}}'
+            {{on 'click' (fn @setFormat 'atom')}}
+            data-test-preview-card-footer-button-atom
+          >
+            Atom</button>
+          <button
+            class='footer-button {{if (eq this.format "embedded") "active"}}'
+            {{on 'click' (fn @setFormat 'embedded')}}
+            data-test-preview-card-footer-button-embedded
+          >
+            Embedded</button>
+          <button
+            class='footer-button {{if (eq this.format "edit") "active"}}'
+            {{on 'click' (fn @setFormat 'edit')}}
+            data-test-preview-card-footer-button-edit
+          >Edit</button>
+        {{/if}}
       </div>
     </div>
 
@@ -152,6 +216,18 @@ export default class CardPreviewPanel extends Component<Signature> {
       :global(:root) {
         --code-mode-preview-footer-height: 70px;
         --code-mode-preview-header-height: 70px;
+      }
+
+      .format-dropdown-button {
+        display: flex;
+      }
+
+      .format-dropdown-button[aria-expanded='true'] svg {
+        transform: rotate(180deg);
+      }
+
+      .format-dropdown-button svg {
+        margin-left: var(--boxel-sp-xxxs);
       }
 
       .preview-header {
@@ -206,6 +282,7 @@ export default class CardPreviewPanel extends Component<Signature> {
         margin: auto;
         display: flex;
         gap: var(--boxel-sp-sm);
+        overflow-x: auto;
       }
 
       .footer-button {
@@ -274,5 +351,31 @@ class ScrollModifier extends Modifier<ScrollSignature> {
         element.removeEventListener('scroll', onScroll);
       });
     }
+  }
+}
+
+interface ResizeSignature {
+  Args: {
+    Named: {
+      setFooterWidthPx: (footerWidthPx: number) => void;
+    };
+  };
+}
+
+class ResizeModifier extends Modifier<ResizeSignature> {
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    { setFooterWidthPx }: ResizeSignature['Args']['Named'],
+  ) {
+    let resizeObserver = new ResizeObserver(() => {
+      setFooterWidthPx(element.clientWidth);
+    });
+
+    resizeObserver.observe(element);
+
+    registerDestructor(this, () => {
+      resizeObserver.disconnect();
+    });
   }
 }
