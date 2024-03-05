@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { registerUser } from '../docker/synapse';
+import {
+  registerUser,
+  loginUser,
+  getAllRoomMessages,
+  getJoinedRooms,
+} from '../docker/synapse';
 import {
   login,
   logout,
@@ -161,6 +166,75 @@ test.describe('Room messages', () => {
     await expect(
       page.locator(`[data-test-message-idx="0"] .content em`),
     ).toContainText('my');
+  });
+
+  test('can add a card that is over 65K to a message (i.e. split card into multiple matrix events)', async ({
+    page,
+  }) => {
+    const testCard = `${testHost}/big-card`; // this is a 153KB card
+    await login(page, 'user1', 'pass');
+    await page.locator(`[data-test-room-settled]`).waitFor();
+    await page.locator('[data-test-choose-card-btn]').click();
+    await page.locator(`[data-test-select="${testCard}"]`).click();
+    await page.locator('[data-test-card-catalog-go-button]').click();
+    await expect(
+      page.locator(`[data-test-selected-card="${testCard}"]`),
+    ).toContainText('Big Card');
+
+    await page.locator('[data-test-message-field]').fill('This is a big card');
+    await page.locator('[data-test-send-message-btn]').click();
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'This is a big card',
+        cards: [{ id: testCard, title: 'Big Card' }],
+      },
+    ]);
+  });
+
+  test('it card strip out base64 image fields from cards sent in messages', async ({
+    page,
+  }) => {
+    const testCard = `${testHost}/mango-puppy`; // this is a 153KB card
+    await login(page, 'user1', 'pass');
+    await page.locator(`[data-test-room-settled]`).waitFor();
+    await page.locator('[data-test-choose-card-btn]').click();
+    await page.locator(`[data-test-select="${testCard}"]`).click();
+    await page.locator('[data-test-card-catalog-go-button]').click();
+    await expect(
+      page.locator(`[data-test-selected-card="${testCard}"]`),
+    ).toContainText('Mango the Puppy');
+
+    await page
+      .locator('[data-test-message-field]')
+      .fill('This is a card without base64');
+    await page.locator('[data-test-send-message-btn]').click();
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'This is a card without base64',
+        cards: [{ id: testCard, title: 'Mango the Puppy' }],
+      },
+    ]);
+
+    let { accessToken } = await loginUser('user1', 'pass');
+    let rooms = await getJoinedRooms(accessToken);
+    let roomsWithMessages = await Promise.all(
+      rooms.map((r) => getAllRoomMessages(r, accessToken)),
+    );
+    let messages = roomsWithMessages.find((messages) => {
+      let message = messages[messages.length - 2];
+      return (
+        message.type === 'm.room.message' &&
+        message.content?.msgtype === 'org.boxel.cardFragment'
+      );
+    });
+    let message = messages![messages!.length - 2];
+    let messageData = JSON.parse(message.content.data);
+    let serializeCard = JSON.parse(messageData.cardFragment);
+
+    expect(serializeCard.data.attributes.name).toStrictEqual('Mango the Puppy');
+    expect(serializeCard.data.attributes.picture).toBeUndefined();
   });
 
   test('can send only a card as a message', async ({ page }) => {

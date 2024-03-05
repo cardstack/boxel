@@ -303,8 +303,15 @@ export async function writeMessage(
   ).toHaveValue(message);
 }
 
-export async function selectCardFromCatalog(page: Page, cardId: string) {
+export async function selectCardFromCatalog(
+  page: Page,
+  cardId: string,
+  realmName = 'Test Workspace A',
+) {
   await page.locator('[data-test-choose-card-btn]').click();
+  await page
+    .locator(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
+    .click();
   await page.locator(`[data-test-select="${cardId}"]`).click();
   await page.locator('[data-test-card-catalog-go-button]').click();
 }

@@ -361,3 +361,26 @@ export async function apiFor(cardOrField: CardDef | FieldDef) {
   }
   return api;
 }
+
+export function splitStringIntoChunks(str: string, maxSizeKB: number) {
+  const maxSizeBytes = maxSizeKB * 1024;
+  let chunks = [];
+  let startIndex = 0;
+  while (startIndex < str.length) {
+    // Calculate the end index of the chunk based on byte length
+    let endIndex = startIndex;
+    let byteLength = 0;
+    while (endIndex < str.length && byteLength < maxSizeBytes) {
+      let charCode = str.charCodeAt(endIndex);
+      // we use this approach so that we can have an isomorphic means of
+      // determining the byte size for strings, as well as, using Blob (in the
+      // browser) to calculate string byte size is pretty expensive
+      byteLength += charCode < 0x0080 ? 1 : charCode < 0x0800 ? 2 : 3;
+      endIndex++;
+    }
+    let chunk = str.substring(startIndex, endIndex);
+    chunks.push(chunk);
+    startIndex = endIndex;
+  }
+  return chunks;
+}

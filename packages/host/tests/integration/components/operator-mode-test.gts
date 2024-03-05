@@ -859,27 +859,42 @@ module('Integration | operator-mode', function (hooks) {
         type: 'm.room.message',
         origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
         content: {
+          body: '',
+          formatted_body: '',
+          msgtype: 'org.boxel.cardFragment',
+          data: JSON.stringify({
+            index: 0,
+            totalParts: 1,
+            cardFragment: JSON.stringify({
+              data: {
+                id: 'http://this-is-not-a-real-card.com',
+                type: 'card',
+                attributes: {
+                  firstName: 'Boom',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://not-a-real-card.com',
+                    name: 'Boom',
+                  },
+                },
+              },
+            }),
+          }),
+        },
+      });
+      await addRoomEvent(matrixService, {
+        event_id: 'event2',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
+        content: {
           body: 'card with error',
           formatted_body: 'card with error',
           msgtype: 'org.boxel.message',
           data: JSON.stringify({
-            attachedCards: [
-              {
-                data: {
-                  id: 'http://this-is-not-a-real-card.com',
-                  type: 'card',
-                  attributes: {
-                    firstName: 'Boom',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: 'http://not-a-real-card.com',
-                      name: 'Boom',
-                    },
-                  },
-                },
-              },
-            ],
+            attachedCardsEventIds: ['event1'],
           }),
         },
       });
@@ -980,6 +995,33 @@ module('Integration | operator-mode', function (hooks) {
         );
 
       localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
+    });
+
+    test('can close past-sessions list on outside click', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      let room = await openAiAssistant();
+      await click('[data-test-past-sessions-button]');
+      assert.dom('[data-test-past-sessions]').exists();
+      assert.dom('[data-test-joined-room]').exists({ count: 1 });
+      await click('.operator-mode__main');
+      assert.dom('[data-test-past-sessions]').doesNotExist();
+
+      await click('[data-test-past-sessions-button]');
+      await click('[data-test-past-sessions]');
+      assert.dom('[data-test-past-sessions]').exists();
+      await click(`[data-test-past-session-options-button="${room}"]`);
+      assert.dom('[data-test-past-sessions]').exists();
+      await click('[data-test-message-field]');
+      assert.dom('[data-test-past-sessions]').doesNotExist();
     });
 
     test('it can render a markdown message from ai bot', async function (assert) {

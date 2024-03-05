@@ -67,7 +67,7 @@ export default class PastSessionItem extends Component<Signature> {
         </:trigger>
         <:content as |dd|>
           <Menu
-            class='menu'
+            class='menu past-session-menu'
             @closeMenu={{dd.close}}
             @items={{array
               (menuItem

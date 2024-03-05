@@ -341,3 +341,76 @@ export async function updateUser(
     );
   }
 }
+
+export async function getJoinedRooms(accessToken: string) {
+  let response = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/joined_rooms`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  let { joined_rooms } = (await response.json()) as { joined_rooms: string[] };
+  return joined_rooms;
+}
+
+interface MessageOptions {
+  direction?: 'forward' | 'backward';
+  pageSize: number;
+}
+const DEFAULT_PAGE_SIZE = 50;
+
+export async function getAllRoomMessages(
+  roomId: string,
+  accessToken: string,
+  opts?: MessageOptions,
+) {
+  let messages: MessageEvent[] = [];
+  let from: string | undefined;
+
+  do {
+    let response = await fetch(
+      `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
+        opts?.direction ? opts.direction.slice(0, 1) : 'f'
+      }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
+        from ? '&from=' + from : ''
+      }`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+    let { chunk, end } = await response.json();
+    from = end;
+    let events: MessageEvent[] = chunk;
+    messages.push(...events);
+  } while (!from);
+  return messages;
+}
+
+interface MessageEvent {
+  type: 'm.room.message';
+  content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
+    msgtype: string;
+    format: string;
+    body: string;
+    formatted_body?: string;
+    data?: any;
+  };
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+  sender: string;
+  origin_server_ts: number;
+  event_id: string;
+  room_id: string;
+}
