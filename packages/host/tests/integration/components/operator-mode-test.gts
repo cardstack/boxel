@@ -996,6 +996,33 @@ module('Integration | operator-mode', function (hooks) {
 
       localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
     });
+
+    test('can close past-sessions list on outside click', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      let room = await openAiAssistant();
+      await click('[data-test-past-sessions-button]');
+      assert.dom('[data-test-past-sessions]').exists();
+      assert.dom('[data-test-joined-room]').exists({ count: 1 });
+      await click('.operator-mode__main');
+      assert.dom('[data-test-past-sessions]').doesNotExist();
+
+      await click('[data-test-past-sessions-button]');
+      await click('[data-test-past-sessions]');
+      assert.dom('[data-test-past-sessions]').exists();
+      await click(`[data-test-past-session-options-button="${room}"]`);
+      assert.dom('[data-test-past-sessions]').exists();
+      await click('[data-test-message-field]');
+      assert.dom('[data-test-past-sessions]').doesNotExist();
+    });
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
