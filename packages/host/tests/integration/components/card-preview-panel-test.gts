@@ -63,7 +63,9 @@ module('Integration | card preview panel', function (hooks) {
     </template>);
 
     await waitUntil(
-      () => document.querySelectorAll(`.footer-button`).length === 4,
+      () =>
+        document.querySelectorAll(`[data-test-preview-card-footer-button]`)
+          .length === 4,
     );
 
     let element = (this as any).element;
@@ -71,19 +73,23 @@ module('Integration | card preview panel', function (hooks) {
     element.querySelector('.preview-footer').style.width = '499px'; // Reduce width of the footer. At 500px, the footer buttons should collapse into a dropdown
 
     await waitUntil(
-      () => document.querySelectorAll(`.footer-button`).length === 1,
+      () =>
+        document.querySelectorAll(`[data-test-preview-card-footer-button]`)
+          .length === 1,
     );
 
-    assert.dom('.footer-button').hasText('Isolated');
-    await click('.footer-button');
+    assert.dom('[data-test-preview-card-footer-button]').hasText('Isolated');
+    await click('[data-test-preview-card-footer-button]');
     await click('[data-test-boxel-menu-item-text="Atom"]');
 
     assert.strictEqual(format, 'atom');
 
-    element.querySelector('.preview-footer').style.width = '901px'; // Increase width of the footer. At 900px, the footer buttons should expand into individual buttons
+    element.querySelector('.preview-footer').style.width = '500px'; // Increase width of the footer
 
     await waitUntil(
-      () => document.querySelectorAll(`.footer-button`).length === 4,
+      () =>
+        document.querySelectorAll(`[data-test-preview-card-footer-button]`)
+          .length === 4,
     );
   });
 });

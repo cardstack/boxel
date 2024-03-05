@@ -147,7 +147,11 @@ export default class CardPreviewPanel extends Component<Signature> {
         {{#if this.footerButtonsCollapsed}}
           <BoxelDropdown>
             <:trigger as |bindings|>
-              <button class='footer-button format-dropdown-button' {{bindings}}>
+              <button
+                class='footer-button format-dropdown-button'
+                {{bindings}}
+                data-test-preview-card-footer-button
+              >
                 <span>{{capitalize this.format}}</span>
                 <DropdownArrowDown
                   class='arrow-icon'
@@ -189,23 +193,27 @@ export default class CardPreviewPanel extends Component<Signature> {
           <button
             class='footer-button {{if (eq this.format "isolated") "active"}}'
             {{on 'click' (fn @setFormat 'isolated')}}
+            data-test-preview-card-footer-button
             data-test-preview-card-footer-button-isolated
           >Isolated</button>
           <button
             class='footer-button {{if (eq this.format "atom") "active"}}'
             {{on 'click' (fn @setFormat 'atom')}}
+            data-test-preview-card-footer-button
             data-test-preview-card-footer-button-atom
           >
             Atom</button>
           <button
             class='footer-button {{if (eq this.format "embedded") "active"}}'
             {{on 'click' (fn @setFormat 'embedded')}}
+            data-test-preview-card-footer-button
             data-test-preview-card-footer-button-embedded
           >
             Embedded</button>
           <button
             class='footer-button {{if (eq this.format "edit") "active"}}'
             {{on 'click' (fn @setFormat 'edit')}}
+            data-test-preview-card-footer-button
             data-test-preview-card-footer-button-edit
           >Edit</button>
         {{/if}}
