@@ -6,10 +6,8 @@ import {
   useIndexBasedKey,
   FieldDef,
 } from './card-api';
-import { on } from '@ember/modifier';
-import Modifier from 'ember-modifier';
 import { fn } from '@ember/helper';
-import { pick } from '@cardstack/boxel-ui/helpers';
+import { RadioInput } from '@cardstack/boxel-ui/components';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
@@ -48,58 +46,33 @@ export default class BooleanField extends FieldDef {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div data-test-radio-group={{@fieldName}}>
-        <label for='{{this.radioGroup}}_true'>
-          True
-          <input
-            type='radio'
-            {{RadioInitializer @model true}}
-            id='{{this.radioGroup}}_true'
-            name='{{this.radioGroup}}'
-            checked={{@model}}
-            {{on 'change' (pick 'target.value' (fn @set true))}}
-          />
-        </label>
-        <label for='{{this.radioGroup}}_false'>
-          False
-          <input
-            type='radio'
-            {{RadioInitializer @model false}}
-            id='{{this.radioGroup}}_false'
-            name='{{this.radioGroup}}'
-            checked={{not @model}}
-            {{on 'change' (pick 'target.value' (fn @set false))}}
-          />
-        </label>
+        <RadioInput
+          @items={{this.items}}
+          @groupDescription='Boolean field'
+          name='{{this.radioGroup}}'
+          @checkedId={{this.checkedId}}
+          @hideBorder={{true}}
+          as |item|
+        >
+          <item.component @onChange={{fn @set item.data.value}}>
+            {{item.data.text}}
+          </item.component>
+        </RadioInput>
       </div>
     </template>
 
+    private items = [
+      { id: 'true', value: true, text: 'True' },
+      { id: 'false', value: false, text: 'False' },
+    ];
+
     private radioGroup = `__cardstack_bool${groupNumber++}__`;
-    constructor(owner: unknown, args: any) {
-      super(owner, args);
-      // initializes to false
-      if (this.args.model === undefined) {
-        this.args.set(false);
-      }
+
+    get checkedId() {
+      console.log(this.args.model);
+      return this.args.model === undefined || this.args.model === null
+        ? 'false'
+        : String(this.args.model);
     }
   };
-}
-
-function not(val: any) {
-  return !val;
-}
-
-interface Signature {
-  element: HTMLInputElement;
-  Args: {
-    Positional: [model: boolean | null, inputType: boolean];
-  };
-}
-
-class RadioInitializer extends Modifier<Signature> {
-  modify(
-    element: HTMLInputElement,
-    [model, inputType]: Signature['Args']['Positional'],
-  ) {
-    element.checked = model === inputType;
-  }
 }
