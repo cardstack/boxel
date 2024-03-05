@@ -49,18 +49,20 @@ import {
 import type { ComponentLike } from '@glint/template';
 
 export { primitive, isField, type BoxComponent };
-export const serialize = Symbol('cardstack-serialize');
-export const deserialize = Symbol('cardstack-deserialize');
-export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
-export const fieldDecorator = Symbol('cardstack-field-decorator');
-export const fieldType = Symbol('cardstack-field-type');
-export const queryableValue = Symbol('cardstack-queryable-value');
-export const relativeTo = Symbol('cardstack-relative-to');
-export const realmInfo = Symbol('cardstack-realm-info');
-export const realmURL = Symbol('cardstack-realm-url');
+
+// symbols are here so that we don't clash with the namespace of the card (custom user fields)
+export const serialize = Symbol.for('cardstack-serialize');
+export const deserialize = Symbol.for('cardstack-deserialize');
+export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
+export const fieldDecorator = Symbol.for('cardstack-field-decorator');
+export const fieldType = Symbol.for('cardstack-field-type');
+export const queryableValue = Symbol.for('cardstack-queryable-value');
+export const relativeTo = Symbol.for('cardstack-relative-to');
+export const realmInfo = Symbol.for('cardstack-realm-info');
+export const realmURL = Symbol.for('cardstack-realm-url');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
-const isSavedInstance = Symbol('cardstack-is-saved-instance');
+const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
 
 export type BaseInstanceType<T extends BaseDefConstructor> = T extends {
   [primitive]: infer P;

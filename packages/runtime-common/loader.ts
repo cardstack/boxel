@@ -622,6 +622,19 @@ export class Loader {
       });
       throw exception;
     }
+
+    /*
+
+    import stuff from "stuff";
+    export default function() {};
+
+    // trnasforms to
+
+    define(moduleIdentifier, ["stuff", "exports"], function(){})
+
+    */
+
+    // if we have a shim here, we already evaluated and this can be skipped
     src = transformSync(src, {
       plugins: [
         [
@@ -673,7 +686,7 @@ export class Loader {
 
     let registeredModule: RegisteredModule = {
       state: 'registered',
-      dependencyList: dependencyList!,
+      dependencyList: dependencyList!, // it's gonna be empty - [] - we can skip to "evaluated" state immediately
       implementation: implementation!,
     };
 
@@ -773,7 +786,11 @@ export class Loader {
     if (!response.ok) {
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
       throw error;
-    }
+    } // add a case for special response (Symbol.for)
+    // if (response[Symbol.for('boxel-shimmed-modeul')]) {
+
+    // when a special response is received, we can treat the module as evaluated (directly from fetching to evaluated state)
+
     return await response.text();
   }
 }
