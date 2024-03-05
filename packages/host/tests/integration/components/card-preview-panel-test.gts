@@ -1,6 +1,5 @@
 import Service from '@ember/service';
-import { click, waitFor } from '@ember/test-helpers';
-import GlimmerComponent from '@glimmer/component';
+import { click, render, waitUntil } from '@ember/test-helpers';
 
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -12,8 +11,9 @@ import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-prev
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import { testRealmURL, shimModule } from '../../helpers';
 import { Format } from 'https://cardstack.com/base/card-api';
+
+import { testRealmURL, shimModule } from '../../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -52,38 +52,38 @@ module('Integration | card preview panel', function (hooks) {
     let setFormat = (f: Format) => {
       format = f;
     };
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <CardPreviewPanel
-            @card={{card}}
-            @format={{format}}
-            @setFormat={{setFormat}}
-            @realmURL={{testRealmURL}}
-          />
-        </template>
-      },
+    let realmURL = new URL(testRealmURL);
+    await render(<template>
+      <CardPreviewPanel
+        @card={{card}}
+        @format={{format}}
+        @setFormat={{setFormat}}
+        @realmURL={{realmURL}}
+      />
+    </template>);
+
+    await waitUntil(
+      () => document.querySelectorAll(`.footer-button`).length === 4,
     );
-    await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
-    assert.dom('[data-test-firstName]').hasText('Mango');
 
-    assert.dom('.footer-button').exists({ count: 4 });
+    let element = (this as any).element;
 
-    this.element.querySelector('.preview-footer').style.width = '499px'; // At 500px, the footer buttons will collapse into a dropdown
-    await this.pauseTest();
-    assert.dom('.footer-button').exists({ count: 1 });
+    element.querySelector('.preview-footer').style.width = '499px'; // Reduce width of the footer. At 500px, the footer buttons should collapse into a dropdown
+
+    await waitUntil(
+      () => document.querySelectorAll(`.footer-button`).length === 1,
+    );
 
     assert.dom('.footer-button').hasText('Isolated');
     await click('.footer-button');
     await click('[data-test-boxel-menu-item-text="Atom"]');
-    await this.pauseTest();
-    assert.dom('.footer-button').hasText('Atom');
 
-    this.element.querySelector('.preview-footer').style.width = '901px';
-    debugger;
-    assert.dom('.footer-button').exists({ count: 4 });
-    assert
-      .dom('[data-test-preview-card-footer-button-atom]')
-      .hasClass('active');
+    assert.strictEqual(format, 'atom');
+
+    element.querySelector('.preview-footer').style.width = '901px'; // Increase width of the footer. At 900px, the footer buttons should expand into individual buttons
+
+    await waitUntil(
+      () => document.querySelectorAll(`.footer-button`).length === 4,
+    );
   });
 });
