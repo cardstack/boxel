@@ -107,7 +107,6 @@ export default class FileTree extends Component<Signature> {
 
         display: grid;
         grid-template-columns: auto 1fr auto;
-        justify-content: center;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         font: 700 var(--boxel-font-sm);
