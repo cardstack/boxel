@@ -30,20 +30,18 @@ export default class FileTree extends Component<Signature> {
     <div class='realm-info'>
       <RealmInfoProvider @realmURL={{@realmURL}}>
         <:ready as |realmInfo|>
-          <section class='icon-and-title'>
-            <RealmIcon
-              @realmIconURL={{realmInfo.iconURL}}
-              @realmName={{realmInfo.name}}
-              class='icon'
-            />
-            {{#let (concat 'In ' realmInfo.name) as |realmTitle|}}
-              <span
-                class='realm-title'
-                data-test-realm-name={{realmInfo.name}}
-                title={{realmTitle}}
-              >{{realmTitle}}</span>
-            {{/let}}
-          </section>
+          <RealmIcon
+            @realmIconURL={{realmInfo.iconURL}}
+            @realmName={{realmInfo.name}}
+            class='icon'
+          />
+          {{#let (concat 'In ' realmInfo.name) as |realmTitle|}}
+            <span
+              class='realm-title'
+              data-test-realm-name={{realmInfo.name}}
+              title={{realmTitle}}
+            >{{realmTitle}}</span>
+          {{/let}}
           {{#if this.canWrite}}
             <Tooltip @placement='top' class='editability-icon'>
               <:trigger>
@@ -107,17 +105,12 @@ export default class FileTree extends Component<Signature> {
         box-shadow: var(--boxel-box-shadow);
         z-index: 1;
 
-        display: flex;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        justify-content: center;
         align-items: center;
-        justify-content: space-between;
         gap: var(--boxel-sp-xxxs);
         font: 700 var(--boxel-font-sm);
-      }
-
-      .icon-and-title {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
       }
 
       .realm-info img {
