@@ -1,4 +1,9 @@
-import { IRoomEvent } from 'matrix-js-sdk';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import type {
+  MatrixEvent as DiscreteMatrixEvent,
+  CardFragmentContent,
+} from 'https://cardstack.com/base/room';
+import { type IRoomEvent } from 'matrix-js-sdk';
 
 const MODIFY_SYSTEM_MESSAGE =
   '\
@@ -40,25 +45,56 @@ export function constructHistory(history: IRoomEvent[]) {
    * would see it - with only the latest event for each
    * message.
    */
-  const latestEventsMap = new Map<string, IRoomEvent>();
-  for (let event of history) {
-    let content = event.content;
-    if (content.data) {
-      content.data = JSON.parse(content.data);
+  const fragments = new Map<string, CardFragmentContent>(); // eventId => fragment
+  const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
+  for (let rawEvent of history) {
+    if (rawEvent.content.data) {
+      rawEvent.content.data = JSON.parse(rawEvent.content.data);
     }
-    if (event.type == 'm.room.message') {
-      let eventId = event.event_id!;
-      if (content['m.relates_to']?.rel_type === 'm.replace') {
-        eventId = content['m.relates_to']!.event_id!;
-        event.event_id = eventId;
-      }
-      const existingEvent = latestEventsMap.get(eventId);
+    let event = { ...rawEvent } as DiscreteMatrixEvent;
+    if (event.type !== 'm.room.message') {
+      continue;
+    }
+    let eventId = event.event_id!;
+    if (event.content.msgtype === 'org.boxel.cardFragment') {
+      fragments.set(eventId, event.content);
+      continue;
+    } else if (event.content.msgtype === 'org.boxel.message') {
       if (
-        !existingEvent ||
-        existingEvent.origin_server_ts < event.origin_server_ts
+        event.content.data.attachedCardsEventIds &&
+        event.content.data.attachedCardsEventIds.length > 0
       ) {
-        latestEventsMap.set(eventId, event);
+        event.content.data.attachedCards =
+          event.content.data.attachedCardsEventIds!.map((id) =>
+            serializedCardFromFragments(id, fragments),
+          );
       }
+      if (
+        event.content.data.context.openCardsEventIds &&
+        event.content.data.context.openCardsEventIds.length > 0
+      ) {
+        event.content.data.context.openCards =
+          event.content.data.context.openCardsEventIds.map((id) =>
+            serializedCardFromFragments(id, fragments),
+          );
+      }
+    }
+
+    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+      eventId = event.content['m.relates_to']!.event_id!;
+      event.event_id = eventId;
+    }
+    const existingEvent = latestEventsMap.get(eventId);
+    if (
+      !existingEvent ||
+      // we check the timestamps of the events because the existing event may
+      // itself be an already replaced event. The idea is that you can perform
+      // multiple replacements on an event. In order to prevent backing out a
+      // subsequent replacement we also assert that the replacement timestamp is
+      // after the event that it is replacing
+      existingEvent.origin_server_ts < event.origin_server_ts
+    ) {
+      latestEventsMap.set(eventId, event);
     }
   }
   let latestEvents = Array.from(latestEventsMap.values());
@@ -66,7 +102,37 @@ export function constructHistory(history: IRoomEvent[]) {
   return latestEvents;
 }
 
-interface OpenAIPromptMessage {
+function serializedCardFromFragments(
+  eventId: string,
+  fragments: Map<string, CardFragmentContent>,
+): LooseSingleCardDocument {
+  let fragment = fragments.get(eventId);
+  if (!fragment) {
+    throw new Error(
+      `No card fragment found in fragments cache for event id ${eventId}`,
+    );
+  }
+  if (fragment.data.totalParts === 1) {
+    return JSON.parse(fragment.data.cardFragment) as LooseSingleCardDocument;
+  }
+
+  let cardFragments = [
+    fragment,
+    ...[...fragments.values()]
+      .filter((f) => f.data.firstFragment && f.data.firstFragment === eventId)
+      .sort((a, b) => (a.data.index = b.data.index)),
+  ];
+  if (cardFragments.length !== fragment.data.totalParts) {
+    throw new Error(
+      `Expected to find ${fragment.data.totalParts} fragments for fragment of event id ${eventId} but found ${cardFragments.length} fragments`,
+    );
+  }
+  return JSON.parse(
+    cardFragments.map((f) => f.data.cardFragment).join(''),
+  ) as LooseSingleCardDocument;
+}
+
+export interface OpenAIPromptMessage {
   /**
    * The contents of the message. `content` is required for all messages, and may be
    * null for assistant messages with function calls.
@@ -79,20 +145,34 @@ interface OpenAIPromptMessage {
   role: 'system' | 'user' | 'assistant';
 }
 
-export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
+export function getRelevantCards(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+) {
   let relevantCards: Map<string, any> = new Map();
   for (let event of history) {
+    if (event.type !== 'm.room.message') {
+      continue;
+    }
     if (event.sender !== aiBotUserId) {
-      let content = event.content;
+      let { content } = event;
       if (content.msgtype === 'org.boxel.message') {
         const context = content.data?.context;
         const attachedCards = content.data?.attachedCards || [];
         const openCards = context?.openCards || [];
         for (let card of attachedCards) {
-          relevantCards.set(card.data.id, card.data);
+          if (card.data.id) {
+            relevantCards.set(card.data.id, card.data);
+          } else {
+            throw new Error(`bug: don't know how to handle card without ID`);
+          }
         }
         for (let card of openCards) {
-          relevantCards.set(card.data.id, card.data);
+          if (card.data.id) {
+            relevantCards.set(card.data.id, card.data);
+          } else {
+            throw new Error(`bug: don't know how to handle card without ID`);
+          }
         }
       }
     }
@@ -105,7 +185,10 @@ export function getRelevantCards(history: IRoomEvent[], aiBotUserId: string) {
   return sortedCards;
 }
 
-export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
+export function getFunctions(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+) {
   // Just get the users messages
   const userMessages = history.filter((event) => event.sender !== aiBotUserId);
   // Get the last message
@@ -114,12 +197,12 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
     return [];
   }
   const lastMessage = userMessages[userMessages.length - 1];
-  const content = lastMessage.content;
   if (
-    content.msgtype === 'org.boxel.message' &&
-    content.data?.context?.functions
+    lastMessage.type === 'm.room.message' &&
+    lastMessage.content.msgtype === 'org.boxel.message' &&
+    lastMessage.content.data?.context?.functions
   ) {
-    return content.data.context.functions;
+    return lastMessage.content.data.context.functions;
   } else {
     // There are no open cards in this message so we shouldn't use any functions.
     return [];
@@ -127,7 +210,7 @@ export function getFunctions(history: IRoomEvent[], aiBotUserId: string) {
 }
 
 export function shouldSetRoomTitle(
-  rawEventLog: IRoomEvent[],
+  rawEventLog: DiscreteMatrixEvent[],
   aiBotUserId: string,
   additionalCommands = 0, // These are any that have been sent since the event log was retrieved
 ) {
@@ -140,7 +223,9 @@ export function shouldSetRoomTitle(
   // If there has been a command sent,
   // we should be at a stage where we can set the room title
   let commandsSent = rawEventLog.filter(
-    (event) => event.content.msgtype === 'org.boxel.command',
+    (event) =>
+      event.type === 'm.room.message' &&
+      event.content.msgtype === 'org.boxel.command',
   );
 
   if (commandsSent.length + additionalCommands > 0) {
@@ -159,7 +244,7 @@ export function shouldSetRoomTitle(
 }
 
 export function getStartOfConversation(
-  history: IRoomEvent[],
+  history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   maxLength = 2000,
 ) {
@@ -170,6 +255,9 @@ export function getStartOfConversation(
   let messages: OpenAIPromptMessage[] = [];
   let totalLength = 0;
   for (let event of history) {
+    if (event.type !== 'm.room.message') {
+      continue;
+    }
     let body = event.content.body;
     if (body && totalLength + body.length <= maxLength) {
       if (event.sender === aiBotUserId) {
@@ -190,7 +278,7 @@ export function getStartOfConversation(
 }
 
 export function getModifyPrompt(
-  history: IRoomEvent[],
+  history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   functions: any[] = [],
 ) {
@@ -203,6 +291,9 @@ export function getModifyPrompt(
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
   for (let event of history) {
+    if (event.type !== 'm.room.message') {
+      continue;
+    }
     let body = event.content.body;
     if (body) {
       if (event.sender === aiBotUserId) {

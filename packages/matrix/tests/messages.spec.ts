@@ -163,6 +163,30 @@ test.describe('Room messages', () => {
     ).toContainText('my');
   });
 
+  test('can add a card that is over 65K to a message (i.e. split card into multiple matrix events)', async ({
+    page,
+  }) => {
+    const testCard = `${testHost}/mango-puppy`; // this is a 153KB card
+    await login(page, 'user1', 'pass');
+    await page.locator(`[data-test-room-settled]`).waitFor();
+    await page.locator('[data-test-choose-card-btn]').click();
+    await page.locator(`[data-test-select="${testCard}"]`).click();
+    await page.locator('[data-test-card-catalog-go-button]').click();
+    await expect(
+      page.locator(`[data-test-selected-card="${testCard}"]`),
+    ).toContainText('Mango the Puppy');
+
+    await page.locator('[data-test-message-field]').fill('This is a big card');
+    await page.locator('[data-test-send-message-btn]').click();
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'This is a big card',
+        cards: [{ id: testCard, title: 'Mango the Puppy' }],
+      },
+    ]);
+  });
+
   test('can send only a card as a message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');

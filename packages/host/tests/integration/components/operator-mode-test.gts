@@ -859,27 +859,42 @@ module('Integration | operator-mode', function (hooks) {
         type: 'm.room.message',
         origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
         content: {
+          body: '',
+          formatted_body: '',
+          msgtype: 'org.boxel.cardFragment',
+          data: JSON.stringify({
+            index: 0,
+            totalParts: 1,
+            cardFragment: JSON.stringify({
+              data: {
+                id: 'http://this-is-not-a-real-card.com',
+                type: 'card',
+                attributes: {
+                  firstName: 'Boom',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://not-a-real-card.com',
+                    name: 'Boom',
+                  },
+                },
+              },
+            }),
+          }),
+        },
+      });
+      await addRoomEvent(matrixService, {
+        event_id: 'event2',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
+        content: {
           body: 'card with error',
           formatted_body: 'card with error',
           msgtype: 'org.boxel.message',
           data: JSON.stringify({
-            attachedCards: [
-              {
-                data: {
-                  id: 'http://this-is-not-a-real-card.com',
-                  type: 'card',
-                  attributes: {
-                    firstName: 'Boom',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: 'http://not-a-real-card.com',
-                      name: 'Boom',
-                    },
-                  },
-                },
-              },
-            ],
+            attachedCardsEventIds: ['event1'],
           }),
         },
       });
