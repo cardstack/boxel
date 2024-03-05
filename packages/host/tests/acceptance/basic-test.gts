@@ -26,6 +26,11 @@ module('Acceptance | basic tests', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
+    // setupVirtualNetwork((network, loader) => {
+    //   let testRealm = setupAcceptanceTestRealm(network, ...);
+
+    // })
+
     window.localStorage.removeItem('recent-files');
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -76,7 +81,6 @@ module('Acceptance | basic tests', function (hooks) {
     }
 
     await setupAcceptanceTestRealm({
-      loader,
       contents: {
         'index.gts': { Index },
         'person.gts': { Person },
