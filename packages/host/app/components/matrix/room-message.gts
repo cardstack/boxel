@@ -5,7 +5,11 @@ import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { marked } from 'marked';
+
 import { eq } from '@cardstack/boxel-ui/helpers';
+
+import { sanitizeHtml } from '@cardstack/runtime-common';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -27,7 +31,7 @@ interface Signature {
 export default class Room extends Component<Signature> {
   <template>
     <AiAssistantMessage
-      @formattedMessage={{htmlSafe @message.formattedMessage}}
+      @formattedMessage={{htmlSafe this.formattedMessage}}
       @datetime={{@message.created}}
       @isFromAssistant={{eq @message.author.userId aiBotUserId}}
       @profileAvatar={{component
@@ -72,6 +76,10 @@ export default class Room extends Component<Signature> {
   </template>
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+
+  private get formattedMessage() {
+    return sanitizeHtml(marked(this.args.message.formattedMessage));
+  }
 
   private get resources() {
     let cards: CardDef[] = [];

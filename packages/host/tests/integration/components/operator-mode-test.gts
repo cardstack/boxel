@@ -1023,6 +1023,44 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-message-field]');
       assert.dom('[data-test-past-sessions]').doesNotExist();
     });
+
+    test('it can render a markdown message from ai bot', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
+          msgtype: 'm.text',
+          formatted_body:
+            "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: 1709652566421,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+      await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+      assert.dom('[data-test-message-idx="0"] h1').containsText('Beagles');
+      assert.dom('[data-test-message-idx="0"]').doesNotContainText('# Beagles');
+      assert.dom('[data-test-message-idx="0"] p').exists({ count: 2 });
+      assert.dom('[data-test-message-idx="0"] em').hasText('love');
+      assert.dom('[data-test-message-idx="0"]').doesNotContainText('_love_');
+    });
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
