@@ -205,7 +205,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('it card strip out base64 image fields from cards sent in messages', async ({
+  test('it can strip out base64 image fields from cards sent in messages', async ({
     page,
   }) => {
     const testCard = `${testHost}/mango-puppy`; // this is a 153KB card
