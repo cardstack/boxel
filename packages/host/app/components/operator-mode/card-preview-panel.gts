@@ -337,9 +337,9 @@ class ResizeModifier extends Modifier<ResizeSignature> {
     { setFooterWidthPx }: ResizeSignature['Args']['Named'],
   ) {
     let resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         setFooterWidthPx(element.clientWidth);
-      });
+      }, 1);
     });
 
     resizeObserver.observe(element);
