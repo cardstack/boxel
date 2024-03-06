@@ -161,6 +161,7 @@ async function sendError(
     // We've had a problem sending the error message back to the user
     // Log and continue
     log.error(`Error sending error message back to user: ${e}`);
+    Sentry.captureException(e);
   }
 }
 
@@ -200,6 +201,7 @@ async function setTitle(
     log.info('Setting room title to', title);
     return await client.setRoomName(room.roomId, title);
   } catch (error) {
+    Sentry.captureException(error);
     return await sendError(client, room, error, undefined);
   }
 }
@@ -241,6 +243,7 @@ async function handleDebugCommands(
         );
       }
     } catch (error) {
+      Sentry.captureException(error);
       return await sendMessage(
         client,
         room,
@@ -368,6 +371,7 @@ Common issues are:
           try {
             args = JSON.parse(functionCall.arguments);
           } catch (error) {
+            Sentry.captureException(error);
             return await sendError(
               client,
               room,
@@ -387,6 +391,7 @@ Common issues are:
           return;
         })
         .on('error', async (error: OpenAIError) => {
+          Sentry.captureException(error);
           return await sendError(client, room, error, initialMessage.event_id);
         });
 
