@@ -1,10 +1,5 @@
 import { expect, test } from '@playwright/test';
-import {
-  registerUser,
-  loginUser,
-  getAllRoomMessages,
-  getJoinedRooms,
-} from '../docker/synapse';
+import { registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -19,6 +14,7 @@ import {
   isInRoom,
   registerRealmUsers,
   selectCardFromCatalog,
+  getRoomEvents,
 } from '../helpers';
 import {
   synapseStart,
@@ -192,18 +188,7 @@ test.describe('Room messages', () => {
     ]);
 
     // peek into the matrix events and confirm there are multiple card fragments
-    let { accessToken } = await loginUser('user1', 'pass');
-    let rooms = await getJoinedRooms(accessToken);
-    let roomsWithMessages = await Promise.all(
-      rooms.map((r) => getAllRoomMessages(r, accessToken)),
-    );
-    let messages = roomsWithMessages.find((messages) => {
-      let message = messages[messages.length - 2];
-      return (
-        message.type === 'm.room.message' &&
-        message.content?.msgtype === 'org.boxel.cardFragment'
-      );
-    })!;
+    let messages = await getRoomEvents();
     let cardFragments = messages.filter(
       (message) =>
         message.type === 'm.room.message' &&
@@ -245,18 +230,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let { accessToken } = await loginUser('user1', 'pass');
-    let rooms = await getJoinedRooms(accessToken);
-    let roomsWithMessages = await Promise.all(
-      rooms.map((r) => getAllRoomMessages(r, accessToken)),
-    );
-    let messages = roomsWithMessages.find((messages) => {
-      let message = messages[messages.length - 2];
-      return (
-        message.type === 'm.room.message' &&
-        message.content?.msgtype === 'org.boxel.cardFragment'
-      );
-    })!;
+    let messages = await getRoomEvents();
     let message = messages[messages.length - 2];
     let messageData = JSON.parse(message.content.data);
     let serializeCard = JSON.parse(messageData.cardFragment);

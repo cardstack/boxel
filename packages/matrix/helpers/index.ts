@@ -1,5 +1,10 @@
 import { expect, type Page } from '@playwright/test';
-import { type SynapseInstance } from '../docker/synapse';
+import {
+  loginUser,
+  getAllRoomEvents,
+  getJoinedRooms,
+  type SynapseInstance,
+} from '../docker/synapse';
 import { registerUser } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
@@ -470,4 +475,21 @@ export async function assertLoggedOut(page: Page) {
     page.locator('[data-test-field-value="displayName"]'),
     'user profile - display name is not displayed',
   ).toHaveCount(0);
+}
+
+export async function getRoomEvents(username = 'user1', password = 'pass') {
+  let { accessToken } = await loginUser(username, password);
+  let rooms = await getJoinedRooms(accessToken);
+  let roomsWithEvents = await Promise.all(
+    rooms.map((r) => getAllRoomEvents(r, accessToken)),
+  );
+  // there will generally be 2 rooms, one is the DM room we do for
+  // authentication, the other is the actual chat (with or.boxel.message events)
+  return roomsWithEvents.find((messages) => {
+    return messages.find(
+      (message) =>
+        message.type === 'm.room.message' &&
+        message.content?.msgtype === 'org.boxel.message',
+    );
+  })!;
 }
