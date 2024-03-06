@@ -23,7 +23,7 @@
 
 `packages/boxel-motion-test-app` is the test suite for boxel-motion
 
-`packages/boxel-motion-test-app` is the demo app for boxel-motion
+`packages/boxel-motion/test-app` is the demo app for boxel-motion
 
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
