@@ -21,6 +21,14 @@ import {
 } from './helpers';
 import { OpenAIError } from 'openai/error';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+import * as Sentry from '@sentry/node';
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT || 'development',
+  });
+}
 
 let log = logger('ai-bot');
 
