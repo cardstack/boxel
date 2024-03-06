@@ -35,6 +35,7 @@ import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
+import { getRealmSession } from '@cardstack/host/resources/realm-session';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -349,11 +350,12 @@ export default class MatrixService extends Service {
     let functions = [];
     let serializedOpenCards: LooseSingleCardDocument[] = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
-    let currentSubMode = context?.submode;
     if (context?.submode === 'interact') {
+      let openCards = context.openCards;
+      let topMostCard = openCards[0];
       // Serialize the top of all cards on all stacks
       serializedOpenCards = await Promise.all(
-        context!.openCards.map(async (card) => {
+        openCards.map(async (card) => {
           let { Base64ImageField } = await loaderFor(card).import<{
             Base64ImageField: typeof Base64ImageFieldType;
           }>(`${baseRealm.url}base64-image`);
@@ -366,29 +368,33 @@ export default class MatrixService extends Service {
 
       // Limiting support to modifying the top of just one stack
       let patchSpec = generateCardPatchCallSpecification(
-        context!.openCards[0].constructor as typeof CardDef,
+        topMostCard.constructor as typeof CardDef,
         this.cardAPI,
         mappings,
       );
 
-      functions.push({
-        name: 'patchCard',
-        description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-        parameters: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
+      let realmSession = getRealmSession(this, { card: () => topMostCard });
+      await realmSession.loaded;
+      if (realmSession.canWrite) {
+        functions.push({
+          name: 'patchCard',
+          description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+          parameters: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+              },
+              card_id: {
+                type: 'string',
+                const: topMostCard.id, // Force the valid card_id to be the id of the card being patched
+              },
+              attributes: patchSpec,
             },
-            card_id: {
-              type: 'string',
-              const: context!.openCards[0].id, // Force the valid card_id to be the id of the card being patched
-            },
-            attributes: patchSpec,
+            required: ['card_id', 'attributes', 'description'],
           },
-          required: ['card_id', 'attributes', 'description'],
-        },
-      });
+        });
+      }
     }
 
     if (attachedCards?.length) {
@@ -427,7 +433,7 @@ export default class MatrixService extends Service {
         context: {
           openCardsEventIds,
           functions: functions,
-          submode: currentSubMode,
+          submode: context?.submode,
         },
       },
     } as CardMessageContent);

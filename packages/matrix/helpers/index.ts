@@ -15,6 +15,7 @@ interface ProfileAssertions {
   email?: string;
 }
 interface LoginOptions {
+  url?: string;
   expectFailure?: true;
 }
 
@@ -49,8 +50,14 @@ export async function openAiAssistant(page: Page) {
   ); // Opening the AI assistant either opens last room or creates one - wait for it to settle
 }
 
-export async function openRoot(page: Page) {
-  await page.goto(testHost);
+export async function openRoot(page: Page, url = testHost) {
+  await page.goto(url);
+  let isOperatorMode = !!(await page.evaluate(() =>
+    document.querySelector('dialog.operator-mode'),
+  ));
+  if (!isOperatorMode) {
+    await page.keyboard.press('Control+,');
+  }
 }
 
 export async function clearLocalStorage(page: Page) {
@@ -211,7 +218,7 @@ export async function login(
   password: string,
   opts?: LoginOptions,
 ) {
-  await openRoot(page);
+  await openRoot(page, opts?.url);
   await toggleOperatorMode(page);
   await page.waitForFunction(() =>
     document.querySelector('[data-test-username-field]'),
@@ -477,19 +484,26 @@ export async function assertLoggedOut(page: Page) {
   ).toHaveCount(0);
 }
 
-export async function getRoomEvents(username = 'user1', password = 'pass') {
+export async function getRoomEvents(
+  username = 'user1',
+  password = 'pass',
+  roomId?: string,
+) {
   let { accessToken } = await loginUser(username, password);
   let rooms = await getJoinedRooms(accessToken);
-  let roomsWithEvents = await Promise.all(
-    rooms.map((r) => getAllRoomEvents(r, accessToken)),
-  );
-  // there will generally be 2 rooms, one is the DM room we do for
-  // authentication, the other is the actual chat (with or.boxel.message events)
-  return roomsWithEvents.find((messages) => {
-    return messages.find(
-      (message) =>
-        message.type === 'm.room.message' &&
-        message.content?.msgtype === 'org.boxel.message',
+  if (!roomId) {
+    let roomsWithEvents = await Promise.all(
+      rooms.map((r) => getAllRoomEvents(r, accessToken)),
     );
-  })!;
+    // there will generally be 2 rooms, one is the DM room we do for
+    // authentication, the other is the actual chat (with org.boxel.message events)
+    return roomsWithEvents.find((messages) => {
+      return messages.find(
+        (message) =>
+          message.type === 'm.room.message' &&
+          message.content?.msgtype === 'org.boxel.message',
+      );
+    })!;
+  }
+  return await getAllRoomEvents(roomId, accessToken);
 }

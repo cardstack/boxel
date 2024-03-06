@@ -239,6 +239,110 @@ test.describe('Room messages', () => {
     expect(serializeCard.data.attributes.picture).toBeUndefined();
   });
 
+  test(`it does include patch function in message event when top-most card is writable and context is shared`, async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomName(page);
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
+      )
+      .click();
+    await expect(
+      page.locator(`[data-test-stack-card="${testHost}/mango"]`),
+    ).toHaveCount(1);
+    await page.locator('[data-test-share-context]').click();
+    await sendMessage(page, room1, 'please change this card');
+    let message = (await getRoomEvents()).pop()!;
+    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    expect(boxelMessageData.context.functions).toMatchObject([
+      {
+        name: 'patchCard',
+        description:
+          'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making',
+        parameters: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+            },
+            card_id: {
+              type: 'string',
+              const: `${testHost}/mango`,
+            },
+            attributes: {
+              type: 'object',
+              properties: {
+                firstName: {
+                  type: 'string',
+                },
+                lastName: {
+                  type: 'string',
+                },
+                email: {
+                  type: 'string',
+                },
+                posts: {
+                  type: 'number',
+                },
+                thumbnailURL: {
+                  type: 'string',
+                },
+              },
+            },
+          },
+          required: ['card_id', 'attributes', 'description'],
+        },
+      },
+    ]);
+  });
+
+  test(`it does not include patch function in message event when context is not shared`, async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomName(page);
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
+      )
+      .click();
+    await expect(
+      page.locator(`[data-test-stack-card="${testHost}/mango"]`),
+    ).toHaveCount(1);
+    await sendMessage(page, room1, 'please change this card');
+    let message = (await getRoomEvents()).pop()!;
+    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    expect(boxelMessageData.context.functions).toMatchObject([]);
+  });
+
+  test(`it does not include patch function in message event when top-most card is read-only`, async ({
+    page,
+  }) => {
+    // the base realm is a read-only realm
+    await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
+    let room1 = await getRoomName(page);
+    await page
+      .locator(
+        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
+      )
+      .click();
+    await expect(
+      page.locator(
+        '[data-test-stack-card="https://cardstack.com/base/fields/boolean-field"]',
+      ),
+    ).toHaveCount(1);
+    await page.locator('[data-test-share-context]').click();
+    await sendMessage(page, room1, 'please change this card');
+    let message = (await getRoomEvents()).pop()!;
+    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    expect(boxelMessageData.context.functions).toMatchObject([]);
+  });
+
   test('can send only a card as a message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
