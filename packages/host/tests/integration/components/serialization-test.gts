@@ -34,6 +34,7 @@ let number: typeof import('https://cardstack.com/base/number');
 let string: typeof import('https://cardstack.com/base/string');
 let bigInteger: typeof import('https://cardstack.com/base/big-integer');
 let ethereumAddress: typeof import('https://cardstack.com/base/ethereum-address');
+let base64Image: typeof import('https://cardstack.com/base/base64-image');
 
 let loader: Loader;
 
@@ -60,6 +61,7 @@ module('Integration | serialization', function (hooks) {
     codeRef = await loader.import(`${baseRealm.url}code-ref`);
     bigInteger = await loader.import(`${baseRealm.url}big-integer`);
     ethereumAddress = await loader.import(`${baseRealm.url}ethereum-address`);
+    base64Image = await loader.import(`${baseRealm.url}base64-image`);
   });
 
   test('can deserialize field', async function (assert) {
@@ -236,6 +238,43 @@ module('Integration | serialization', function (hooks) {
         },
       },
     });
+  });
+
+  test('can omit specified field type from serialized data', async function (assert) {
+    let { field, contains, CardDef, serializeCard } = cardApi;
+    let { default: StringField } = string;
+    let { Base64ImageField } = base64Image;
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field picture = contains(Base64ImageField);
+    }
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+
+    let mango = new Person({
+      firstName: 'Mango',
+      picture: new Base64ImageField({
+        model: 'data:image/png;base64,iVBORw0K',
+      }),
+    });
+
+    let normalSerialize = serializeCard(mango);
+    let serializedWithoutOmittedField = serializeCard(mango, {
+      omitFields: [Base64ImageField],
+    });
+
+    assert.notDeepEqual(
+      normalSerialize,
+      serializedWithoutOmittedField,
+      'picture field was omitted',
+    );
+
+    delete normalSerialize.data.attributes?.picture;
+
+    assert.deepEqual(
+      normalSerialize,
+      serializedWithoutOmittedField,
+      'picture field was omitted',
+    );
   });
 
   test('can update an instance from serialized data', async function (assert) {

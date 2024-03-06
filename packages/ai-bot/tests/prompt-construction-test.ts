@@ -1,6 +1,6 @@
 import { module, test, assert } from 'qunit';
 import { getFunctions, getModifyPrompt, getRelevantCards } from '../helpers';
-import { IRoomEvent } from 'matrix-js-sdk';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 
 function getPatchFunction(cardId: string, properties: any) {
   return {
@@ -28,15 +28,23 @@ function getPatchFunction(cardId: string, properties: any) {
 
 module('getModifyPrompt', () => {
   test('should generate a prompt from the user', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
+          msgtype: 'm.text',
+          format: 'org.matrix.custom.html',
           body: 'Hey',
+          formatted_body: 'Hey',
         },
         sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
       },
     ];
 
@@ -50,15 +58,21 @@ module('getModifyPrompt', () => {
   });
 
   test('should generate a more structured response if the user uploads a card', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'Hey',
+          formatted_body: 'Hey',
           data: {
+            context: {
+              functions: [],
+              submode: undefined,
+            },
             attachedCards: [
               {
                 data: {
@@ -80,6 +94,11 @@ module('getModifyPrompt', () => {
           },
         },
         sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
       },
     ];
 
@@ -90,23 +109,41 @@ module('getModifyPrompt', () => {
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'user');
     assert.true(result[1].content?.includes('Hey'));
-    assert.true(
-      result[0].content?.includes(
-        JSON.stringify(history[0].content.data.attachedCards[0].data),
-      ),
-    );
+    if (
+      history[0].type === 'm.room.message' &&
+      history[0].content.msgtype === 'org.boxel.message'
+    ) {
+      assert.true(
+        result[0].content?.includes(
+          JSON.stringify(history[0].content.data.attachedCards![0].data),
+        ),
+      );
+    } else {
+      assert.true(
+        false,
+        'expected "m.room.message" event with a "org.boxel.message" msgtype',
+      );
+    }
   });
 
   test('should raise an error if we do not pass in a full id', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
+          msgtype: 'm.text',
+          format: 'org.matrix.custom.html',
           body: 'Hey',
+          formatted_body: 'Hey',
         },
         sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
       },
     ];
 
@@ -117,12 +154,13 @@ module('getModifyPrompt', () => {
   });
 
   test('Gets only the latest version of cards uploaded', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
@@ -156,23 +194,27 @@ module('getModifyPrompt', () => {
               },
             ],
             context: {
+              functions: [],
               submode: 'interact',
             },
           },
         },
+        room_id: 'room1',
         origin_server_ts: 1696813813166,
         unsigned: {
           age: 115498,
+          transaction_id: '1',
         },
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
       },
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'set the location to home',
+          formatted_body: 'set the location to home',
           data: {
             attachedCards: [
               {
@@ -204,69 +246,88 @@ module('getModifyPrompt', () => {
               },
             ],
             context: {
+              functions: [],
               submode: 'interact',
             },
           },
         },
+        room_id: 'room1',
         origin_server_ts: 1696813813167,
         unsigned: {
           age: 115498,
+          transaction_id: '2',
         },
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
       },
     ];
 
     const relevantCards = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 1);
-    assert.equal(
-      relevantCards[0],
-      history[1].content.data.attachedCards[0]['data'],
-    );
+    if (
+      history[1].type === 'm.room.message' &&
+      history[1].content.msgtype === 'org.boxel.message'
+    ) {
+      assert.equal(
+        relevantCards[0],
+        history[1].content.data.attachedCards![0]['data'],
+      );
+    } else {
+      assert.true(
+        false,
+        'expected "m.room.message" event with a "org.boxel.message" msgtype',
+      );
+    }
   });
 
   test('Safely manages cases with no cards', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
               openCardIds: [],
+              functions: [],
               submode: 'interact',
             },
           },
         },
+        room_id: 'room1',
         origin_server_ts: 1696813813166,
         unsigned: {
           age: 115498,
+          transaction_id: '1',
         },
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
       },
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'set the location to home',
+          formatted_body: 'set the location to home',
           data: {
             context: {
               openCardIds: [],
+              functions: [],
               submode: 'interact',
             },
           },
         },
+        room_id: 'room1',
         origin_server_ts: 1696813813167,
         unsigned: {
           age: 115498,
+          transaction_id: '2',
         },
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
       },
     ];
 
@@ -275,14 +336,16 @@ module('getModifyPrompt', () => {
   });
 
   test('Gets uploaded cards if no shared context', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'Hey',
+          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -302,9 +365,19 @@ module('getModifyPrompt', () => {
                 },
               },
             ],
+            context: {
+              openCards: [],
+              functions: [],
+              submode: 'interact',
+            },
           },
         },
         sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 115498,
+          transaction_id: '1',
+        },
       },
     ];
     const relevantCards = getRelevantCards(history, '@aibot:localhost');
@@ -312,14 +385,16 @@ module('getModifyPrompt', () => {
   });
 
   test('Gets multiple uploaded cards', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'Hey',
+          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -339,9 +414,19 @@ module('getModifyPrompt', () => {
                 },
               },
             ],
+            context: {
+              openCards: [],
+              functions: [],
+              submode: 'interact',
+            },
           },
         },
         sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 115498,
+          transaction_id: '1',
+        },
       },
       {
         type: 'm.room.message',
@@ -349,7 +434,9 @@ module('getModifyPrompt', () => {
         origin_server_ts: 1234567890,
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'Hey',
+          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -369,9 +456,19 @@ module('getModifyPrompt', () => {
                 },
               },
             ],
+            context: {
+              openCards: [],
+              functions: [],
+              submode: 'interact',
+            },
           },
         },
         sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 115498,
+          transaction_id: '2',
+        },
       },
     ];
     const relevantCards = getRelevantCards(history, '@aibot:localhost');
@@ -379,12 +476,13 @@ module('getModifyPrompt', () => {
   });
 
   test('If a user stops sharing their context keep it in the system prompt', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
@@ -420,15 +518,17 @@ module('getModifyPrompt', () => {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Friend/1'],
               submode: 'interact',
+              functions: [],
             },
           },
         },
+        room_id: 'room1',
         origin_server_ts: 1696813813166,
         unsigned: {
           age: 115498,
+          transaction_id: '1',
         },
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
       },
       {
         type: 'm.room.message',
@@ -459,6 +559,38 @@ module('getModifyPrompt', () => {
         sender: '@ian:localhost',
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
+          body: 'Just a regular message',
+          formatted_body: 'Just a regular message',
+          data: {
+            context: {
+              openCardIds: [],
+              functions: [],
+              submode: 'interact',
+            },
+          },
+        },
+        room_id: 'room1',
+        origin_server_ts: 1696813813167,
+        unsigned: {
+          age: 115498,
+          transaction_id: '2',
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+      },
+    ];
+    const functions = getFunctions(history, '@aibot:localhost');
+    assert.equal(functions.length, 0);
+  });
+
+  test('If a user stops sharing their context then ignore function calls', () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
@@ -473,25 +605,37 @@ module('getModifyPrompt', () => {
             },
           },
         },
+        room_id: 'room1',
         origin_server_ts: 1696813813166,
         unsigned: {
           age: 115498,
+          transaction_id: '1',
         },
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
       },
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
+          msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'Just a regular message',
+          formatted_body: 'Just a regular message',
+          data: {
+            context: {
+              openCardIds: [],
+              functions: [],
+              submode: 'interact',
+            },
+          },
         },
+        room_id: 'room1',
         origin_server_ts: 1696813813167,
         unsigned: {
           age: 115498,
+          transaction_id: '2',
         },
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
       },
     ];
     const functions = getFunctions(history, '@aibot:localhost');
@@ -499,12 +643,13 @@ module('getModifyPrompt', () => {
   });
 
   test("Don't break when there is an older format type with open cards", () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
@@ -547,12 +692,13 @@ module('getModifyPrompt', () => {
             },
           },
         },
+        room_id: 'room1',
         origin_server_ts: 1696813813166,
         unsigned: {
           age: 115498,
+          transaction_id: '1',
         },
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
       },
     ];
 
@@ -645,12 +791,13 @@ module('getModifyPrompt', () => {
   });
 
   test('Gets only the latest functions', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
@@ -665,19 +812,22 @@ module('getModifyPrompt', () => {
             },
           },
         },
+        room_id: 'room1',
         origin_server_ts: 1696813813166,
         unsigned: {
           age: 115498,
+          transaction_id: '1',
         },
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
       },
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
           msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
           body: 'set the location to home',
+          formatted_body: 'set the location to home',
           data: {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Meeting/2'],
@@ -690,12 +840,13 @@ module('getModifyPrompt', () => {
             },
           },
         },
+        room_id: 'room1',
         origin_server_ts: 1696813813167,
         unsigned: {
           age: 115498,
+          transaction_id: '2',
         },
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        age: 115498,
       },
     ];
 
