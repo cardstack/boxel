@@ -217,6 +217,8 @@ async function handleDebugCommands(
       room.roomId,
       eventBody.split('debug:title:set:')[1],
     );
+  } else if (eventBody.startsWith('debug:boom')) {
+    throw new Error('Boom');
   }
   // Use GPT to set the room title
   else if (eventBody.startsWith('debug:title:create')) {
