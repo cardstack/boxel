@@ -196,7 +196,7 @@ export default class Login extends Component<Signature> {
       throw e;
     }
     if (auth) {
-      this.router.refresh();
+      await this.router.refresh();
       await this.matrixService.start(auth);
     } else {
       throw new Error(

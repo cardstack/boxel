@@ -9,7 +9,7 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { Modal } from '@cardstack/boxel-ui/components';
 import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader, Query } from '@cardstack/runtime-common';
@@ -50,7 +50,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
 
-    this.matrixService.loadMatrix.perform();
     if (isTesting()) {
       (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
       registerDestructor(this, () => {
@@ -152,22 +151,15 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      {{#if this.matrixService.loadMatrix.isRunning}}
-        <div class='loading' data-test-initializing-operator-mode>
-          <LoadingIndicator @color='var(--boxel-light)' />
-          <span class='loading__message'>Initializing Operator Mode...</span>
-        </div>
+      {{#if (and this.matrixService.isLoggedIn this.isCodeMode)}}
+        <CodeSubmode
+          @saveSourceOnClose={{perform this.saveSource}}
+          @saveCardOnClose={{perform this.write}}
+        />
+      {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
+        <InteractSubmode @write={{perform this.write}} />
       {{else}}
-        {{#if (and this.matrixService.isLoggedIn this.isCodeMode)}}
-          <CodeSubmode
-            @saveSourceOnClose={{perform this.saveSource}}
-            @saveCardOnClose={{perform this.write}}
-          />
-        {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
-          <InteractSubmode @write={{perform this.write}} />
-        {{else}}
-          <Auth />
-        {{/if}}
+        <Auth />
       {{/if}}
     </Modal>
 

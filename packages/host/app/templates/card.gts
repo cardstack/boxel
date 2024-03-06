@@ -7,12 +7,16 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { ComponentLike } from '@glint/template';
-// @ts-expect-error no types
+
 import { restartableTask } from 'ember-concurrency';
+// @ts-expect-error no types
 import { keyResponder, onKey } from 'ember-keyboard';
 
+import { trackedFunction } from 'ember-resources/util/function';
 import RouteTemplate from 'ember-route-template';
 import stringify from 'safe-stable-stringify';
+
+import { and, bool } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -132,6 +136,8 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   }
 
   toggleOperatorModeTask = restartableTask(async () => {
+    // Users are not allowed to open guest mode
+    // if realm is not publicly readable
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
       new URL(ownRealmURL),
     );
@@ -167,9 +173,20 @@ class CardRouteComponent extends Component<CardRouteSignature> {
     this.args.controller.operatorModeEnabled = false;
   }
 
+  get isPublicReadableRealm() {
+    return this.fetchIsPublicReadableStatus.value ?? false;
+  }
+
+  private fetchIsPublicReadableStatus = trackedFunction(
+    this,
+    async () =>
+      await this.realmInfoService.isPublicReadable(new URL(ownRealmURL)),
+  );
+
   <template>
     <div class='card-isolated-component'>
-      {{#if @model}}
+      {{#if (and (bool @model) this.isPublicReadableRealm)}}
+        {{! @glint-ignore model should not be null}}
         <Preview @card={{@model}} @format='isolated' />
       {{/if}}
     </div>

@@ -2,7 +2,7 @@ import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import { all, task, timeout } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import { marked } from 'marked';
 import {
   type LoginResponse,
@@ -66,8 +66,6 @@ export type OperatorModeContext = {
   submode: Submode;
   openCards: CardDef[];
 };
-
-const { loginMessageTimeoutMs } = ENV;
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
@@ -656,19 +654,6 @@ export default class MatrixService extends Service {
       this.client.off(event, handler);
     }
   }
-
-  loadMatrix = task(async () => {
-    if (this._client) {
-      return;
-    }
-    await all([
-      await (async () => {
-        await this.ready;
-        await this.start();
-      })(),
-      timeout(loginMessageTimeoutMs),
-    ]);
-  });
 }
 
 function saveAuth(auth: LoginResponse) {

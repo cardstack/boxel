@@ -3,6 +3,7 @@ import type RouterService from '@ember/routing/router-service';
 import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
+import { all, task, timeout } from 'ember-concurrency';
 import stringify from 'safe-stable-stringify';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
@@ -19,7 +20,7 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type CardService from '../services/card-service';
 
-const { ownRealmURL } = ENV;
+const { ownRealmURL, loginMessageTimeoutMs } = ENV;
 
 export type Model = CardDef | null;
 
@@ -47,10 +48,7 @@ export default class RenderCard extends Route<Model | null> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
   @service declare realmInfoService: RealmInfoService;
-
-  async beforeModel(_transition: any) {
-    //this.matrixService.loadMatrix.perform();
-  }
+  hasLoadMatrixBeenExecuted = false;
 
   async model(params: {
     path: string;
@@ -60,11 +58,11 @@ export default class RenderCard extends Route<Model | null> {
     let { path, operatorModeState, operatorModeEnabled } = params;
     path = path || '';
     let url = path
-      ? new URL(`./${path}`, ownRealmURL)
+      ? new URL(`/${path}`, ownRealmURL)
       : new URL('./', ownRealmURL);
 
     try {
-      await this.matrixService.ready;
+      await this.loadMatrix.perform();
       let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
         new URL(ownRealmURL),
       );
@@ -105,6 +103,9 @@ export default class RenderCard extends Route<Model | null> {
   }
 
   async redirect(_model: Model, transition: Transition) {
+    // Users are not allowed to access guest mode if realm is not publicly readable,
+    // so users will be redirected to operator mode.
+    // We can update the codes below after we have a clear idea on how to implement authentication in guest mode.
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
       new URL(ownRealmURL),
     );
@@ -114,7 +115,7 @@ export default class RenderCard extends Route<Model | null> {
     ) {
       let path = transition.to.params['path'] || '';
       let url = path
-        ? new URL(`./${path}`, ownRealmURL)
+        ? new URL(`/${path}`, ownRealmURL)
         : new URL('./', ownRealmURL);
       await this.router.replaceWith(`card`, {
         queryParams: {
@@ -134,4 +135,19 @@ export default class RenderCard extends Route<Model | null> {
       });
     }
   }
+
+  loadMatrix = task(async () => {
+    if (this.hasLoadMatrixBeenExecuted) {
+      return;
+    }
+
+    await all([
+      await (async () => {
+        await this.matrixService.ready;
+        await this.matrixService.start();
+      })(),
+      timeout(loginMessageTimeoutMs),
+    ]);
+    this.hasLoadMatrixBeenExecuted = true;
+  });
 }
