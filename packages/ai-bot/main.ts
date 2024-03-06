@@ -218,6 +218,7 @@ async function handleDebugCommands(
       eventBody.split('debug:title:set:')[1],
     );
   } else if (eventBody.startsWith('debug:boom')) {
+    await sendMessage(client, room, `Throwing an unhandled error`, undefined);
     throw new Error('Boom');
   }
   // Use GPT to set the room title
