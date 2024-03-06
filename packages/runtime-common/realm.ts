@@ -30,6 +30,7 @@ import {
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
+  RealmVirtualNetwork,
 } from './index';
 import merge from 'lodash/merge';
 import flatMap from 'lodash/flatMap';
@@ -84,6 +85,7 @@ import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
 
 import { shimExternals } from '../realm-server/lib/externals';
+import { Fetch } from 'realm-virtual-network';
 
 export type RealmInfo = {
   name: string;
@@ -267,7 +269,7 @@ export class Realm {
     {
       url,
       adapter,
-      _loader,
+      _loader, // todo delete this
       indexRunner,
       runnerOptsMgr,
       getIndexHTML,
@@ -275,7 +277,7 @@ export class Realm {
       realmSecretSeed,
       permissions,
       urlMappings,
-      contents,
+      fetchImplementation,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -287,7 +289,7 @@ export class Realm {
       permissions: RealmPermissions;
       realmSecretSeed: string;
       urlMappings: [URL, URL][];
-      contents: {};
+      fetchImplementation: Fetch;
     },
     opts?: Options,
   ) {
@@ -299,7 +301,7 @@ export class Realm {
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
 
-    let loader = new Loader();
+    let loader = new Loader(fetchImplementation);
     shimExternals(loader);
     for (let [from, to] of urlMappings) {
       loader.addURLMapping(from, to);
@@ -374,10 +376,6 @@ export class Realm {
       this.#startedUp.fulfill((() => this.#startup())());
     }
   }
-
-  // applyContents(loader) {
-
-  // }
 
   // it's only necessary to call this when the realm is using a deferred startup
   async start() {

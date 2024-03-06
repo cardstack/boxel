@@ -1,7 +1,7 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { RealmVirtualNetwork, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
@@ -24,6 +24,8 @@ export default class LoaderService extends Service {
   // which in turn assures the resources will not get torn down.
   private realmSessions: Map<string, RealmSessionResource> = new Map();
 
+  virtualNetwork = new RealmVirtualNetwork();
+
   reset() {
     if (this.loader) {
       this.loader = this.loader.clone();
@@ -35,12 +37,12 @@ export default class LoaderService extends Service {
 
   private makeInstance() {
     if (this.fastboot.isFastBoot) {
-      let loader = new Loader();
+      let loader = new Loader(this.virtualNetwork.fetch);
       shimExternals(loader);
       return loader;
     }
 
-    let loader = new Loader();
+    let loader = new Loader(this.virtualNetwork.fetch);
     loader.addURLMapping(
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),

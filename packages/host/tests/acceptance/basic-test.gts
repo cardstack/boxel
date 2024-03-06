@@ -5,7 +5,7 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { RealmVirtualNetwork, baseRealm } from '@cardstack/runtime-common';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
@@ -32,9 +32,10 @@ module('Acceptance | basic tests', function (hooks) {
     // })
 
     window.localStorage.removeItem('recent-files');
-
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    let loaderService = this.owner.lookup(
+      'service:loader-service',
+    ) as LoaderService;
+    let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')
     >(`${baseRealm.url}card-api`);
@@ -80,6 +81,8 @@ module('Acceptance | basic tests', function (hooks) {
       };
     }
 
+    let virtualNetwork = loaderService.virtualNetwork;
+
     await setupAcceptanceTestRealm({
       contents: {
         'index.gts': { Index },
@@ -98,6 +101,7 @@ module('Acceptance | basic tests', function (hooks) {
           lastName: 'Abdel-Rahman',
         }),
       },
+      virtualNetwork,
     });
   });
 

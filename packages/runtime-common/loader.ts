@@ -8,6 +8,7 @@ import flatMap from 'lodash/flatMap';
 import { type RunnerOpts } from './search-index';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
+import RealmVirtualNetwork, { Fetch } from 'realm-virtual-network';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -112,7 +113,10 @@ type EvaluatableDep =
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
-export type RequestHandler = (req: Request) => Promise<Response | null>;
+export type RequestHandler = (
+  req: Request,
+  fetch: Fetch,
+) => Promise<Response | null>;
 
 let nonce = 0;
 export class Loader {
@@ -135,9 +139,15 @@ export class Loader {
   >();
   private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
+  private fetchImplementation: Fetch;
+
+  constructor(fetchImplementation?: Fetch) {
+    // Todo: remove optionality once fetchImplementation is provided in all places
+    this.fetchImplementation = fetchImplementation ?? getNativeFetch();
+  }
 
   clone(): Loader {
-    let clone = new Loader();
+    let clone = new Loader(this.fetchImplementation);
     clone.urlHandlers = [...this.urlHandlers];
     clone.urlMappings = [...this.urlMappings];
     for (let [moduleIdentifier, module] of this.moduleShims) {
@@ -504,12 +514,16 @@ export class Loader {
       for (let handler of this.urlHandlers) {
         let result = await handler(
           this.asUnresolvedRequest(urlOrRequest, init),
+          this.fetchImplementation,
         );
         if (result) {
           return result;
         }
       }
-      return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
+
+      return await this.fetchImplementation(
+        this.asResolvedRequest(urlOrRequest, init),
+      );
     } catch (err: any) {
       let url =
         urlOrRequest instanceof Request

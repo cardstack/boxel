@@ -19,6 +19,7 @@ import {
   Deferred,
   executableExtensions,
   SupportedMimeType,
+  RealmVirtualNetwork,
   type TokenClaims,
 } from '@cardstack/runtime-common';
 
@@ -409,6 +410,7 @@ export async function setupAcceptanceTestRealm({
   contents,
   realmURL,
   onFetch,
+  virtualNetwork,
 }: {
   loader: Loader;
   contents: RealmContents;
@@ -417,12 +419,14 @@ export async function setupAcceptanceTestRealm({
     req: Request;
     res: Response | null;
   }>;
+  virtualNetwork: RealmVirtualNetwork;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
     onFetch,
     isAcceptanceTest: true,
+    virtualNetwork,
   });
 }
 
@@ -449,11 +453,13 @@ export async function setupIntegrationTestRealm({
 }
 
 export const testRealmSecretSeed = "shhh! it's a secret";
+
 async function setupTestRealm({
   contents,
   realmURL,
   onFetch,
   isAcceptanceTest,
+  virtualNetwork,
 }: {
   loader: Loader;
   contents: RealmContents;
@@ -463,8 +469,48 @@ async function setupTestRealm({
     res: Response | null;
   }>;
   isAcceptanceTest?: boolean;
+  virtualNetwork: RealmVirtualNetwork;
 }) {
   realmURL = realmURL ?? testRealmURL;
+  let owner = (getContext() as TestContext).owner;
+  let localIndexer = owner.lookup(
+    'service:local-indexer',
+  ) as unknown as MockLocalIndexer;
+  let adapter = new TestRealmAdapter({}, new URL(realmURL));
+
+  let realm = new Realm(
+    {
+      url: realmURL,
+      adapter,
+      loader: null,
+      indexRunner: async (optsId) => {
+        let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
+        await localIndexer.configureRunner(
+          registerRunner,
+          entrySetter,
+          adapter,
+        );
+      },
+      runnerOptsMgr,
+      getIndexHTML: async () =>
+        `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
+      matrix: testMatrix,
+      permissions: { '*': ['read', 'write'] },
+      urlMappings: [],
+      realmSecretSeed: testRealmSecretSeed,
+      fetchImplementation: virtualNetwork.fetch,
+    },
+    { deferStartUp: true },
+  );
+
+  virtualNetwork.addRealm(realm);
+
+  let loader = realm.loader;
+  loader.addURLMapping(
+    new URL(baseRealm.url),
+    new URL('http://localhost:4201/base/'),
+  );
+
   for (const [path, mod] of Object.entries(contents)) {
     if (path.endsWith('.gts') && typeof mod !== 'string') {
       await shimModule(
@@ -498,8 +544,9 @@ async function setupTestRealm({
       flatFiles[path] = JSON.stringify(value);
     }
   }
-  let adapter = new TestRealmAdapter(flatFiles, new URL(realmURL));
-  let owner = (getContext() as TestContext).owner;
+
+  adapter.setFiles(flatFiles);
+
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
   } else {
@@ -509,50 +556,14 @@ async function setupTestRealm({
     await makeRenderer();
   }
 
-  let localIndexer = owner.lookup(
-    'service:local-indexer',
-  ) as unknown as MockLocalIndexer;
-  let realm: Realm;
-  // if (onFetch) {
-  //   // we need to register this before the realm is created so
-  //   // that it is in prime position in the url handlers list
-  //   loader.registerURLHandler(async (req: Request) => {
-  //     let token = waiter.beginAsync();
-  //     try {
-  //       let { req: newReq, res } = await onFetch(req);
-  //       if (res) {
-  //         return res;
-  //       }
-  //       req = newReq;
-  //     } finally {
-  //       waiter.endAsync(token);
-  //     }
+  // let realm: Realm;
 
-  //     return realm.maybeHandle(req);
-  //   });
-  // }
-
-  realm = new Realm({
-    url: realmURL,
-    adapter,
-    loader: null,
-    indexRunner: async (optsId) => {
-      let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
-      await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
-    },
-    runnerOptsMgr,
-    getIndexHTML: async () =>
-      `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
-    matrix: testMatrix,
-    permissions: { '*': ['read', 'write'] },
-    realmSecretSeed: testRealmSecretSeed,
-  });
   // loader.prependURLHandlers([
   //   (req) => sourceFetchRedirectHandle(req, adapter, realm),
   //   (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
   // ]);
 
-  await realm.ready;
+  await realm.start();
   return { realm, adapter };
 }
 
@@ -631,6 +642,24 @@ export class TestRealmAdapter implements RealmAdapter {
     realmURL = new URL(testRealmURL),
   ) {
     this.#paths = new RealmPaths(realmURL);
+    let now = Date.now();
+    for (let [path, content] of Object.entries(flatFiles)) {
+      let segments = path.split('/');
+      let last = segments.pop()!;
+      let dir = this.#traverse(segments, 'directory');
+      if (typeof dir === 'string') {
+        throw new Error(`tried to use file as directory`);
+      }
+      this.#lastModified.set(this.#paths.fileURL(path).href, now);
+      if (typeof content === 'string') {
+        dir[last] = content;
+      } else {
+        dir[last] = JSON.stringify(content);
+      }
+    }
+  }
+
+  setFiles(flatFiles: FilesForTestAdapter) {
     let now = Date.now();
     for (let [path, content] of Object.entries(flatFiles)) {
       let segments = path.split('/');
