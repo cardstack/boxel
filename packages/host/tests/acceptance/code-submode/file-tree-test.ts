@@ -5,6 +5,7 @@ import {
   fillIn,
   settled,
   triggerKeyEvent,
+  triggerEvent,
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -824,5 +825,40 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await click('[data-test-file="cards-grid.gts"]');
     await waitFor('[data-test-file="cards-grid.gts"].selected');
     assert.dom('[data-test-file="cards-grid.gts"]').hasClass('selected');
+  });
+
+  test('can scroll to bottom of the file tree in the base realm', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      // This issue is specific to base realm
+      // because base realm has different resolved ('http://localhost:4201/base')
+      // and unresolved URL ('http://cardstack.com/base'),
+      // if we are not consistent on using the URL as `keyScrollPosition` in `ScrollPositionService`
+      // it can cause the scroll position to jump back to the top.
+      codePath: `http://localhost:4201/base/cards-grid.gts`,
+    });
+
+    await waitFor('[data-test-togglable-left-panel]');
+    await settled();
+    let scrollablePanel = find('[data-test-togglable-left-panel]');
+    let expectedScrollTop;
+    if (scrollablePanel) {
+      scrollablePanel.scrollTop = scrollablePanel.scrollHeight;
+      expectedScrollTop = scrollablePanel.scrollTop;
+      // We have to trigger `scrollend` event to make sure
+      // event listeners not updating the scroll position
+      await triggerEvent('[data-test-togglable-left-panel]', 'scrollend');
+    }
+
+    assert.strictEqual(scrollablePanel?.scrollTop, expectedScrollTop);
   });
 });

@@ -1,11 +1,14 @@
 import Component from '@glimmer/component';
 
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+
 interface Signature {
   Element: HTMLElement;
   Blocks: {
     header: [];
     body: [];
   };
+  Args: { onClose: () => void };
 }
 
 export default class AiAssistantPanelPopover extends Component<Signature> {
@@ -49,7 +52,11 @@ export default class AiAssistantPanelPopover extends Component<Signature> {
       }
     </style>
 
-    <div class='panel-popover' ...attributes>
+    <div
+      {{onClickOutside @onClose exceptSelector='.past-session-menu,.delete'}}
+      class='panel-popover'
+      ...attributes
+    >
       <div class='header'>
         {{yield to='header'}}
       </div>

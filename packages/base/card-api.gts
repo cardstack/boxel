@@ -2244,6 +2244,7 @@ export interface SerializeOpts {
   includeComputeds?: boolean;
   includeUnrenderedFields?: boolean;
   maybeRelativeURL?: ((possibleURL: string) => string) | null; // setting this to null will force all URL's to be absolute
+  omitFields?: [typeof BaseDef];
 }
 
 function serializeCardResource(
@@ -2261,9 +2262,11 @@ function serializeCardResource(
     ...fieldOpts,
     usedFieldsOnly: !opts?.includeUnrenderedFields,
   });
-  let fieldResources = Object.keys(fields).map((fieldName) =>
-    serializedGet(model, fieldName, doc, visited, opts),
-  );
+  let fieldResources = Object.entries(fields)
+    .filter(([_fieldName, field]) =>
+      opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
+    )
+    .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
   return merge(
     {
       attributes: {},
