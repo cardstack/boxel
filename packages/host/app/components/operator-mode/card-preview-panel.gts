@@ -1,8 +1,10 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
@@ -38,6 +40,8 @@ interface Signature {
 }
 
 export default class CardPreviewPanel extends Component<Signature> {
+  @tracked footerWidthPx = 0;
+
   private scrollPositions = new Map<string, number>();
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.args.card.id);
@@ -54,6 +58,18 @@ export default class CardPreviewPanel extends Component<Signature> {
 
   private get format(): Format {
     return this.args.format ?? 'isolated';
+  }
+
+  @action setFooterWidthPx(footerWidthPx: number) {
+    this.footerWidthPx = footerWidthPx;
+  }
+
+  get footerButtonsClass() {
+    if (this.footerWidthPx < 380) {
+      // Adjust this as needed - it's where the buttons in single line start to get too squished
+      return 'collapsed';
+    }
+    return null;
   }
 
   <template>
@@ -121,8 +137,13 @@ export default class CardPreviewPanel extends Component<Signature> {
       <Preview @card={{@card}} @format={{this.format}} />
     </div>
 
-    <div class='preview-footer' data-test-code-mode-card-preview-footer>
-      <div class='footer-buttons'>
+    <div
+      class='preview-footer'
+      {{ResizeModifier setFooterWidthPx=this.setFooterWidthPx}}
+      data-test-code-mode-card-preview-footer
+    >
+      <div class='preview-footer-title'>Preview as</div>
+      <div class='footer-buttons {{this.footerButtonsClass}}'>
         <button
           class='footer-button {{if (eq this.format "isolated") "active"}}'
           {{on 'click' (fn @setFormat 'isolated')}}
@@ -149,14 +170,8 @@ export default class CardPreviewPanel extends Component<Signature> {
     </div>
 
     <style>
-      :global(:root) {
-        --code-mode-preview-footer-height: 70px;
-        --code-mode-preview-header-height: 70px;
-      }
-
       .preview-header {
         background: white;
-        height: var(--code-mode-preview-header-height);
         border-top-left-radius: var(--boxel-border-radius);
         border-top-right-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-lg);
@@ -173,10 +188,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       }
 
       .preview-body {
-        height: calc(
-          100% - var(--code-mode-preview-footer-height) -
-            var(--code-mode-preview-header-height)
-        );
+        flex-grow: 1;
         overflow-y: auto;
       }
 
@@ -195,35 +207,67 @@ export default class CardPreviewPanel extends Component<Signature> {
       }
 
       .preview-footer {
-        bottom: 0;
-        height: var(--code-mode-preview-footer-height);
         background-color: var(--boxel-200);
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
+        padding-bottom: var(--boxel-sp-sm);
+      }
+
+      .preview-footer-title {
+        text-align: center;
+        padding: var(--boxel-sp-xs) 0;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: var(--boxel-400);
+        letter-spacing: 0.6px;
       }
 
       .footer-buttons {
-        margin: auto;
+        margin: auto var(--boxel-sp-sm);
         display: flex;
+        width: 100% - calc(2 * var(--boxel-sp));
+      }
+
+      .footer-buttons.collapsed {
+        display: block;
         gap: var(--boxel-sp-sm);
+        width: 100% - calc(2 * var(--boxel-sp));
       }
 
       .footer-button {
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xxxs) 0;
+        flex-grow: 1;
+        flex-basis: 0;
         font-weight: 600;
         background: transparent;
         color: var(--boxel-dark);
-        border-radius: 6px;
         border: 1px solid var(--boxel-400);
+      }
+
+      .footer-buttons.collapsed .footer-button {
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        border-radius: 6px;
+        margin-top: var(--boxel-sp-xxxs);
+        margin-right: var(--boxel-sp-xxs);
+      }
+
+      .footer-button:first-child {
+        border-top-left-radius: var(--boxel-border-radius);
+        border-bottom-left-radius: var(--boxel-border-radius);
+      }
+
+      .footer-button:last-child {
+        border-top-right-radius: var(--boxel-border-radius);
+        border-bottom-right-radius: var(--boxel-border-radius);
+      }
+
+      .footer-button + .footer-button {
+        margin-left: -1px;
       }
 
       .footer-button.active {
         background: #27232f;
         color: var(--boxel-teal);
-      }
-
-      .preview-footer {
-        display: flex;
       }
 
       .icon-button {
@@ -274,5 +318,31 @@ class ScrollModifier extends Modifier<ScrollSignature> {
         element.removeEventListener('scroll', onScroll);
       });
     }
+  }
+}
+
+interface ResizeSignature {
+  Args: {
+    Named: {
+      setFooterWidthPx: (footerWidthPx: number) => void;
+    };
+  };
+}
+
+class ResizeModifier extends Modifier<ResizeSignature> {
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    { setFooterWidthPx }: ResizeSignature['Args']['Named'],
+  ) {
+    let resizeObserver = new ResizeObserver(() => {
+      setFooterWidthPx(element.clientWidth);
+    });
+
+    resizeObserver.observe(element);
+
+    registerDestructor(this, () => {
+      resizeObserver.disconnect();
+    });
   }
 }
