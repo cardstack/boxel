@@ -337,6 +337,7 @@ class ResizeModifier extends Modifier<ResizeSignature> {
     { setFooterWidthPx }: ResizeSignature['Args']['Named'],
   ) {
     let resizeObserver = new ResizeObserver(() => {
+      // setTimeout prevents the "ResizeObserver loop completed with undelivered notifications" error that happens in tests
       setTimeout(() => {
         setFooterWidthPx(element.clientWidth);
       }, 1);
