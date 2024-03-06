@@ -6,7 +6,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
-import { all, task, timeout } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -17,7 +17,6 @@ import type { Loader, Query } from '@cardstack/runtime-common';
 import Auth from '@cardstack/host/components/matrix/auth';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
-import config from '@cardstack/host/config/environment';
 import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 
 import {
@@ -37,8 +36,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
-const { loginMessageTimeoutMs } = config;
-
 interface Signature {
   Args: {
     onClose: () => void;
@@ -53,7 +50,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
 
-    this.loadMatrix.perform();
+    this.matrixService.loadMatrix.perform();
     if (isTesting()) {
       (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
       registerDestructor(this, () => {
@@ -145,16 +142,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
-  private loadMatrix = task(async () => {
-    await all([
-      await (async () => {
-        await this.matrixService.ready;
-        await this.matrixService.start();
-      })(),
-      timeout(loginMessageTimeoutMs),
-    ]);
-  });
-
   <template>
     <Modal
       class='operator-mode'
@@ -165,7 +152,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      {{#if this.loadMatrix.isRunning}}
+      {{#if this.matrixService.loadMatrix.isRunning}}
         <div class='loading' data-test-initializing-operator-mode>
           <LoadingIndicator @color='var(--boxel-light)' />
           <span class='loading__message'>Initializing Operator Mode...</span>

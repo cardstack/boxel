@@ -8,6 +8,7 @@ import Component from '@glimmer/component';
 
 import { ComponentLike } from '@glint/template';
 // @ts-expect-error no types
+import { restartableTask } from 'ember-concurrency';
 import { keyResponder, onKey } from 'ember-keyboard';
 
 import RouteTemplate from 'ember-route-template';
@@ -20,6 +21,7 @@ import OperatorModeContainer from '@cardstack/host/components/operator-mode/cont
 
 import Preview from '@cardstack/host/components/preview';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import ENV from '@cardstack/host/config/environment';
 
 import CardController from '@cardstack/host/controllers/card';
 
@@ -33,6 +35,7 @@ import MessageService from '@cardstack/host/services/message-service';
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
+import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -49,7 +52,7 @@ interface CardRouteSignature {
     model: CardModel;
   };
 }
-
+const { ownRealmURL } = ENV;
 @keyResponder
 class CardRouteComponent extends Component<CardRouteSignature> {
   isolatedCardComponent: ComponentLike | undefined;
@@ -59,10 +62,14 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare messageService: MessageService;
+  @service declare realmInfoService: RealmInfoService;
 
   constructor(owner: Owner, args: CardRouteSignature['Args']) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
+    // if (!this.args.model && !this.args.controller.operatorModeEnabled) {
+    //   scheduleOnce('afterRender', this, this.toggleOperatorMode);
+    // }
 
     // this allows the guest mode cards-grid to use a live query. I'm not sure
     // if that is a requirement or not. we can remove this if it is not.
@@ -121,6 +128,17 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   @onKey('Ctrl+,')
   @action
   toggleOperatorMode() {
+    this.toggleOperatorModeTask.perform();
+  }
+
+  toggleOperatorModeTask = restartableTask(async () => {
+    let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
+      new URL(ownRealmURL),
+    );
+    if (!isPublicReadableRealm && this.args.controller.operatorModeEnabled) {
+      return;
+    }
+
     this.args.controller.operatorModeEnabled =
       !this.args.controller.operatorModeEnabled;
 
@@ -128,19 +146,21 @@ class CardRouteComponent extends Component<CardRouteSignature> {
       // When entering operator mode, put the current card on the stack
       this.args.controller.operatorModeState = stringify({
         stacks: [
-          [
-            {
-              id: this.args.model?.id,
-              format: 'isolated',
-            },
-          ],
+          this.args.model
+            ? [
+                {
+                  id: this.args.model.id,
+                  format: 'isolated',
+                },
+              ]
+            : [],
         ],
         submode: Submodes.Interact,
       } as OperatorModeSerializedState)!;
     } else {
       this.args.controller.operatorModeState = null;
     }
-  }
+  });
 
   @action
   closeOperatorMode() {
@@ -151,15 +171,11 @@ class CardRouteComponent extends Component<CardRouteSignature> {
     <div class='card-isolated-component'>
       {{#if @model}}
         <Preview @card={{@model}} @format='isolated' />
-      {{else}}
-        <div>ERROR: cannot load card</div>
       {{/if}}
     </div>
 
     {{#if @controller.operatorModeEnabled}}
-      {{#if @model}}
-        <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
-      {{/if}}
+      <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
     {{/if}}
 
     {{outlet}}

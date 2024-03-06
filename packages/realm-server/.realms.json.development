@@ -6,7 +6,8 @@
   },
   "http://localhost:4201/drafts/": {
     "users": {
-      "*": ["read", "write"]
+      "*": ["read"],
+      "users": ["write"]
     }
   },
   "http://localhost:4201/published/": {

@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
 import { action } from '@ember/object';
+import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -362,6 +363,7 @@ export default class RegisterUser extends Component<Signature> {
       } = { type: 'initial' };
 
   @service private declare matrixService: MatrixService;
+  @service declare router: RouterService;
 
   private get currentPage() {
     if (['initial', 'validateEmail', 'register'].includes(this.state.type)) {
@@ -698,6 +700,7 @@ export default class RegisterUser extends Component<Signature> {
     // If access_token and device_id are present, RegisterResponse matches LoginResponse
     // except for the optional well_known field
     if (auth.access_token && auth.device_id) {
+      await this.router.refresh();
       await this.matrixService.startAndSetDisplayName(
         auth as LoginResponse,
         this.state.name,
