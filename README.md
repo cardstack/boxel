@@ -173,7 +173,7 @@ There is a ember-freestyle component explorer available to assist with developme
 
 In order to run the boxel-motion demo app:
 
-1. `cd packages/boxel-motion-test-app`
+1. `cd packages/boxel-motion/test-app`
 2. `pnpm start`
 3. Visit http://localhost:4200 in your browser
 
