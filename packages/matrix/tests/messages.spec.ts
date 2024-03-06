@@ -186,6 +186,7 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/big-card`; // this is a 153KB card
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
+    await removeAutoAttachedCard(page);
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
@@ -210,6 +211,7 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/mango-puppy`; // this is a 153KB card
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
+    await removeAutoAttachedCard(page);
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
