@@ -190,6 +190,34 @@ test.describe('Room messages', () => {
         cards: [{ id: testCard, title: 'Big Card' }],
       },
     ]);
+
+    // peek into the matrix events and confirm there are multiple card fragments
+    let { accessToken } = await loginUser('user1', 'pass');
+    let rooms = await getJoinedRooms(accessToken);
+    let roomsWithMessages = await Promise.all(
+      rooms.map((r) => getAllRoomMessages(r, accessToken)),
+    );
+    let messages = roomsWithMessages.find((messages) => {
+      let message = messages[messages.length - 2];
+      return (
+        message.type === 'm.room.message' &&
+        message.content?.msgtype === 'org.boxel.cardFragment'
+      );
+    })!;
+    let cardFragments = messages.filter(
+      (message) =>
+        message.type === 'm.room.message' &&
+        message.content?.msgtype === 'org.boxel.cardFragment',
+    );
+    expect(cardFragments.length).toStrictEqual(3);
+    let lastFragment = messages.findIndex((m) => m === cardFragments[2]);
+    let boxelMessage = messages[lastFragment + 1];
+    let boxelMessageData = JSON.parse(boxelMessage.content.data);
+    // the card fragment events need to come before the boxel message event they
+    // are used in, and the boxel message should point to the first fragment
+    expect(boxelMessageData.attachedCardsEventIds).toMatchObject([
+      cardFragments[0].event_id,
+    ]);
   });
 
   test('it card strip out base64 image fields from cards sent in messages', async ({
@@ -228,8 +256,8 @@ test.describe('Room messages', () => {
         message.type === 'm.room.message' &&
         message.content?.msgtype === 'org.boxel.cardFragment'
       );
-    });
-    let message = messages![messages!.length - 2];
+    })!;
+    let message = messages[messages.length - 2];
     let messageData = JSON.parse(message.content.data);
     let serializeCard = JSON.parse(messageData.cardFragment);
 
