@@ -54,6 +54,8 @@ export const isNode =
 
 export { Realm } from './realm';
 export { SupportedMimeType } from './router';
+export { RealmVirtualNetwork } from './realm-virtual-network';
+
 export type {
   Kind,
   RealmAdapter,
@@ -361,3 +363,9 @@ export async function apiFor(cardOrField: CardDef | FieldDef) {
   }
   return api;
 }
+
+export function isCardInstance(instance: any): instance is CardDef {
+  return cardDef in instance;
+}
+
+export const cardDef = Symbol.for('cardstack-card-def');

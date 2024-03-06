@@ -36,6 +36,7 @@ import {
   moduleFrom,
   getCard,
   trackCard,
+  cardDef,
   type Meta,
   type CardFields,
   type Relationship,
@@ -45,6 +46,7 @@ import {
   type CardResource,
   type Actions,
   type RealmInfo,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 
@@ -180,7 +182,7 @@ const subscribers = new WeakMap<BaseDef, Set<CardChangeSubscriber>>();
 // involve rerunning async computed fields)
 const cardTracking = new TrackedWeakMap<object, any>();
 
-const isBaseInstance = Symbol('isBaseInstance');
+const isBaseInstance = Symbol.for('isBaseInstance');
 
 class Logger {
   private promises: Promise<any>[] = [];
@@ -1940,6 +1942,8 @@ export class CardDef extends BaseDef {
   [isSavedInstance] = false;
   [realmInfo]: RealmInfo | undefined = undefined;
   [realmURL]: URL | undefined = undefined;
+  [cardDef] = undefined;
+
   @field id = contains(IDField);
   @field title = contains(StringField);
   @field description = contains(StringField);
@@ -2377,12 +2381,15 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
   }
-  if (instance instanceof CardDef) {
-    if (!instance[realmInfo] && doc.data.meta.realmInfo) {
-      instance[realmInfo] = doc.data.meta.realmInfo;
+
+  if (isCardInstance(instance)) {
+    let cardInstance = instance as CardDef;
+
+    if (!cardInstance[realmInfo] && doc.data.meta.realmInfo) {
+      cardInstance[realmInfo] = doc.data.meta.realmInfo;
     }
-    if (!instance[realmURL] && doc.data.meta.realmURL) {
-      instance[realmURL] = new URL(doc.data.meta.realmURL);
+    if (!cardInstance[realmURL] && doc.data.meta.realmURL) {
+      cardInstance[realmURL] = new URL(doc.data.meta.realmURL);
     }
   }
   return await _updateFromSerialized(instance, doc.data, doc, identityContext);
@@ -2424,9 +2431,10 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   if (!instance) {
     instance = new card({ id: resource.id }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
-    if (instance instanceof CardDef) {
-      instance[realmInfo] = data?.meta?.realmInfo;
-      instance[realmURL] = data?.meta?.realmURL
+    if (isCardInstance(instance)) {
+      let cardInstance = instance as CardDef;
+      cardInstance[realmInfo] = data?.meta?.realmInfo;
+      cardInstance[realmURL] = data?.meta?.realmURL
         ? new URL(data.meta.realmURL)
         : undefined;
     }
@@ -2506,10 +2514,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   {
     let wasSaved = false;
     let originalId: string | undefined;
-    if (instance instanceof CardDef) {
-      wasSaved = instance[isSavedInstance];
-      originalId = (instance as CardDef).id; // the instance is a composite card
-      instance[isSavedInstance] = false;
+    if (isCardInstance(instance)) {
+      let cardInstance = instance as CardDef;
+      wasSaved = cardInstance[isSavedInstance];
+      originalId = (cardInstance as CardDef).id; // the instance is a composite card
+      cardInstance[isSavedInstance] = false;
     }
     for (let [fieldName, value] of values) {
       if (fieldName === 'id' && wasSaved && originalId !== value) {
@@ -2532,11 +2541,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       deserialized.set(fieldName as string, value);
       logger.log(recompute(instance));
     }
-    if (instance instanceof CardDef && resource.id != null) {
+    if (isCardInstance(instance) && resource.id != null) {
+      let cardInstance = instance as CardDef;
       // importantly, we place this synchronously after the assignment of the model's
       // fields, such that subsequent assignment of the id field when the model is
       // saved will throw
-      instance[isSavedInstance] = true;
+      cardInstance[isSavedInstance] = true;
     }
   }
 

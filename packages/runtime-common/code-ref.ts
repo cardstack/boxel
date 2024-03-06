@@ -2,7 +2,7 @@ import {
   type BaseDefConstructor,
   type Field,
   type BaseDef,
-  type CardDef,
+  CardDef,
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';

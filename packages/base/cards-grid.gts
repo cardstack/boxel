@@ -17,6 +17,7 @@ import {
   getLiveCards,
   baseRealm,
   cardTypeDisplayName,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 // @ts-ignore no types
@@ -271,8 +272,9 @@ export class CardsGrid extends CardDef {
   });
 
   static getDisplayName(instance: BaseDef) {
-    if (instance instanceof CardDef) {
-      return instance[realmInfo]?.name ?? this.displayName;
+    if (isCardInstance(instance)) {
+      let cardInstance = instance as CardDef;
+      return cardInstance[realmInfo]?.name ?? this.displayName;
     }
     return this.displayName;
   }
