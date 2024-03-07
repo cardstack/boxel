@@ -5,6 +5,9 @@ import {
   Component,
   useIndexBasedKey,
   FieldDef,
+  BaseDefConstructor,
+  BaseInstanceType,
+  deserialize,
 } from './card-api';
 import { fn } from '@ember/helper';
 import { RadioInput } from '@cardstack/boxel-ui/components';
@@ -33,6 +36,17 @@ export default class BooleanField extends FieldDef {
   static [serialize](val: any) {
     return Boolean(val);
   }
+
+  static async [deserialize]<T extends BaseDefConstructor>(
+    this: T,
+    val: any,
+  ): Promise<BaseInstanceType<T>> {
+    if (val === undefined || val === null) {
+      return false as BaseInstanceType<T>;
+    }
+    return Boolean(val) as BaseInstanceType<T>;
+  }
+
   static [queryableValue](val: any): boolean {
     if (typeof val === 'string') {
       return val.toLowerCase() === 'true';
@@ -62,14 +76,13 @@ export default class BooleanField extends FieldDef {
     </template>
 
     private items = [
-      { id: 'true', value: true, text: 'True' },
       { id: 'false', value: false, text: 'False' },
+      { id: 'true', value: true, text: 'True' },
     ];
 
     private radioGroup = `__cardstack_bool${groupNumber++}__`;
 
     get checkedId() {
-      console.log(this.args.model);
       return this.args.model === undefined || this.args.model === null
         ? 'false'
         : String(this.args.model);
