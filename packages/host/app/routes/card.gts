@@ -66,13 +66,16 @@ export default class RenderCard extends Route<Model | null> {
       let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
         new URL(ownRealmURL),
       );
-      let card = null;
+      let model = null;
       if (!isPublicReadableRealm && !this.matrixService.isLoggedIn) {
-        return card;
+        return model;
       }
       let cardResource = getCard(this, () => url.href);
       await cardResource.loaded;
-      card = cardResource.card;
+      model = cardResource.card;
+      if (!model) {
+        throw new Error(`Could not find ${url}`);
+      }
 
       if (operatorModeEnabled) {
         let operatorModeStateObject = JSON.parse(operatorModeState);
@@ -85,12 +88,12 @@ export default class RenderCard extends Route<Model | null> {
           // query param, which will trigger a refresh of the model, which will call the model hook again.
           // The model refresh happens automatically because we have operatorModeState: { refreshModel: true } in the queryParams.
           // We have that because we want to support back-forward navigation in operator mode.
-          return card ?? null;
+          return model ?? null;
         }
         await this.operatorModeStateService.restore(operatorModeStateObject);
       }
 
-      return card ?? null;
+      return model ?? null;
     } catch (e) {
       (e as any).loadType = params.operatorModeEnabled
         ? 'stack'

@@ -188,6 +188,8 @@ class CardRouteComponent extends Component<CardRouteSignature> {
       {{#if (and (bool @model) this.isPublicReadableRealm)}}
         {{! @glint-ignore model should not be null}}
         <Preview @card={{@model}} @format='isolated' />
+      {{else}}
+        <div>ERROR: cannot load card</div>
       {{/if}}
     </div>
 

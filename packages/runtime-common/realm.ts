@@ -970,6 +970,7 @@ export class Realm {
       request.url.endsWith('_message') ||
       request.url.endsWith('_session') ||
       request.method === 'HEAD' ||
+      request.headers.get('Content-Type') === SupportedMimeType.HTML ||
       (neededPermission === 'read' &&
         this.#permissions['*']?.includes('read')) ||
       (neededPermission === 'write' &&
