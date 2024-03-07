@@ -69,15 +69,18 @@ class CardPill extends Component<CardPillSignature> {
         display: flex;
         align-items: center;
         justify-content: center;
+        outline: 0;
       }
+      .remove-button:focus:not(:disabled),
       .remove-button:hover:not(:disabled) {
         --icon-color: var(--boxel-highlight);
       }
       .card-pill {
         --pill-icon-size: 18px;
+        padding: var(--boxel-sp-5xs);
         background-color: var(--boxel-light);
         border: 1px solid var(--boxel-400);
-        height: 1.875rem;
+        height: var(--pill-height);
       }
       .card-title {
         max-width: 10rem;
@@ -142,17 +145,8 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           (not this.isViewAllAttachedCards)
         )
       }}
-        <Pill
-          @inert={{true}}
-          class='card-pill view-all'
-          data-test-view-all
-          {{on 'click' this.toggleViewAllAttachedCards}}
-        >
-          <:default>
-            <div class='card-title'>
-              View All ({{this.cardsToDisplay.length}})
-            </div>
-          </:default>
+        <Pill {{on 'click' this.toggleViewAllAttachedCards}} data-test-view-all>
+          View All ({{this.cardsToDisplay.length}})
         </Pill>
       {{/if}}
       {{#if this.canDisplayAddButton}}
@@ -181,11 +175,13 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         padding: var(--boxel-sp-xxs);
       }
       .attach-button {
-        height: var(--boxel-add-button-pill-height);
+        --icon-color: var(--boxel-highlight);
+        --boxel-add-button-pill-font: var(--boxel-font-sm);
+        height: var(--pill-height);
         padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs) var(--boxel-sp-4xs)
           var(--boxel-sp-5xs);
         background: none;
-        box-shadow: none;
+        color: var(--boxel-highlight);
         transition: color var(--boxel-transition);
         outline: 0;
       }
@@ -193,42 +189,13 @@ export default class AiAssistantCardPicker extends Component<Signature> {
       .attach-button:focus:not(:disabled) {
         --icon-color: var(--boxel-highlight-hover);
         color: var(--boxel-highlight-hover);
+        background: none;
+        box-shadow: none;
       }
       .attach-button.icon-only {
         padding: 0;
-        width: 25px;
+        width: 20px;
         height: var(--pill-height);
-      }
-      .remove-button {
-        --boxel-icon-button-width: 25px;
-        --boxel-icon-button-height: 25px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        outline: 0;
-      }
-      .remove-button:focus:not(:disabled),
-      .remove-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight);
-      }
-      .card-pill {
-        --pill-icon-size: 18px;
-        padding: var(--boxel-sp-5xs);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-400);
-        height: var(--pill-height);
-      }
-      .card-title {
-        max-width: 10rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .is-autoattached {
-        border-style: dashed;
-      }
-      .view-all {
-        cursor: pointer;
       }
     </style>
   </template>

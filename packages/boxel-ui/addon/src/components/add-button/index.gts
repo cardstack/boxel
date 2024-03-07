@@ -104,10 +104,13 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       color: var(--boxel-light);
       font: 700 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
       letter-spacing: var(--boxel-lsp-xs);
-      transition: background-color var(--boxel-transition);
+      transition:
+        background-color var(--boxel-transition),
+        box-shadow var(--boxel-transition);
     }
     .add-button--pill:focus:not(:disabled),
     .add-button--pill:hover:not(:disabled) {
+      background-color: var(--boxel-highlight-hover);
       box-shadow: var(--boxel-box-shadow);
       cursor: pointer;
     }

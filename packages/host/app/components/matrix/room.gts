@@ -64,8 +64,6 @@ export default class Room extends Component<Signature> {
             @removeCard={{this.removeCard}}
           />
         </div>
-        <small>Assistant may display inacurrate info, please double check its
-          responses.</small>
       </footer>
     </section>
 
@@ -90,12 +88,6 @@ export default class Room extends Component<Signature> {
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
-      }
-      small {
-        display: block;
-        color: var(--boxel-450);
-        font: var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xs);
       }
     </style>
   </template>
@@ -238,7 +230,7 @@ export default class Room extends Component<Signature> {
 
   private get isSendButtonDisabled() {
     return (
-      (!this.messageToSend && !this.cardsToAttach) ||
+      (!this.messageToSend && !this.cardsToAttach && !this.autoAttachedCard) ||
       this.doSendMessage.isRunning
     );
   }
