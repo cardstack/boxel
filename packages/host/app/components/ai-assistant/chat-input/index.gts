@@ -76,6 +76,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         height: var(--boxel-icon-med);
         background-color: var(--boxel-highlight);
         border-radius: var(--boxel-border-radius-sm);
+        align-self: flex-end;
       }
       .send-button:hover:not(:disabled),
       .send-button:focus:not(:disabled) {
