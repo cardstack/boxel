@@ -30,6 +30,15 @@ import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
+import {
+  AnimationContext,
+  type AnimationDefinition,
+  type Changeset,
+  SpringBehavior,
+  Sprite,
+} from '@cardstack/boxel-motion';
+import { Sprite as sprite } from '@cardstack/boxel-motion/modifiers';
+
 const { APP } = ENV;
 
 type PanelWidths = {
@@ -150,6 +159,49 @@ export default class SubmodeLayout extends Component<Signature> {
     this.searchElement = element;
   }
 
+  @action
+  aiPanelTransition(changeset: Changeset): AnimationDefinition | undefined {
+    let sprites = changeset.spritesFor({ id: 'ai-assistant-panel' });
+    let sprite = changeset.spriteFor({ id: 'ai-assistant-panel' });
+    let isOpeningAiPanel =
+      sprite?.initialBounds?.element?.height === 40 &&
+      sprite?.finalBounds?.element?.height !== 40;
+    let isClosingAiPanel =
+      sprite?.finalBounds?.element?.height === 40 &&
+      sprite?.initialBounds?.element?.height !== 40;
+    if (!isOpeningAiPanel && !isClosingAiPanel) {
+      console.log('Not opening or closing AI Panel -- skipping animation');
+      return;
+    }
+    if (window.billy) {
+      debugger;
+    }
+    if (isOpeningAiPanel && sprite?.counterpart) {
+      sprites = new Set([sprite.counterpart]);
+    }
+    return {
+      timeline: {
+        type: 'sequence',
+        animations: [
+          {
+            sprites,
+            properties: {
+              left: {},
+              top: {},
+              width: {},
+              height: {},
+            },
+            timing: {
+              behavior: new SpringBehavior({
+                overshootClamping: true,
+              }),
+            },
+          },
+        ],
+      },
+    };
+  }
+
   <template>
     <div
       class='operator-mode-with-ai-assistant
@@ -174,24 +226,29 @@ export default class SubmodeLayout extends Component<Signature> {
           {{yield this.openSearchSheetToPrompt}}
         </ResizablePanel>
         {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
-          {{#if this.isAiAssistantVisible}}
-            <ResizablePanel
-              @defaultLengthFraction={{0.3}}
-              @minLengthPx={{371}}
-              @collapsible={{false}}
-            >
-              <AiAssistantPanel
-                @onClose={{this.toggleChat}}
-                @resizeHandle={{ResizeHandle}}
-                class='ai-assistant-panel'
+          <AnimationContext @use={{this.aiPanelTransition}}>
+            {{#if this.isAiAssistantVisible}}
+              <ResizablePanel
+                @defaultLengthFraction={{0.3}}
+                @minLengthPx={{371}}
+                @collapsible={{false}}
+                class='ai-resizable-panel'
+              >
+                <AiAssistantPanel
+                  @onClose={{this.toggleChat}}
+                  @resizeHandle={{ResizeHandle}}
+                  class='ai-assistant-panel'
+                  {{sprite id='ai-assistant-panel'}}
+                />
+              </ResizablePanel>
+            {{else}}
+              <AiAssistantButton
+                class='chat-btn'
+                {{sprite id='ai-assistant-panel'}}
+                {{on 'click' this.toggleChat}}
               />
-            </ResizablePanel>
-          {{else}}
-            <AiAssistantButton
-              class='chat-btn'
-              {{on 'click' this.toggleChat}}
-            />
-          {{/if}}
+            {{/if}}
+          </AnimationContext>
         {{/if}}
       </ResizablePanelGroup>
     </div>
@@ -253,6 +310,10 @@ export default class SubmodeLayout extends Component<Signature> {
         margin-right: 0;
         background-color: var(--boxel-ai-purple);
         box-shadow: var(--boxel-deep-box-shadow);
+      }
+
+      .ai-resizable-panel {
+        height: 100%;
       }
 
       .ai-assistant-panel {

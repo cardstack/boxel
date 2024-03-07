@@ -29,7 +29,9 @@ export default class AiAssistantButton extends Component<Signature> {
           url('./ai-assist-icon@3x.webp')
         );
         background-size: 26px 26px;
-        background-position: center;
+        /* positioning top and left helps when we animate the button into the panel */
+        background-position: calc((var(--container-button-size) - 26px) / 2)
+          calc((var(--container-button-size) - 26px) / 2);
         background-repeat: no-repeat;
       }
       .ai-assistant-button:hover {

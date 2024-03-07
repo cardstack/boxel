@@ -60,6 +60,7 @@ export default class Panel extends Component<Signature> {
         )
       }}
       {{createRef (@resizablePanelElId this.id) bucket=@panelGroupComponent}}
+      ...attributes
     >
       {{yield}}
     </div>
