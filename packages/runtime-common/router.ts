@@ -5,7 +5,7 @@ export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
 
 type Handler = (request: Request) => Promise<Response>;
-type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 export enum SupportedMimeType {
   CardJson = 'application/vnd.card+json',
   CardSource = 'application/vnd.card+source',
@@ -41,8 +41,43 @@ export function extractSupportedMimeType(
   return undefined;
 }
 
+export type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
+
+export function lookupRouteFamily<T>(routeTable: RouteTable<T>, paths: RealmPaths, request: Request) {
+  let acceptMimeType = extractSupportedMimeType(
+    request.headers.get('Accept') as unknown as null | string | [string],
+  )
+  if (!acceptMimeType) {
+    return;
+  }
+  if (!isHTTPMethod(request.method)) {
+    return;
+  }
+  let routes = routeTable.get(acceptMimeType)?.get(request.method);
+  if (!routes) {
+    return;
+  }
+
+  // we construct a new URL within RealmPath.local() param that strips off the query string
+  let requestPath = `/${paths.local(request.url)}`;
+  // add a leading and trailing slashes back so we can match on routing rules for directories.
+  requestPath =
+    request.url.endsWith('/') && requestPath !== '/'
+      ? `${requestPath}/`
+      : requestPath;
+  for (let [route, value] of routes) {
+    // let's take care of auto escaping '/' and anchoring in our route regex's
+    // to make it more readable in our config
+    let routeRegExp = new RegExp(`^${route.replace('/', '\\/')}$`);
+    if (routeRegExp.test(requestPath)) {
+      return value;
+    }
+  }
+  return;
+}
+
 export class Router {
-  #routeTable = new Map<SupportedMimeType, Map<Method, Map<string, Handler>>>();
+  #routeTable: RouteTable<Handler> = new Map<SupportedMimeType, Map<Method, Map<string, Handler>>>();
   log = logger('realm:router');
   #paths: RealmPaths;
   constructor(mountURL: URL) {
@@ -110,36 +145,6 @@ export class Router {
   }
 
   private lookupHandler(request: Request): Handler | undefined {
-    let acceptMimeType = extractSupportedMimeType(
-      request.headers.get('Accept') as unknown as null | string | [string],
-    );
-    if (!acceptMimeType) {
-      return;
-    }
-    if (!isHTTPMethod(request.method)) {
-      return;
-    }
-    let routeTable = this.#routeTable;
-    let routes = routeTable.get(acceptMimeType)?.get(request.method);
-    if (!routes) {
-      return;
-    }
-
-    // we construct a new URL within RealmPath.local() param that strips off the query string
-    let requestPath = `/${this.#paths.local(request.url)}`;
-    // add a leading and trailing slashes back so we can match on routing rules for directories.
-    requestPath =
-      request.url.endsWith('/') && requestPath !== '/'
-        ? `${requestPath}/`
-        : requestPath;
-    for (let [route, handler] of routes) {
-      // let's take care of auto escaping '/' and anchoring in our route regex's
-      // to make it more readable in our config
-      let routeRegExp = new RegExp(`^${route.replace('/', '\\/')}$`);
-      if (routeRegExp.test(requestPath)) {
-        return handler;
-      }
-    }
-    return;
+    return lookupRouteFamily(this.#routeTable, this.#paths, request);
   }
 }

@@ -65,8 +65,11 @@ import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
 import {
   AuthenticationError,
   AuthorizationError,
+  Method,
+  RouteTable,
   Router,
   SupportedMimeType,
+  lookupRouteFamily,
 } from './router';
 import { parseQueryString } from './query';
 //@ts-ignore service worker can't handle this
@@ -965,12 +968,34 @@ export class Realm {
     request: Request,
     neededPermission: 'read' | 'write',
   ) {
-    // If the realm is public readable or writable, do not require a JWT
+      let endpontsWithoutAuthNeeded: RouteTable<true> = new Map([
+        // authentication endpoint
+        [
+          SupportedMimeType.Session,
+          new Map([
+            ['POST' as Method, new Map([['/_session', true]])],
+          ]),
+        ],
+        // SSE endpoint
+        [
+          SupportedMimeType.EventStream,
+          new Map([
+            ['GET' as Method, new Map([['/_message', true]])],
+          ]),
+        ],
+        // serve a text/html endpoint
+        [
+          SupportedMimeType.HTML,
+          new Map([
+            ['GET' as Method, new Map([['/.*', true]])],
+          ]),
+        ],
+      ]);
+    
     if (
-      request.url.endsWith('_message') ||
-      request.url.endsWith('_session') ||
+      lookupRouteFamily(endpontsWithoutAuthNeeded, this.paths, request) ||
       request.method === 'HEAD' ||
-      request.headers.get('Accept') === SupportedMimeType.HTML ||
+      // If the realm is public readable or writable, do not require a JWT
       (neededPermission === 'read' &&
         this.#permissions['*']?.includes('read')) ||
       (neededPermission === 'write' &&

@@ -71,9 +71,6 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   constructor(owner: Owner, args: CardRouteSignature['Args']) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
-    // if (!this.args.model && !this.args.controller.operatorModeEnabled) {
-    //   scheduleOnce('afterRender', this, this.toggleOperatorMode);
-    // }
 
     // this allows the guest mode cards-grid to use a live query. I'm not sure
     // if that is a requirement or not. we can remove this if it is not.

@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
@@ -105,10 +106,17 @@ module('Acceptance | permissioned realm tests', function (hooks) {
     await visit('/test/');
 
     // Redirecting to operator mode if realm is not publicly readable
-    assert.strictEqual(
-      currentURL(),
-      '/test/?operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%5B%7B%22format%22%3A%22isolated%22%2C%22id%22%3A%22http%3A%2F%2Ftest-realm%2Ftest%2F%22%7D%5D%5D%2C%22submode%22%3A%22interact%22%7D',
-    );
+    assert.operatorModeParametersMatch(currentURL(), {
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: Submodes.Interact,
+    });
 
     await waitFor('[data-test-stack-card]');
     assert.dom(`[data-test-stack-card="${testRealmURL}"]`).exists();
