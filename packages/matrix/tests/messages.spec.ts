@@ -49,7 +49,6 @@ test.describe('Room messages', () => {
     let room1 = await getRoomName(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
-    await removeAutoAttachedCard(page);
     await assertMessages(page, []);
 
     await writeMessage(page, room1, 'Message 1');
@@ -59,7 +58,7 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-new-session]')).toHaveCount(0);
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
-    let room2 = await createRoom(page);
+    let room2 = await createRoom(page, false);
     await openRoom(page, room1);
 
     await reloadAndOpenAiAssistant(page);
@@ -105,7 +104,6 @@ test.describe('Room messages', () => {
   test(`it can send a markdown message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await removeAutoAttachedCard(page);
     await sendMessage(page, room1, 'message with _style_');
     await assertMessages(page, [
       {
@@ -122,7 +120,7 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
     await sendMessage(page, room1, 'Hello');
-    let room2 = await createRoom(page);
+    let room2 = await createRoom(page, false);
     await openRoom(page, room1);
 
     await writeMessage(page, room1, 'room 1 message');
@@ -156,7 +154,6 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
 
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
@@ -186,7 +183,6 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/big-card`; // this is a 153KB card
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
@@ -211,7 +207,6 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/mango-puppy`; // this is a 153KB card
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
@@ -255,7 +250,6 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await removeAutoAttachedCard(page);
     await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
       {
@@ -269,7 +263,6 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/type-examples`;
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await removeAutoAttachedCard(page);
 
     // Send a card that contains a type that matrix doesn't support
     await sendMessage(page, room1, undefined, [testCard]);
@@ -286,7 +279,6 @@ test.describe('Room messages', () => {
     const testCard2 = `${testHost}/mango`;
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard);
     await selectCardFromCatalog(page, testCard2);
@@ -352,7 +344,6 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await removeAutoAttachedCard(page);
 
     await sendMessage(page, room1, 'message 1', [testCard1]);
     await assertMessages(page, [message1]);
@@ -384,7 +375,6 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
@@ -408,7 +398,6 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard2);
     await selectCardFromCatalog(page, testCard1);
@@ -440,7 +429,6 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
