@@ -774,72 +774,6 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Fadhlan');
     });
 
-    test('it sends regular messages without any context while the share checkbox is unticked', async function (assert) {
-      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template>
-            <OperatorMode @onClose={{noop}} />
-            <CardPrerender />
-          </template>
-        },
-      );
-
-      await waitFor('[data-test-person]');
-      assert.dom('[data-test-boxel-header-title]').hasText('Person');
-      assert.dom('[data-test-person]').hasText('Fadhlan');
-
-      let roomId = await openAiAssistant();
-
-      // Add some text so that we can click the send button
-      // Do not share the context here
-      assert.dom(`[data-test-message-field="${roomId}"]`).exists();
-      await fillIn(`[data-test-message-field="${roomId}"]`, 'hello');
-
-      // Send message
-      await click('[data-test-send-message-btn]');
-      assert.deepEqual(matrixService.lastMessageSent, {
-        body: 'hello',
-        cards: undefined,
-        context: undefined,
-        roomId,
-      });
-    });
-
-    test('sends the top stack cards when context sharing is on', async function (assert) {
-      await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template>
-            <OperatorMode @onClose={{noop}} />
-            <CardPrerender />
-          </template>
-        },
-      );
-
-      await waitFor('[data-test-boxel-header-title]');
-      assert.dom('[data-test-boxel-header-title]').hasText('Pet');
-
-      let roomId = await openAiAssistant();
-
-      // Add some text so that we can click the send button
-      assert.dom(`[data-test-message-field="${roomId}"]`).exists();
-      await fillIn(`[data-test-message-field="${roomId}"]`, 'hello');
-      // Set sharing the context to true
-      await click('[data-test-share-context]');
-
-      // Send message
-      await click('[data-test-send-message-btn]');
-      // Checking the object itself has issues due to serialisation
-      // checking we're sharing the correct card should be enough
-      assert.equal(matrixService.lastMessageSent.context.openCards.length, 1);
-      assert.equal(matrixService.lastMessageSent.context.submode, 'interact');
-      assert.equal(
-        matrixService.lastMessageSent.context.openCards[0].id,
-        'http://test-realm/test/Pet/mango',
-      );
-    });
-
     test('it can handle an error in a card attached to a matrix message', async function (assert) {
       await setCardInOperatorModeState();
       await renderComponent(
@@ -859,27 +793,42 @@ module('Integration | operator-mode', function (hooks) {
         type: 'm.room.message',
         origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
         content: {
+          body: '',
+          formatted_body: '',
+          msgtype: 'org.boxel.cardFragment',
+          data: JSON.stringify({
+            index: 0,
+            totalParts: 1,
+            cardFragment: JSON.stringify({
+              data: {
+                id: 'http://this-is-not-a-real-card.com',
+                type: 'card',
+                attributes: {
+                  firstName: 'Boom',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://not-a-real-card.com',
+                    name: 'Boom',
+                  },
+                },
+              },
+            }),
+          }),
+        },
+      });
+      await addRoomEvent(matrixService, {
+        event_id: 'event2',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
+        content: {
           body: 'card with error',
           formatted_body: 'card with error',
           msgtype: 'org.boxel.message',
           data: JSON.stringify({
-            attachedCards: [
-              {
-                data: {
-                  id: 'http://this-is-not-a-real-card.com',
-                  type: 'card',
-                  attributes: {
-                    firstName: 'Boom',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: 'http://not-a-real-card.com',
-                      name: 'Boom',
-                    },
-                  },
-                },
-              },
-            ],
+            attachedCardsEventIds: ['event1'],
           }),
         },
       });
@@ -1007,6 +956,44 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-past-sessions]').exists();
       await click('[data-test-message-field]');
       assert.dom('[data-test-past-sessions]').doesNotExist();
+    });
+
+    test('it can render a markdown message from ai bot', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
+          msgtype: 'm.text',
+          formatted_body:
+            "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: 1709652566421,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+      await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+      assert.dom('[data-test-message-idx="0"] h1').containsText('Beagles');
+      assert.dom('[data-test-message-idx="0"]').doesNotContainText('# Beagles');
+      assert.dom('[data-test-message-idx="0"] p').exists({ count: 2 });
+      assert.dom('[data-test-message-idx="0"] em').hasText('love');
+      assert.dom('[data-test-message-idx="0"]').doesNotContainText('_love_');
     });
   });
 

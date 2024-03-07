@@ -1,8 +1,8 @@
-import { Input } from '@ember/component';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout, all } from 'ember-concurrency';
 
@@ -58,21 +58,12 @@ export default class Room extends Component<Signature> {
             data-test-message-field={{this.room.name}}
           />
           <AiAssistantCardPicker
+            @autoAttachedCard={{this.autoAttachedCard}}
             @cardsToAttach={{this.cardsToAttach}}
             @chooseCard={{this.chooseCard}}
             @removeCard={{this.removeCard}}
           />
         </div>
-        <small>
-          <label>
-            <Input
-              @type='checkbox'
-              @checked={{this.shareCurrentContext}}
-              data-test-share-context
-            />
-            Allow access to the cards you can see at the top of your stacks
-          </label>
-        </small>
         <small>Assistant may display inacurrate info, please double check its
           responses.</small>
       </footer>
@@ -114,11 +105,13 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   private roomResource = getRoom(this, () => this.args.roomId);
-  private shareCurrentContext = false;
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, CardDef[] | undefined> =
     new TrackedMap();
+  private lastTopMostCard: CardDef | undefined;
+
+  @tracked private isAutoAttachedCardDisplayed = true;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -147,9 +140,8 @@ export default class Room extends Component<Signature> {
     return this.cardsToSend.get(this.args.roomId);
   }
 
-  @action sendPrompt(message: string) {
-    this.setMessage(message);
-    this.sendMessage();
+  @action sendPrompt(prompt: string) {
+    this.doSendMessage.perform(prompt); // sends the prompt only
   }
 
   @action
@@ -159,7 +151,17 @@ export default class Room extends Component<Signature> {
 
   @action
   private sendMessage() {
-    this.doSendMessage.perform(this.messageToSend, this.cardsToAttach);
+    let cards = [];
+    if (this.cardsToAttach) {
+      cards.push(...this.cardsToAttach);
+    }
+    if (this.autoAttachedCard) {
+      cards.push(this.autoAttachedCard);
+    }
+    this.doSendMessage.perform(
+      this.messageToSend,
+      cards.length ? cards : undefined,
+    );
   }
 
   @action
@@ -172,23 +174,35 @@ export default class Room extends Component<Signature> {
 
   @action
   private removeCard(card: CardDef) {
-    let cards = this.cardsToAttach?.filter((c) => c.id !== card.id);
-    this.cardsToSend.set(this.args.roomId, cards?.length ? cards : undefined);
+    // If card doesn't exist in `cardsToAttch`,
+    // then it is an auto-attached card.
+    const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
+    if (
+      cardIndex == undefined ||
+      (cardIndex === -1 && this.autoAttachedCard?.id === card.id)
+    ) {
+      this.isAutoAttachedCardDisplayed = false;
+    } else {
+      if (cardIndex != undefined && cardIndex !== -1) {
+        this.cardsToAttach?.splice(cardIndex, 1);
+      }
+      this.cardsToSend.set(
+        this.args.roomId,
+        this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+      );
+    }
   }
 
   private doSendMessage = restartableTask(
     async (message: string | undefined, cards?: CardDef[]) => {
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
-      let context = undefined;
-      if (this.shareCurrentContext) {
-        context = {
-          submode: this.operatorModeStateService.state.submode,
-          openCards: this.operatorModeStateService
-            .topMostStackItems()
-            .map((stackItem) => stackItem.card),
-        };
-      }
+      let context = {
+        submode: this.operatorModeStateService.state.submode,
+        openCardIds: this.operatorModeStateService
+          .topMostStackItems()
+          .map((stackItem) => stackItem.card.id),
+      };
       await this.matrixService.sendMessage(
         this.args.roomId,
         message,
@@ -197,6 +211,30 @@ export default class Room extends Component<Signature> {
       );
     },
   );
+
+  @action
+  private setLastTopMostCard(card: CardDef) {
+    if (this.lastTopMostCard?.id !== card.id) {
+      this.lastTopMostCard = card;
+      this.isAutoAttachedCardDisplayed = true;
+    }
+  }
+
+  private get autoAttachedCard(): CardDef | undefined {
+    let stackItems = this.operatorModeStateService.topMostStackItems();
+    let topMostCard = stackItems[stackItems.length - 1]?.card;
+    if (!topMostCard) {
+      return undefined;
+    }
+    this.setLastTopMostCard(topMostCard);
+
+    let card = this.cardsToAttach?.find((c) => c.id === topMostCard.id);
+    if (!this.isAutoAttachedCardDisplayed || card) {
+      return undefined;
+    }
+
+    return topMostCard;
+  }
 
   private get isSendButtonDisabled() {
     return (

@@ -228,10 +228,18 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function createRoom(page: Page) {
+export async function createRoom(
+  page: Page,
+  removeAutoAttachedCard: boolean = true,
+) {
   await page.locator('[data-test-create-room-btn]').click();
   let roomName = await getRoomName(page);
   await isInRoom(page, roomName);
+  if (removeAutoAttachedCard) {
+    await page
+      .locator(`[data-test-selected-card] [data-test-remove-card-btn]`)
+      .click();
+  }
   return roomName;
 }
 
@@ -303,8 +311,15 @@ export async function writeMessage(
   ).toHaveValue(message);
 }
 
-export async function selectCardFromCatalog(page: Page, cardId: string) {
+export async function selectCardFromCatalog(
+  page: Page,
+  cardId: string,
+  realmName = 'Test Workspace A',
+) {
   await page.locator('[data-test-choose-card-btn]').click();
+  await page
+    .locator(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
+    .click();
   await page.locator(`[data-test-select="${cardId}"]`).click();
   await page.locator('[data-test-card-catalog-go-button]').click();
 }

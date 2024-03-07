@@ -12,6 +12,7 @@ import {
   type EmittedEvents,
   type IEvent,
   type MatrixClient,
+  type ISendEventResponse,
 } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -19,6 +20,9 @@ import {
   type LooseSingleCardDocument,
   sanitizeHtml,
   aiBotUsername,
+  splitStringIntoChunks,
+  baseRealm,
+  loaderFor,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
@@ -32,12 +36,14 @@ import ENV from '@cardstack/host/config/environment';
 
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
+import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
+  CardFragmentContent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -53,12 +59,13 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const DEFAULT_PAGE_SIZE = 50;
+const MAX_CARD_SIZE_KB = 60;
 
 export type Event = Partial<IEvent>;
 
 export type OperatorModeContext = {
   submode: Submode;
-  openCards: CardDef[];
+  openCardIds: string[];
 };
 
 export default class MatrixService extends Service {
@@ -319,16 +326,16 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent,
+    content: CardMessageContent | CardFragmentContent,
   ) {
     if (content.data) {
       const encodedContent = {
         ...content,
         data: JSON.stringify(content.data),
       };
-      await this.client.sendEvent(roomId, eventType, encodedContent);
+      return await this.client.sendEvent(roomId, eventType, encodedContent);
     } else {
-      await this.client.sendEvent(roomId, eventType, content);
+      return await this.client.sendEvent(roomId, eventType, content);
     }
   }
 
@@ -340,49 +347,64 @@ export default class MatrixService extends Service {
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
     let functions = [];
-    let serializedOpenCards: LooseSingleCardDocument[] = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
     let currentSubMode = context?.submode;
+    let openCardIds = context?.openCardIds ?? [];
     if (context?.submode === 'interact') {
-      // Serialize the top of all cards on all stacks
-      serializedOpenCards = await Promise.all(
-        context!.openCards.map(async (card) => {
-          return await this.cardService.serializeCard(card);
-        }),
-      );
       let mappings = await basicMappings(this.loaderService.loader);
-
-      // Limiting support to modifying the top of just one stack
-      let patchSpec = generateCardPatchCallSpecification(
-        context!.openCards[0].constructor as typeof CardDef,
-        this.cardAPI,
-        mappings,
+      // Open cards are attached automaticaly
+      // If they are not attached, the user is not allowing us to
+      // modify them
+      let openCardDefs = attachedCards.filter((c) =>
+        context.openCardIds.includes(c.id),
       );
+      // Generate function calls for patching currently open cards
+      for (let openCardDef of openCardDefs) {
+        let patchSpec = generateCardPatchCallSpecification(
+          openCardDef.constructor as typeof CardDef,
+          this.cardAPI,
+          mappings,
+        );
 
-      functions.push({
-        name: 'patchCard',
-        description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-        parameters: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
+        functions.push({
+          name: 'patchCard',
+          description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+          parameters: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+              },
+              card_id: {
+                type: 'string',
+                const: openCardDef.id, // Force the valid card_id to be the id of the card being patched
+              },
+              attributes: patchSpec,
             },
-            card_id: {
-              type: 'string',
-              const: context!.openCards[0].id, // Force the valid card_id to be the id of the card being patched
-            },
-            attributes: patchSpec,
+            required: ['card_id', 'attributes', 'description'],
           },
-          required: ['card_id', 'attributes', 'description'],
-        },
-      });
+        });
+      }
     }
 
     if (attachedCards?.length) {
       serializedAttachedCards = await Promise.all(
-        attachedCards.map(async (c) => await this.cardService.serializeCard(c)),
+        attachedCards.map(async (card) => {
+          let { Base64ImageField } = await loaderFor(card).import<{
+            Base64ImageField: typeof Base64ImageFieldType;
+          }>(`${baseRealm.url}base64-image`);
+          return await this.cardService.serializeCard(card, {
+            omitFields: [Base64ImageField],
+          });
+        }),
       );
+    }
+    let attachedCardsEventIds: string[] = [];
+    if (serializedAttachedCards.length > 0) {
+      for (let attachedCard of serializedAttachedCards) {
+        let eventIds = await this.sendCardFragments(roomId, attachedCard);
+        attachedCardsEventIds.push(eventIds[0].event_id); // we only care about the first fragment
+      }
     }
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: 'org.boxel.message',
@@ -390,14 +412,51 @@ export default class MatrixService extends Service {
       format: 'org.matrix.custom.html',
       formatted_body: html,
       data: {
-        attachedCards: serializedAttachedCards,
+        attachedCardsEventIds,
         context: {
-          openCards: serializedOpenCards,
+          openCardIds: openCardIds,
           functions: functions,
           submode: currentSubMode,
         },
       },
-    });
+    } as CardMessageContent);
+  }
+
+  private async sendCardFragments(
+    roomId: string,
+    card: LooseSingleCardDocument,
+  ): Promise<ISendEventResponse[]> {
+    let fragments = splitStringIntoChunks(
+      JSON.stringify(card),
+      MAX_CARD_SIZE_KB,
+    );
+    let responses: ISendEventResponse[] = [];
+    for (let [index, cardFragment] of fragments.entries()) {
+      let response = await this.sendEvent(roomId, 'm.room.message', {
+        ...(responses.length > 0
+          ? {
+              'm.relates_to': {
+                event_id: responses[responses.length - 1].event_id,
+                rel_type: 'append',
+              },
+            }
+          : {}),
+        msgtype: 'org.boxel.cardFragment' as const,
+        format: 'org.boxel.card' as const,
+        body: `card fragment ${index + 1} of ${fragments.length}`,
+        formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
+        data: {
+          ...(responses.length > 0
+            ? { firstFragment: responses[0].event_id }
+            : {}),
+          cardFragment,
+          index,
+          totalParts: fragments.length,
+        },
+      } as CardFragmentContent);
+      responses.push(response);
+    }
+    return responses;
   }
 
   async initializeRooms() {
