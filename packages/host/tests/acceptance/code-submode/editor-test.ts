@@ -1,4 +1,4 @@
-import { click, waitFor, fillIn } from '@ember/test-helpers';
+import { click, waitFor, fillIn, find } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 
@@ -798,6 +798,16 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           MonacoSDK.editor.EditorOption.readOnly,
         ),
         'editor should be read-only',
+      );
+
+      assert.dom('[data-test-realm-indicator-not-writable]').exists();
+      assert.strictEqual(
+        find('.monaco-editor')
+          ?.computedStyleMap()
+          .get('background-color')!
+          .toString(),
+        'rgb(235, 234, 237)', // equivalent to #ebeaed
+        'monaco editor is greyed out when read-only',
       );
     });
   });
