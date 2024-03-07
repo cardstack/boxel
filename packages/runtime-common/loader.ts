@@ -5,11 +5,8 @@ import { trimExecutableExtension, logger } from './index';
 import { RealmPaths } from './paths';
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
-import { type RunnerOpts } from './search-index';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
-
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -114,6 +111,8 @@ type EvaluatableDep =
 
 export type RequestHandler = (req: Request) => Promise<Response | null>;
 
+type Fetch = typeof fetch;
+
 let nonce = 0;
 export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
@@ -136,8 +135,14 @@ export class Loader {
   private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
 
+  private fetchImplementation: Fetch;
+
+  constructor(fetch: Fetch) {
+    this.fetchImplementation = fetch;
+  }
+
   static cloneLoader(loader: Loader): Loader {
-    let clone = new Loader();
+    let clone = new Loader(loader.fetchImplementation);
     clone.urlHandlers = loader.urlHandlers;
     clone.urlMappings = loader.urlMappings;
     for (let [moduleIdentifier, module] of loader.moduleShims) {
@@ -508,7 +513,9 @@ export class Loader {
           return result;
         }
       }
-      return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
+      return await this.fetchImplementation(
+        this.asResolvedRequest(urlOrRequest, init),
+      );
     } catch (err: any) {
       let url =
         urlOrRequest instanceof Request
@@ -610,9 +617,12 @@ export class Loader {
     };
     this.setModule(moduleIdentifier, module);
 
-    let src: string | null | undefined;
+    let loaded:
+      | { type: 'source'; source: string }
+      | { type: 'shimmed'; module: Record<string, unknown> };
+
     try {
-      src = await this.load(moduleURL);
+      loaded = await this.load(moduleURL);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
@@ -621,6 +631,19 @@ export class Loader {
       });
       throw exception;
     }
+
+    if (loaded.type === 'shimmed') {
+      this.setModule(moduleIdentifier, {
+        state: 'evaluated',
+        moduleInstance: loaded.module,
+        consumedModules: new Set(),
+      });
+      module.deferred.fulfill();
+      return;
+    }
+
+    let src: string | null | undefined = loaded.source;
+
     src = transformSync(src, {
       plugins: [
         [
@@ -758,7 +781,12 @@ export class Loader {
     }
   }
 
-  private async load(moduleURL: ResolvedURL): Promise<string> {
+  private async load(
+    moduleURL: ResolvedURL,
+  ): Promise<
+    | { type: 'source'; source: string }
+    | { type: 'shimmed'; module: Record<string, unknown> }
+  > {
     let response: Response;
     try {
       response = await this.fetch(moduleURL);
@@ -773,22 +801,15 @@ export class Loader {
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
       throw error;
     }
-    return await response.text();
-  }
-}
 
-function getNativeFetch(): typeof fetch {
-  if (isFastBoot) {
-    let optsId = (globalThis as any).runnerOptsId;
-    if (optsId == null) {
-      throw new Error(`Runner Options Identifier was not set`);
+    if (Symbol.for('shimmed-module') in response) {
+      return {
+        type: 'shimmed',
+        module: (response as any)[Symbol.for('shimmed-module')],
+      };
     }
-    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
-      optsId: number,
-    ) => RunnerOpts;
-    return getRunnerOpts(optsId)._fetch;
-  } else {
-    return fetch;
+
+    return { type: 'source', source: await response.text() };
   }
 }
 
