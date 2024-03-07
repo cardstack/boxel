@@ -43,7 +43,7 @@ export function extractSupportedMimeType(
 
 export type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
 
-export function lookupRouteFamily<T>(routeTable: RouteTable<T>, paths: RealmPaths, request: Request) {
+export function lookupRouteTable<T>(routeTable: RouteTable<T>, paths: RealmPaths, request: Request) {
   let acceptMimeType = extractSupportedMimeType(
     request.headers.get('Accept') as unknown as null | string | [string],
   )
@@ -145,6 +145,6 @@ export class Router {
   }
 
   private lookupHandler(request: Request): Handler | undefined {
-    return lookupRouteFamily(this.#routeTable, this.#paths, request);
+    return lookupRouteTable(this.#routeTable, this.#paths, request);
   }
 }

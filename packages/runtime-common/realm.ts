@@ -69,7 +69,7 @@ import {
   RouteTable,
   Router,
   SupportedMimeType,
-  lookupRouteFamily,
+  lookupRouteTable,
 } from './router';
 import { parseQueryString } from './query';
 //@ts-ignore service worker can't handle this
@@ -993,7 +993,7 @@ export class Realm {
       ]);
     
     if (
-      lookupRouteFamily(endpontsWithoutAuthNeeded, this.paths, request) ||
+      lookupRouteTable(endpontsWithoutAuthNeeded, this.paths, request) ||
       request.method === 'HEAD' ||
       // If the realm is public readable or writable, do not require a JWT
       (neededPermission === 'read' &&
