@@ -14,6 +14,7 @@ interface Signature {
     value: string;
     onInput: (val: string) => void;
     onSend: (val: string) => void;
+    sendDisabled?: boolean;
   };
 }
 
@@ -29,7 +30,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         @type='textarea'
         @value={{@value}}
         @onInput={{@onInput}}
-        @placeholder='Enter text here'
+        @placeholder='Enter a prompt'
         {{onKeyMod 'cmd+Enter' this.onSend}}
         {{onKeyMod 'ctrl+Enter' this.onSend}}
         {{setCssVar chat-input-height=this.height}}
@@ -40,39 +41,50 @@ export default class AiAssistantChatInput extends Component<Signature> {
         class='send-button'
         @icon={{Send}}
         @height='20'
-        @width='20'
+        @width='25'
+        disabled={{@sendDisabled}}
+        aria-label='Send'
         data-test-send-message-btn
-      >
-        Send
-      </IconButton>
+      />
     </div>
     <style>
       .chat-input-container {
         display: grid;
         grid-template-columns: 1fr auto;
-        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xxs) var(--boxel-sp-xxs)
+          var(--boxel-sp-xs);
         background-color: var(--boxel-light);
       }
       .chat-input {
         height: var(--chat-input-height);
+        min-height: var(--chat-input-height);
         border-color: transparent;
         font-weight: 500;
-        padding: var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-4xs);
         resize: none;
+        outline: 0;
       }
       .chat-input::placeholder {
         color: var(--boxel-400);
       }
       .chat-input:hover:not(:disabled) {
-        border-color: var(--boxel-border-color);
+        border-color: transparent;
       }
       .send-button {
-        --icon-color: var(--boxel-highlight);
-        height: 30px;
-        padding-bottom: var(--boxel-sp-xs);
+        width: var(--boxel-icon-med);
+        height: var(--boxel-icon-med);
+        background-color: var(--boxel-highlight);
+        border-radius: var(--boxel-border-radius-sm);
       }
-      .send-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight-hover);
+      .send-button:hover:not(:disabled),
+      .send-button:focus:not(:disabled) {
+        background-color: var(--boxel-highlight-hover);
+      }
+      .send-button:disabled {
+        --icon-color: var(--boxel-450);
+        background-color: var(--boxel-300);
+        pointer-events: none;
       }
     </style>
   </template>
@@ -83,14 +95,14 @@ export default class AiAssistantChatInput extends Component<Signature> {
 
   get height() {
     const lineHeight = 20;
-    const padding = 9;
+    const padding = 8;
 
     let lineCount = (this.args.value.match(/\n/g) ?? []).length + 1;
-    let count = 2;
+    let count = 1;
 
     if (lineCount > 5) {
       count = 5;
-    } else if (lineCount > 2) {
+    } else if (lineCount > 1) {
       count = lineCount;
     }
 

@@ -10,13 +10,15 @@ interface Signature {
     hideIcon?: boolean;
     iconHeight?: string;
     iconWidth?: string;
-    variant?: 'full-width' | 'pill';
+    variant?: AddButtonVariant;
   };
   Blocks: {
     default: [];
   };
   Element: HTMLElement;
 }
+
+export type AddButtonVariant = 'full-width' | 'pill';
 
 const AddButton: TemplateOnlyComponent<Signature> = <template>
   {{#if (bool @variant)}}
@@ -28,10 +30,12 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       }}
       ...attributes
     >
-      {{#unless @hideIcon}}<IconPlus
+      {{#unless @hideIcon}}
+        <IconPlus
           width={{if @iconWidth @iconWidth '20px'}}
           height={{if @iconHeight @iconHeight '20px'}}
-        />{{/unless}}
+        />
+      {{/unless}}
       {{yield}}
     </button>
   {{else}}
@@ -56,7 +60,6 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       border: none;
       box-shadow: 0 4px 6px 0px rgb(0 0 0 / 35%);
     }
-
     .add-button:hover {
       --icon-bg: var(--boxel-light-200);
     }
@@ -77,11 +80,13 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       color: var(--boxel-highlight);
       font: 700 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
-      transition: background-color var(--boxel-transition);
+      transition:
+        background-color var(--boxel-transition),
+        box-shadow var(--boxel-transition);
     }
-
     .add-button--full-width:hover:not(:disabled) {
       background-color: var(--boxel-light-200);
+      box-shadow: var(--boxel-box-shadow);
       cursor: pointer;
     }
 
@@ -101,6 +106,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       letter-spacing: var(--boxel-lsp-xs);
       transition: background-color var(--boxel-transition);
     }
+    .add-button--pill:focus:not(:disabled),
     .add-button--pill:hover:not(:disabled) {
       box-shadow: var(--boxel-box-shadow);
       cursor: pointer;

@@ -49,26 +49,32 @@ export default class Room extends Component<Signature> {
       {{/if}}
 
       <footer class='room-actions'>
-        <AiAssistantChatInput
-          @value={{this.messageToSend}}
-          @onInput={{this.setMessage}}
-          @onSend={{this.sendMessage}}
-          data-test-message-field={{this.room.name}}
-        />
-        <AiAssistantCardPicker
-          @maxNumberOfCards={{5}}
-          @cardsToAttach={{this.cardsToAttach}}
-          @chooseCard={{this.chooseCard}}
-          @removeCard={{this.removeCard}}
-        />
-        <label>
-          <Input
-            @type='checkbox'
-            @checked={{this.shareCurrentContext}}
-            data-test-share-context
+        <div class='chat-input-area'>
+          <AiAssistantChatInput
+            @value={{this.messageToSend}}
+            @onInput={{this.setMessage}}
+            @onSend={{this.sendMessage}}
+            @sendDisabled={{this.isSendButtonDisabled}}
+            data-test-message-field={{this.room.name}}
           />
-          Allow access to the cards you can see at the top of your stacks
-        </label>
+          <AiAssistantCardPicker
+            @cardsToAttach={{this.cardsToAttach}}
+            @chooseCard={{this.chooseCard}}
+            @removeCard={{this.removeCard}}
+          />
+        </div>
+        <small>
+          <label>
+            <Input
+              @type='checkbox'
+              @checked={{this.shareCurrentContext}}
+              data-test-share-context
+            />
+            Allow access to the cards you can see at the top of your stacks
+          </label>
+        </small>
+        <small>Assistant may display inacurrate info, please double check its
+          responses.</small>
       </footer>
     </section>
 
@@ -83,7 +89,22 @@ export default class Room extends Component<Signature> {
         padding-bottom: var(--boxel-sp);
       }
       .room-actions {
+        padding: var(--boxel-sp);
         box-shadow: var(--boxel-box-shadow);
+      }
+      .room-actions > * + * {
+        margin-top: var(--boxel-sp-sm);
+      }
+      .chat-input-area {
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
+        overflow: hidden;
+      }
+      small {
+        display: block;
+        color: var(--boxel-450);
+        font: var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
       }
     </style>
   </template>
@@ -176,6 +197,13 @@ export default class Room extends Component<Signature> {
       );
     },
   );
+
+  private get isSendButtonDisabled() {
+    return (
+      (!this.messageToSend && !this.cardsToAttach) ||
+      this.doSendMessage.isRunning
+    );
+  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {
