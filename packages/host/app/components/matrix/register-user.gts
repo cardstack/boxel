@@ -702,7 +702,6 @@ export default class RegisterUser extends Component<Signature> {
         auth as LoginResponse,
         this.state.name,
       );
-      this.args.setMode('login');
     }
   });
 
