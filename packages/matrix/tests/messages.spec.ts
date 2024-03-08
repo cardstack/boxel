@@ -266,7 +266,6 @@ test.describe('Room messages', () => {
     await expect(
       page.locator(`[data-test-stack-card="${testHost}/mango"]`),
     ).toHaveCount(1);
-    await page.locator('[data-test-share-context]').click();
     await sendMessage(page, room1, 'please change this card');
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
@@ -313,7 +312,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test(`it does not include patch function in message event when context is not shared`, async ({
+  test(`it does not include patch function in message event for an open card that is not attached`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -326,6 +325,11 @@ test.describe('Room messages', () => {
     await expect(
       page.locator(`[data-test-stack-card="${testHost}/mango"]`),
     ).toHaveCount(1);
+    await page
+      .locator(
+        `[data-test-selected-card="${testHost}/mango"] [data-test-remove-card-btn]`,
+      )
+      .click();
     await sendMessage(page, room1, 'please change this card');
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
@@ -349,7 +353,6 @@ test.describe('Room messages', () => {
         '[data-test-stack-card="https://cardstack.com/base/fields/boolean-field"]',
       ),
     ).toHaveCount(1);
-    await page.locator('[data-test-share-context]').click();
     await sendMessage(page, room1, 'please change this card');
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
