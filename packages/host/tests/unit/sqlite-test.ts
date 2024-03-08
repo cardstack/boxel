@@ -35,7 +35,19 @@ module('Unit | sqlite | smoke test', function (hooks) {
   }
 
   test('run a sqlite db', function (assert) {
-    const db = new sqlite.oo1.DB('/mydb.sqlite3', 'c'); // "ct" flags: c = create db if does not exist, t = enable tracing
+    // ":localStorage:" and ":sessionStorage:" are also a valid filename value
+    // when running in the main window thread, which opens up some interesting
+    // persistance options for us.
+    //
+    // It is possible to write to the local
+    // filesystem via Origin Private Filesystem, but it requires _very_
+    // restrictive response headers that would cause our host app to break
+    //     "Cross-Origin-Embedder-Policy: require-corp"
+    //     "Cross-Origin-Opener-Policy: same-origin"
+    // https://webkit.org/blog/12257/the-file-system-access-api-with-origin-private-file-system/
+
+    const db = new sqlite.oo1.DB({ filename: ':memory:' });
+
     try {
       db.exec(`
         CREATE TABLE t(a,b);
