@@ -11,6 +11,7 @@ import AiAssistantChatInput from './index';
 
 export default class AiAssistantChatInputUsage extends Component {
   @tracked value = '';
+  @tracked canSend = true;
 
   @action onSend(message: string) {
     console.log(`message sent: ${message}`);
@@ -35,7 +36,7 @@ export default class AiAssistantChatInputUsage extends Component {
           @value={{this.value}}
           @onInput={{fn (mut this.value)}}
           @onSend={{this.onSend}}
-          @isSending={{this.mockSend.isRunning}}
+          @canSend={{this.canSend}}
         />
       </:example>
       <:api as |Args|>
@@ -54,10 +55,11 @@ export default class AiAssistantChatInputUsage extends Component {
           @description='Action to be called when "cmd+Enter" or \`ctrl+Enter\` keys are pressed or send button is clicked'
           @value={{this.onSend}}
         />
-        <Args.Action
-          @name='isSending'
-          @description='A boolean indicating if the message being sent is in flight'
-          @value={{this.mockSend.isRunning}}
+        <Args.Bool
+          @name='canSend'
+          @description='A boolean indicating whether the message can be sent'
+          @onInput={{fn (mut this.canSend)}}
+          @value={{this.canSend}}
         />
       </:api>
     </FreestyleUsage>

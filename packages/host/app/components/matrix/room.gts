@@ -54,7 +54,7 @@ export default class Room extends Component<Signature> {
             @value={{this.messageToSend}}
             @onInput={{this.setMessage}}
             @onSend={{this.sendMessage}}
-            @isSending={{this.isSendButtonDisabled}}
+            @canSend={{this.canSend}}
             data-test-message-field={{this.room.name}}
           />
           <AiAssistantCardPicker
@@ -228,10 +228,14 @@ export default class Room extends Component<Signature> {
     return topMostCard;
   }
 
-  private get isSendButtonDisabled() {
+  private get canSend() {
     return (
-      (!this.messageToSend && !this.cardsToAttach && !this.autoAttachedCard) ||
-      this.doSendMessage.isRunning
+      !this.doSendMessage.isRunning &&
+      Boolean(
+        this.messageToSend ||
+          this.cardsToAttach?.length ||
+          this.autoAttachedCard,
+      )
     );
   }
 }
