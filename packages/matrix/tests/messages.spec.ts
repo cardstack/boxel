@@ -46,6 +46,7 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
     await removeAutoAttachedCard(page);
+    await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
     await assertMessages(page, []);
 
     await writeMessage(page, room1, 'Message 1');
