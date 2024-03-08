@@ -2,6 +2,7 @@ import { getOwner } from '@ember/application';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -49,6 +50,17 @@ export default class Auth extends Component {
         clientSecret,
       };
     }
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    // We have to retrigger model hook in the card route by refreshing the router,
+    // because after user logged-in we need to reload the card and operator mode state.
+    scheduleOnce('destroy', this, this.refreshRoute);
+  }
+
+  async refreshRoute() {
+    await this.router.refresh();
   }
 
   @action

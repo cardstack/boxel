@@ -1,7 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -142,7 +141,6 @@ export default class Login extends Component<Signature> {
   @tracked private username: string | undefined;
   @tracked private password: string | undefined;
   @service private declare matrixService: MatrixService;
-  @service declare router: RouterService;
 
   private get isLoginButtonDisabled() {
     return (
@@ -196,7 +194,6 @@ export default class Login extends Component<Signature> {
       throw e;
     }
     if (auth) {
-      await this.router.refresh();
       await this.matrixService.start(auth);
     } else {
       throw new Error(
