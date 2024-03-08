@@ -735,12 +735,7 @@ export interface CardMessageContent {
     // fragments that we receive
     attachedCards?: LooseSingleCardDocument[];
     context: {
-      // we use this field over the wire since the matrix message protocol
-      // limits us to 65KB per message
-      openCardsEventIds?: string[];
-      // we materialize this field on the server from the card
-      // fragments that we receive
-      openCards?: LooseSingleCardDocument[];
+      openCardIds?: string[];
       functions: {
         name: string;
         description: string;
