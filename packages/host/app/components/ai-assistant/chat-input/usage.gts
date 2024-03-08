@@ -14,6 +14,7 @@ export default class AiAssistantChatInputUsage extends Component {
 
   @action onSend(message: string) {
     console.log(`message sent: ${message}`);
+    this.mockSend.perform();
   }
 
   mockSend = restartableTask(async () => {
