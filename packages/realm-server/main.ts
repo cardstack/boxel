@@ -10,8 +10,16 @@ import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
 import { type RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common/realm';
+import * as Sentry from '@sentry/node';
 
 import fs from 'fs';
+
+if (process.env.REALM_SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.REALM_SENTRY_DSN,
+    environment: process.env.REALM_SENTRY_ENVIRONMENT || 'development',
+  });
+}
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {

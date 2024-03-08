@@ -91,5 +91,8 @@
   },
   "volta": {
     "extends": "../../package.json"
+  },
+  "dependencies": {
+    "@sentry/node": "^7.105.0"
   }
 }
