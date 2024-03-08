@@ -119,6 +119,10 @@ export class RealmServer {
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
+    if (ctxt.request.path === '/_boom') {
+      throw new Error('boom');
+    }
+
     let realm = this.realms.find((r) => {
       let reversedResolution = r.loader.reverseResolution(
         fullRequestURL(ctxt).href,
