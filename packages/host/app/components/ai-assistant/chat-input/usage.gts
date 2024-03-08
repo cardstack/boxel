@@ -55,7 +55,7 @@ export default class AiAssistantChatInputUsage extends Component {
           @value={{this.onSend}}
         />
         <Args.Action
-          @name='isSendIdle'
+          @name='isSending'
           @description='A boolean indicating if the message being sent is in flight'
           @value={{this.mockSend.isRunning}}
         />
