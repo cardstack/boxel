@@ -21,6 +21,14 @@ import {
 } from './helpers';
 import { OpenAIError } from 'openai/error';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+import * as Sentry from '@sentry/node';
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT || 'development',
+  });
+}
 
 let log = logger('ai-bot');
 
@@ -153,6 +161,7 @@ async function sendError(
     // We've had a problem sending the error message back to the user
     // Log and continue
     log.error(`Error sending error message back to user: ${e}`);
+    Sentry.captureException(e);
   }
 }
 
@@ -192,6 +201,7 @@ async function setTitle(
     log.info('Setting room title to', title);
     return await client.setRoomName(room.roomId, title);
   } catch (error) {
+    Sentry.captureException(error);
     return await sendError(client, room, error, undefined);
   }
 }
@@ -209,6 +219,9 @@ async function handleDebugCommands(
       room.roomId,
       eventBody.split('debug:title:set:')[1],
     );
+  } else if (eventBody.startsWith('debug:boom')) {
+    await sendMessage(client, room, `Throwing an unhandled error`, undefined);
+    throw new Error('Boom');
   }
   // Use GPT to set the room title
   else if (eventBody.startsWith('debug:title:create')) {
@@ -230,6 +243,7 @@ async function handleDebugCommands(
         );
       }
     } catch (error) {
+      Sentry.captureException(error);
       return await sendMessage(
         client,
         room,
@@ -357,6 +371,7 @@ Common issues are:
           try {
             args = JSON.parse(functionCall.arguments);
           } catch (error) {
+            Sentry.captureException(error);
             return await sendError(
               client,
               room,
@@ -376,6 +391,7 @@ Common issues are:
           return;
         })
         .on('error', async (error: OpenAIError) => {
+          Sentry.captureException(error);
           return await sendError(client, room, error, initialMessage.event_id);
         });
 
