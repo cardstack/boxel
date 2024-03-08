@@ -53,7 +53,7 @@ export default class NewSession extends Component<Signature> {
           </ul>
         {{/if}}
         <small>
-          Assistant may display inacurrate info, please double check its
+          Assistant may display inaccurate info, please double check its
           responses.
         </small>
       {{/if}}
