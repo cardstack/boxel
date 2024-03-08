@@ -1,10 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import {
-  registerUser,
-  loginUser,
-  getAllRoomMessages,
-  getJoinedRooms,
-} from '../docker/synapse';
+import { registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -19,6 +14,7 @@ import {
   isInRoom,
   registerRealmUsers,
   selectCardFromCatalog,
+  getRoomEvents,
 } from '../helpers';
 import {
   synapseStart,
@@ -204,9 +200,26 @@ test.describe('Room messages', () => {
         cards: [{ id: testCard, title: 'Big Card' }],
       },
     ]);
+
+    // peek into the matrix events and confirm there are multiple card fragments
+    let messages = await getRoomEvents();
+    let cardFragments = messages.filter(
+      (message) =>
+        message.type === 'm.room.message' &&
+        message.content?.msgtype === 'org.boxel.cardFragment',
+    );
+    expect(cardFragments.length).toStrictEqual(3);
+    let lastFragment = messages.findIndex((m) => m === cardFragments[2]);
+    let boxelMessage = messages[lastFragment + 1];
+    let boxelMessageData = JSON.parse(boxelMessage.content.data);
+    // the card fragment events need to come before the boxel message event they
+    // are used in, and the boxel message should point to the first fragment
+    expect(boxelMessageData.attachedCardsEventIds).toMatchObject([
+      cardFragments[0].event_id,
+    ]);
   });
 
-  test('it card strip out base64 image fields from cards sent in messages', async ({
+  test('it can strip out base64 image fields from cards sent in messages', async ({
     page,
   }) => {
     const testCard = `${testHost}/mango-puppy`; // this is a 153KB card
@@ -232,24 +245,120 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let { accessToken } = await loginUser('user1', 'pass');
-    let rooms = await getJoinedRooms(accessToken);
-    let roomsWithMessages = await Promise.all(
-      rooms.map((r) => getAllRoomMessages(r, accessToken)),
-    );
-    let messages = roomsWithMessages.find((messages) => {
-      let message = messages[messages.length - 2];
-      return (
-        message.type === 'm.room.message' &&
-        message.content?.msgtype === 'org.boxel.cardFragment'
-      );
-    });
-    let message = messages![messages!.length - 2];
+    let messages = await getRoomEvents();
+    let message = messages[messages.length - 2];
     let messageData = JSON.parse(message.content.data);
     let serializeCard = JSON.parse(messageData.cardFragment);
 
     expect(serializeCard.data.attributes.name).toStrictEqual('Mango the Puppy');
     expect(serializeCard.data.attributes.picture).toBeUndefined();
+  });
+
+  test(`it does include patch function in message event when top-most card is writable and context is shared`, async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomName(page);
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
+      )
+      .click();
+    await expect(
+      page.locator(`[data-test-stack-card="${testHost}/mango"]`),
+    ).toHaveCount(1);
+    await sendMessage(page, room1, 'please change this card');
+    let message = (await getRoomEvents()).pop()!;
+    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    expect(boxelMessageData.context.functions).toMatchObject([
+      {
+        name: 'patchCard',
+        description:
+          'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making',
+        parameters: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+            },
+            card_id: {
+              type: 'string',
+              const: `${testHost}/mango`,
+            },
+            attributes: {
+              type: 'object',
+              properties: {
+                firstName: {
+                  type: 'string',
+                },
+                lastName: {
+                  type: 'string',
+                },
+                email: {
+                  type: 'string',
+                },
+                posts: {
+                  type: 'number',
+                },
+                thumbnailURL: {
+                  type: 'string',
+                },
+              },
+            },
+          },
+          required: ['card_id', 'attributes', 'description'],
+        },
+      },
+    ]);
+  });
+
+  test(`it does not include patch function in message event for an open card that is not attached`, async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomName(page);
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
+      )
+      .click();
+    await expect(
+      page.locator(`[data-test-stack-card="${testHost}/mango"]`),
+    ).toHaveCount(1);
+    await page
+      .locator(
+        `[data-test-selected-card="${testHost}/mango"] [data-test-remove-card-btn]`,
+      )
+      .click();
+    await sendMessage(page, room1, 'please change this card');
+    let message = (await getRoomEvents()).pop()!;
+    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    expect(boxelMessageData.context.functions).toMatchObject([]);
+  });
+
+  test(`it does not include patch function in message event when top-most card is read-only`, async ({
+    page,
+  }) => {
+    // the base realm is a read-only realm
+    await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
+    let room1 = await getRoomName(page);
+    await page
+      .locator(
+        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
+      )
+      .click();
+    await expect(
+      page.locator(
+        '[data-test-stack-card="https://cardstack.com/base/fields/boolean-field"]',
+      ),
+    ).toHaveCount(1);
+    await sendMessage(page, room1, 'please change this card');
+    let message = (await getRoomEvents()).pop()!;
+    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    expect(boxelMessageData.context.functions).toMatchObject([]);
   });
 
   test('can send only a card as a message', async ({ page }) => {

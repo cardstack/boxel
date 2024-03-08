@@ -3,6 +3,8 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { restartableTask, timeout } from 'ember-concurrency';
+
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import AiAssistantChatInput from './index';
@@ -14,6 +16,10 @@ export default class AiAssistantChatInputUsage extends Component {
   @action onSend(message: string) {
     console.log(`message sent: ${message}`);
   }
+
+  mockSend = restartableTask(async () => {
+    await timeout(2000);
+  });
 
   <template>
     <FreestyleUsage @name='AiAssistant::ChatInput'>
@@ -30,7 +36,7 @@ export default class AiAssistantChatInputUsage extends Component {
           @value={{this.value}}
           @onInput={{fn (mut this.value)}}
           @onSend={{this.onSend}}
-          @sendDisabled={{this.isSendDisabled}}
+          @isSending={{this.mockSend.isRunning}}
         />
       </:example>
       <:api as |Args|>
@@ -54,6 +60,11 @@ export default class AiAssistantChatInputUsage extends Component {
           @name='onSend'
           @description='Action to be called when "cmd+Enter" or \`ctrl+Enter\` keys are pressed or send button is clicked'
           @value={{this.onSend}}
+        />
+        <Args.Action
+          @name='isSending'
+          @description='A boolean indicating if the message being sent is in flight'
+          @value={{this.mockSend.isRunning}}
         />
       </:api>
     </FreestyleUsage>

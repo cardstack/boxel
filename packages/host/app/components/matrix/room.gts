@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, timeout, all } from 'ember-concurrency';
+import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -54,7 +54,7 @@ export default class Room extends Component<Signature> {
             @value={{this.messageToSend}}
             @onInput={{this.setMessage}}
             @onSend={{this.sendMessage}}
-            @sendDisabled={{this.isSendButtonDisabled}}
+            @isSending={{this.isSendButtonDisabled}}
             data-test-message-field={{this.room.name}}
           />
           <AiAssistantCardPicker
@@ -185,7 +185,7 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  private doSendMessage = restartableTask(
+  private doSendMessage = enqueueTask(
     async (message: string | undefined, cards?: CardDef[]) => {
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
