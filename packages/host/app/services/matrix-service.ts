@@ -1,9 +1,9 @@
+import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-
 import { marked } from 'marked';
 import {
   type LoginResponse,
@@ -67,10 +67,10 @@ export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
 };
-
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare router: RouterService;
   @tracked private _client: MatrixClient | undefined;
   private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
 
@@ -174,6 +174,7 @@ export default class MatrixService extends Service {
   async startAndSetDisplayName(auth: LoginResponse, displayName: string) {
     this.start(auth);
     this.setDisplayName(displayName);
+    await this.router.refresh();
   }
 
   async setDisplayName(displayName: string) {
