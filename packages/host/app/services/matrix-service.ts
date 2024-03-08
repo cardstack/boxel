@@ -66,7 +66,7 @@ export type Event = Partial<IEvent>;
 
 export type OperatorModeContext = {
   submode: Submode;
-  openCards: CardDef[];
+  openCardIds: string[];
 };
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
@@ -350,24 +350,26 @@ export default class MatrixService extends Service {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
-    let openCardIds = (context?.openCards ?? []).map((c) => c.id);
+    let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
     if (submode === 'interact') {
       let mappings = await basicMappings(this.loaderService.loader);
       // Open cards are attached automatically
       // If they are not attached, the user is not allowing us to
       // modify them
-      let cardsToModify = attachedCards.filter((c) =>
-        openCardIds.includes(c.id),
+      attachedOpenCards = attachedCards.filter((c) =>
+        (context?.openCardIds ?? []).includes(c.id),
       );
       // Generate function calls for patching currently open cards permitted for modification
-      for (let cardToModify of cardsToModify) {
+      for (let attachedOpenCard of attachedOpenCards) {
         let patchSpec = generateCardPatchCallSpecification(
-          cardToModify.constructor as typeof CardDef,
+          attachedOpenCard.constructor as typeof CardDef,
           this.cardAPI,
           mappings,
         );
-        let realmSession = getRealmSession(this, { card: () => cardToModify });
+        let realmSession = getRealmSession(this, {
+          card: () => attachedOpenCard,
+        });
         await realmSession.loaded;
         if (realmSession.canWrite) {
           functions.push({
@@ -381,7 +383,7 @@ export default class MatrixService extends Service {
                 },
                 card_id: {
                   type: 'string',
-                  const: cardToModify.id, // Force the valid card_id to be the id of the card being patched
+                  const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
                 },
                 attributes: patchSpec,
               },
@@ -419,7 +421,7 @@ export default class MatrixService extends Service {
       data: {
         attachedCardsEventIds,
         context: {
-          openCardIds,
+          openCardIds: attachedOpenCards.map((c) => c.id),
           functions,
           submode,
         },

@@ -5,6 +5,7 @@ import Component from '@glimmer/component';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
 import { BoxelInput, IconButton } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import { Send } from '@cardstack/boxel-ui/icons';
 import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
@@ -14,6 +15,7 @@ interface Signature {
     value: string;
     onInput: (val: string) => void;
     onSend: (val: string) => void;
+    isSendIdle: boolean;
   };
 }
 
@@ -37,6 +39,9 @@ export default class AiAssistantChatInput extends Component<Signature> {
       />
       <IconButton
         {{on 'click' this.onSend}}
+        {{! TODO we should visually surface this loading state }}
+        @disabled={{not @isSendIdle}}
+        data-test-can-send-msg={{@isSendIdle}}
         class='send-button'
         @icon={{Send}}
         @height='20'

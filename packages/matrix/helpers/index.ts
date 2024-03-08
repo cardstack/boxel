@@ -33,7 +33,12 @@ export async function reloadAndOpenAiAssistant(page: Page) {
 }
 
 export async function toggleOperatorMode(page: Page) {
-  await page.locator('[data-test-operator-mode-btn]').click();
+  let isOperatorMode = !!(await page.evaluate(() =>
+    document.querySelector('dialog.operator-mode'),
+  ));
+  if (!isOperatorMode) {
+    await page.locator('[data-test-operator-mode-btn]').click();
+  }
 }
 
 export async function openAiAssistant(page: Page) {
@@ -52,6 +57,7 @@ export async function openAiAssistant(page: Page) {
 
 export async function openRoot(page: Page, url = testHost) {
   await page.goto(url);
+  await expect(page.locator('.cards-grid')).toHaveCount(1);
   let isOperatorMode = !!(await page.evaluate(() =>
     document.querySelector('dialog.operator-mode'),
   ));
@@ -240,10 +246,7 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function createRoom(
-  page: Page,
-  removeAutoAttachedCard: boolean = true,
-) {
+export async function createRoom(page: Page, removeAutoAttachedCard = true) {
   await page.locator('[data-test-create-room-btn]').click();
   let roomName = await getRoomName(page);
   await isInRoom(page, roomName);
@@ -355,6 +358,8 @@ export async function sendMessage(
   }
   // can we check it's higher than before?
   await page.waitForSelector(`[data-test-room-settled]`);
+  await page.waitForSelector(`[data-test-room-settled]`);
+  await page.waitForSelector(`[data-test-can-send-msg]`);
   await page.locator('[data-test-send-message-btn]').click();
 }
 
