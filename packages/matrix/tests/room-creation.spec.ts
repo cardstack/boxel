@@ -126,7 +126,11 @@ test.describe('Room creation', () => {
     await page.locator('[data-test-save-name-button]').click();
 
     await expect(page.locator('[data-test-rename-session]')).toHaveCount(0);
-    await expect(page.locator('[data-test-past-sessions]')).toHaveCount(0);
+    await expect(page.locator('[data-test-past-sessions]')).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-joined-room="${newRoom1}"]`),
+    ).toContainText(newRoom1);
+    await page.locator(`[data-test-close-past-sessions]`).click();
     await assertRooms(page, [newRoom1, room2, room3]);
 
     await openRoom(page, newRoom1);
@@ -158,8 +162,15 @@ test.describe('Room creation', () => {
       newName,
     );
     await page.locator('[data-test-cancel-name-button]').click();
-    await expect(page.locator(`[data-test-past-sessions]`)).toHaveCount(0);
     await expect(page.locator(`[data-test-rename-session]`)).toHaveCount(0);
+    await expect(page.locator(`[data-test-past-sessions]`)).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-joined-room="${newName}"]`),
+    ).toHaveCount(0);
+    await expect(
+      page.locator(`[data-test-joined-room="${room1}"]`),
+    ).toContainText(room1);
+    await page.locator(`[data-test-close-past-sessions]`).click();
     await assertRooms(page, [room1, room2, room3]);
 
     await openRenameMenu(page, room1);
@@ -169,18 +180,60 @@ test.describe('Room creation', () => {
     await expect(page.locator('[data-test-save-name-button]')).toBeDisabled();
     await page.locator('[data-test-cancel-name-button]').click();
     await expect(page.locator(`[data-test-rename-session]`)).toHaveCount(0);
+    await page.locator(`[data-test-close-past-sessions]`).click();
   });
 
   test('it can delete a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    let room = await getRoomName(page);
-    await assertRooms(page, [room]);
+    let room1 = await getRoomName(page);
+    await sendMessage(page, room1, 'Room 1');
+    let room2 = await createRoomWithMessage(page, 'Room 2');
+    let room3 = await createRoomWithMessage(page, 'Room 3');
+    await assertRooms(page, [room1, room2, room3]);
 
-    await deleteRoom(page, room);
+    await deleteRoom(page, room1);
+    await expect(
+      page.locator(`[data-test-joined-room="${room1}"]`),
+    ).toHaveCount(0);
+    await expect(
+      page.locator(`[data-test-joined-room="${room2}"]`),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-joined-room="${room3}"]`),
+    ).toHaveCount(1);
+
+    await page
+      .locator(`[data-test-past-session-options-button="${room2}"]`)
+      .click();
+    await page.locator(`[data-test-boxel-menu-item-text="Delete"]`).click();
+    await page
+      .locator(
+        `[data-test-delete-modal-container] [data-test-confirm-delete-button]`,
+      )
+      .click();
+    await expect(
+      page.locator(`[data-test-joined-room="${room2}"]`),
+    ).toHaveCount(0);
+    await expect(
+      page.locator(`[data-test-joined-room="${room3}"]`),
+    ).toHaveCount(1);
+
+    await page
+      .locator(`[data-test-past-session-options-button="${room3}"]`)
+      .click();
+    await page.locator(`[data-test-boxel-menu-item-text="Delete"]`).click();
+    await page
+      .locator(
+        `[data-test-delete-modal-container] [data-test-confirm-delete-button]`,
+      )
+      .click();
+    await expect(page.locator(`[data-test-past-sessions]`)).toHaveCount(0);
 
     await page.waitForTimeout(500); // wait for new room to be created
     let newRoom = await getRoomName(page);
-    expect(newRoom).not.toEqual(room);
+    expect(newRoom).not.toEqual(room1);
+    expect(newRoom).not.toEqual(room2);
+    expect(newRoom).not.toEqual(room3);
     await assertRooms(page, [newRoom]);
   });
 
@@ -203,6 +256,9 @@ test.describe('Room creation', () => {
         `[data-test-delete-modal-container] [data-test-confirm-cancel-button]`,
       )
       .click();
+    await expect(page.locator(`[data-test-joined-room="${room}"]`)).toHaveCount(
+      1,
+    );
     await page.locator(`[data-test-close-past-sessions]`).click();
     await assertRooms(page, [room]);
   });
@@ -219,13 +275,16 @@ test.describe('Room creation', () => {
 
     await isInRoom(page, room3);
     await deleteRoom(page, room3); // current room is deleted
+    await page.locator(`[data-test-close-past-sessions]`).click();
     await assertRooms(page, [room1, room2]);
     await isInRoom(page, room2); // is in latest available room
 
     await deleteRoom(page, room1); // a different room is deleted
+    await page.locator(`[data-test-close-past-sessions]`).click();
     await assertRooms(page, [room2]);
     await isInRoom(page, room2); // remains in same room
     await deleteRoom(page, room2); // current room is deleted
+    await page.locator(`[data-test-close-past-sessions]`).click();
 
     await page.waitForTimeout(500); // wait for new room to be created
     let newRoom = await getRoomName(page);

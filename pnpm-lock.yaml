@@ -25,7 +25,7 @@ patchedDependencies:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
   matrix-js-sdk@31.0.0:
-    hash: jnv3nlvwopx4raymczlximq4ti
+    hash: igcckcqmkyc37qn7cofjntczfm
     path: patches/matrix-js-sdk@31.0.0.patch
   style-loader@2.0.0:
     hash: xqjji5denmqrswdovljl2t3yv4
@@ -110,6 +110,9 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:^
         version: link:../runtime-common
+      '@sentry/node':
+        specifier: ^7.105.0
+        version: 7.105.0
       '@types/node':
         specifier: ^18.18.5
         version: 18.18.5
@@ -121,7 +124,7 @@ importers:
         version: 1.7.3
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0(patch_hash=jnv3nlvwopx4raymczlximq4ti)
+        version: 31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm)
       openai:
         specifier: 4.19.0
         version: 4.19.0
@@ -1396,7 +1399,7 @@ importers:
         version: 5.0.2
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0(patch_hash=jnv3nlvwopx4raymczlximq4ti)
+        version: 31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm)
       moment:
         specifier: ^2.29.4
         version: 2.29.4
@@ -4787,6 +4790,45 @@ packages:
     transitivePeerDependencies:
       - supports-color
     dev: true
+
+  /@sentry-internal/tracing@7.105.0:
+    resolution: {integrity: sha512-b+AFYB7Bc9vmyxl2jbmuT4esX5G0oPfpz35A0sxFzmJIhvMg1YMDNio2c81BtKN+VSPORCnKMLhfk3kyKKvWMQ==}
+    engines: {node: '>=8'}
+    dependencies:
+      '@sentry/core': 7.105.0
+      '@sentry/types': 7.105.0
+      '@sentry/utils': 7.105.0
+    dev: false
+
+  /@sentry/core@7.105.0:
+    resolution: {integrity: sha512-5xsaTG6jZincTeJUmZomlv20mVRZUEF1U/g89lmrSOybyk2+opEnB1JeBn4ODwnvmSik8r2QLr6/RiYlaxRJCg==}
+    engines: {node: '>=8'}
+    dependencies:
+      '@sentry/types': 7.105.0
+      '@sentry/utils': 7.105.0
+    dev: false
+
+  /@sentry/node@7.105.0:
+    resolution: {integrity: sha512-b0QwZ7vT4hcJi6LmNRh3dcaYpLtXnkYXkL0rfhMb8hN8sUx8zuOWFMI7j0cfAloVThUeJVwGyv9dERfzGS2r2w==}
+    engines: {node: '>=8'}
+    dependencies:
+      '@sentry-internal/tracing': 7.105.0
+      '@sentry/core': 7.105.0
+      '@sentry/types': 7.105.0
+      '@sentry/utils': 7.105.0
+    dev: false
+
+  /@sentry/types@7.105.0:
+    resolution: {integrity: sha512-80o0KMVM+X2Ym9hoQxvJetkJJwkpCg7o6tHHFXI+Rp7fawc2iCMTa0IRQMUiSkFvntQLYIdDoNNuKdzz2PbQGA==}
+    engines: {node: '>=8'}
+    dev: false
+
+  /@sentry/utils@7.105.0:
+    resolution: {integrity: sha512-YVAV0c2KLM8+VZCicQ/E/P2+J9Vs0hGhrXwV7w6ZEAtvxrg4oF270toL1WRhvcaf8JO4J1v4V+LuU6Txs4uEeQ==}
+    engines: {node: '>=8'}
+    dependencies:
+      '@sentry/types': 7.105.0
+    dev: false
 
   /@sideway/address@4.1.4:
     resolution: {integrity: sha512-7vwq+rOHVWjyXxVlR76Agnvhy8I9rpzjosTESvmhNeXOXdZZB15Fl+TI9x1SiHZH5Jv2wTGduSxFDIaq0m3DUw==}
@@ -16694,7 +16736,7 @@ packages:
   /matrix-events-sdk@0.0.1:
     resolution: {integrity: sha512-1QEOsXO+bhyCroIe2/A5OwaxHvBm7EsSQ46DEDn8RBIfQwN5HWBpFvyWWR4QY0KHPPnnJdI99wgRiAl7Ad5qaA==}
 
-  /matrix-js-sdk@31.0.0(patch_hash=jnv3nlvwopx4raymczlximq4ti):
+  /matrix-js-sdk@31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm):
     resolution: {integrity: sha512-2TqDwEK34NFS0uiOti02CBCupwJcAIxWarOSD0yIrgMpIwSVNB795jEnXxNXz+bgPKsepDmiqeg2DrlinIoW1w==}
     engines: {node: '>=18.0.0'}
     dependencies:
