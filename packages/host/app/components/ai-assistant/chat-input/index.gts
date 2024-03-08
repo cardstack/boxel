@@ -15,7 +15,7 @@ interface Signature {
     value: string;
     onInput: (val: string) => void;
     onSend: (val: string) => void;
-    isSendIdle: boolean;
+    isSending: boolean;
   };
 }
 
@@ -40,8 +40,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
       <IconButton
         {{on 'click' this.onSend}}
         {{! TODO we should visually surface this loading state }}
-        @disabled={{not @isSendIdle}}
-        data-test-can-send-msg={{@isSendIdle}}
+        @disabled={{@isSending}}
+        data-test-can-send-msg={{not @isSending}}
         class='send-button'
         @icon={{Send}}
         @height='20'

@@ -53,7 +53,7 @@ export default class Room extends Component<Signature> {
           @value={{this.messageToSend}}
           @onInput={{this.setMessage}}
           @onSend={{this.sendMessage}}
-          @isSendIdle={{this.doSendMessage.isIdle}}
+          @isSending={{this.doSendMessage.isRunning}}
           data-test-message-field={{this.room.name}}
         />
         <AiAssistantCardPicker

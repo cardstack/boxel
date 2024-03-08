@@ -35,7 +35,7 @@ export default class AiAssistantChatInputUsage extends Component {
           @value={{this.value}}
           @onInput={{fn (mut this.value)}}
           @onSend={{this.onSend}}
-          @isSendIdle={{this.mockSend.isIdle}}
+          @isSending={{this.mockSend.isRunning}}
         />
       </:example>
       <:api as |Args|>
@@ -56,8 +56,8 @@ export default class AiAssistantChatInputUsage extends Component {
         />
         <Args.Action
           @name='isSendIdle'
-          @description='A boolean indicating if the message being sent is not in flight'
-          @value={{this.mockSend.isIdle}}
+          @description='A boolean indicating if the message being sent is in flight'
+          @value={{this.mockSend.isRunning}}
         />
       </:api>
     </FreestyleUsage>
