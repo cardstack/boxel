@@ -52,10 +52,10 @@ export default class NewSession extends Component<Signature> {
             {{/each}}
           </ul>
         {{/if}}
-        <small>
+        <p class='disclaimer'>
           Assistant may display inaccurate info, please double check its
           responses.
-        </small>
+        </p>
       {{/if}}
     </div>
 
@@ -118,8 +118,8 @@ export default class NewSession extends Component<Signature> {
       .error-section > * + * {
         margin-top: var(--boxel-sp-sm);
       }
-      small {
-        display: block;
+      .disclaimer {
+        margin: 0;
         color: var(--boxel-450);
         font: var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xs);
