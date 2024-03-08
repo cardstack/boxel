@@ -11,7 +11,6 @@ import AiAssistantChatInput from './index';
 
 export default class AiAssistantChatInputUsage extends Component {
   @tracked value = '';
-  @tracked isSendDisabled = false;
 
   @action onSend(message: string) {
     console.log(`message sent: ${message}`);
@@ -45,12 +44,6 @@ export default class AiAssistantChatInputUsage extends Component {
           @description='Chat input field'
           @onInput={{fn (mut this.value)}}
           @value={{this.value}}
-        />
-        <Args.Bool
-          @name='sendDisabled'
-          @description='Disabled state of send button'
-          @onInput={{fn (mut this.isSendDisabled)}}
-          @value={{this.isSendDisabled}}
         />
         <Args.Action
           @name='onInput'
