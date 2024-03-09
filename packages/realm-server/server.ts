@@ -27,6 +27,7 @@ import './lib/externals';
 import { nodeStreamToText } from './stream';
 import mime from 'mime-types';
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
+import * as Sentry from '@sentry/node';
 
 interface Options {
   assetsURL?: URL;
@@ -95,6 +96,13 @@ export class RealmServer {
       .use(rootRealmRedirect(this.realms))
       .use(router.routes())
       .use(this.serveFromRealm);
+
+    app.on('error', (err, ctx) => {
+      Sentry.withScope((scope) => {
+        scope.setSDKProcessingMetadata({ request: ctx.request });
+        Sentry.captureException(err);
+      });
+    });
 
     return app;
   }
