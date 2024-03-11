@@ -167,7 +167,7 @@ export default class InteractSubmode extends Component<Signature> {
           doc,
           relativeTo,
         );
-        await here.cardService.saveModel(this, newCard);
+        await here.cardService.saveModel(here, newCard);
         let newItem = new StackItem({
           owner: here,
           card: newCard,
