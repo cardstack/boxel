@@ -83,9 +83,7 @@ export default class BooleanField extends FieldDef {
     private radioGroup = `__cardstack_bool${groupNumber++}__`;
 
     get checkedId() {
-      return this.args.model === undefined || this.args.model === null
-        ? 'false'
-        : String(this.args.model);
+      return String(this.args.model);
     }
   };
 }
