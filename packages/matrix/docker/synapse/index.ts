@@ -361,7 +361,7 @@ interface MessageOptions {
 }
 const DEFAULT_PAGE_SIZE = 50;
 
-export async function getAllRoomMessages(
+export async function getAllRoomEvents(
   roomId: string,
   accessToken: string,
   opts?: MessageOptions,

@@ -6,8 +6,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
-import { and, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
+import { AddButton, IconButton, Tooltip } from '@cardstack/boxel-ui/components';
+import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
@@ -18,6 +18,82 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import RealmIcon from '../../operator-mode/realm-icon';
 import Pill from '../../pill';
+
+interface CardPillSignature {
+  Element: HTMLDivElement;
+  Args: {
+    card: CardDef;
+    index: number;
+    isAutoAttachedCard?: boolean;
+    removeCard: (card: CardDef) => void;
+  };
+}
+
+class CardPill extends Component<CardPillSignature> {
+  <template>
+    <Pill
+      @inert={{true}}
+      class={{cn 'card-pill' is-autoattached=@isAutoAttachedCard}}
+      data-test-pill-index={{@index}}
+      data-test-selected-card={{@card.id}}
+      data-test-autoattached-card={{@isAutoAttachedCard}}
+    >
+      <:icon>
+        <RealmInfoProvider @fileURL={{@card.id}}>
+          <:ready as |realmInfo|>
+            <RealmIcon
+              @realmIconURL={{realmInfo.iconURL}}
+              @realmName={{realmInfo.name}}
+              width='18'
+              height='18'
+            />
+          </:ready>
+        </RealmInfoProvider>
+      </:icon>
+      <:default>
+        <div class='card-title'>
+          {{if @card.title @card.title 'Untitled Card'}}
+        </div>
+        <IconButton
+          class='remove-button'
+          @icon={{IconX}}
+          {{on 'click' (fn @removeCard @card)}}
+          data-test-remove-card-btn={{@index}}
+        />
+      </:default>
+    </Pill>
+    <style>
+      .remove-button {
+        --boxel-icon-button-width: 25px;
+        --boxel-icon-button-height: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        outline: 0;
+      }
+      .remove-button:focus:not(:disabled),
+      .remove-button:hover:not(:disabled) {
+        --icon-color: var(--boxel-highlight);
+      }
+      .card-pill {
+        --pill-icon-size: 18px;
+        padding: var(--boxel-sp-5xs);
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-400);
+        height: var(--pill-height);
+      }
+      .card-title {
+        max-width: 10rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .is-autoattached {
+        border-style: dashed;
+      }
+    </style>
+  </template>
+}
 
 interface Signature {
   Element: HTMLDivElement;
@@ -36,39 +112,31 @@ export default class AiAssistantCardPicker extends Component<Signature> {
     <div class='card-picker'>
       {{#each this.cardsToDisplay as |card i|}}
         {{#if (this.isCardDisplayed card i)}}
-          <Pill
-            @inert={{true}}
-            class={{cn
-              'card-pill'
-              is-autoattached=(eq card.id @autoAttachedCard.id)
-            }}
-            data-test-pill-index={{i}}
-            data-test-selected-card={{card.id}}
-          >
-            <:icon>
-              <RealmInfoProvider @fileURL={{card.id}}>
-                <:ready as |realmInfo|>
-                  <RealmIcon
-                    @realmIconURL={{realmInfo.iconURL}}
-                    @realmName={{realmInfo.name}}
-                    width='18'
-                    height='18'
-                  />
-                </:ready>
-              </RealmInfoProvider>
-            </:icon>
-            <:default>
-              <div class='card-title'>
-                {{if card.title card.title 'Untitled Card'}}
-              </div>
-              <IconButton
-                class='remove-button'
-                @icon={{IconX}}
-                {{on 'click' (fn @removeCard card)}}
-                data-test-remove-card-btn={{i}}
-              />
-            </:default>
-          </Pill>
+          {{#if (this.isAutoAttachedCard card)}}
+            <Tooltip @placement='top'>
+              <:trigger>
+                <CardPill
+                  @card={{card}}
+                  @index={{i}}
+                  @isAutoAttachedCard={{true}}
+                  @removeCard={{@removeCard}}
+                />
+              </:trigger>
+
+              <:content>
+                {{#if (this.isAutoAttachedCard card)}}
+                  Topmost card is shared automatically
+                {{/if}}
+              </:content>
+            </Tooltip>
+          {{else}}
+            <CardPill
+              @card={{card}}
+              @index={{i}}
+              @isAutoAttachedCard={{false}}
+              @removeCard={{@removeCard}}
+            />
+          {{/if}}
         {{/if}}
       {{/each}}
       {{#if
@@ -77,28 +145,21 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           (not this.isViewAllAttachedCards)
         )
       }}
-        <Pill
-          @inert={{true}}
-          class='card-pill view-all'
-          data-test-view-all
-          {{on 'click' this.toggleViewAllAttachedCards}}
-        >
-          <:default>
-            <div class='card-title'>
-              View All ({{this.cardsToDisplay.length}})
-            </div>
-          </:default>
+        <Pill {{on 'click' this.toggleViewAllAttachedCards}} data-test-view-all>
+          View All ({{this.cardsToDisplay.length}})
         </Pill>
       {{/if}}
       {{#if this.canDisplayAddButton}}
         <AddButton
-          class='attach-button'
+          class={{cn 'attach-button' icon-only=this.cardsToDisplay.length}}
           @variant='pill'
           {{on 'click' this.chooseCard}}
           @disabled={{this.doChooseCard.isRunning}}
           data-test-choose-card-btn
         >
-          Attach Card
+          <span class={{if this.cardsToDisplay.length 'boxel-sr-only'}}>
+            Add a Card
+          </span>
         </AddButton>
       {{/if}}
     </div>
@@ -106,50 +167,35 @@ export default class AiAssistantCardPicker extends Component<Signature> {
       .card-picker {
         --pill-height: 1.875rem;
         --pill-content-max-width: 10rem;
-        background-color: var(--boxel-100);
+        background-color: var(--boxel-light);
         color: var(--boxel-dark);
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xxs);
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-xxs);
       }
       .attach-button {
-        --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
+        --icon-color: var(--boxel-highlight);
         --boxel-add-button-pill-font: var(--boxel-font-sm);
         height: var(--pill-height);
-        padding: 0 var(--boxel-sp-xs);
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs) var(--boxel-sp-4xs)
+          var(--boxel-sp-5xs);
+        background: none;
+        color: var(--boxel-highlight);
+        transition: color var(--boxel-transition);
+        outline: 0;
       }
-      .attach-button:hover:not(:disabled) {
+      .attach-button:hover:not(:disabled),
+      .attach-button:focus:not(:disabled) {
+        --icon-color: var(--boxel-highlight-hover);
+        color: var(--boxel-highlight-hover);
+        background: none;
         box-shadow: none;
-        background-color: var(--boxel-highlight-hover);
       }
-      .remove-button {
-        --boxel-icon-button-width: 25px;
-        --boxel-icon-button-height: 25px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .remove-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight);
-      }
-      .card-pill {
-        --pill-icon-size: 18px;
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-400);
-        height: 1.875rem;
-      }
-      .card-title {
-        max-width: 10rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .is-autoattached {
-        border-style: dashed;
-      }
-      .view-all {
-        cursor: pointer;
+      .attach-button.icon-only {
+        padding: 0;
+        width: 20px;
+        height: var(--pill-height);
       }
     </style>
   </template>
@@ -204,4 +250,9 @@ export default class AiAssistantCardPicker extends Component<Signature> {
     });
     return chosenCard;
   });
+
+  @action
+  private isAutoAttachedCard(card: CardDef) {
+    return this.args.autoAttachedCard?.id === card.id;
+  }
 }

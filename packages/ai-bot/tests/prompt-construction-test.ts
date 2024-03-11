@@ -153,132 +153,6 @@ module('getModifyPrompt', () => {
     });
   });
 
-  test('Gets only the latest version of cards shared in context', () => {
-    const history: DiscreteMatrixEvent[] = [
-      {
-        type: 'm.room.message',
-        sender: '@ian:localhost',
-        content: {
-          msgtype: 'org.boxel.message',
-          format: 'org.matrix.custom.html',
-          body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
-          data: {
-            context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
-                    attributes: {
-                      firstName: 'Original Name',
-                      thumbnailURL: null,
-                    },
-                    relationships: {
-                      friend: {
-                        links: {
-                          self: './2',
-                        },
-                        data: {
-                          type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
-                        },
-                      },
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../friend',
-                        name: 'Friend',
-                      },
-                    },
-                  },
-                },
-              ],
-              functions: [],
-              submode: 'interact',
-            },
-          },
-        },
-        room_id: 'room1',
-        origin_server_ts: 1696813813166,
-        unsigned: {
-          age: 115498,
-          transaction_id: '1',
-        },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-      },
-      {
-        type: 'm.room.message',
-        sender: '@ian:localhost',
-        content: {
-          msgtype: 'org.boxel.message',
-          format: 'org.matrix.custom.html',
-          formatted_body: 'set the location to home',
-          body: 'set the location to home',
-          data: {
-            context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
-                    attributes: {
-                      firstName: 'Changed Name',
-                      thumbnailURL: null,
-                    },
-                    relationships: {
-                      friend: {
-                        links: {
-                          self: './2',
-                        },
-                        data: {
-                          type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
-                        },
-                      },
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../friend',
-                        name: 'Friend',
-                      },
-                    },
-                  },
-                },
-              ],
-              functions: [],
-              submode: 'interact',
-            },
-          },
-        },
-        room_id: 'room1',
-        origin_server_ts: 1696813813167,
-        unsigned: {
-          age: 115498,
-          transaction_id: '2',
-        },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-      },
-    ];
-
-    const relevantCards = getRelevantCards(history, '@aibot:localhost');
-    assert.equal(relevantCards.length, 1);
-    if (
-      history[1].type === 'm.room.message' &&
-      history[1].content.msgtype === 'org.boxel.message'
-    ) {
-      assert.equal(
-        relevantCards[0],
-        history[1].content.data.context.openCards![0]['data'],
-      );
-    } else {
-      assert.true(
-        false,
-        'expected "m.room.message" event with a "org.boxel.message" msgtype',
-      );
-    }
-  });
-
   test('Gets only the latest version of cards uploaded', () => {
     const history: DiscreteMatrixEvent[] = [
       {
@@ -417,7 +291,7 @@ module('getModifyPrompt', () => {
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
-              openCards: [],
+              openCardIds: [],
               functions: [],
               submode: 'interact',
             },
@@ -441,7 +315,7 @@ module('getModifyPrompt', () => {
           formatted_body: 'set the location to home',
           data: {
             context: {
-              openCards: [],
+              openCardIds: [],
               functions: [],
               submode: 'interact',
             },
@@ -601,156 +475,6 @@ module('getModifyPrompt', () => {
     assert.equal(relevantCards.length, 2);
   });
 
-  test('Open cards add to attached cards', () => {
-    const history: DiscreteMatrixEvent[] = [
-      {
-        type: 'm.room.message',
-        event_id: '1',
-        origin_server_ts: 1234567890,
-        content: {
-          msgtype: 'org.boxel.message',
-          format: 'org.matrix.custom.html',
-          body: 'Hey',
-          formatted_body: 'Hey',
-          data: {
-            attachedCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/1',
-                  attributes: {
-                    firstName: 'Terry',
-                    lastName: 'Pratchett',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../author',
-                      name: 'Author',
-                    },
-                  },
-                },
-              },
-            ],
-            context: {
-              openCards: [],
-              functions: [],
-              submode: 'interact',
-            },
-          },
-        },
-        sender: '@user:localhost',
-        room_id: 'room1',
-        unsigned: {
-          age: 115498,
-          transaction_id: '1',
-        },
-      },
-      {
-        type: 'm.room.message',
-        event_id: '1',
-        origin_server_ts: 1234567890,
-        content: {
-          msgtype: 'org.boxel.message',
-          format: 'org.matrix.custom.html',
-          body: 'Hey',
-          formatted_body: 'Hey',
-          data: {
-            attachedCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/2',
-                  attributes: {
-                    firstName: 'Mr',
-                    lastName: 'T',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../author',
-                      name: 'Author',
-                    },
-                  },
-                },
-              },
-            ],
-            context: {
-              openCards: [],
-              functions: [],
-              submode: 'interact',
-            },
-          },
-        },
-        sender: '@user:localhost',
-        room_id: 'room1',
-        unsigned: {
-          age: 115498,
-          transaction_id: '2',
-        },
-      },
-      {
-        type: 'm.room.message',
-        sender: '@ian:localhost',
-        content: {
-          msgtype: 'org.boxel.message',
-          format: 'org.matrix.custom.html',
-          body: 'set the location to home',
-          formatted_body: 'set the location to home',
-          data: {
-            context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Meeting/2',
-                    attributes: {
-                      location: 'Work',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../meeting',
-                        name: 'Meeting',
-                      },
-                    },
-                  },
-                },
-              ],
-              functions: [],
-              submode: 'interact',
-            },
-          },
-        },
-        room_id: 'room1',
-        origin_server_ts: 1696813813167,
-        unsigned: {
-          age: 115498,
-          transaction_id: '3',
-        },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-      },
-    ];
-    const relevantCards = getRelevantCards(history, '@aibot:localhost');
-    assert.equal(relevantCards.length, 3);
-    if (
-      history[0].type === 'm.room.message' &&
-      history[0].content.msgtype === 'org.boxel.message' &&
-      history[1].type === 'm.room.message' &&
-      history[1].content.msgtype === 'org.boxel.message' &&
-      history[2].type === 'm.room.message' &&
-      history[2].content.msgtype === 'org.boxel.message'
-    ) {
-      assert.deepEqual(relevantCards, [
-        history[0].content.data.attachedCards![0]['data'],
-        history[1].content.data.attachedCards![0]['data'],
-        history[2].content.data.context.openCards![0]['data'],
-      ]);
-    } else {
-      assert.true(
-        false,
-        'expected "m.room.message" event with a "org.boxel.message" msgtype',
-      );
-    }
-  });
-
   test('If a user stops sharing their context keep it in the system prompt', () => {
     const history: DiscreteMatrixEvent[] = [
       {
@@ -762,38 +486,39 @@ module('getModifyPrompt', () => {
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
-            context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
-                    attributes: {
-                      firstName: 'Hassan',
-                      thumbnailURL: null,
-                    },
-                    relationships: {
-                      friend: {
-                        links: {
-                          self: './2',
-                        },
-                        data: {
-                          type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
-                        },
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Friend/1',
+                  attributes: {
+                    firstName: 'Hassan',
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './2',
                       },
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../friend',
-                        name: 'Friend',
+                      data: {
+                        type: 'card',
+                        id: 'http://localhost:4201/drafts/Friend/2',
                       },
                     },
                   },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../friend',
+                      name: 'Friend',
+                    },
+                  },
                 },
-              ],
-              functions: [],
+              },
+            ],
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -809,13 +534,37 @@ module('getModifyPrompt', () => {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
+          body: 'Just a regular message',
+        },
+        origin_server_ts: 1696813813167,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+    const relevantCards = getRelevantCards(history, '@aibot:localhost');
+    assert.equal(relevantCards.length, 1);
+    assert.equal(
+      relevantCards[0],
+      history[0].content.data.attachedCards[0]['data'],
+    );
+  });
+
+  test('If there are no functions in the last message from the user, store none', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
           msgtype: 'org.boxel.message',
           format: 'org.matrix.custom.html',
           body: 'Just a regular message',
           formatted_body: 'Just a regular message',
           data: {
             context: {
-              openCards: [],
+              openCardIds: [],
               functions: [],
               submode: 'interact',
             },
@@ -830,22 +579,8 @@ module('getModifyPrompt', () => {
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
       },
     ];
-    const relevantCards = getRelevantCards(history, '@aibot:localhost');
-    assert.equal(relevantCards.length, 1);
-    if (
-      history[0].type === 'm.room.message' &&
-      history[0].content.msgtype === 'org.boxel.message'
-    ) {
-      assert.equal(
-        relevantCards[0],
-        history[0].content.data.context.openCards![0]['data'],
-      );
-    } else {
-      assert.true(
-        false,
-        'expected "m.room.message" event with a "org.boxel.message" msgtype',
-      );
-    }
+    const functions = getFunctions(history, '@aibot:localhost');
+    assert.equal(functions.length, 0);
   });
 
   test('If a user stops sharing their context then ignore function calls', () => {
@@ -860,35 +595,7 @@ module('getModifyPrompt', () => {
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
-                    attributes: {
-                      firstName: 'Hassan',
-                      thumbnailURL: null,
-                    },
-                    relationships: {
-                      friend: {
-                        links: {
-                          self: './2',
-                        },
-                        data: {
-                          type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
-                        },
-                      },
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../friend',
-                        name: 'Friend',
-                      },
-                    },
-                  },
-                },
-              ],
+              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
               functions: [
                 getPatchFunction('http://localhost:4201/drafts/Friend/1', {
                   firstName: { type: 'string' },
@@ -916,7 +623,7 @@ module('getModifyPrompt', () => {
           formatted_body: 'Just a regular message',
           data: {
             context: {
-              openCards: [],
+              openCardIds: [],
               functions: [],
               submode: 'interact',
             },
@@ -935,7 +642,7 @@ module('getModifyPrompt', () => {
     assert.equal(functions.length, 0);
   });
 
-  test('Create patch function calls when there is a cardSpec', () => {
+  test("Don't break when there is an older format type with open cards", () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1024,6 +731,65 @@ module('getModifyPrompt', () => {
     });
   });
 
+  test('Create patch function calls when there is a cardSpec', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          data: {
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
+              functions: [
+                getPatchFunction('http://localhost:4201/drafts/Friend/1', {
+                  firstName: { type: 'string' },
+                }),
+              ],
+              submode: 'interact',
+            },
+          },
+        },
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+
+    const functions = getFunctions(history, '@aibot:localhost');
+    assert.equal(functions.length, 1);
+    assert.deepEqual(functions[0], {
+      name: 'patchCard',
+      description: 'description',
+      parameters: {
+        type: 'object',
+        properties: {
+          description: {
+            type: 'string',
+          },
+          card_id: {
+            type: 'string',
+            const: 'http://localhost:4201/drafts/Friend/1',
+          },
+          attributes: {
+            type: 'object',
+            properties: {
+              firstName: {
+                type: 'string',
+              },
+            },
+          },
+        },
+        required: ['card_id', 'attributes', 'description'],
+      },
+    });
+  });
+
   test('Gets only the latest functions', () => {
     const history: DiscreteMatrixEvent[] = [
       {
@@ -1036,35 +802,7 @@ module('getModifyPrompt', () => {
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
-                    attributes: {
-                      firstName: 'Hassan',
-                      thumbnailURL: null,
-                    },
-                    relationships: {
-                      friend: {
-                        links: {
-                          self: './2',
-                        },
-                        data: {
-                          type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
-                        },
-                      },
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../friend',
-                        name: 'Friend',
-                      },
-                    },
-                  },
-                },
-              ],
+              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
               functions: [
                 getPatchFunction('http://localhost:4201/drafts/Friend/1', {
                   firstName: { type: 'string' },
@@ -1092,23 +830,7 @@ module('getModifyPrompt', () => {
           formatted_body: 'set the location to home',
           data: {
             context: {
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Meeting/2',
-                    attributes: {
-                      location: 'Work',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../meeting',
-                        name: 'Meeting',
-                      },
-                    },
-                  },
-                },
-              ],
+              openCardIds: ['http://localhost:4201/drafts/Meeting/2'],
               functions: [
                 getPatchFunction('http://localhost:4201/drafts/Meeting/2', {
                   location: { type: 'string' },

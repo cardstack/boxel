@@ -6,9 +6,11 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import BoxelAddButton from './index.gts';
+import { type AddButtonVariant } from './index.gts';
 
 export default class AddButtonUsage extends Component {
-  @tracked variant?: 'full-width';
+  variants: (AddButtonVariant | null)[] = [null, 'full-width', 'pill'];
+  @tracked variant?: AddButtonVariant;
 
   @action log(message: string): void {
     // eslint-disable-next-line no-console
@@ -29,7 +31,7 @@ export default class AddButtonUsage extends Component {
         <Args.String
           @name='variant'
           @optional={{true}}
-          @options={{Array 'default' 'full-width'}}
+          @options={{this.variants}}
           @onInput={{fn (mut this.variant)}}
           @value={{this.variant}}
         />

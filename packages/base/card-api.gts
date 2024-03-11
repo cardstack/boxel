@@ -29,6 +29,7 @@ import {
   primitive,
   identifyCard,
   isCardDef,
+  isCardInstance as _isCardInstance,
   loadCard,
   humanReadable,
   maybeURL,
@@ -49,18 +50,18 @@ import {
 import type { ComponentLike } from '@glint/template';
 
 export { primitive, isField, type BoxComponent };
-export const serialize = Symbol('cardstack-serialize');
-export const deserialize = Symbol('cardstack-deserialize');
-export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
-export const fieldDecorator = Symbol('cardstack-field-decorator');
-export const fieldType = Symbol('cardstack-field-type');
-export const queryableValue = Symbol('cardstack-queryable-value');
-export const relativeTo = Symbol('cardstack-relative-to');
-export const realmInfo = Symbol('cardstack-realm-info');
-export const realmURL = Symbol('cardstack-realm-url');
+export const serialize = Symbol.for('cardstack-serialize');
+export const deserialize = Symbol.for('cardstack-deserialize');
+export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
+export const fieldDecorator = Symbol.for('cardstack-field-decorator');
+export const fieldType = Symbol.for('cardstack-field-type');
+export const queryableValue = Symbol.for('cardstack-queryable-value');
+export const relativeTo = Symbol.for('cardstack-relative-to');
+export const realmInfo = Symbol.for('cardstack-realm-info');
+export const realmURL = Symbol.for('cardstack-realm-url');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
-const isSavedInstance = Symbol('cardstack-is-saved-instance');
+const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
 
 export type BaseInstanceType<T extends BaseDefConstructor> = T extends {
   [primitive]: infer P;
@@ -178,7 +179,7 @@ const subscribers = new WeakMap<BaseDef, Set<CardChangeSubscriber>>();
 // involve rerunning async computed fields)
 const cardTracking = new TrackedWeakMap<object, any>();
 
-const isBaseInstance = Symbol('isBaseInstance');
+const isBaseInstance = Symbol.for('isBaseInstance');
 
 class Logger {
   private promises: Promise<any>[] = [];
@@ -2379,7 +2380,8 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
   }
-  if (instance instanceof CardDef) {
+
+  if (isCardInstance(instance)) {
     if (!instance[realmInfo] && doc.data.meta.realmInfo) {
       instance[realmInfo] = doc.data.meta.realmInfo;
     }
@@ -2388,6 +2390,11 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
     }
   }
   return await _updateFromSerialized(instance, doc.data, doc, identityContext);
+}
+
+// The typescript `is` type here refuses to work unless it's in this file.
+function isCardInstance(instance: any): instance is CardDef {
+  return _isCardInstance(instance);
 }
 
 async function _createFromSerialized<T extends BaseDefConstructor>(
@@ -2426,7 +2433,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   if (!instance) {
     instance = new card({ id: resource.id }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
-    if (instance instanceof CardDef) {
+    if (isCardInstance(instance)) {
       instance[realmInfo] = data?.meta?.realmInfo;
       instance[realmURL] = data?.meta?.realmURL
         ? new URL(data.meta.realmURL)
@@ -2508,7 +2515,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   {
     let wasSaved = false;
     let originalId: string | undefined;
-    if (instance instanceof CardDef) {
+    if (isCardInstance(instance)) {
       wasSaved = instance[isSavedInstance];
       originalId = (instance as CardDef).id; // the instance is a composite card
       instance[isSavedInstance] = false;
@@ -2534,7 +2541,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       deserialized.set(fieldName as string, value);
       logger.log(recompute(instance));
     }
-    if (instance instanceof CardDef && resource.id != null) {
+    if (isCardInstance(instance) && resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
       // fields, such that subsequent assignment of the id field when the model is
       // saved will throw
@@ -2627,7 +2634,7 @@ function makeDescriptor<
     descriptor.set = function (this: BaseInstanceType<CardT>, value: any) {
       if (
         (field.card as typeof BaseDef) === IDField &&
-        this instanceof CardDef &&
+        isCardInstance(this) &&
         this[isSavedInstance]
       ) {
         throw new Error(
