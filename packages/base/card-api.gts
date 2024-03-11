@@ -1858,6 +1858,7 @@ export type BaseDefComponent = ComponentLike<{
     cardOrField: typeof BaseDef;
     fields: any;
     format: Format;
+    displayContainer?: boolean;
     model: any;
     set: Setter;
     fieldName: string | undefined;

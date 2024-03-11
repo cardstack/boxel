@@ -1,13 +1,23 @@
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
+
+import { cached } from '@glimmer/tracking';
 
 import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
 
+import { trackedFunction } from 'ember-resources/util/function';
+
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
+
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
+import Pill from '@cardstack/host/components/pill';
+
+import type CardService from '@cardstack/host/services/card-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -34,6 +44,8 @@ class ScrollIntoView extends Modifier {
 }
 
 export default class AiAssistantMessage extends Component<Signature> {
+  @service private declare cardService: CardService;
+
   <template>
     <div
       class={{cn 'ai-assistant-message' is-from-assistant=@isFromAssistant}}
@@ -79,10 +91,8 @@ export default class AiAssistantMessage extends Component<Signature> {
 
           {{#if @attachedCards.length}}
             <div class='cards' data-test-message-cards>
-              {{#each this.cardResources as |resource|}}
-                <div data-test-message-card={{resource.card.id}}>
-                  <resource.component />
-                </div>
+              {{#each @attachedCards as |card|}}
+                <CardPill @card={{card}} />
               {{/each}}
             </div>
           {{/if}}
@@ -207,13 +217,6 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
     </style>
   </template>
-
-  private get cardResources() {
-    return this.args.attachedCards?.map((card) => ({
-      card,
-      component: card.constructor.getComponent(card, 'atom'),
-    }));
-  }
 }
 
 interface AiAssistantConversationSignature {
@@ -233,6 +236,58 @@ export class AiAssistantConversation extends Component<AiAssistantConversationSi
       .ai-assistant-conversation {
         padding: var(--boxel-sp);
         overflow-y: auto;
+      }
+    </style>
+  </template>
+}
+
+interface CardPillSignature {
+  Element: HTMLDivElement;
+  Args: {
+    card: CardDef;
+  };
+  Blocks: {
+    default: [];
+  };
+}
+
+export class CardPill extends Component<CardPillSignature> {
+  @service private declare cardService: CardService;
+
+  get component() {
+    return this.args.card.constructor.getComponent(this.args.card, 'atom');
+  }
+
+  @cached
+  private get realmIconURL() {
+    return this.fetchRealmInfo.value?.iconURL || null;
+  }
+
+  @cached
+  private get realmName() {
+    return this.fetchRealmInfo.value?.name;
+  }
+
+  private fetchRealmInfo = trackedFunction(
+    this,
+    async () => await this.cardService.getRealmInfo(this.args.card),
+  );
+
+  <template>
+    <div data-test-message-card={{@card.id}}>
+      <Pill>
+        <RealmIcon
+          class='realm-icon'
+          @realmIconURL={{this.realmIconURL}}
+          @realmName={{this.realmName}}
+        />
+        <this.component @displayContainer={{false}} />
+      </Pill>
+    </div>
+    <style>
+      .realm-icon {
+        width: 18px;
+        height: 18px;
       }
     </style>
   </template>
