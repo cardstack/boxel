@@ -26,11 +26,12 @@ module('Unit | sqlite | smoke test', function (hooks) {
   });
 
   // this is a handy function to fashion a result set from the raw sqlite exec API
-  async function query(dbId: string, sql: string) {
+  async function query(dbId: string, sql: string, bind?: any[]) {
     let results: Record<string, any>[] = [];
     await sqlite('exec', {
       dbId,
       sql,
+      bind,
       // Nested execs are not possible with this async interface--we can't call
       // into the exec in this callback due to the way we communicate to the
       // worker thread via postMessage. if we need nesting do it all in the SQL
@@ -71,13 +72,25 @@ module('Unit | sqlite | smoke test', function (hooks) {
         INSERT INTO t(a,b) VALUES('abc',123),('def',456),(NULL,789),('ghi',012);
       `,
       });
+      await sqlite('exec', {
+        dbId,
+        sql: `
+        INSERT INTO t(a,b) VALUES(?,?),(?,?);
+      `,
+        bind: ['mango', 4, 'van gogh', 8],
+      });
       let results = await query(dbId, `SELECT * FROM t;`);
       assert.deepEqual(results, [
         { a: 'abc', b: 123 },
         { a: 'def', b: 456 },
         { a: null, b: 789 },
         { a: 'ghi', b: 12 },
+        { a: 'mango', b: 4 },
+        { a: 'van gogh', b: 8 },
       ]);
+
+      results = await query(dbId, `SELECT * FROM t WHERE a = ?`, ['abc']);
+      assert.deepEqual(results, [{ a: 'abc', b: 123 }]);
     } finally {
       await sqlite('close', { dbId });
     }

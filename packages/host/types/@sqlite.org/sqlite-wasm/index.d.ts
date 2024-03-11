@@ -22,6 +22,7 @@ interface CloseConfig {
 interface ExecConfig {
   dbId: string;
   sql: string;
+  bind?: any[];
   callback?: (row: {
     type: string;
     row: any[] | undefined;
