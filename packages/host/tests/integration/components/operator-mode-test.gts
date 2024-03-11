@@ -1216,6 +1216,53 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
   });
 
+  test<TestContextWithSave>('selecting a card using cards-grid creates a card with empty values', async function (assert) {
+    assert.expect(5);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    let savedCards = new Set<string>();
+    this.onSave((url) => {
+      savedCards.add(url.href);
+    });
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+
+    await click('[data-test-create-new-card-button]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+    );
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 4 });
+
+    await click(
+      `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor('[data-test-stack-card-index="1"]');
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+    let setIter = savedCards.keys();
+    let savedCardUrl = setIter.next().value;
+    let json =
+      await operatorModeStateService.cardService.fetchJSON(savedCardUrl);
+    let resource = json?.data as CardResource<string>;
+    assert.equal(resource.attributes?.socialBlurb, null);
+    assert.ok(
+      true,
+      'fetchJSON did not throw an error -- meaning card has been saved',
+    );
+  });
+
   test('can open a card from the cards-grid and close it', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
