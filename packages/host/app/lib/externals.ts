@@ -30,40 +30,47 @@ import * as boxelUiIcons from '@cardstack/boxel-ui/icons';
 
 import * as runtime from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { VirtualNetwork } from '@cardstack/runtime-common';
+import { debug } from '@ember/debug';
 
-export function shimExternals(loader: Loader) {
-  loader.shimModule('@cardstack/runtime-common', runtime);
-  loader.shimModule('@cardstack/boxel-ui/components', boxelUiComponents);
-  loader.shimModule('@cardstack/boxel-ui/helpers', boxelUiHelpers);
-  loader.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
-  loader.shimModule('@glimmer/component', glimmerComponent);
-  loader.shimModule('@ember/component', emberComponent);
-  loader.shimModule(
+export function shimExternals(virtualNetwork: VirtualNetwork) {
+  virtualNetwork.shimModule('@cardstack/runtime-common', runtime);
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-ui/components',
+    boxelUiComponents,
+  );
+  virtualNetwork.shimModule('@cardstack/boxel-ui/helpers', boxelUiHelpers);
+  virtualNetwork.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
+  virtualNetwork.shimModule('@glimmer/component', glimmerComponent);
+  virtualNetwork.shimModule('@ember/component', emberComponent);
+  virtualNetwork.shimModule(
     '@ember/component/template-only',
     emberComponentTemplateOnly,
   );
-  loader.shimModule('ember-css-url', cssUrl);
-  loader.shimModule('@ember/template-factory', emberTemplateFactory);
-  loader.shimModule('@ember/template', emberTemplate);
-  loader.shimModule('@glimmer/tracking', glimmerTracking);
-  loader.shimModule('@ember/object', emberObject);
-  loader.shimModule('@ember/object/internals', emberObjectInternals);
-  loader.shimModule('@ember/helper', emberHelper);
-  loader.shimModule('@ember/modifier', emberModifier);
-  loader.shimModule('ember-resources', emberResources);
-  loader.shimModule('ember-concurrency', emberConcurrency);
-  loader.shimModule(
+  virtualNetwork.shimModule('ember-css-url', cssUrl);
+  virtualNetwork.shimModule('@ember/template-factory', emberTemplateFactory);
+  virtualNetwork.shimModule('@ember/template', emberTemplate);
+  virtualNetwork.shimModule('@glimmer/tracking', glimmerTracking);
+  virtualNetwork.shimModule('@ember/object', emberObject);
+  virtualNetwork.shimModule('@ember/object/internals', emberObjectInternals);
+  virtualNetwork.shimModule('@ember/helper', emberHelper);
+  virtualNetwork.shimModule('@ember/modifier', emberModifier);
+  virtualNetwork.shimModule('ember-resources', emberResources);
+  virtualNetwork.shimModule('ember-concurrency', emberConcurrency);
+  virtualNetwork.shimModule(
     'ember-concurrency/-private/async-arrow-runtime',
     emberConcurrencyAsyncArrowRuntime,
   );
-  loader.shimModule('ember-modifier', emberModifier2);
-  loader.shimModule('flat', flat);
-  loader.shimModule('lodash', lodash);
-  loader.shimModule('tracked-built-ins', tracked);
-  loader.shimModule('date-fns', dateFns);
-  loader.shimModule('@ember/destroyable', emberDestroyable);
-  loader.shimModule('marked', marked);
-  loader.shimModule('ethers', ethers);
-  loader.shimModule('ember-source/types', { default: class {} });
-  loader.shimModule('ember-source/types/preview', { default: class {} });
+  virtualNetwork.shimModule('ember-modifier', emberModifier2);
+  virtualNetwork.shimModule('flat', flat);
+  virtualNetwork.shimModule('lodash', lodash);
+  virtualNetwork.shimModule('tracked-built-ins', tracked);
+  virtualNetwork.shimModule('date-fns', dateFns);
+  virtualNetwork.shimModule('@ember/destroyable', emberDestroyable);
+  virtualNetwork.shimModule('marked', marked);
+  virtualNetwork.shimModule('ethers', ethers);
+  virtualNetwork.shimModule('ember-source/types', { default: class {} });
+  virtualNetwork.shimModule('ember-source/types/preview', {
+    default: class {},
+  });
 }

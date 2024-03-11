@@ -20,6 +20,7 @@ import {
   executableExtensions,
   SupportedMimeType,
   type TokenClaims,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -53,6 +54,7 @@ import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import { WebMessageStream, messageCloseHandler } from './stream';
 import visitOperatorMode from './visit-operator-mode';
+import LoaderService from '@cardstack/host/services/loader-service';
 
 export { percySnapshot };
 export { visitOperatorMode };
@@ -410,6 +412,7 @@ export async function setupAcceptanceTestRealm({
   contents,
   realmURL,
   onFetch,
+  virtualNetwork,
 }: {
   loader: Loader;
   contents: RealmContents;
@@ -418,6 +421,7 @@ export async function setupAcceptanceTestRealm({
     req: Request;
     res: Response | null;
   }>;
+  virtualNetwork?: VirtualNetwork;
 }) {
   return await setupTestRealm({
     loader,
@@ -425,6 +429,7 @@ export async function setupAcceptanceTestRealm({
     realmURL,
     onFetch,
     isAcceptanceTest: true,
+    virtualNetwork,
   });
 }
 
@@ -468,14 +473,17 @@ async function setupTestRealm({
   }>;
   isAcceptanceTest?: boolean;
 }) {
+  let owner = (getContext() as TestContext).owner;
+
+  let virtualNetwork = (owner.lookup('service:loader') as LoaderService)
+    .virtualNetwork;
+
   realmURL = realmURL ?? testRealmURL;
+
   for (const [path, mod] of Object.entries(contents)) {
     if (path.endsWith('.gts') && typeof mod !== 'string') {
-      await shimModule(
-        `${realmURL}${path.replace(/\.gts$/, '')}`,
-        mod as object,
-        loader,
-      );
+      let moduleURLString = `${realmURL}${path.replace(/\.gts$/, '')}`;
+      await shimModule(moduleURLString, mod as object, loader);
     }
   }
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
@@ -503,7 +511,6 @@ async function setupTestRealm({
     }
   }
   let adapter = new TestRealmAdapter(flatFiles, new URL(realmURL));
-  let owner = (getContext() as TestContext).owner;
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
   } else {

@@ -251,6 +251,11 @@ export class Loader {
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
+    if (!isUrlLike(moduleIdentifier)) {
+      moduleIdentifier = new URL(moduleIdentifier, 'https://shimmed-module/')
+        .href;
+    }
+
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     let shimmed = this.moduleShims.get(moduleIdentifier);

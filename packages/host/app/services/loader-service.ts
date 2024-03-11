@@ -5,13 +5,14 @@ import { VirtualNetwork, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import {
   type RealmSessionResource,
   getRealmSession,
 } from '@cardstack/host/resources/realm-session';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
+
+import { shimExternals } from '../lib/externals';
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
@@ -24,30 +25,30 @@ export default class LoaderService extends Service {
   // which in turn assures the resources will not get torn down.
   private realmSessions: Map<string, RealmSessionResource> = new Map();
 
+  virtualNetwork = new VirtualNetwork();
+
   reset() {
     if (this.loader) {
       this.loader = Loader.cloneLoader(this.loader);
-      shimExternals(this.loader);
     } else {
       this.loader = this.makeInstance();
     }
   }
 
   private makeInstance() {
-    let fetchImplementation = new VirtualNetwork().fetch;
     if (this.fastboot.isFastBoot) {
-      let loader = new Loader(fetchImplementation);
-      shimExternals(loader);
+      let loader = new Loader(this.virtualNetwork.fetch);
+      shimExternals(this.virtualNetwork);
       return loader;
     }
 
-    let loader = new Loader(fetchImplementation);
+    let loader = new Loader(this.virtualNetwork.fetch);
     loader.addURLMapping(
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),
     );
     loader.prependURLHandlers([(req) => this.fetchWithAuth(req)]);
-    shimExternals(loader);
+    shimExternals(this.virtualNetwork);
 
     return loader;
   }

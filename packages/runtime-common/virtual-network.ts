@@ -24,6 +24,12 @@ export class VirtualNetwork {
 
   private handlers: Handler[] = [];
 
+  private shimmedModules = new Map<string, Record<string, any>>();
+
+  shimModule(moduleIdentifier: string, module: Record<string, any>) {
+    this.shimmedModules.set(moduleIdentifier, module);
+  }
+
   mount(handler: Handler) {
     this.handlers.push(handler);
   }
@@ -36,6 +42,23 @@ export class VirtualNetwork {
       urlOrRequest instanceof Request
         ? urlOrRequest
         : new Request(urlOrRequest, init);
+
+    // tODO: use constant
+    if (request.url.startsWith('https://shimmed-module/')) {
+      let shimmedModule = this.shimmedModules.get(
+        request.url.replace('https://shimmed-module/', ''),
+      );
+
+      if (!shimmedModule) {
+        throw new Error(
+          `Shimmed module not found but it should've been: ${request.url}`,
+        );
+      }
+
+      let response = new Response();
+      (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
+      return response;
+    }
 
     for (let handler of this.handlers) {
       let response = await handler(request);
