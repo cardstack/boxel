@@ -22,7 +22,7 @@ class View extends Component<typeof MarkdownField> {
 
 export default class MarkdownField extends FieldDef {
   static displayName = 'Markdown';
-  static [primitive]: string;
+  @field value = primitive<string>();
   static [useIndexBasedKey]: never;
 
   static embedded = View;

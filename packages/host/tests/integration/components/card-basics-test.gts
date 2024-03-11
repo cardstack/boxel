@@ -183,18 +183,18 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render primitive field', async function (assert) {
-    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    let { field, contains, CardDef, FieldDef, Component, primitive } = cardApi;
     class EmphasizedString extends FieldDef {
-      static [primitive]: string;
+      @field value = primitive<string>();
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <em data-test='name'>{{@model}}</em>
+          <em data-test='name'>{{@model.value}}</em>
         </template>
       };
     }
 
     class StrongNumber extends FieldDef {
-      static [primitive]: number;
+      @field value = primitive<number>();
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <strong data-test='number'>{{@model}}</strong>
@@ -224,7 +224,7 @@ module('Integration | card-basics', function (hooks) {
     let { field, contains, CardDef, FieldDef, Component } = cardApi;
     let { default: StringField } = string;
     class EmphasizedString extends FieldDef {
-      static [primitive]: string;
+      @field value = primitive<string>();
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <em data-test-embedded='name'>{{@model}}</em>
@@ -238,7 +238,7 @@ module('Integration | card-basics', function (hooks) {
     }
 
     class StrongNumber extends FieldDef {
-      static [primitive]: number;
+      @field value = primitive<number>();
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <strong data-test-embedded='number'>{{@model}}</strong>
@@ -1165,7 +1165,7 @@ module('Integration | card-basics', function (hooks) {
   test('render nested composite field', async function (assert) {
     let { field, contains, CardDef, FieldDef, Component } = cardApi;
     class TestString extends FieldDef {
-      static [primitive]: string;
+      @field value = primitive<string>();
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <em data-test='string'>{{@model}}</em>
@@ -1174,7 +1174,7 @@ module('Integration | card-basics', function (hooks) {
     }
 
     class TestNumber extends FieldDef {
-      static [primitive]: number;
+      @field value = primitive<number>();
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <strong data-test='number'>{{@model}}</strong>
@@ -2267,7 +2267,7 @@ module('Integration | card-basics', function (hooks) {
     let { FieldDef, getQueryableValue } = cardApi;
 
     class TestField extends FieldDef {
-      static [primitive]: TestShape;
+      @field value = primitive<TestShape>();
       static [queryableValue](value: TestShape) {
         return value.firstName;
       }
@@ -2328,7 +2328,7 @@ module('Integration | card-basics', function (hooks) {
   test('queryable value for a field defaults to current field value when not specified', async function (assert) {
     let { FieldDef, getQueryableValue } = cardApi;
     class StringField extends FieldDef {
-      static [primitive]: string;
+      @field value = primitive<string>();
     }
 
     assert.strictEqual(
@@ -2342,7 +2342,7 @@ module('Integration | card-basics', function (hooks) {
     let { FieldDef, getQueryableValue } = cardApi;
 
     class TestField1 extends FieldDef {
-      static [primitive]: TestShape;
+      @field value = primitive<TestShape>();
       static [queryableValue](_value: TestShape) {
         return { notAScalar: true };
       }
@@ -2357,7 +2357,7 @@ module('Integration | card-basics', function (hooks) {
     );
 
     class TestField2 extends FieldDef {
-      static [primitive]: TestShape;
+      @field value = primitive<TestShape>();
       static [queryableValue](_value: TestShape) {
         return [{ notAScalar: true }];
       }
@@ -2376,7 +2376,7 @@ module('Integration | card-basics', function (hooks) {
     let { FieldDef, getQueryableValue } = cardApi;
 
     class TestField extends FieldDef {
-      static [primitive]: TestShape;
+      @field value = primitive<TestShape>();
     }
     assert.throws(
       () =>
@@ -2393,7 +2393,7 @@ async function testString(label: string) {
   cardApi = await loader.import(`${baseRealm.url}card-api`);
   let { FieldDef, Component } = cardApi;
   return class TestString extends FieldDef {
-    static [primitive]: string;
+    @field value = primitive<string>();
     static embedded = class Embedded extends Component<typeof this> {
       <template>
         <em data-test={{label}}>{{@model}}</em>

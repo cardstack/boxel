@@ -6,7 +6,7 @@ import {
   queryableValue,
   CardDef,
   BaseDefConstructor,
-  BaseInstanceType,
+  InstanceType,
   FieldDef,
   relativeTo,
   type SerializeOpts,
@@ -27,7 +27,7 @@ class BaseView extends Component<typeof CodeRefField> {
 type CardId = { name: string; module: string };
 
 export default class CodeRefField extends FieldDef {
-  static [primitive]: CardId;
+  @field value = primitive<CardId>();
 
   static [serialize](
     cardRef: CardId,
@@ -45,8 +45,8 @@ export default class CodeRefField extends FieldDef {
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     cardRef: CardId,
-  ): Promise<BaseInstanceType<T>> {
-    return { ...cardRef } as BaseInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
+  ): Promise<InstanceType<T>> {
+    return { ...cardRef } as InstanceType<T>; // return a new object so that the model cannot be mutated from the outside
   }
   static [queryableValue](cardRef: CardId | undefined, stack: CardDef[] = []) {
     if (cardRef) {

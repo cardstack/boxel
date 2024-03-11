@@ -197,7 +197,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
 
     class NewField extends FieldDef {
       static displayName = 'NewField';
-      static [primitive]: number;
+      @field value = primitive<number>();
     }
 
     class TestCard extends CardDef {

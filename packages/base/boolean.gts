@@ -30,7 +30,7 @@ class View extends Component<typeof BooleanField> {
 
 export default class BooleanField extends FieldDef {
   static displayName = 'Boolean';
-  static [primitive]: boolean;
+  @field value = primitive<boolean>();
   static [useIndexBasedKey]: never;
   static [serialize](val: any) {
     return Boolean(val);

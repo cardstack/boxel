@@ -18,7 +18,7 @@ class View extends Component<typeof SillyNumberField> {
 }
 
 export default class SillyNumberField extends FieldDef {
-  static [primitive]: string[];
+  @field value = primitive<string[]>();
   static [queryableValue](value: string[] | undefined) {
     if (!value) {
       return undefined;

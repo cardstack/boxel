@@ -4,7 +4,7 @@ import {
   useIndexBasedKey,
   FieldDef,
   deserialize,
-  BaseInstanceType,
+  InstanceType,
   BaseDefConstructor,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -70,13 +70,13 @@ class View extends Component<typeof NumberField> {
 
 export default class NumberField extends FieldDef {
   static displayName = 'Number';
-  static [primitive]: number;
+  @field value = primitive<number>();
   static [useIndexBasedKey]: never;
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     number: any,
-  ): Promise<BaseInstanceType<T>> {
-    return _deserialize(number) as BaseInstanceType<T>;
+  ): Promise<InstanceType<T>> {
+    return _deserialize(number) as InstanceType<T>;
   }
   static embedded = View;
   static atom = View;

@@ -4,9 +4,9 @@ import {
   serialize,
   deserialize,
   queryableValue,
-  BaseInstanceType,
   BaseDefConstructor,
   FieldDef,
+  field,
 } from './card-api';
 import { parse, format } from 'date-fns';
 import { fn } from '@ember/helper';
@@ -35,7 +35,7 @@ class View extends Component<typeof DateField> {
 }
 
 export default class DateField extends FieldDef {
-  static [primitive]: Date;
+  @field value = primitive<Date>();
   static [serialize](date: Date) {
     return format(date, dateFormat);
   }
@@ -44,11 +44,11 @@ export default class DateField extends FieldDef {
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     date: any,
-  ): Promise<BaseInstanceType<T>> {
+  ): Promise<InstanceType<T>> {
     if (date == null) {
       return date;
     }
-    return parse(date, dateFormat, new Date()) as BaseInstanceType<T>;
+    return parse(date, dateFormat, new Date()) as InstanceType<T>;
   }
 
   static [queryableValue](date: Date | undefined) {

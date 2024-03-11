@@ -4,7 +4,7 @@ import {
   serialize,
   deserialize,
   queryableValue,
-  BaseInstanceType,
+  InstanceType,
   BaseDefConstructor,
   FieldDef,
 } from './card-api';
@@ -39,7 +39,7 @@ class View extends Component<typeof DatetimeField> {
 
 export default class DatetimeField extends FieldDef {
   static displayName = 'DateTime';
-  static [primitive]: Date;
+  @field value = primitive<Date>();
   static [serialize](date: Date) {
     return date.toISOString();
   }
@@ -47,11 +47,11 @@ export default class DatetimeField extends FieldDef {
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     date: any,
-  ): Promise<BaseInstanceType<T>> {
+  ): Promise<InstanceType<T>> {
     if (date == null) {
       return date;
     }
-    return parseISO(date) as BaseInstanceType<T>;
+    return parseISO(date) as InstanceType<T>;
   }
 
   static [queryableValue](date: Date | undefined) {

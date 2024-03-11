@@ -5,7 +5,7 @@ import {
   FieldDef,
   BaseDefConstructor,
   deserialize,
-  BaseInstanceType,
+  InstanceType,
   queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -68,15 +68,15 @@ class Edit extends Component<typeof BigIntegerField> {
 
 export default class BigIntegerField extends FieldDef {
   static displayName = 'BigInteger';
-  static [primitive]: bigint;
+  @field value = primitive<bigint>();
   static [serialize](val: bigint | null) {
     return _serialize(val);
   }
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     bigintString: any,
-  ): Promise<BaseInstanceType<T>> {
-    return _deserialize(bigintString ?? null) as BaseInstanceType<T>;
+  ): Promise<InstanceType<T>> {
+    return _deserialize(bigintString ?? null) as InstanceType<T>;
   }
   static [queryableValue](val: bigint | undefined): string | undefined {
     return _serialize(val ?? null);

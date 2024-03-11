@@ -86,7 +86,7 @@ class JSONView extends Component<typeof MatrixEventField> {
 }
 
 class MatrixEventField extends FieldDef {
-  static [primitive]: MatrixEvent;
+  @field value = primitive<MatrixEvent>();
   static embedded = class Embedded extends JSONView {};
   static isolated = class Isolated extends JSONView {};
   // The edit template is meant to be read-only, this field card is not mutable
@@ -118,7 +118,7 @@ class RoomMemberView extends Component<typeof RoomMemberField> {
 }
 
 class RoomMembershipField extends FieldDef {
-  static [primitive]: 'invite' | 'join' | 'leave';
+  @field value = primitive<'invite' | 'join' | 'leave'>();
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -218,11 +218,11 @@ type JSONObject = { [x: string]: JSONValue };
 type PatchObject = { patch: { attributes: JSONObject }; id: string };
 
 class PatchObjectField extends FieldDef {
-  static [primitive]: PatchObject;
+  @field value = primitive<PatchObject>();
 }
 
 class CommandType extends FieldDef {
-  static [primitive]: 'patch';
+  @field value = primitive<'patch'>();
 }
 
 // Subclass, add a validator that checks the fields required?

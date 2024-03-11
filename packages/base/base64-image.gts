@@ -194,7 +194,7 @@ class Edit extends Component<typeof Base64ImageField> {
 let groupNumber = 0;
 class ImageSizeField extends FieldDef {
   static displayName = 'Image Size';
-  static [primitive]: 'actual' | 'contain' | 'cover';
+  @field value = primitive<'actual' | 'contain' | 'cover'>();
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
     <template>

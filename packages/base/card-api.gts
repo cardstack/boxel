@@ -26,7 +26,6 @@ import {
   NotReady,
   getField,
   isField,
-  primitive,
   identifyCard,
   isCardDef,
   isCardInstance as _isCardInstance,
@@ -49,7 +48,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 
-export { primitive, isField, type BoxComponent };
+export { isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
 export const deserialize = Symbol.for('cardstack-deserialize');
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
@@ -63,16 +62,6 @@ export const realmURL = Symbol.for('cardstack-realm-url');
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
 
-export type BaseInstanceType<T extends BaseDefConstructor> = T extends {
-  [primitive]: infer P;
-}
-  ? P
-  : InstanceType<T>;
-export type PartialBaseInstanceType<T extends BaseDefConstructor> = T extends {
-  [primitive]: infer P;
-}
-  ? P | null
-  : Partial<InstanceType<T>>;
 export type FieldsTypeFor<T extends BaseDef> = {
   [Field in keyof T]: BoxComponent &
     (T[Field] extends ArrayLike<unknown>
@@ -272,18 +261,16 @@ export interface Field<
     defaultFormat: Format,
     context?: CardContext,
   ): BoxComponent;
-  getter(instance: BaseDef): BaseInstanceType<CardT>;
+  getter(instance: BaseDef): InstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
   queryMatcher(
     innerMatcher: (innerValue: any) => boolean | null,
   ): (value: SearchT) => boolean | null;
   handleNotLoadedError(
-    instance: BaseInstanceType<CardT>,
+    instance: InstanceType<CardT>,
     e: NotLoaded,
     opts?: RecomputeOptions,
-  ): Promise<
-    BaseInstanceType<CardT> | BaseInstanceType<CardT>[] | undefined | void
-  >;
+  ): Promise<InstanceType<CardT> | InstanceType<CardT>[] | undefined | void>;
 }
 
 function callSerializeHook(
@@ -336,7 +323,7 @@ function resourceFrom(
 function getter<CardT extends BaseDefConstructor>(
   instance: BaseDef,
   field: Field<CardT>,
-): BaseInstanceType<CardT> {
+): InstanceType<CardT> {
   let deserialized = getDataBucket(instance);
   // this establishes that our field should rerender when cardTracking for this card changes
   cardTracking.get(instance);
@@ -385,7 +372,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     return this.cardThunk();
   }
 
-  getter(instance: BaseDef): BaseInstanceType<FieldT> {
+  getter(instance: BaseDef): InstanceType<FieldT> {
     return getter(instance, this);
   }
 
@@ -417,7 +404,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   }
 
   serialize(
-    values: BaseInstanceType<FieldT>[],
+    values: InstanceType<FieldT>[],
     doc: JSONAPISingleResourceDocument,
     _visited: Set<string>,
     opts?: SerializeOpts,
@@ -488,7 +475,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
-  ): Promise<BaseInstanceType<FieldT>[]> {
+  ): Promise<InstanceType<FieldT>[]> {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
@@ -604,7 +591,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return this.cardThunk();
   }
 
-  getter(instance: BaseDef): BaseInstanceType<CardT> {
+  getter(instance: BaseDef): InstanceType<CardT> {
     return getter(instance, this);
   }
 
@@ -677,7 +664,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
-  ): Promise<BaseInstanceType<CardT>> {
+  ): Promise<InstanceType<CardT>> {
     if (primitive in this.card) {
       return this.card[deserialize](value, relativeTo, doc);
     }
@@ -759,7 +746,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
-  getter(instance: CardDef): BaseInstanceType<CardT> {
+  getter(instance: CardDef): InstanceType<CardT> {
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
     cardTracking.get(instance);
@@ -876,7 +863,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     _instancePromise: Promise<CardDef>,
     loadedValue: any,
     relativeTo: URL | undefined,
-  ): Promise<BaseInstanceType<CardT> | null | NotLoadedValue> {
+  ): Promise<InstanceType<CardT> | null | NotLoadedValue> {
     if (!isRelationship(value)) {
       throw new Error(
         `linkTo field '${
@@ -897,7 +884,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       cardResource.card ?? identityContext.identities.get(value.links.self);
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
-      return cachedInstance as BaseInstanceType<CardT>;
+      return cachedInstance as InstanceType<CardT>;
     }
     let resourceId = new URL(value.links.self, relativeTo).href;
     let resource = resourceFrom(doc, resourceId);
@@ -923,7 +910,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       loader,
       deserialized,
       deserialized[realmURL]!,
-    ) as BaseInstanceType<CardT>;
+    ) as InstanceType<CardT>;
     return deserialized;
   }
 
@@ -953,10 +940,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   }
 
   async handleNotLoadedError(
-    instance: BaseInstanceType<CardT>,
+    instance: InstanceType<CardT>,
     e: NotLoaded,
     opts?: RecomputeOptions,
-  ): Promise<BaseInstanceType<CardT> | undefined> {
+  ): Promise<InstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
     let identityContext =
       identityContexts.get(instance as BaseDef) ?? new IdentityContext();
@@ -965,7 +952,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
 
     if (fieldValue !== undefined) {
       deserialized.set(this.name, fieldValue);
-      return fieldValue as BaseInstanceType<CardT>;
+      return fieldValue as InstanceType<CardT>;
     }
 
     if (opts?.loadFields) {
@@ -976,7 +963,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         instance[relativeTo],
       );
       deserialized.set(this.name, fieldValue);
-      return fieldValue as BaseInstanceType<CardT>;
+      return fieldValue as InstanceType<CardT>;
     }
 
     return;
@@ -1063,7 +1050,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     return this.cardThunk();
   }
 
-  getter(instance: CardDef): BaseInstanceType<FieldT> {
+  getter(instance: CardDef): InstanceType<FieldT> {
     let deserialized = getDataBucket(instance);
     cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
@@ -1118,7 +1105,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   }
 
   serialize(
-    values: BaseInstanceType<FieldT>[] | null | undefined,
+    values: InstanceType<FieldT>[] | null | undefined,
     doc: JSONAPISingleResourceDocument,
     visited: Set<string>,
     opts?: SerializeOpts,
@@ -1195,12 +1182,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
     instancePromise: Promise<BaseDef>,
     loadedValues: any,
     relativeTo: URL | undefined,
-  ): Promise<(BaseInstanceType<FieldT> | NotLoadedValue)[]> {
+  ): Promise<(InstanceType<FieldT> | NotLoadedValue)[]> {
     if (!Array.isArray(values) && values.links.self === null) {
       return [];
     }
 
-    let resources: Promise<BaseInstanceType<FieldT> | NotLoadedValue>[] =
+    let resources: Promise<InstanceType<FieldT> | NotLoadedValue>[] =
       values.map(async (value: Relationship) => {
         if (!isRelationship(value)) {
           throw new Error(
@@ -1258,7 +1245,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
           loader,
           deserialized,
           deserialized[realmURL]!,
-        ) as BaseInstanceType<FieldT>;
+        ) as InstanceType<FieldT>;
         return deserialized;
       });
 
@@ -1483,7 +1470,7 @@ export const field = function (
 export function containsMany<FieldT extends FieldDefConstructor>(
   field: FieldT,
   options?: Options,
-): BaseInstanceType<FieldT>[] {
+): InstanceType<FieldT>[] {
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
@@ -1502,7 +1489,7 @@ containsMany[fieldType] = 'contains-many' as FieldType;
 export function contains<FieldT extends FieldDefConstructor>(
   field: FieldT,
   options?: Options,
-): BaseInstanceType<FieldT> {
+): InstanceType<FieldT> {
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
@@ -1518,10 +1505,14 @@ export function contains<FieldT extends FieldDefConstructor>(
 }
 contains[fieldType] = 'contains' as FieldType;
 
+export function primitive<T>(): T | undefined {
+  return undefined as any;
+}
+
 export function linksTo<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
   options?: Options,
-): BaseInstanceType<CardT> {
+): InstanceType<CardT> {
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
@@ -1540,7 +1531,7 @@ linksTo[fieldType] = 'linksTo' as FieldType;
 export function linksToMany<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
   options?: Options,
-): BaseInstanceType<CardT>[] {
+): InstanceType<CardT>[] {
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
@@ -1629,7 +1620,7 @@ export class BaseDef {
     relativeTo: URL | undefined,
     doc?: CardDocument,
     identityContext?: IdentityContext,
-  ): Promise<BaseInstanceType<T>> {
+  ): Promise<InstanceType<T>> {
     if (primitive in this) {
       // primitive cards can override this as need be
       return data;
@@ -1878,7 +1869,7 @@ export class FieldDef extends BaseDef {
 }
 
 class IDField extends FieldDef {
-  static [primitive]: string;
+  @field value = primitive<string>();
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -1899,7 +1890,7 @@ class IDField extends FieldDef {
 
 export class StringField extends FieldDef {
   static displayName = 'String';
-  static [primitive]: string;
+  @field value = primitive<string>();
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -2346,7 +2337,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   relativeTo: URL | undefined,
   loader: Loader,
   opts?: { identityContext?: IdentityContext },
-): Promise<BaseInstanceType<T>> {
+): Promise<InstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
   let {
     meta: { adoptsFrom },
@@ -2368,9 +2359,9 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
 }
 
 export async function updateFromSerialized<T extends BaseDefConstructor>(
-  instance: BaseInstanceType<T>,
+  instance: InstanceType<T>,
   doc: LooseSingleCardDocument,
-): Promise<BaseInstanceType<T>> {
+): Promise<InstanceType<T>> {
   let identityContext = identityContexts.get(instance);
   if (!identityContext) {
     identityContext = new IdentityContext();
@@ -2402,7 +2393,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   doc: LooseSingleCardDocument | CardDocument | undefined,
   _relativeTo: URL | undefined,
   identityContext: IdentityContext = new IdentityContext(),
-): Promise<BaseInstanceType<T>> {
+): Promise<InstanceType<T>> {
   if (primitive in card) {
     return card[deserialize](data, _relativeTo);
   }
@@ -2423,14 +2414,14 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   if (!doc) {
     doc = { data: resource };
   }
-  let instance: BaseInstanceType<T> | undefined;
+  let instance: InstanceType<T> | undefined;
   if (resource.id != null) {
     instance = identityContext.identities.get(resource.id) as
-      | BaseInstanceType<T>
+      | InstanceType<T>
       | undefined;
   }
   if (!instance) {
-    instance = new card({ id: resource.id }) as BaseInstanceType<T>;
+    instance = new card({ id: resource.id }) as InstanceType<T>;
     instance[relativeTo] = _relativeTo;
     if (isCardInstance(instance)) {
       instance[realmInfo] = data?.meta?.realmInfo;
@@ -2444,11 +2435,11 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
 }
 
 async function _updateFromSerialized<T extends BaseDefConstructor>(
-  instance: BaseInstanceType<T>,
+  instance: InstanceType<T>,
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   identityContext: IdentityContext,
-): Promise<BaseInstanceType<T>> {
+): Promise<InstanceType<T>> {
   if (resource.id != null) {
     identityContext.identities.set(resource.id, instance as CardDef); // the instance must be a composite card since we are updating it from a resource
   }
@@ -2508,7 +2499,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         }),
       ];
     }),
-  )) as [keyof BaseInstanceType<T>, any][];
+  )) as [keyof InstanceType<T>, any][];
 
   // this block needs to be synchronous
   {
@@ -2622,7 +2613,7 @@ function makeDescriptor<
   let descriptor: any = {
     enumerable: true,
   };
-  descriptor.get = function (this: BaseInstanceType<CardT>) {
+  descriptor.get = function (this: InstanceType<CardT>) {
     return field.getter(this);
   };
   if (field.computeVia) {
@@ -2630,7 +2621,7 @@ function makeDescriptor<
       // computeds should just no-op when an assignment occurs
     };
   } else {
-    descriptor.set = function (this: BaseInstanceType<CardT>, value: any) {
+    descriptor.set = function (this: InstanceType<CardT>, value: any) {
       if (
         (field.card as typeof BaseDef) === IDField &&
         isCardInstance(this) &&
@@ -2693,7 +2684,7 @@ function cardThunk<CardT extends BaseDefConstructor>(
 
 export type SignatureFor<CardT extends BaseDefConstructor> = {
   Args: {
-    model: PartialBaseInstanceType<CardT>;
+    model: PartialInstanceType<CardT>;
     fields: FieldsTypeFor<InstanceType<CardT>>;
     set: Setter;
     fieldName: string | undefined;

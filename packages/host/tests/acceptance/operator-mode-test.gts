@@ -79,7 +79,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     } = cardApi;
     let { default: StringField } = string;
     type BaseDefConstructor = typeof BaseDef;
-    type BaseInstanceType<T extends BaseDefConstructor> = T extends {
+    type InstanceType<T extends BaseDefConstructor> = T extends {
       [primitive]: infer P;
     }
       ? P
@@ -232,10 +232,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     }
 
     class BoomField extends FieldDef {
-      static [primitive]: string;
+      @field value = primitive<string>();
       static async [deserialize]<T extends BaseDefConstructor>(
         this: T,
-      ): Promise<BaseInstanceType<T>> {
+      ): Promise<InstanceType<T>> {
         throw new Error('Boom!');
       }
       static embedded = class Embedded extends Component<typeof this> {

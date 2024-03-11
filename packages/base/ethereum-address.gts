@@ -5,7 +5,7 @@ import {
   useIndexBasedKey,
   FieldDef,
   deserialize,
-  BaseInstanceType,
+  InstanceType,
   BaseDefConstructor,
   queryableValue,
 } from './card-api';
@@ -73,13 +73,13 @@ class Edit extends Component<typeof EthereumAddressField> {
 
 export default class EthereumAddressField extends FieldDef {
   static displayName = 'EthereumAddress';
-  static [primitive]: string;
+  @field value = primitive<string>();
   static [useIndexBasedKey]: never;
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     address: any,
-  ): Promise<BaseInstanceType<T>> {
-    return _deserialize(address) as BaseInstanceType<T>;
+  ): Promise<InstanceType<T>> {
+    return _deserialize(address) as InstanceType<T>;
   }
   static [queryableValue](val: string | undefined): string | undefined {
     return serialize(val ?? null);
