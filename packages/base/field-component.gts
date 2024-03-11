@@ -319,7 +319,7 @@ export function getPluralViewComponent(
         >
           {{#each (getComponents) as |Item i|}}
             <div data-test-plural-view-item={{i}}>
-              <Item @format={{format}} @displayContainer={{true}} />
+              <Item @format={{format}} />
             </div>
           {{/each}}
         </div>
