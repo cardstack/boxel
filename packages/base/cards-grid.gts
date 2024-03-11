@@ -245,12 +245,6 @@ class Isolated extends Component<typeof CardsGrid> {
       return;
     }
 
-    // before auto save we used to add the new card to the stack
-    // after it was created. now this no longer really makes sense
-    // after auto-save. The card is in the stack in an edit mode.
-    //if the user wants to view the card in isolated mode they can
-    // just toggle the edit button. otherwise we'll pop 2 of the
-    // same cards into the stack.
     await this.args.context?.actions?.createCard?.(card.ref, new URL(card.id), {
       realmURL: this.args.model[realmURL],
     });
