@@ -1804,36 +1804,40 @@ module('Integration | card-basics', function (hooks) {
       isHuman: false,
     });
 
-    const TRUE = 'label:first-child input';
-    const FALSE = 'label:last-child input';
     await renderCard(loader, mango, 'edit');
-    assert
-      .dom(`[data-test-radio-group="isCool"] > ${TRUE}`)
-      .isChecked('the isCool true radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isCool"] > ${FALSE}`)
-      .isNotChecked('the isCool false radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isHuman"] > ${TRUE}`)
-      .isNotChecked('the isHuman true radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isHuman"] > ${FALSE}`)
-      .isChecked('the isHuman false radio has correct state');
 
-    await click(`[data-test-radio-group="isHuman"] > ${TRUE}`);
+    let getRadioQuerySelector = (fieldName: string, optionVal: string) => {
+      return `[data-test-radio-group="${fieldName}"]  [data-test-boxel-radio-option-id="${optionVal}"] input[type="radio"]`;
+    };
+    let assertRadioInput = (
+      fieldName: string,
+      optionVal: string,
+      checked: boolean,
+    ) => {
+      let querySelector = getRadioQuerySelector(fieldName, optionVal);
+      debugger;
+      if (checked === true) {
+        assert
+          .dom(querySelector)
+          .isChecked('the isCool true radio has correct state');
+      } else {
+        assert
+          .dom(querySelector)
+          .isNotChecked('the isCool true radio has correct state');
+      }
+    };
+    assertRadioInput('isCool', 'true', true);
+    assertRadioInput('isCool', 'false', false);
+    assertRadioInput('isHuman', 'true', false);
+    assertRadioInput('isHuman', 'false', true);
+
+    await click(getRadioQuerySelector('isHuman', 'true'));
+
     // make sure radio group changes don't bleed into one another
-    assert
-      .dom(`[data-test-radio-group="isCool"] > ${TRUE}`)
-      .isChecked('the isCool true radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isCool"] > ${FALSE}`)
-      .isNotChecked('the isCool false radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isHuman"] > ${TRUE}`)
-      .isChecked('the isHuman true radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isHuman"] > ${FALSE}`)
-      .isNotChecked('the isHuman false radio has correct state');
+    assertRadioInput('isCool', 'true', true);
+    assertRadioInput('isCool', 'false', false);
+    assertRadioInput('isHuman', 'true', true);
+    assertRadioInput('isHuman', 'false', false);
 
     assert.strictEqual(
       mango.isCool,
