@@ -17,8 +17,8 @@ module('Unit | sqlite | smoke test', function (hooks) {
 
   hooks.beforeEach(async function () {
     let ready = new Deferred<typeof SQLiteWorker>();
-    const _promiser = sqlite3Worker1Promiser({
-      onready: () => ready.fulfill(_promiser),
+    const promisedWorker = sqlite3Worker1Promiser({
+      onready: () => ready.fulfill(promisedWorker),
     });
     sqlite = await ready.promise;
   });
