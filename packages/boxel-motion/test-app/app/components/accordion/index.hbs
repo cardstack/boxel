@@ -44,3 +44,25 @@
     />
   {{/each}}
 </div>
+
+<style>
+  .Accordion {
+    margin: 2em;
+    padding: 0;
+    border: 2px solid hsl(0, 0%, 82%);
+    border-radius: 7px;
+    width: 20em;
+  }
+
+  .Accordion.focus {
+    border-color: hsl(216, 94%, 73%);
+  }
+
+  .Accordion.focus :deep(h3) {
+    background-color: hsl(0, 0%, 97%);
+  }
+
+  .Accordion > * + * {
+    border-top: 1px solid hsl(0, 0%, 82%);
+  }
+</style>

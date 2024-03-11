@@ -63,3 +63,115 @@
     {{/if}}
   </div>
 </AnimationContext>
+
+<style>
+  .accordion-panel-animation-context,
+  .accordion-panel-content {
+    overflow-y: hidden;
+  }
+
+  .accordion-panel-animation-context:nth-of-type(1),
+  .accordion-panel-animation-context:nth-of-type(1) .accordion-panel-container,
+  .accordion-panel-animation-context:nth-of-type(1) .accordion-panel-container .accordion-panel-header,
+  .accordion-panel-animation-context:nth-of-type(1) .accordion-panel-container .accordion-panel-header .Accordion-trigger {
+    border-radius: 7px 7px 0 0;
+  }
+  .accordion-panel-animation-context:nth-last-of-type(1),
+  .accordion-panel-animation-context:nth-last-of-type(1) .accordion-panel-container,
+  .accordion-panel-animation-context:nth-last-of-type(1) .accordion-panel-container .accordion-panel-header,
+  .accordion-panel-animation-context:nth-last-of-type(1) .accordion-panel-container .accordion-panel-header .Accordion-trigger {
+    border-radius: 0 0 7px 7px;
+  }
+
+  .accordion-panel-header {
+    background-color: hsl(0, 0%, 97%);
+    border-top: 1px solid hsl(0, 0%, 82%);
+    margin: 0;
+    padding: 0;
+  }
+
+  .accordion-panel-animation-context:nth-of-type(1) .accordion-panel-container .accordion-panel-header {
+    border-top: 0;
+  }
+
+  .Accordion-trigger {
+    background: none;
+    color: hsl(0, 0%, 13%);
+    display: block;
+    font-size: 1rem;
+    font-weight: normal;
+    margin: 0;
+    padding: 1em 1.5em;
+    position: relative;
+    text-align: left;
+    width: 100%;
+    outline: none;
+  }
+
+  .Accordion-trigger:focus,
+  .Accordion-trigger:hover {
+    background: hsl(216, 94%, 94%);
+  }
+
+  .accordion-panel-header button {
+    border-style: none;
+  }
+
+  .accordion-panel-header button::-moz-focus-inner {
+    border: 0;
+  }
+
+  .Accordion-title {
+    display: block;
+    pointer-events: none;
+    border: transparent 2px solid;
+    border-radius: 5px;
+    padding: 0.25em;
+    outline: none;
+  }
+
+  .Accordion-trigger:focus .Accordion-title {
+    border-color: hsl(216, 94%, 73%);
+  }
+
+  .Accordion-icon {
+    border: solid hsl(0, 0%, 62%);
+    border-width: 0 2px 2px 0;
+    height: 0.5rem;
+    pointer-events: none;
+    position: absolute;
+    right: 2em;
+    top: 50%;
+    transform: translateY(-60%) rotate(45deg);
+    width: 0.5rem;
+  }
+
+  .Accordion-trigger:focus .Accordion-icon,
+  .Accordion-trigger:hover .Accordion-icon {
+    border-color: hsl(216, 94%, 73%);
+  }
+
+  .Accordion-trigger[aria-expanded="true"] .Accordion-icon {
+    transform: translateY(-50%) rotate(-135deg);
+  }
+
+  .Accordion-panel {
+    margin: 0;
+    padding: 1em 1.5em;
+    overflow: hidden;
+  }
+
+  fieldset {
+    border: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  input {
+    border: 1px solid hsl(0, 0%, 62%);
+    border-radius: 0.3em;
+    display: block;
+    font-size: inherit;
+    padding: 0.3em 0.5em;
+  }
+</style>
