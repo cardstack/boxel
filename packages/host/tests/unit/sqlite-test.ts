@@ -21,8 +21,6 @@ module('Unit | sqlite | smoke test', function (hooks) {
       onready: () => ready.fulfill(_promiser),
     });
     sqlite = await ready.promise;
-    let response = await sqlite('config-get', {});
-    console.log('Running SQLite3 version', response.result.version.libVersion);
   });
 
   // this is a handy function to fashion a result set from the raw sqlite exec API
