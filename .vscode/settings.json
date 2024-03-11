@@ -9,5 +9,7 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.formatOnSave": true
   },
-  "prettier.documentSelectors": ["**/*.gjs", "**/*.gts"]
+  "prettier.documentSelectors": ["**/*.gjs", "**/*.gts"],
+  "cucumber.features": ["packages/flow-explorer/features/**/*.feature"],
+  "cucumber.glue": ["packages/flow-explorer/features/**/*.ts"]
 }
