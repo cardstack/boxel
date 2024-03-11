@@ -1,7 +1,7 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { VirtualNetwork, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
@@ -34,13 +34,14 @@ export default class LoaderService extends Service {
   }
 
   private makeInstance() {
+    let fetchImplementation = new VirtualNetwork().fetch;
     if (this.fastboot.isFastBoot) {
-      let loader = new Loader();
+      let loader = new Loader(fetchImplementation);
       shimExternals(loader);
       return loader;
     }
 
-    let loader = new Loader();
+    let loader = new Loader(fetchImplementation);
     loader.addURLMapping(
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),

@@ -1,5 +1,5 @@
 import './setup-logger'; // This should be first
-import { Realm, logger } from '@cardstack/runtime-common';
+import { Realm, VirtualNetwork, logger } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -114,7 +114,7 @@ if (
 
 let log = logger('main');
 
-let loader = new Loader();
+let loader = new Loader(new VirtualNetwork().fetch);
 shimExternals(loader);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [

@@ -54,6 +54,8 @@ export const isNode =
 
 export { Realm } from './realm';
 export { SupportedMimeType } from './router';
+export { VirtualNetwork } from './virtual-network';
+
 export type {
   Kind,
   RealmAdapter,
