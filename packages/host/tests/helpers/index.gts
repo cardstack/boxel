@@ -412,7 +412,6 @@ export async function setupAcceptanceTestRealm({
   contents,
   realmURL,
   onFetch,
-  virtualNetwork,
 }: {
   loader: Loader;
   contents: RealmContents;
@@ -421,7 +420,6 @@ export async function setupAcceptanceTestRealm({
     req: Request;
     res: Response | null;
   }>;
-  virtualNetwork?: VirtualNetwork;
 }) {
   return await setupTestRealm({
     loader,
@@ -429,7 +427,6 @@ export async function setupAcceptanceTestRealm({
     realmURL,
     onFetch,
     isAcceptanceTest: true,
-    virtualNetwork,
   });
 }
 
@@ -474,9 +471,6 @@ async function setupTestRealm({
   isAcceptanceTest?: boolean;
 }) {
   let owner = (getContext() as TestContext).owner;
-
-  let virtualNetwork = (owner.lookup('service:loader') as LoaderService)
-    .virtualNetwork;
 
   realmURL = realmURL ?? testRealmURL;
 

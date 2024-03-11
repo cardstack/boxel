@@ -8,6 +8,7 @@ import flatMap from 'lodash/flatMap';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
 
+export const SHIMMED_MODULE_FAKE_ORIGIN = 'https://shimmed-module/';
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
 export interface ResolvedURL extends URL {
@@ -252,7 +253,7 @@ export class Loader {
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
     if (!isUrlLike(moduleIdentifier)) {
-      moduleIdentifier = new URL(moduleIdentifier, 'https://shimmed-module/')
+      moduleIdentifier = new URL(moduleIdentifier, SHIMMED_MODULE_FAKE_ORIGIN)
         .href;
     }
 
@@ -681,7 +682,13 @@ export class Loader {
             moduleURL: this.resolve(depId, new URL(moduleIdentifier)),
           };
         } else {
-          return { type: 'shim-dep', moduleId: depId }; // for npm imports
+          return {
+            type: 'dep',
+            moduleURL: this.resolve(
+              new URL(depId, SHIMMED_MODULE_FAKE_ORIGIN).href,
+              new URL(moduleIdentifier),
+            ),
+          };
         }
       });
       implementation = impl;

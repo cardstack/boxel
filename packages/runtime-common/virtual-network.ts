@@ -1,3 +1,4 @@
+import { SHIMMED_MODULE_FAKE_ORIGIN } from './loader';
 import type { RunnerOpts } from './search-index';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
@@ -44,9 +45,9 @@ export class VirtualNetwork {
         : new Request(urlOrRequest, init);
 
     // tODO: use constant
-    if (request.url.startsWith('https://shimmed-module/')) {
+    if (request.url.startsWith(SHIMMED_MODULE_FAKE_ORIGIN)) {
       let shimmedModule = this.shimmedModules.get(
-        request.url.replace('https://shimmed-module/', ''),
+        request.url.replace(SHIMMED_MODULE_FAKE_ORIGIN, ''),
       );
 
       if (!shimmedModule) {

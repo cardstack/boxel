@@ -113,9 +113,9 @@ if (
 }
 
 let log = logger('main');
-
-let loader = new Loader(new VirtualNetwork().fetch);
-shimExternals(loader);
+let virtualNetwork = new VirtualNetwork();
+let loader = new Loader(virtualNetwork.fetch);
+shimExternals(virtualNetwork);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),
