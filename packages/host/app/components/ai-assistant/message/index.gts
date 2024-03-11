@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
+//@ts-expect-error cached type not available yet
 import { cached } from '@glimmer/tracking';
 
 import { format as formatDate, formatISO } from 'date-fns';
