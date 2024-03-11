@@ -160,7 +160,13 @@ test.describe('Room messages', () => {
       {
         from: 'user1',
         message: 'This is my card',
-        cards: [{ id: testCard, title: 'Hassan' }],
+        cards: [
+          {
+            id: testCard,
+            title: 'Hassan',
+            realmIconUrl: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+          },
+        ],
       },
     ]);
     await expect(

@@ -343,7 +343,7 @@ export async function assertMessages(
   messages: {
     from: string;
     message?: string;
-    cards?: { id: string; title?: string }[];
+    cards?: { id: string; title?: string; realmIconUrl?: string }[];
   }[],
 ) {
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
@@ -384,6 +384,14 @@ export async function assertMessages(
               `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"]`,
             ),
           ).toContainText(card.title);
+        }
+
+        if (card.realmIconUrl) {
+          await expect(
+            page.locator(
+              `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
+            ),
+          ).toHaveCount(1);
         }
       });
     } else {
