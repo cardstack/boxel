@@ -72,6 +72,7 @@ module('Unit | sqlite | smoke test', function (hooks) {
           INSERT INTO t(a,b) VALUES('abc',123),('def',456),(NULL,789),('ghi',012);
         `,
       });
+
       await sqlite('exec', {
         dbId,
         sql: `
@@ -79,6 +80,7 @@ module('Unit | sqlite | smoke test', function (hooks) {
         `,
         bind: ['mango', 4, 'van gogh', 8],
       });
+
       let results = await query(dbId, `SELECT * FROM t;`);
       assert.deepEqual(results, [
         { a: 'abc', b: 123 },
