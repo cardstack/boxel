@@ -466,6 +466,9 @@ importers:
       ember-freestyle:
         specifier: ^0.20.0
         version: 0.20.0(@babel/core@7.22.11)(@ember/string@3.1.1)(@glint/template@1.2.1)(ember-source@4.12.0)(webpack@5.89.0)
+      ember-keyboard:
+        specifier: ^8.2.0
+        version: 8.2.0(@babel/core@7.22.11)(@ember/test-helpers@2.9.3)(ember-source@4.12.0)
       ember-load-initializers:
         specifier: ^2.1.2
         version: 2.1.2(@babel/core@7.22.11)
@@ -3598,7 +3601,6 @@ packages:
       semver: 7.5.4
     transitivePeerDependencies:
       - supports-color
-    dev: false
 
   /@embroider/babel-loader-9@3.1.0(@embroider/core@3.3.0)(supports-color@8.1.1)(webpack@5.89.0):
     resolution: {integrity: sha512-TEOaOAsci15Zc3qh8kFAt/XpAsKjw/DzS/1+dv7yNGOeEgqImux+RoZ7DkZkVZNeuA0eAonpY79B+B0J17Us5g==}
@@ -3796,7 +3798,6 @@ packages:
       typescript-memoize: 1.1.1
     transitivePeerDependencies:
       - supports-color
-    dev: false
 
   /@embroider/test-setup@0.47.2:
     resolution: {integrity: sha512-zTiNaicOeBJWQ+uAJOEg4Z4plmvF2Ckze+tMZ0sycp2o09UV72WC8s9L3pssWOGgHMV6Kl+eCfFQelWwUOqz1Q==}
@@ -12234,7 +12235,7 @@ packages:
         optional: true
     dependencies:
       '@ember/test-helpers': 2.9.3(@babel/core@7.22.11)(@glint/environment-ember-loose@1.2.1)(@glint/template@1.2.1)(ember-source@4.12.0)
-      '@embroider/addon-shim': 1.8.6
+      '@embroider/addon-shim': 1.8.7
       ember-destroyable-polyfill: 2.0.3(@babel/core@7.22.11)
       ember-modifier: 4.1.0(ember-source@4.12.0)
       ember-modifier-manager-polyfill: 1.2.0(@babel/core@7.22.11)
@@ -12863,7 +12864,7 @@ packages:
     peerDependencies:
       ember-source: '>=3.28.0'
     dependencies:
-      '@embroider/addon-shim': 1.8.6
+      '@embroider/addon-shim': 1.8.7
       ember-functions-as-helper-polyfill: 2.1.2(ember-source@4.12.0)
       ember-source: 4.12.0(@babel/core@7.22.11)(@glimmer/component@1.1.2)(@glint/template@1.2.1)(webpack@5.89.0)
     transitivePeerDependencies:
