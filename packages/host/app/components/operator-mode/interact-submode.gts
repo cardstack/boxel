@@ -203,10 +203,9 @@ export default class InteractSubmode extends Component<Signature> {
           }),
         );
       },
-      saveCard(card: CardDef): void {
-        //this will be saving an existing card
+      saveCard(card: CardDef, dismissItem: boolean): void {
         let item = here.findCardInStack(card, stackIndex);
-        here.save.perform(item);
+        here.save.perform(item, dismissItem);
       },
       delete: (card: CardDef | URL | string): void => {
         if (!card || card instanceof URL || typeof card === 'string') {
@@ -292,12 +291,21 @@ export default class InteractSubmode extends Component<Signature> {
     }
   });
 
-  private save = task(async (item: StackItem) => {
+  private save = task(async (item: StackItem, dismissStackItem: boolean) => {
     let { request } = item;
     let updatedCard = await this.args.write(item.card);
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
+      if (!dismissStackItem) {
+        // if this is a newly created card from auto-save then we
+        // need to replace the stack item to account for the new card's ID
+        if (!item.card.id && updatedCard.id) {
+          await item.setCardURL(new URL(updatedCard.id));
+        }
+        return;
+      }
+
       if (item.isLinkedCard) {
         this.operatorModeStateService.trimItemsFromStack(item); // closes the 'create new card' editor for linked card fields
       } else {
