@@ -94,7 +94,7 @@ export function getBoxComponent(
       {{#let (lookupFormat @format) as |f|}}
         {{#if (isCard model.value)}}
           <CardContainer
-            @displayBoundaries={{true}}
+            @displayBoundaries={{false}}
             class='field-component-card {{f.format}}-format'
             {{cardComponentModifier
               card=model.value
