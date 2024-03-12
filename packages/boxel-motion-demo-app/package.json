@@ -31,7 +31,7 @@
     "@cardstack/boxel-motion": "workspace:*",
     "@ember/optional-features": "^2.0.0",
     "@ember/string": "^3.1.1",
-    "@ember/test-helpers": "^2.9.3",
+    "@ember/test-helpers": "^2.9.4",
     "@embroider/core": "^3.3.0",
     "@embroider/compat": "^3.2.2",
     "@embroider/macros": "^1.13.2",
