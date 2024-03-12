@@ -29,9 +29,7 @@ import * as boxelUiHelpers from '@cardstack/boxel-ui/helpers';
 import * as boxelUiIcons from '@cardstack/boxel-ui/icons';
 
 import * as runtime from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
 import { VirtualNetwork } from '@cardstack/runtime-common';
-import { debug } from '@ember/debug';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/runtime-common', runtime);

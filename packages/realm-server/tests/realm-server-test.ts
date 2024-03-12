@@ -26,6 +26,7 @@ import {
   type LooseSingleCardDocument,
   Realm,
   RealmPermissions,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -115,9 +116,11 @@ module('Realm Server', function (hooks) {
   let request: SuperTest<Test>;
   let dir: DirResult;
 
-  let loader = new Loader();
+  let virtualNetwork = new VirtualNetwork();
+  let loader = new Loader(virtualNetwork.fetch);
+
   loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-  shimExternals(loader);
+  shimExternals(virtualNetwork);
 
   setupCardLogs(
     hooks,
@@ -1712,12 +1715,14 @@ module('Realm Server', function (hooks) {
           '*': ['read', 'write'],
         }));
 
-      let testRealmServer2Loader = new Loader();
+      let virtualNetwork = new VirtualNetwork();
+
+      let testRealmServer2Loader = new Loader(virtualNetwork.fetch);
       testRealmServer2Loader.addURLMapping(
         new URL(baseRealm.url),
         new URL(localBaseRealm),
       );
-      shimExternals(testRealmServer2Loader);
+      shimExternals(virtualNetwork);
 
       testRealmServer2 = (
         await runTestRealmServer(
@@ -2025,9 +2030,11 @@ module('Realm Server serving from root', function (hooks) {
 
   let dir: DirResult;
 
-  let loader = new Loader();
+  let virtualNetwork = new VirtualNetwork();
+  let loader = new Loader(virtualNetwork.fetch);
+
   loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-  shimExternals(loader);
+  shimExternals(virtualNetwork);
 
   setupCardLogs(
     hooks,
@@ -2040,7 +2047,9 @@ module('Realm Server serving from root', function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    let testRealmServerLoader = new Loader();
+    let virtualNetwork = new VirtualNetwork();
+
+    let testRealmServerLoader = new Loader(virtualNetwork.fetch);
     testRealmServerLoader.addURLMapping(
       new URL(baseRealm.url),
       new URL(localBaseRealm),
@@ -2226,9 +2235,10 @@ module('Realm Server serving from a subdirectory', function (hooks) {
 
   let dir: DirResult;
 
-  let loader = new Loader();
+  let virtualNetwork = new VirtualNetwork();
+  let loader = new Loader(virtualNetwork.fetch);
   loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-  shimExternals(loader);
+  shimExternals(virtualNetwork);
 
   setupCardLogs(
     hooks,
@@ -2241,7 +2251,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    let testRealmServerLoader = new Loader();
+    let testRealmServerLoader = new Loader(virtualNetwork.fetch);
     testRealmServerLoader.addURLMapping(
       new URL(baseRealm.url),
       new URL(localBaseRealm),
@@ -2293,14 +2303,14 @@ async function setupPermissionedRealm(permissions: RealmPermissions) {
 
   let dir = dirSync();
   copySync(join(__dirname, 'cards'), dir.name);
-
-  let testRealmServerLoader = new Loader();
+  let virtualNetwork = new VirtualNetwork();
+  let testRealmServerLoader = new Loader(virtualNetwork.fetch);
   testRealmServerLoader.addURLMapping(
     new URL(baseRealm.url),
     new URL(localBaseRealm),
   );
 
-  shimExternals(testRealmServerLoader);
+  shimExternals(virtualNetwork);
 
   ({ testRealm, testRealmServer } = await runTestRealmServer(
     testRealmServerLoader,

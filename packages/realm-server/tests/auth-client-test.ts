@@ -5,7 +5,7 @@ import {
   RealmAuthClient,
   type RealmAuthMatrixClientInterface,
 } from '@cardstack/runtime-common/realm-auth-client';
-import { Loader } from '@cardstack/runtime-common';
+import { Loader, VirtualNetwork } from '@cardstack/runtime-common';
 import jwt from 'jsonwebtoken';
 
 function createJWT(expiresIn: string | number) {
@@ -33,7 +33,9 @@ module('realm-auth-client', function (assert) {
         return Promise.resolve();
       },
     } as RealmAuthMatrixClientInterface;
-    let loader = new Loader();
+
+    let virtualNetwork = new VirtualNetwork();
+    let loader = new Loader(virtualNetwork.fetch);
 
     client = new RealmAuthClient(
       new URL('http://testrealm.com/'),

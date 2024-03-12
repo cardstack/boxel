@@ -96,7 +96,6 @@ module('Acceptance | basic tests', function (hooks) {
           lastName: 'Abdel-Rahman',
         }),
       },
-      virtualNetwork: loaderService.virtualNetwork,
     });
   });
 

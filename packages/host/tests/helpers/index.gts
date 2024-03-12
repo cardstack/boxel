@@ -20,7 +20,6 @@ import {
   executableExtensions,
   SupportedMimeType,
   type TokenClaims,
-  VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -54,7 +53,6 @@ import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import { WebMessageStream, messageCloseHandler } from './stream';
 import visitOperatorMode from './visit-operator-mode';
-import LoaderService from '@cardstack/host/services/loader-service';
 
 export { percySnapshot };
 export { visitOperatorMode };

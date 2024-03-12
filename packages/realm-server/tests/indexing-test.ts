@@ -5,6 +5,7 @@ import {
   baseRealm,
   LooseSingleCardDocument,
   Realm,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   createRealm,
@@ -33,12 +34,14 @@ setGracefulCleanup();
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
 module('indexing', function (hooks) {
-  let loader = new Loader();
+  let virtualNetwork = new VirtualNetwork();
+  let loader = new Loader(virtualNetwork.fetch);
+
   loader.addURLMapping(
     new URL(baseRealm.url),
     new URL('http://localhost:4201/base/'),
   );
-  shimExternals(loader);
+  shimExternals(virtualNetwork);
 
   setupCardLogs(
     hooks,
@@ -51,12 +54,12 @@ module('indexing', function (hooks) {
   setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
-    let testRealmLoader = new Loader();
+    let testRealmLoader = new Loader(virtualNetwork.fetch);
     testRealmLoader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/'),
     );
-    shimExternals(testRealmLoader);
+    shimExternals(virtualNetwork);
 
     dir = dirSync().name;
     realm = await createRealm(testRealmLoader, dir, {
