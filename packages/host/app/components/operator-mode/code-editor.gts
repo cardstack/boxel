@@ -39,6 +39,7 @@ interface Signature {
     file: FileResource | undefined;
     moduleContentsResource: ModuleContentsResource | undefined;
     selectedDeclaration: ModuleDeclaration | undefined;
+    isReadOnly: boolean;
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
@@ -287,17 +288,13 @@ export default class CodeEditor extends Component<Signature> {
     return undefined;
   }
 
-  private get readOnly() {
-    return !this.readyFile.realmSession.canWrite;
-  }
-
   <template>
     {{#if this.isReady}}
       {{#if this.readyFile.isBinary}}
         <BinaryFileInfo @readyFile={{this.readyFile}} />
       {{else}}
         <div
-          class='monaco-container'
+          class='monaco-container {{if @isReadOnly "readonly"}}'
           data-test-editor
           data-test-percy-hide
           {{monacoModifier
@@ -307,7 +304,7 @@ export default class CodeEditor extends Component<Signature> {
             language=this.language
             initialCursorPosition=this.initialMonacoCursorPosition
             onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
-            readOnly=this.readOnly
+            readOnly=@isReadOnly
           }}
         ></div>
       {{/if}}
@@ -324,6 +321,10 @@ export default class CodeEditor extends Component<Signature> {
         width: 100%;
         min-width: 100%;
         padding: var(--boxel-sp) 0;
+      }
+
+      .monaco-container.readonly {
+        background-color: #ebeaed;
       }
 
       .loading {

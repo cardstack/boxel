@@ -52,6 +52,10 @@ export default class NewSession extends Component<Signature> {
             {{/each}}
           </ul>
         {{/if}}
+        <p class='disclaimer'>
+          Assistant may display inaccurate info, please double check its
+          responses.
+        </p>
       {{/if}}
     </div>
 
@@ -59,12 +63,12 @@ export default class NewSession extends Component<Signature> {
       .intro {
         display: flex;
         flex-direction: column;
-        justify-content: center;
         gap: var(--boxel-sp-xl);
         height: 100%;
         padding: var(--boxel-sp) var(--boxel-sp-lg);
         color: var(--boxel-light);
         letter-spacing: var(--boxel-lsp);
+        overflow: auto;
       }
       .title-group {
         display: flex;
@@ -113,6 +117,12 @@ export default class NewSession extends Component<Signature> {
       }
       .error-section > * + * {
         margin-top: var(--boxel-sp-sm);
+      }
+      .disclaimer {
+        margin: 0;
+        color: var(--boxel-450);
+        font: var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
       }
     </style>
   </template>

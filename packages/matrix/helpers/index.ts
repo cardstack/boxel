@@ -1,5 +1,10 @@
 import { expect, type Page } from '@playwright/test';
-import { type SynapseInstance } from '../docker/synapse';
+import {
+  loginUser,
+  getAllRoomEvents,
+  getJoinedRooms,
+  type SynapseInstance,
+} from '../docker/synapse';
 import { registerUser } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
@@ -10,6 +15,7 @@ interface ProfileAssertions {
   email?: string;
 }
 interface LoginOptions {
+  url?: string;
   expectFailure?: true;
 }
 
@@ -27,7 +33,12 @@ export async function reloadAndOpenAiAssistant(page: Page) {
 }
 
 export async function toggleOperatorMode(page: Page) {
-  await page.locator('[data-test-operator-mode-btn]').click();
+  let isOperatorMode = !!(await page.evaluate(() =>
+    document.querySelector('dialog.operator-mode'),
+  ));
+  if (!isOperatorMode) {
+    await page.locator('[data-test-operator-mode-btn]').click();
+  }
 }
 
 export async function openAiAssistant(page: Page) {
@@ -44,8 +55,15 @@ export async function openAiAssistant(page: Page) {
   ); // Opening the AI assistant either opens last room or creates one - wait for it to settle
 }
 
-export async function openRoot(page: Page) {
-  await page.goto(testHost);
+export async function openRoot(page: Page, url = testHost) {
+  await page.goto(url);
+  await expect(page.locator('.cards-grid')).toHaveCount(1);
+  let isOperatorMode = !!(await page.evaluate(() =>
+    document.querySelector('dialog.operator-mode'),
+  ));
+  if (!isOperatorMode) {
+    await page.keyboard.press('Control+,');
+  }
 }
 
 export async function clearLocalStorage(page: Page) {
@@ -206,7 +224,7 @@ export async function login(
   password: string,
   opts?: LoginOptions,
 ) {
-  await openRoot(page);
+  await openRoot(page, opts?.url);
   await toggleOperatorMode(page);
   await page.waitForFunction(() =>
     document.querySelector('[data-test-username-field]'),
@@ -228,18 +246,10 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function createRoom(
-  page: Page,
-  removeAutoAttachedCard: boolean = true,
-) {
+export async function createRoom(page: Page) {
   await page.locator('[data-test-create-room-btn]').click();
   let roomName = await getRoomName(page);
   await isInRoom(page, roomName);
-  if (removeAutoAttachedCard) {
-    await page
-      .locator(`[data-test-selected-card] [data-test-remove-card-btn]`)
-      .click();
-  }
   return roomName;
 }
 
@@ -343,6 +353,8 @@ export async function sendMessage(
   }
   // can we check it's higher than before?
   await page.waitForSelector(`[data-test-room-settled]`);
+  await page.waitForSelector(`[data-test-room-settled]`);
+  await page.waitForSelector(`[data-test-can-send-msg]`);
   await page.locator('[data-test-send-message-btn]').click();
 }
 
@@ -478,4 +490,28 @@ export async function assertLoggedOut(page: Page) {
     page.locator('[data-test-field-value="displayName"]'),
     'user profile - display name is not displayed',
   ).toHaveCount(0);
+}
+
+export async function getRoomEvents(
+  username = 'user1',
+  password = 'pass',
+  roomId?: string,
+) {
+  let { accessToken } = await loginUser(username, password);
+  let rooms = await getJoinedRooms(accessToken);
+  if (!roomId) {
+    let roomsWithEvents = await Promise.all(
+      rooms.map((r) => getAllRoomEvents(r, accessToken)),
+    );
+    // there will generally be 2 rooms, one is the DM room we do for
+    // authentication, the other is the actual chat (with org.boxel.message events)
+    return roomsWithEvents.find((messages) => {
+      return messages.find(
+        (message) =>
+          message.type === 'm.room.message' &&
+          message.content?.msgtype === 'org.boxel.message',
+      );
+    })!;
+  }
+  return await getAllRoomEvents(roomId, accessToken);
 }

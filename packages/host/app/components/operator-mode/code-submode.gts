@@ -17,13 +17,10 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 import { Accordion } from '@cardstack/boxel-ui/components';
 
-import {
-  LoadingIndicator,
-  ResizablePanelGroup,
-} from '@cardstack/boxel-ui/components';
+import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
 import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
-import { CheckMark, File } from '@cardstack/boxel-ui/icons';
+import { File } from '@cardstack/boxel-ui/icons';
 
 import {
   isCardDocumentString,
@@ -35,8 +32,10 @@ import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
+import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
+
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
@@ -657,6 +656,10 @@ export default class CodeSubmode extends Component<Signature> {
     this.selectedAccordionItem = item;
   }
 
+  get isReadOnly() {
+    return !this.readyFile.realmSession.canWrite;
+  }
+
   <template>
     <RealmInfoProvider @realmURL={{this.realmURL}}>
       <:ready as |realmInfo|>
@@ -776,25 +779,14 @@ export default class CodeSubmode extends Component<Signature> {
                     @selectDeclaration={{this.selectDeclaration}}
                     @onFileSave={{this.onSourceFileSave}}
                     @onSetup={{this.setupCodeEditor}}
+                    @isReadOnly={{this.isReadOnly}}
+                  />
+
+                  <CodeSubmodeEditorIndicator
+                    @isSaving={{this.isSaving}}
+                    @isReadOnly={{this.isReadOnly}}
                   />
                 {{/if}}
-                <div class='save-indicator {{if this.isSaving "visible"}}'>
-                  {{#if this.isSaving}}
-                    <span class='saving-msg'>
-                      Now Saving
-                    </span>
-                    <span class='save-spinner'>
-                      <span class='save-spinner-inner'>
-                        <LoadingIndicator />
-                      </span>
-                    </span>
-                  {{else}}
-                    <span data-test-saved class='saved-msg'>
-                      Saved
-                    </span>
-                    <CheckMark width='27' height='27' />
-                  {{/if}}
-                </div>
               </InnerContainer>
             </ResizablePanel>
             <ResizeHandle />
@@ -999,43 +991,6 @@ export default class CodeSubmode extends Component<Signature> {
         margin: 40vh auto;
       }
 
-      .save-indicator {
-        --icon-color: var(--boxel-highlight);
-        position: absolute;
-        display: flex;
-        align-items: center;
-        height: 2.5rem;
-        width: 140px;
-        bottom: 0;
-        right: 0;
-        background-color: var(--boxel-200);
-        padding: 0 var(--boxel-sp-xxs) 0 var(--boxel-sp-sm);
-        border-top-left-radius: var(--boxel-border-radius);
-        font: var(--boxel-font-sm);
-        font-weight: 500;
-        transform: translateX(140px);
-        transition: all var(--boxel-transition);
-        transition-delay: 5s;
-      }
-      .save-indicator.visible {
-        transform: translateX(0px);
-        transition-delay: 0s;
-      }
-      .save-spinner {
-        display: inline-block;
-        position: relative;
-      }
-      .save-spinner-inner {
-        display: inline-block;
-        position: absolute;
-        top: -7px;
-      }
-      .saving-msg {
-        margin-right: var(--boxel-sp-sm);
-      }
-      .saved-msg {
-        margin-right: var(--boxel-sp-xxs);
-      }
       .file-incompatible-message {
         display: flex;
         flex-wrap: wrap;

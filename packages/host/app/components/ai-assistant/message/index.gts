@@ -231,6 +231,9 @@ export class AiAssistantConversation extends Component<AiAssistantConversationSi
     </div>
     <style>
       .ai-assistant-conversation {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
         padding: var(--boxel-sp);
         overflow-y: auto;
       }

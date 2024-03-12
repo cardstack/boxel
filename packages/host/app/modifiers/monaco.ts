@@ -66,6 +66,15 @@ export default class Monaco extends Modifier<Signature> {
         this.model.setValue(content);
       }
     } else {
+      monacoSDK.editor.defineTheme('boxel-theme', {
+        base: 'vs',
+        inherit: true,
+        rules: [],
+        colors: {
+          'editor.background': readOnly ? '#EBEAED' : '#FFFFFF',
+        },
+      });
+
       let editorOptions: MonacoSDK.editor.IStandaloneEditorConstructionOptions =
         {
           readOnly,
@@ -76,6 +85,7 @@ export default class Monaco extends Modifier<Signature> {
           minimap: {
             enabled: false,
           },
+          theme: 'boxel-theme',
         };
 
       // Code rendering is inconsistently wrapped without this, producing spurious visual diffs

@@ -1,10 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import {
-  registerUser,
-  loginUser,
-  getAllRoomMessages,
-  getJoinedRooms,
-} from '../docker/synapse';
+import { expect, test } from '@playwright/test';
+import { registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -19,6 +14,7 @@ import {
   isInRoom,
   registerRealmUsers,
   selectCardFromCatalog,
+  getRoomEvents,
 } from '../helpers';
 import {
   synapseStart,
@@ -36,20 +32,14 @@ test.describe('Room messages', () => {
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
   });
-  async function removeAutoAttachedCard(page: Page) {
-    await page
-      .locator(
-        `[data-test-selected-card][data-test-autoattached-card] [data-test-remove-card-btn]`,
-      )
-      .click();
-    await page.locator(`[data-test-room-settled]`).waitFor();
-  }
+
   test(`it can send a message in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
-    await removeAutoAttachedCard(page);
+
+    await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
     await assertMessages(page, []);
 
     await writeMessage(page, room1, 'Message 1');
@@ -105,7 +95,6 @@ test.describe('Room messages', () => {
   test(`it can send a markdown message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await removeAutoAttachedCard(page);
     await sendMessage(page, room1, 'message with _style_');
     await assertMessages(page, [
       {
@@ -156,7 +145,6 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
 
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
@@ -186,7 +174,6 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/big-card`; // this is a 153KB card
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
@@ -203,15 +190,31 @@ test.describe('Room messages', () => {
         cards: [{ id: testCard, title: 'Big Card' }],
       },
     ]);
+
+    // peek into the matrix events and confirm there are multiple card fragments
+    let messages = await getRoomEvents();
+    let cardFragments = messages.filter(
+      (message) =>
+        message.type === 'm.room.message' &&
+        message.content?.msgtype === 'org.boxel.cardFragment',
+    );
+    expect(cardFragments.length).toStrictEqual(3);
+    let lastFragment = messages.findIndex((m) => m === cardFragments[2]);
+    let boxelMessage = messages[lastFragment + 1];
+    let boxelMessageData = JSON.parse(boxelMessage.content.data);
+    // the card fragment events need to come before the boxel message event they
+    // are used in, and the boxel message should point to the first fragment
+    expect(boxelMessageData.attachedCardsEventIds).toMatchObject([
+      cardFragments[0].event_id,
+    ]);
   });
 
-  test('it card strip out base64 image fields from cards sent in messages', async ({
+  test('it can strip out base64 image fields from cards sent in messages', async ({
     page,
   }) => {
     const testCard = `${testHost}/mango-puppy`; // this is a 153KB card
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
@@ -231,19 +234,8 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let { accessToken } = await loginUser('user1', 'pass');
-    let rooms = await getJoinedRooms(accessToken);
-    let roomsWithMessages = await Promise.all(
-      rooms.map((r) => getAllRoomMessages(r, accessToken)),
-    );
-    let messages = roomsWithMessages.find((messages) => {
-      let message = messages[messages.length - 2];
-      return (
-        message.type === 'm.room.message' &&
-        message.content?.msgtype === 'org.boxel.cardFragment'
-      );
-    });
-    let message = messages![messages!.length - 2];
+    let messages = await getRoomEvents();
+    let message = messages[messages.length - 2];
     let messageData = JSON.parse(message.content.data);
     let serializeCard = JSON.parse(messageData.cardFragment);
 
@@ -251,11 +243,117 @@ test.describe('Room messages', () => {
     expect(serializeCard.data.attributes.picture).toBeUndefined();
   });
 
+  test(`it does include patch function in message event when top-most card is writable and context is shared`, async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomName(page);
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
+      )
+      .click();
+    await expect(
+      page.locator(`[data-test-stack-card="${testHost}/mango"]`),
+    ).toHaveCount(1);
+    await sendMessage(page, room1, 'please change this card');
+    let message = (await getRoomEvents()).pop()!;
+    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    expect(boxelMessageData.context.functions).toMatchObject([
+      {
+        name: 'patchCard',
+        description:
+          'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making',
+        parameters: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+            },
+            card_id: {
+              type: 'string',
+              const: `${testHost}/mango`,
+            },
+            attributes: {
+              type: 'object',
+              properties: {
+                firstName: {
+                  type: 'string',
+                },
+                lastName: {
+                  type: 'string',
+                },
+                email: {
+                  type: 'string',
+                },
+                posts: {
+                  type: 'number',
+                },
+                thumbnailURL: {
+                  type: 'string',
+                },
+              },
+            },
+          },
+          required: ['card_id', 'attributes', 'description'],
+        },
+      },
+    ]);
+  });
+
+  test(`it does not include patch function in message event for an open card that is not attached`, async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomName(page);
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
+      )
+      .click();
+    await expect(
+      page.locator(`[data-test-stack-card="${testHost}/mango"]`),
+    ).toHaveCount(1);
+    await page
+      .locator(
+        `[data-test-selected-card="${testHost}/mango"] [data-test-remove-card-btn]`,
+      )
+      .click();
+    await sendMessage(page, room1, 'please change this card');
+    let message = (await getRoomEvents()).pop()!;
+    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    expect(boxelMessageData.context.functions).toMatchObject([]);
+  });
+
+  test(`it does not include patch function in message event when top-most card is read-only`, async ({
+    page,
+  }) => {
+    // the base realm is a read-only realm
+    await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
+    let room1 = await getRoomName(page);
+    await page
+      .locator(
+        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
+      )
+      .click();
+    await expect(
+      page.locator(
+        '[data-test-stack-card="https://cardstack.com/base/fields/boolean-field"]',
+      ),
+    ).toHaveCount(1);
+    await sendMessage(page, room1, 'please change this card');
+    let message = (await getRoomEvents()).pop()!;
+    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    expect(boxelMessageData.context.functions).toMatchObject([]);
+  });
+
   test('can send only a card as a message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await removeAutoAttachedCard(page);
     await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
       {
@@ -269,7 +367,6 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/type-examples`;
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await removeAutoAttachedCard(page);
 
     // Send a card that contains a type that matrix doesn't support
     await sendMessage(page, room1, undefined, [testCard]);
@@ -286,7 +383,6 @@ test.describe('Room messages', () => {
     const testCard2 = `${testHost}/mango`;
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard);
     await selectCardFromCatalog(page, testCard2);
@@ -352,7 +448,6 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await removeAutoAttachedCard(page);
 
     await sendMessage(page, room1, 'message 1', [testCard1]);
     await assertMessages(page, [message1]);
@@ -384,7 +479,6 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
-    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
@@ -408,7 +502,6 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard2);
     await selectCardFromCatalog(page, testCard1);
@@ -440,7 +533,6 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await removeAutoAttachedCard(page);
 
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
@@ -512,6 +604,52 @@ test.describe('Room messages', () => {
           { id: testCard1, title: 'Hassan' },
           { id: testCard2, title: 'Mango' },
         ],
+      },
+    ]);
+  });
+
+  test('does not auto attach index card', async ({ page }) => {
+    const testCard1 = `${testHost}/hassan`;
+
+    await login(page, 'user1', 'pass');
+    // Make sure we've got an open room
+    await getRoomName(page);
+
+    // assert nothing attached
+
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
+
+    // Opening a card should result in it being auto-attached
+    await page
+      .locator(
+        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+      )
+      .click();
+
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
+    await page.locator(`[data-test-selected-card]`).hover();
+    await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+      'Topmost card is shared automatically',
+    );
+
+    // close card
+    await page
+      .locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`)
+      .click();
+
+    // Should have no cards attached again
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
+
+    // Fill in a message
+
+    await page.locator('[data-test-message-field]').fill('This is a message');
+
+    await page.locator('[data-test-send-message-btn]').click();
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'This is a message',
+        cards: [],
       },
     ]);
   });

@@ -35,6 +35,7 @@ import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
+import { getRealmSession } from '@cardstack/host/resources/realm-session';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -349,42 +350,47 @@ export default class MatrixService extends Service {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
-    let currentSubMode = context?.submode;
-    let openCardIds = context?.openCardIds ?? [];
-    if (context?.submode === 'interact') {
+    let attachedOpenCards: CardDef[] = [];
+    let submode = context?.submode;
+    if (submode === 'interact') {
       let mappings = await basicMappings(this.loaderService.loader);
-      // Open cards are attached automaticaly
+      // Open cards are attached automatically
       // If they are not attached, the user is not allowing us to
       // modify them
-      let openCardDefs = attachedCards.filter((c) =>
-        context.openCardIds.includes(c.id),
+      attachedOpenCards = attachedCards.filter((c) =>
+        (context?.openCardIds ?? []).includes(c.id),
       );
-      // Generate function calls for patching currently open cards
-      for (let openCardDef of openCardDefs) {
+      // Generate function calls for patching currently open cards permitted for modification
+      for (let attachedOpenCard of attachedOpenCards) {
         let patchSpec = generateCardPatchCallSpecification(
-          openCardDef.constructor as typeof CardDef,
+          attachedOpenCard.constructor as typeof CardDef,
           this.cardAPI,
           mappings,
         );
-
-        functions.push({
-          name: 'patchCard',
-          description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              card_id: {
-                type: 'string',
-                const: openCardDef.id, // Force the valid card_id to be the id of the card being patched
-              },
-              attributes: patchSpec,
-            },
-            required: ['card_id', 'attributes', 'description'],
-          },
+        let realmSession = getRealmSession(this, {
+          card: () => attachedOpenCard,
         });
+        await realmSession.loaded;
+        if (realmSession.canWrite) {
+          functions.push({
+            name: 'patchCard',
+            description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
+                },
+                card_id: {
+                  type: 'string',
+                  const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+                },
+                attributes: patchSpec,
+              },
+              required: ['card_id', 'attributes', 'description'],
+            },
+          });
+        }
       }
     }
 
@@ -415,9 +421,9 @@ export default class MatrixService extends Service {
       data: {
         attachedCardsEventIds,
         context: {
-          openCardIds: openCardIds,
-          functions: functions,
-          submode: currentSubMode,
+          openCardIds: attachedOpenCards.map((c) => c.id),
+          functions,
+          submode,
         },
       },
     } as CardMessageContent);
