@@ -29,7 +29,7 @@
   "dependencies": {
     "@glimmer/component": "^1.1.2",
     "ember-auto-import": "^2.6.3",
-    "ember-cli-babel": "^7.26.11",
+    "ember-cli-babel": "^8.2.0",
     "ember-cli-htmlbars": "^6.3.0",
     "ember-cli-typescript": "^5.2.1",
     "ember-concurrency": "github:machty/ember-concurrency#c6ed562",
