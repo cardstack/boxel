@@ -217,8 +217,8 @@ importers:
         specifier: ^6.3.0
         version: 6.3.0
       ember-cli-typescript:
-        specifier: ^5.2.1
-        version: 5.2.1
+        specifier: ^5.3.0
+        version: 5.3.0
       ember-concurrency:
         specifier: github:machty/ember-concurrency#c6ed562
         version: github.com/machty/ember-concurrency/c6ed562(@babel/core@7.22.11)(ember-source@4.12.0)
@@ -13722,8 +13722,8 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  /ember-cli-typescript@5.2.1:
-    resolution: {integrity: sha512-qqp5TAIuPHxHiGXJKL+78Euyhy0zSKQMovPh8sJpN/ZBYx0H90pONufHR3anaMcp1snVfx4B+mb9+7ijOik8ZA==}
+  /ember-cli-typescript@5.3.0:
+    resolution: {integrity: sha512-gFA+ZwmsvvFwo2Jz/B9GMduEn+fPoGb69qWGP0Tp3+Tu5xypDtIKVSZ5086I3Cr19cLXD4HkrOR3YQvdUKzAkQ==}
     engines: {node: '>= 12.*'}
     dependencies:
       ansi-to-html: 0.6.15
@@ -14248,7 +14248,7 @@ packages:
       ember-auto-import: 2.6.3(@glint/template@1.2.1)(webpack@5.89.0)
       ember-cli-babel: 7.26.11
       ember-cli-htmlbars: 6.3.0
-      ember-cli-typescript: 5.2.1
+      ember-cli-typescript: 5.3.0
       ember-focus-trap: 1.0.1
       ember-modifier: 4.1.0(ember-source@4.12.0)
       ember-named-blocks-polyfill: 0.2.5
@@ -14271,7 +14271,7 @@ packages:
       ember-source: ^3.25.0 || >=4.0.0
     dependencies:
       ember-cli-babel: 7.26.11
-      ember-cli-typescript: 5.2.1
+      ember-cli-typescript: 5.3.0
       ember-cli-version-checker: 5.1.2
       ember-source: 4.12.0(@babel/core@7.22.11)(@glimmer/component@1.1.2)(@glint/template@1.2.1)(webpack@5.89.0)
     transitivePeerDependencies:
