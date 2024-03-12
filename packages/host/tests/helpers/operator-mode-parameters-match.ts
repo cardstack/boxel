@@ -5,7 +5,8 @@ export default function (assert: Assert) {
     currentURL: string,
     operatorModeState: SerializedState,
   ) {
-    let urlParameterString = currentURL.replace(/^\/\?/, '');
+    let urlParameterString =
+      currentURL.split('?')[1].replace(/^\/\?/, '') ?? '';
     let urlParameters = new URLSearchParams(urlParameterString);
 
     let operatorModeEnabled = urlParameters.get('operatorModeEnabled');

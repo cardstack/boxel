@@ -16,6 +16,7 @@ import {
   baseRealm,
   createResponse,
   RealmInfo,
+  RealmPermissions,
   Deferred,
   executableExtensions,
   SupportedMimeType,
@@ -410,6 +411,7 @@ export async function setupAcceptanceTestRealm({
   contents,
   realmURL,
   onFetch,
+  permissions,
 }: {
   loader: Loader;
   contents: RealmContents;
@@ -418,6 +420,7 @@ export async function setupAcceptanceTestRealm({
     req: Request;
     res: Response | null;
   }>;
+  permissions?: RealmPermissions;
 }) {
   return await setupTestRealm({
     loader,
@@ -425,6 +428,7 @@ export async function setupAcceptanceTestRealm({
     realmURL,
     onFetch,
     isAcceptanceTest: true,
+    permissions,
   });
 }
 
@@ -458,6 +462,7 @@ async function setupTestRealm({
   realmURL,
   onFetch,
   isAcceptanceTest,
+  permissions = { '*': ['read', 'write'] },
 }: {
   loader: Loader;
   contents: RealmContents;
@@ -467,6 +472,7 @@ async function setupTestRealm({
     res: Response | null;
   }>;
   isAcceptanceTest?: boolean;
+  permissions?: RealmPermissions;
 }) {
   let owner = (getContext() as TestContext).owner;
 
@@ -547,7 +553,7 @@ async function setupTestRealm({
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
-    permissions: { '*': ['read', 'write'] },
+    permissions,
     realmSecretSeed: testRealmSecretSeed,
   });
   loader.prependURLHandlers([

@@ -63,7 +63,6 @@ export default class RealmInfoService extends Service {
     if (this.cachedPublicReadableRealms.has(realmURLString)) {
       return this.cachedPublicReadableRealms.get(realmURLString)!;
     }
-
     let response = await this.loaderService.loader.fetch(realmURL, {
       method: 'HEAD',
     });

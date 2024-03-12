@@ -93,12 +93,11 @@ export default class LoaderService extends Service {
 
     request.headers.set('Authorization', realmSession.rawRealmToken);
     let body;
-    if (request.bodyUsed) {
-      body = null;
-    } else if (request.headers.get('content-type') === 'application/json') {
-      body = JSON.stringify(await request.json());
-    } else {
-      body = await request.text();
+    if (request.body && !request.bodyUsed) {
+      body =
+        request.headers.get('content-type') === 'application/json'
+          ? JSON.stringify(await request.json())
+          : await request.text();
     }
     let response = await this.loader.fetch(request.url, {
       method: request.method,

@@ -69,15 +69,18 @@ class CardPill extends Component<CardPillSignature> {
         display: flex;
         align-items: center;
         justify-content: center;
+        outline: 0;
       }
+      .remove-button:focus:not(:disabled),
       .remove-button:hover:not(:disabled) {
         --icon-color: var(--boxel-highlight);
       }
       .card-pill {
         --pill-icon-size: 18px;
+        padding: var(--boxel-sp-5xs);
         background-color: var(--boxel-light);
         border: 1px solid var(--boxel-400);
-        height: 1.875rem;
+        height: var(--pill-height);
       }
       .card-title {
         max-width: 10rem;
@@ -142,28 +145,21 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           (not this.isViewAllAttachedCards)
         )
       }}
-        <Pill
-          @inert={{true}}
-          class='card-pill view-all'
-          data-test-view-all
-          {{on 'click' this.toggleViewAllAttachedCards}}
-        >
-          <:default>
-            <div class='card-title'>
-              View All ({{this.cardsToDisplay.length}})
-            </div>
-          </:default>
+        <Pill {{on 'click' this.toggleViewAllAttachedCards}} data-test-view-all>
+          View All ({{this.cardsToDisplay.length}})
         </Pill>
       {{/if}}
       {{#if this.canDisplayAddButton}}
         <AddButton
-          class='attach-button'
+          class={{cn 'attach-button' icon-only=this.cardsToDisplay.length}}
           @variant='pill'
           {{on 'click' this.chooseCard}}
           @disabled={{this.doChooseCard.isRunning}}
           data-test-choose-card-btn
         >
-          Attach Card
+          <span class={{if this.cardsToDisplay.length 'boxel-sr-only'}}>
+            Add a Card
+          </span>
         </AddButton>
       {{/if}}
     </div>
@@ -171,25 +167,35 @@ export default class AiAssistantCardPicker extends Component<Signature> {
       .card-picker {
         --pill-height: 1.875rem;
         --pill-content-max-width: 10rem;
-        background-color: var(--boxel-100);
+        background-color: var(--boxel-light);
         color: var(--boxel-dark);
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xxs);
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-xxs);
       }
       .attach-button {
-        --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
+        --icon-color: var(--boxel-highlight);
         --boxel-add-button-pill-font: var(--boxel-font-sm);
         height: var(--pill-height);
-        padding: 0 var(--boxel-sp-xs);
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs) var(--boxel-sp-4xs)
+          var(--boxel-sp-5xs);
+        background: none;
+        color: var(--boxel-highlight);
+        transition: color var(--boxel-transition);
+        outline: 0;
       }
-      .attach-button:hover:not(:disabled) {
+      .attach-button:hover:not(:disabled),
+      .attach-button:focus:not(:disabled) {
+        --icon-color: var(--boxel-highlight-hover);
+        color: var(--boxel-highlight-hover);
+        background: none;
         box-shadow: none;
-        background-color: var(--boxel-highlight-hover);
       }
-      .view-all {
-        cursor: pointer;
+      .attach-button.icon-only {
+        padding: 0;
+        width: 20px;
+        height: var(--pill-height);
       }
     </style>
   </template>
