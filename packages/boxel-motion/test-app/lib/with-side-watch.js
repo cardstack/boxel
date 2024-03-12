@@ -1,8 +1,9 @@
 /* eslint-disable no-undef */
 /* eslint-disable @typescript-eslint/no-var-requires */
+/* eslint-disable @typescript-eslint/no-empty-function */
 const mergeTrees = require('broccoli-merge-trees');
-const { WatchedDir } = require('broccoli-source');
 const Plugin = require('broccoli-plugin');
+const { WatchedDir } = require('broccoli-source');
 
 class BroccoliNoOp extends Plugin {
   constructor(path) {
