@@ -1815,7 +1815,6 @@ module('Integration | card-basics', function (hooks) {
       checked: boolean,
     ) => {
       let querySelector = getRadioQuerySelector(fieldName, optionVal);
-      debugger;
       if (checked === true) {
         assert
           .dom(querySelector)
