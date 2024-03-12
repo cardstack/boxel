@@ -171,7 +171,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         position: relative;
         height: fit-content;
       }
-      .boxel-pill .atom-format {
+      .boxel-pill .atom-format.display-container-true {
         display: flex;
         justify-content: center;
         align-items: center;
