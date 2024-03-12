@@ -806,6 +806,37 @@ module('Acceptance | interact submode tests', function (hooks) {
       await deferred.promise;
     });
 
+    test<TestContextWithSave>('duplicate card in a stack is not allowed', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom(
+          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+        )
+        .exists();
+      await click(
+        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+      );
+      assert
+        .dom(`[data-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists({ count: 1 });
+      await click(
+        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+      );
+      assert
+        .dom(`[data-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists({ count: 1 });
+    });
+
     test('embedded card from writable realm shows pencil icon in edit mode', async (assert) => {
       await visitOperatorMode({
         stacks: [

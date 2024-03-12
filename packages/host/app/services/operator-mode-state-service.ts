@@ -95,6 +95,12 @@ export default class OperatorModeStateService extends Service {
     if (!this.state.stacks[stackIndex]) {
       this.state.stacks[stackIndex] = new TrackedArray([]);
     }
+    let index = this.state.stacks[stackIndex].findIndex(
+      (existingItem: StackItem) => existingItem.card.id === item.card.id,
+    );
+    if (index > 0) {
+      this.state.stacks[stackIndex].splice(index, 1);
+    }
     this.state.stacks[stackIndex].push(item);
     this.recentCardsService.add(item.card);
     this.schedulePersist();
