@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, timeout, all } from 'ember-concurrency';
+import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -49,19 +49,21 @@ export default class Room extends Component<Signature> {
       {{/if}}
 
       <footer class='room-actions'>
-        <AiAssistantChatInput
-          @value={{this.messageToSend}}
-          @onInput={{this.setMessage}}
-          @onSend={{this.sendMessage}}
-          data-test-message-field={{this.room.name}}
-        />
-        <AiAssistantCardPicker
-          @autoAttachedCard={{this.autoAttachedCard}}
-          @maxNumberOfCards={{5}}
-          @cardsToAttach={{this.cardsToAttach}}
-          @chooseCard={{this.chooseCard}}
-          @removeCard={{this.removeCard}}
-        />
+        <div class='chat-input-area'>
+          <AiAssistantChatInput
+            @value={{this.messageToSend}}
+            @onInput={{this.setMessage}}
+            @onSend={{this.sendMessage}}
+            @canSend={{this.canSend}}
+            data-test-message-field={{this.room.name}}
+          />
+          <AiAssistantCardPicker
+            @autoAttachedCard={{this.autoAttachedCard}}
+            @cardsToAttach={{this.cardsToAttach}}
+            @chooseCard={{this.chooseCard}}
+            @removeCard={{this.removeCard}}
+          />
+        </div>
       </footer>
     </section>
 
@@ -76,7 +78,16 @@ export default class Room extends Component<Signature> {
         padding-bottom: var(--boxel-sp);
       }
       .room-actions {
+        padding: var(--boxel-sp);
         box-shadow: var(--boxel-box-shadow);
+      }
+      .room-actions > * + * {
+        margin-top: var(--boxel-sp-sm);
+      }
+      .chat-input-area {
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
+        overflow: hidden;
       }
     </style>
   </template>
@@ -174,7 +185,7 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  private doSendMessage = restartableTask(
+  private doSendMessage = enqueueTask(
     async (message: string | undefined, cards?: CardDef[]) => {
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
@@ -229,6 +240,17 @@ export default class Room extends Component<Signature> {
     }
 
     return topMostCard;
+  }
+
+  private get canSend() {
+    return (
+      !this.doSendMessage.isRunning &&
+      Boolean(
+        this.messageToSend ||
+          this.cardsToAttach?.length ||
+          this.autoAttachedCard,
+      )
+    );
   }
 }
 

@@ -148,6 +148,20 @@ export class MatrixClient {
     return json as T;
   }
 
+  async getProfile(userId: string): Promise<{ displayname: string } | undefined> {
+    let response = await this.request(
+      `_matrix/client/v3/profile/${userId}`,
+      'GET',
+      undefined,
+      false,
+    );
+    if (!response.ok) {
+      return undefined;
+    }
+    let json = await response.json();
+    return json;
+  }
+
   async sendEvent<T>(roomId: string, type: string, content: T) {
     if (!this.access) {
       throw new Error(`Missing matrix access token`);

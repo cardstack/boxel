@@ -59,6 +59,7 @@
     "@simple-dom/interface": "^1.4.0",
     "@simple-dom/serializer": "^1.4.0",
     "@simple-dom/void-map": "^1.4.0",
+    "@sqlite.org/sqlite-wasm": "3.45.1-build1",
     "@types/filesize": "^5.0.0",
     "@types/flat": "^5.0.2",
     "@types/htmlbars-inline-precompile": "^3.0.0",
