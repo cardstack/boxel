@@ -9,5 +9,6 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.formatOnSave": true
   },
-  "prettier.documentSelectors": ["**/*.gjs", "**/*.gts"]
+  "prettier.documentSelectors": ["**/*.gjs", "**/*.gts"],
+  "search.followSymlinks": false
 }

@@ -57,7 +57,7 @@
     "focus-trap": "^7.4.3",
     "lodash": "^4.17.21",
     "tracked-built-ins": "^3.2.0",
-    "typescript": "^5.1.6"
+    "typescript": "~5.1.6"
   },
   "devDependencies": {
     "@babel/core": "^7.22.11",
@@ -73,7 +73,7 @@
     "@types/lodash": "^4.14.182",
     "@typescript-eslint/eslint-plugin": "^5.48.1",
     "@typescript-eslint/parser": "^5.48.1",
-    "babel-plugin-ember-template-compilation": "^2.2.0",
+    "babel-plugin-ember-template-compilation": "^2.2.1",
     "concurrently": "^8.0.1",
     "ember-template-imports": "^3.1.2",
     "ember-template-lint": "^5.11.2",
