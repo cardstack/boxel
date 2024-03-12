@@ -36,14 +36,7 @@ test.describe('Room messages', () => {
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
   });
-  async function removeAutoAttachedCard(page: Page) {
-    await page
-      .locator(
-        `[data-test-selected-card][data-test-autoattached-card] [data-test-remove-card-btn]`,
-      )
-      .click();
-    await page.locator(`[data-test-room-settled]`).waitFor();
-  }
+
   test(`it can send a message in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
@@ -500,6 +493,52 @@ test.describe('Room messages', () => {
           { id: testCard1, title: 'Hassan' },
           { id: testCard2, title: 'Mango' },
         ],
+      },
+    ]);
+  });
+
+  test('does not auto attach index card', async ({ page }) => {
+    const testCard1 = `${testHost}/hassan`;
+
+    await login(page, 'user1', 'pass');
+    // Make sure we've got an open room
+    await getRoomName(page);
+
+    // assert nothing attached
+
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
+
+    // Opening a card should result in it being auto-attached
+    await page
+      .locator(
+        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+      )
+      .click();
+
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(1);
+    await page.locator(`[data-test-selected-card]`).hover();
+    await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+      'Topmost card is shared automatically',
+    );
+
+    // close card
+    await page
+      .locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`)
+      .click();
+
+    // Should have no cards attached again
+    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
+
+    // Fill in a message
+
+    await page.locator('[data-test-message-field]').fill('This is a message');
+
+    await page.locator('[data-test-send-message-btn]').click();
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'This is a message',
+        cards: [],
       },
     ]);
   });
