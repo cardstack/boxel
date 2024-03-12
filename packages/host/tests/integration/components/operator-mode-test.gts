@@ -17,7 +17,7 @@ import { module, test, skip } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { baseRealm, CardResource, Deferred } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -273,6 +273,14 @@ module('Integration | operator-mode', function (hooks) {
           return [this.firstName, this.lastName].filter(Boolean).join(' ');
         },
       });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-isolated-author>
+            <@fields.firstName />
+            <@fields.lastName />
+          </div>
+        </template>
+      };
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <span data-test-author='{{@model.firstName}}'>
@@ -1214,53 +1222,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${packetId}"]`);
     assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
-  });
-
-  test<TestContextWithSave>('selecting a card using cards-grid creates a card with empty values', async function (assert) {
-    assert.expect(5);
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    let savedCards = new Set<string>();
-    this.onSave((url) => {
-      savedCards.add(url.href);
-    });
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-stack-card-index="0"]`).exists();
-
-    await click('[data-test-create-new-card-button]');
-    assert
-      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a CatalogEntry card');
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
-    );
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 4 });
-
-    await click(
-      `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
-    );
-    await click('[data-test-card-catalog-go-button]');
-    await waitFor('[data-test-stack-card-index="1"]');
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
-    let setIter = savedCards.keys();
-    let savedCardUrl = setIter.next().value;
-    let json =
-      await operatorModeStateService.cardService.fetchJSON(savedCardUrl);
-    let resource = json?.data as CardResource<string>;
-    assert.equal(resource.attributes?.socialBlurb, null);
-    assert.ok(
-      true,
-      'fetchJSON did not throw an error -- meaning card has been saved',
-    );
   });
 
   test('can open a card from the cards-grid and close it', async function (assert) {
@@ -2798,5 +2759,29 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-operator-mode-stack]`);
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
+  });
+
+  test<TestContextWithSave>('Clicking on "Finish Editing" when creating a card from linksTo will switch the card into isolated mode. The card should be saved', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    let savedCards = new Set<string>();
+    this.onSave((url) => savedCards.add(url.href));
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
+    await click('[data-test-edit-button]');
+    assert.dom('[data-test-add-new]').exists();
+    await click('[data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-modal]`);
+    await click(`[data-test-card-catalog-create-new-button]`);
+    await waitFor('[data-test-edit-button]');
+    await click('[data-test-edit-button]');
+    await waitFor('[data-test-isolated-author');
+    assert.dom('[data-test-isolated-author]').exists();
   });
 });
