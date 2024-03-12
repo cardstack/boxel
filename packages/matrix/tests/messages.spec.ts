@@ -49,7 +49,7 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-new-session]')).toHaveCount(0);
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
-    let room2 = await createRoom(page, false);
+    let room2 = await createRoom(page);
     await openRoom(page, room1);
 
     await reloadAndOpenAiAssistant(page);
@@ -111,7 +111,7 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomName(page);
     await sendMessage(page, room1, 'Hello');
-    let room2 = await createRoom(page, false);
+    let room2 = await createRoom(page);
     await openRoom(page, room1);
 
     await writeMessage(page, room1, 'room 1 message');
