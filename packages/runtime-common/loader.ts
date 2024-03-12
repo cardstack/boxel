@@ -9,6 +9,7 @@ import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
 
 export const SHIMMED_MODULE_FAKE_ORIGIN = 'https://shimmed-module/';
+
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
 export interface ResolvedURL extends URL {

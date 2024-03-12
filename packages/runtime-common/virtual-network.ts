@@ -44,7 +44,6 @@ export class VirtualNetwork {
         ? urlOrRequest
         : new Request(urlOrRequest, init);
 
-    // tODO: use constant
     if (request.url.startsWith(SHIMMED_MODULE_FAKE_ORIGIN)) {
       let shimmedModule = this.shimmedModules.get(
         request.url.replace(SHIMMED_MODULE_FAKE_ORIGIN, ''),
