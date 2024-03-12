@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import PowerSelect, {
   type PowerSelectArgs,
-} from 'ember-power-select/components/power-select.js';
+} from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 
 import cn from '../../helpers/cn.ts';
