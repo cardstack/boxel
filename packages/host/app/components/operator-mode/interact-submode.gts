@@ -300,21 +300,13 @@ export default class InteractSubmode extends Component<Signature> {
       if (!dismissStackItem) {
         return;
       }
-      if (item.isLinkedCard) {
-        this.operatorModeStateService.trimItemsFromStack(item); // closes the 'create new card' editor for linked card fields
-      } else {
-        if (!item.card.id && updatedCard.id) {
-          this.operatorModeStateService.trimItemsFromStack(item);
-        } else {
-          this.operatorModeStateService.replaceItemInStack(
-            item,
-            item.clone({
-              request,
-              format: 'isolated',
-            }),
-          );
-        }
-      }
+      this.operatorModeStateService.replaceItemInStack(
+        item,
+        item.clone({
+          request,
+          format: 'isolated',
+        }),
+      );
     }
   });
 
