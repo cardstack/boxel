@@ -1,11 +1,12 @@
 {
   "data": {
+    "type": "card",
     "attributes": {
-      "title": "Pet",
-      "description": "Catalog entry for Pet card",
+      "title": "Puppy",
+      "description": "Catalog entry for Puppy card",
       "ref": {
-        "module": "../pet",
-        "name": "Pet"
+        "module": "../puppy-card",
+        "name": "PuppyCard"
       },
       "demo": {}
     },
@@ -13,8 +14,8 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "../pet",
-            "name": "Pet"
+            "module": "../puppy-card",
+            "name": "PuppyCard"
           }
         }
       },
@@ -22,7 +23,6 @@
         "module": "https://cardstack.com/base/catalog-entry",
         "name": "CatalogEntry"
       }
-    },
-    "type": "card"
+    }
   }
 }

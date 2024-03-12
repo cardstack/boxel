@@ -7,6 +7,9 @@ import {
   Component,
   primitive,
   useIndexBasedKey,
+  BaseDefConstructor,
+  BaseInstanceType,
+  deserialize,
 } from './card-api';
 import { tracked } from '@glimmer/tracking';
 import Modifier from 'ember-modifier';
@@ -196,6 +199,16 @@ class ImageSizeField extends FieldDef {
   static displayName = 'Image Size';
   static [primitive]: 'actual' | 'contain' | 'cover';
   static [useIndexBasedKey]: never;
+
+  static async [deserialize]<T extends BaseDefConstructor>(
+    this: T,
+    val: any,
+  ): Promise<BaseInstanceType<T>> {
+    if (val === undefined || val === null) {
+      return 'actual' as BaseInstanceType<T>;
+    }
+    return val as BaseInstanceType<T>;
+  }
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{@model}}
@@ -250,13 +263,6 @@ class ImageSizeField extends FieldDef {
     </template>
 
     private radioGroup = `__cardstack_img_size${groupNumber++}__`;
-    constructor(owner: unknown, args: any) {
-      super(owner, args);
-      // initializes to 'actual'
-      if (!this.args.model) {
-        this.args.set('actual');
-      }
-    }
   };
   static atom = class Atom extends Component<typeof this> {
     <template>
