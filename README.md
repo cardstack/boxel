@@ -25,7 +25,7 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/boxel-motion-test-app` is the test suite for boxel-motion
 
-`packages/boxel-motion-demo-app` is the demo app for boxel-motion
+`packages/boxel-motion/test-app` is the demo app for boxel-motion
 
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
@@ -172,7 +172,7 @@ There is a ember-freestyle component explorer available to assist with developme
 
 In order to run the boxel-motion demo app:
 
-1. `cd packages/boxel-motion-demo-app`
+1. `cd packages/boxel-motion/test-app`
 2. `pnpm start`
 3. Visit http://localhost:4200 in your browser
 
