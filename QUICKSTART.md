@@ -84,7 +84,8 @@ Visit http://localhost:8080. Type in Username = "admin", Password: "password" Ho
 13. Run ai bot (Optional):
 
     ```zsh
-    OPENAI_KEY=*** pnpm start
+    cd ./packages/ai-bot
+    OPENAI_API_KEY=*** pnpm start
     ```
 
 ## Cleanup command
