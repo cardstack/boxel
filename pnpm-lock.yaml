@@ -846,9 +846,6 @@ importers:
       ember-cli-terser:
         specifier: ^4.0.2
         version: 4.0.2
-      ember-concurrency:
-        specifier: ^4.0.1
-        version: 4.0.1(@babel/core@7.24.0)(@glimmer/tracking@1.1.2)(@glint/template@1.2.1)(ember-source@4.12.0)
       ember-css-url:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=aglq5wzlwgv75jfevvip6brqo4)
@@ -875,7 +872,7 @@ importers:
         version: 10.0.0(@ember/string@3.1.1)(ember-source@4.12.0)
       ember-resources:
         specifier: ^6.3.1
-        version: 6.3.1(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.2.1)(ember-concurrency@4.0.1)(ember-source@4.12.0)
+        version: 6.3.1(@ember/test-waiters@3.0.2)(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.2.1)(ember-concurrency@3.1.0)(ember-source@4.12.0)
       ember-source:
         specifier: ^4.12.0
         version: 4.12.0(@babel/core@7.24.0)(@glimmer/component@1.1.2)(@glint/template@1.2.1)(webpack@5.89.0)
@@ -11796,36 +11793,6 @@ packages:
       '@glint/template': 1.2.1
       ember-async-data: 1.0.1(ember-source@4.12.0)
       ember-concurrency: 3.1.0(@babel/core@7.24.0)(ember-source@4.12.0)
-      ember-source: 4.12.0(@babel/core@7.24.0)(@glimmer/component@1.1.2)(@glint/template@1.2.1)(webpack@5.89.0)
-    transitivePeerDependencies:
-      - supports-color
-    dev: true
-
-  /ember-resources@6.3.1(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.2.1)(ember-concurrency@4.0.1)(ember-source@4.12.0):
-    resolution: {integrity: sha512-DcLW/j/ffnPwmOunNM45gi3221kxIdiYk3pR879OWxmQXHjGk8uL5ACwD/0IrwjTpbO8/H+6fwOKg+GqFM7NBQ==}
-    peerDependencies:
-      '@ember/test-waiters': ^3.0.0
-      '@glimmer/component': ^1.1.2
-      '@glimmer/tracking': ^1.1.2
-      '@glint/template': ^1.0.0-beta.3 || ^1.0.0
-      ember-concurrency: ^2.0.0 || ^3.0.0
-      ember-source: ^3.28.0 || ^4.0.0 || ^5.0.0
-    peerDependenciesMeta:
-      '@ember/test-waiters':
-        optional: true
-      '@glimmer/component':
-        optional: true
-      ember-concurrency:
-        optional: true
-    dependencies:
-      '@babel/runtime': 7.22.11
-      '@embroider/addon-shim': 1.8.7
-      '@embroider/macros': 1.15.0(@glint/template@1.2.1)
-      '@glimmer/component': 1.1.2(@babel/core@7.24.0)
-      '@glimmer/tracking': 1.1.2
-      '@glint/template': 1.2.1
-      ember-async-data: 1.0.1(ember-source@4.12.0)
-      ember-concurrency: 4.0.1(@babel/core@7.24.0)(@glimmer/tracking@1.1.2)(@glint/template@1.2.1)(ember-source@4.12.0)
       ember-source: 4.12.0(@babel/core@7.24.0)(@glimmer/component@1.1.2)(@glint/template@1.2.1)(webpack@5.89.0)
     transitivePeerDependencies:
       - supports-color
