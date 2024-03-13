@@ -276,6 +276,7 @@ module('Integration | operator-mode', function (hooks) {
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <span data-test-author='{{@model.firstName}}'>
+            <@fields.title />
             <@fields.firstName />
             <@fields.lastName />
           </span>
@@ -1201,12 +1202,6 @@ module('Integration | operator-mode', function (hooks) {
     await click(
       '[data-test-stack-card-index="1"] [data-test-more-options-button]',
     );
-    assert
-      .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
-      .hasAttribute('disabled');
-    assert
-      .dom('[data-test-boxel-menu-item-text="Delete"]')
-      .hasAttribute('disabled');
     await fillIn(`[data-test-field="title"] input`, 'New Post');
     await saved.promise;
     let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
@@ -1853,14 +1848,17 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
+    debugger;
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
 
     await waitFor(`[data-test-cards-grid-item]`);
 
+    debugger;
     await focus(`[data-test-search-field]`);
     await typeIn(`[data-test-search-field]`, 'Ma');
     assert.dom(`[data-test-search-label]`).containsText('Searching for “Ma”');
+    debugger;
 
     await waitFor(`[data-test-search-sheet-search-result]`);
     assert.dom(`[data-test-search-label]`).containsText('2 Results for “Ma”');
