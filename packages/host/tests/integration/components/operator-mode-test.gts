@@ -282,6 +282,7 @@ module('Integration | operator-mode', function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-isolated-author>
+            <@fields.title />
             <@fields.firstName />
             <@fields.lastName />
           </div>
