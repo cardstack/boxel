@@ -2,34 +2,43 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "ClaimList from ../claim-list",
-      "description": "Catalog entry for ClaimList from ../claim-list",
+      "title": "ContactCard",
+      "description": "Catalog entry for ContactCard",
       "ref": {
-        "module": "../claim-list",
-        "name": "ClaimList"
+        "module": "../contact-card",
+        "name": "ContactCard"
       },
       "demo": {
-        "description": "Staking claims available to 0xEDC43a390C8eE324cC9d21C93C55c04bD6B8257f"
-      }
-    },
-    "relationships": {
-      "demo.claims.0": {
-        "links": {
-          "self": "../Claim/1"
-        }
-      },
-      "demo.claims.1": {
-        "links": {
-          "self": "../Claim/2"
-        }
+        "name": null,
+        "phone": {
+          "country": null,
+          "area": null,
+          "number": null
+        },
+        "emergencyContact": {
+          "name": null,
+          "phoneNumber": {
+            "country": null,
+            "area": null,
+            "number": null
+          },
+          "email": null
+        },
+        "namesInvited": [],
+        "guest": {
+          "name": null,
+          "additionalNames": []
+        },
+        "description": null,
+        "thumbnailURL": null
       }
     },
     "meta": {
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "../claim-list",
-            "name": "ClaimList"
+            "module": "../contact-card",
+            "name": "ContactCard"
           }
         }
       },

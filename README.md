@@ -1,5 +1,7 @@
 # Boxel Runtime
 
+For a quickstart, see [here](./QUICKSTART.md)
+
 ## Setup
 
 - you will want the [Glint](https://marketplace.visualstudio.com/items?itemName=typed-ember.glint-vscode) vscode extension
@@ -28,6 +30,8 @@
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
 `packages/ai-bot` is a node app that runs a matrix client session and an OpenAI session. Matrix message queries sent to the AI bot are packaged with an OpenAI system prompt and operator mode context and sent to OpenAI. The ai bot enriches the OpenAI response and posts the response back into the matrix room.
+
+To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
 ## Running the Host App
 
@@ -80,7 +84,6 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4205 | qunit server mounting realms in iframes for testing       | ✅                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                     | ✅                  | 🚫                   |
-
 
 #### Using `start:development`
 
@@ -136,12 +139,8 @@ First you must create an administrative user:
    docker exec -it boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u admin -p your_admin_password --admin
    ```
    Alternatively, you can execute `pnpm register-test-admin` and utilize the following credentials: `user: admin` and `password: password`.
-3. Run the docker container:
-   ```
-   docker run --name synapse-admin -p 8080:80 -d awesometechnologies/synapse-admin
-   ```
 
-After you have created an administrative user and have created the docker container you can start the admin console by executing the following in the packages/matrix workspace:
+After you have created an administrative user and can start the admin console by executing the following in the packages/matrix workspace:
 
 ```
 pnpm start:admin
