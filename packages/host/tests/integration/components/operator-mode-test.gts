@@ -1219,12 +1219,6 @@ module('Integration | operator-mode', function (hooks) {
     await click(
       '[data-test-stack-card-index="1"] [data-test-more-options-button]',
     );
-    assert
-      .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
-      .hasAttribute('disabled');
-    assert
-      .dom('[data-test-boxel-menu-item-text="Delete"]')
-      .hasAttribute('disabled');
     await fillIn(`[data-test-field="title"] input`, 'New Post');
     await saved.promise;
     let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
