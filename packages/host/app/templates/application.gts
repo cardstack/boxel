@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 
+import BasicDropdownWormhole from 'ember-basic-dropdown/components/basic-dropdown-wormhole';
 import RouteTemplate from 'ember-route-template';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -10,6 +11,7 @@ interface ApplicationRouteSignature {
 
 class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
   <template>
+    <BasicDropdownWormhole />
     {{outlet}}
     <CardPrerender />
 
