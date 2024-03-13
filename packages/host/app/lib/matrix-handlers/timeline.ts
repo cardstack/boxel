@@ -4,6 +4,7 @@ import { type MatrixEvent } from 'matrix-js-sdk';
 import {
   type CardMessageContent,
   type CardFragmentContent,
+  type MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/room';
 
 import { eventDebounceMs } from '../matrix-utils';
@@ -61,20 +62,36 @@ async function processDecryptedEvent(context: Context, event: Event) {
       Array.isArray(data.attachedCardsEventIds)
     ) {
       for (let attachedCardEventId of data.attachedCardsEventIds) {
-        if (!roomField.events.find((e) => e.event_id === attachedCardEventId)) {
-          let nextFragment: string | undefined = attachedCardEventId;
-          do {
-            let fragmentEvent = await context.client.fetchRoomEvent(
+        let nextFragment: string | undefined = attachedCardEventId;
+        do {
+          let fragmentEvent = roomField.events.find(
+            (e) => e.event_id === nextFragment,
+          );
+          let fragmentData: CardFragmentContent['data'];
+          if (!fragmentEvent) {
+            fragmentEvent = (await context.client.fetchRoomEvent(
               roomId,
               attachedCardEventId,
-            );
+            )) as DiscreteMatrixEvent;
             await addRoomEvent(context, fragmentEvent);
-            let fragmentData = JSON.parse(
-              fragmentEvent.content!.data,
+            fragmentData = JSON.parse(
+              (fragmentEvent.content as any).data,
             ) as CardFragmentContent['data'];
-            nextFragment = fragmentData?.nextFragment; // using '?' so we can be kind to older event schemas
-          } while (nextFragment);
-        }
+          } else {
+            if (
+              fragmentEvent.type !== 'm.room.message' ||
+              fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
+            ) {
+              throw new Error(
+                `Expected event to be 'org.boxel.cardFragment' but was ${JSON.stringify(
+                  fragmentEvent,
+                )}`,
+              );
+            }
+            fragmentData = fragmentEvent.content.data;
+          }
+          nextFragment = fragmentData?.nextFragment; // using '?' so we can be kind to older event schemas
+        } while (nextFragment);
       }
     }
   }
