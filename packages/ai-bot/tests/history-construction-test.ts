@@ -457,9 +457,8 @@ module('constructHistory', () => {
           data: JSON.stringify({
             context: {
               functions: [],
-              openCardsEventIds: ['3'],
             },
-            attachedCardsEventIds: ['1'],
+            attachedCardsTxnIds: ['1'],
           }),
         },
         sender: '@user:localhost',
@@ -485,7 +484,6 @@ module('constructHistory', () => {
           data: {
             context: {
               functions: [],
-              openCardsEventIds: ['3'],
               openCards: [
                 {
                   data: {
@@ -505,7 +503,7 @@ module('constructHistory', () => {
                 },
               ],
             },
-            attachedCardsEventIds: ['1'],
+            attachedCardsTxnIds: ['1'],
             attachedCards: [
               {
                 data: {
