@@ -818,20 +818,20 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      assert
-        .dom(
+      await waitFor(
+        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+      );
+      // Simulate simultaneous clicks for spam-clicking
+      await Promise.all([
+        click(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
-        )
-        .exists();
-      await click(
-        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
-      );
-      assert
-        .dom(`[data-stack-card="${testRealmURL}Person/fadhlan"]`)
-        .exists({ count: 1 });
-      await click(
-        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
-      );
+        ),
+        click(
+          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+        ),
+      ]);
+
+      await waitFor(`[data-stack-card="${testRealmURL}Person/fadhlan"]`);
       assert
         .dom(`[data-stack-card="${testRealmURL}Person/fadhlan"]`)
         .exists({ count: 1 });
