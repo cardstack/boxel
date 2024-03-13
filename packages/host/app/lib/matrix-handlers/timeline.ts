@@ -1,6 +1,11 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent } from 'matrix-js-sdk';
 
+import {
+  type CardMessageContent,
+  type CardFragmentContent,
+} from 'https://cardstack.com/base/room';
+
 import { eventDebounceMs } from '../matrix-utils';
 
 import { type Context, type Event, addRoomEvent } from './index';
@@ -34,13 +39,46 @@ async function drainTimeline(context: Context) {
 }
 
 async function processDecryptedEvent(context: Context, event: Event) {
-  await addRoomEvent(context, event);
   let { room_id: roomId } = event;
   if (!roomId) {
     throw new Error(
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
+  let roomField = await context.rooms.get(roomId);
+
+  // patch in any missing room events--this will support dealing with local
+  // echoes, migrating older histories as well as handle any matrix syncing gaps
+  // that might occur
+  if (
+    roomField &&
+    event.type === 'm.room.message' &&
+    event.content?.msgtype === 'org.boxel.message'
+  ) {
+    let data = JSON.parse(event.content.data) as CardMessageContent['data'];
+    if (
+      'attachedCardsEventIds' in data &&
+      Array.isArray(data.attachedCardsEventIds)
+    ) {
+      for (let attachedCardEventId of data.attachedCardsEventIds) {
+        if (!roomField.events.find((e) => e.event_id === attachedCardEventId)) {
+          let nextFragment: string | undefined = attachedCardEventId;
+          do {
+            let fragmentEvent = await context.client.fetchRoomEvent(
+              roomId,
+              attachedCardEventId,
+            );
+            await addRoomEvent(context, fragmentEvent);
+            let fragmentData = JSON.parse(
+              fragmentEvent.content!.data,
+            ) as CardFragmentContent['data'];
+            nextFragment = fragmentData?.nextFragment; // using '?' so we can be kind to older event schemas
+          } while (nextFragment);
+        }
+      }
+    }
+  }
+  await addRoomEvent(context, event);
 
   let room = context.client.getRoom(roomId);
   if (!room) {
