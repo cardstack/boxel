@@ -12,11 +12,9 @@ import {
   deserialize,
 } from './card-api';
 import { tracked } from '@glimmer/tracking';
-import Modifier from 'ember-modifier';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
-import { pick, eq } from '@cardstack/boxel-ui/helpers';
 import { FieldContainer, BoxelInput } from '@cardstack/boxel-ui/components';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import { htmlSafe } from '@ember/template';
@@ -251,25 +249,6 @@ class ImageSizeField extends FieldDef {
       {{@model}}
     </template>
   };
-}
-
-interface RadioSignature {
-  element: HTMLInputElement;
-  Args: {
-    Positional: [
-      model: 'actual' | 'cover' | 'contain' | null,
-      inputType: 'actual' | 'cover' | 'contain',
-    ];
-  };
-}
-
-class RadioInitializer extends Modifier<RadioSignature> {
-  modify(
-    element: HTMLInputElement,
-    [model, inputType]: RadioSignature['Args']['Positional'],
-  ) {
-    element.checked = model === inputType;
-  }
 }
 
 function getConstrainedImageSize(maxHeight: number) {
