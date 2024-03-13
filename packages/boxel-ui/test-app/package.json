@@ -87,7 +87,7 @@
     "qunit": "^2.19.4",
     "qunit-dom": "^2.0.0",
     "tracked-built-ins": "^3.2.0",
-    "typescript": "^5.1.6",
+    "typescript": "~5.1.6",
     "webpack": "^5.89.0"
   },
   "peerDependencies": {

@@ -246,15 +246,10 @@ export async function logout(page: Page) {
   await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
-export async function createRoom(page: Page, removeAutoAttachedCard = true) {
+export async function createRoom(page: Page) {
   await page.locator('[data-test-create-room-btn]').click();
   let roomName = await getRoomName(page);
   await isInRoom(page, roomName);
-  if (removeAutoAttachedCard) {
-    await page
-      .locator(`[data-test-selected-card] [data-test-remove-card-btn]`)
-      .click();
-  }
   return roomName;
 }
 
