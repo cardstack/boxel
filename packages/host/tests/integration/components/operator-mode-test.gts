@@ -17,7 +17,7 @@ import { module, test, skip } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm, CardResource, Deferred } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -39,6 +39,7 @@ import {
   setupOnSave,
   showSearchResult,
   type TestContextWithSave,
+  TestRealmAdapter,
 } from '../../helpers';
 import {
   setupMatrixServiceMock,
@@ -48,11 +49,16 @@ import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
-let setCardInOperatorModeState: (cardURL?: string) => Promise<void>;
+let setCardInOperatorModeState: (
+  cardURL?: string,
+  format?: 'isolated' | 'edit',
+) => Promise<void>;
 let loader: Loader;
 
 module('Integration | operator-mode', function (hooks) {
   let matrixService: MockMatrixService;
+  let testRealmAdapter: TestRealmAdapter;
+
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
@@ -329,7 +335,7 @@ module('Integration | operator-mode', function (hooks) {
       });
     }
 
-    await setupIntegrationTestRealm({
+    ({ adapter: testRealmAdapter } = await setupIntegrationTestRealm({
       loader,
       contents: {
         'pet.gts': { Pet },
@@ -655,14 +661,17 @@ module('Integration | operator-mode', function (hooks) {
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         ...Object.fromEntries(personCards),
       },
-    });
+    }));
 
-    setCardInOperatorModeState = async (cardURL?: string) => {
+    setCardInOperatorModeState = async (
+      cardURL?: string,
+      format: 'isolated' | 'edit' = 'isolated',
+    ) => {
       let operatorModeStateService = this.owner.lookup(
         'service:operator-mode-state-service',
       ) as OperatorModeStateService;
       await operatorModeStateService.restore({
-        stacks: cardURL ? [[{ id: cardURL, format: 'isolated' }]] : [[]],
+        stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
       });
     };
   });
@@ -2761,7 +2770,134 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
   });
 
-  test<TestContextWithSave>('Clicking on "Finish Editing" when creating a card from linksTo will switch the card into isolated mode. The card should be saved', async function (assert) {
+  test<TestContextWithSave>('Choosing a new catalog entry card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
+    assert.expect(5);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    let savedCards = new Set<string>();
+    this.onSave((url) => {
+      savedCards.add(url.href);
+    });
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+
+    await click('[data-test-create-new-card-button]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+    );
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 4 });
+
+    await click(
+      `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor('[data-test-stack-card-index="1"]');
+
+    let paths = Array.from(savedCards).map(
+      (url) => url.substring(testRealmURL.length) + '.json',
+    );
+    let fileRef = await testRealmAdapter.openFile(paths[0]);
+    assert.deepEqual(
+      JSON.parse(fileRef!.content as string),
+      {
+        data: {
+          attributes: {
+            description: null,
+            socialBlurb: null,
+            thumbnailURL: null,
+            title: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../publishing-packet',
+              name: 'PublishingPacket',
+            },
+          },
+          relationships: {
+            blogPost: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          type: 'card',
+        },
+      },
+      'file contents were saved correctly',
+    );
+    assert.dom('[data-test-last-saved]').doesNotExist();
+  });
+
+  test<TestContextWithSave>('Creating a new card from a linksTo field automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
+    assert.expect(5);
+    await setCardInOperatorModeState(`${testRealmURL}Person/1`, 'edit');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    let savedCards = new Set<string>();
+    this.onSave((url) => {
+      savedCards.add(url.href);
+    });
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"]`);
+    await waitFor('[data-test-links-to-editor="pet"] [data-test-remove-card]');
+    await click('[data-test-links-to-editor="pet"] [data-test-remove-card]');
+    await waitFor('[data-test-add-new]');
+    assert.dom('[data-test-add-new]').exists();
+    assert
+      .dom('[data-test-links-to-editor="pet"] [data-test-boxel-card-container]')
+      .doesNotExist();
+    await click('[data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-modal]`);
+    await waitFor(`[data-test-card-catalog-create-new-button]`);
+    await click(`[data-test-card-catalog-create-new-button]`);
+    await waitFor('[data-test-stack-card-index="1"]');
+    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    let ids = Array.from(savedCards);
+    let paths = ids.map((url) => url.substring(testRealmURL.length) + '.json');
+    let path = paths.find((p) => p.includes('Pet/'));
+    let id = ids.find((p) => p.includes('Pet/'));
+    let fileRef = await testRealmAdapter.openFile(path!);
+    assert.deepEqual(
+      JSON.parse(fileRef!.content as string),
+      {
+        data: {
+          attributes: {
+            description: null,
+            name: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../pet',
+              name: 'Pet',
+            },
+          },
+          type: 'card',
+        },
+      },
+      'file contents were saved correctly',
+    );
+    assert
+      .dom(`[data-test-stack-card="${id}"] [data-test-last-saved]`)
+      .doesNotExist();
+  });
+
+  test<TestContextWithSave>('Clicking on "Finish Editing" after creating a card from linksTo field will switch the card into isolated mode', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
