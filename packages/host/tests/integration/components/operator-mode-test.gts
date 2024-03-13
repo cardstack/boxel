@@ -1952,6 +1952,7 @@ module('Integration | operator-mode', function (hooks) {
     });
     await click('[data-test-card-catalog-go-button]');
 
+    await waitFor(`[data-test-stack-card-index="1"] [data-test-field="title"]`);
     assert
       .dom(`[data-test-stack-card-index="1"] [data-test-field="title"]`)
       .exists();
