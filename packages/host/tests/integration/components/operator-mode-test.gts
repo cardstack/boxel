@@ -2011,6 +2011,7 @@ module('Integration | operator-mode', function (hooks) {
         )?.disabled === false,
     );
     await click(`[data-test-card-catalog-go-button]`);
+    await waitFor('[data-test-stack-card-index="1"]');
     assert.dom('[data-test-stack-card-index="1"]').exists();
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
