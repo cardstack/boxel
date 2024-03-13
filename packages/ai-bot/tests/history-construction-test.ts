@@ -457,8 +457,9 @@ module('constructHistory', () => {
           data: JSON.stringify({
             context: {
               functions: [],
+              openCardIds: ['http://localhost:4201/drafts/Author/1'],
             },
-            attachedCardsTxnIds: ['1'],
+            attachedCardsTxnIds: ['1', '3'],
           }),
         },
         sender: '@user:localhost',
@@ -484,26 +485,9 @@ module('constructHistory', () => {
           data: {
             context: {
               functions: [],
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Author/1',
-                    attributes: {
-                      firstName: 'Mango',
-                      lastName: 'Abdel-Rahman',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../author',
-                        name: 'Author',
-                      },
-                    },
-                  },
-                },
-              ],
+              openCardIds: ['http://localhost:4201/drafts/Author/1'],
             },
-            attachedCardsTxnIds: ['1'],
+            attachedCardsTxnIds: ['1', '3'],
             attachedCards: [
               {
                 data: {
@@ -512,6 +496,22 @@ module('constructHistory', () => {
                   attributes: {
                     firstName: 'Terry',
                     lastName: 'Pratchett',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Mango',
+                    lastName: 'Abdel-Rahman',
                   },
                   meta: {
                     adoptsFrom: {
