@@ -11,6 +11,7 @@ import {
   OrchestrationMatrix,
 } from './models/orchestration.ts';
 import Sprite, { type ISpriteModifier, SpriteType } from './models/sprite.ts';
+import sprite from './modifiers/sprite.ts';
 import AnimationsService from './services/animations.ts';
 
 export {
@@ -23,7 +24,8 @@ export {
   ISpriteModifier,
   OrchestrationMatrix,
   SpringBehavior,
-  Sprite,
+  Sprite, // model
+  sprite, // modifier
   SpriteType,
   StaticBehavior,
   TweenBehavior,

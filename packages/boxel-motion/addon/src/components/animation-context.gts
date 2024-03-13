@@ -67,6 +67,17 @@ export default class AnimationContextComponent
     );
   }
 
+  constructor(owner: unknown, args: AnimationContextArgs) {
+    super(owner, args);
+    if (!this.animations) {
+      throw new Error(
+        `Expected to find "animations" service in app.
+         Add 'app/services/animations.ts' with
+           \`export { AnimationsService as default } from '@cardstack/boxel-motion';\``,
+      );
+    }
+  }
+
   willDestroy(): void {
     super.willDestroy();
     this.animations.unregisterContext(this);

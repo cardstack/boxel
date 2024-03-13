@@ -963,6 +963,9 @@ importers:
       '@cardstack/base':
         specifier: workspace:*
         version: link:../base
+      '@cardstack/boxel-motion':
+        specifier: workspace:*
+        version: link:../boxel-motion/addon
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui/addon

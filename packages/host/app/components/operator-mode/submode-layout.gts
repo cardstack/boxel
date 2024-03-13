@@ -5,6 +5,14 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import {
+  AnimationContext,
+  type Changeset,
+  sprite,
+  SpriteType,
+  type Sprite,
+  TweenBehavior,
+} from '@cardstack/boxel-motion';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
@@ -150,8 +158,99 @@ export default class SubmodeLayout extends Component<Signature> {
     this.searchElement = element;
   }
 
+  @action
+  animate(changeset: Changeset) {
+    let aiAssistantPanelSprite = changeset.spriteFor({
+      id: 'ai-assistant-panel',
+    });
+    let aiAssistantButtonSprite = changeset.spriteFor({
+      id: 'ai-assistant-button',
+    });
+    function isAiAssistantOpening(button: Sprite, panel: Sprite) {
+      return (
+        button.type === SpriteType.Removed && panel.type === SpriteType.Inserted
+      );
+    }
+    function isAiAssistantClosing(button: Sprite, panel: Sprite) {
+      return (
+        button.type === SpriteType.Inserted && panel.type === SpriteType.Removed
+      );
+    }
+    if (aiAssistantButtonSprite && aiAssistantPanelSprite) {
+      if (
+        isAiAssistantOpening(aiAssistantButtonSprite, aiAssistantPanelSprite)
+      ) {
+        console.log('ai assistant opening');
+        let mainResizablePanelSprite = changeset.spriteFor({
+          id: 'submode-main-resizable-panel',
+        });
+        let aiAssistantResizablePanelSprite = changeset.spriteFor({
+          id: 'ai-assistant-resizable-panel',
+        });
+        aiAssistantPanelSprite.element.style.opacity = 0;
+        mainResizablePanelSprite.element.style['--boxel-panel-width'] = '100vw';
+        aiAssistantResizablePanelSprite.element.style['--boxel-panel-width'] =
+          '0';
+        let buttonTargetX =
+          document.body.clientWidth -
+          parseInt(aiAssistantButtonSprite.initial.left);
+        return {
+          timeline: {
+            type: 'sequential',
+            animations: [
+              {
+                sprites: new Set([aiAssistantButtonSprite]),
+                properties: {
+                  x: { from: '0px', to: `${buttonTargetX}px` },
+                },
+                timing: {
+                  behavior: new TweenBehavior(),
+                  duration: 2000,
+                },
+              },
+              // {
+              //   sprites: new Set([aiAssistantSprite.counterpart]),
+              //   properties: {
+              //     x: {
+              //       from: 0,
+              //       to: aiAssistantSprite.counterpart!.initial.width,
+              //     },
+              //   },
+              //   timing: {
+              //     behavior: new TweenBehavior(),
+              //     duration: 2000,
+              //   },
+              // },
+              // {
+              //   sprites: new Set([aiAssistantSprite]),
+              //   properties: {
+              //     x: {},
+              //   },
+              //   timing: {
+              //     behavior: new TweenBehavior(),
+              //     duration: 2000,
+              //   },
+              // },
+            ],
+          },
+        };
+      } else if (
+        isAiAssistantClosing(aiAssistantButtonSprite, aiAssistantPanelSprite)
+      ) {
+        console.log('ai assistant closing');
+        return {
+          timeline: {
+            type: 'parallel',
+            animations: [],
+          },
+        };
+      }
+    }
+  }
+
   <template>
-    <div
+    <AnimationContext
+      @use={{this.animate}}
       class='operator-mode-with-ai-assistant
         {{this.aiAssistantVisibilityClass}}'
     >
@@ -165,6 +264,7 @@ export default class SubmodeLayout extends Component<Signature> {
           @defaultLengthFraction={{1}}
           @minLengthPx={{371}}
           @collapsible={{false}}
+          {{sprite id='submode-main-resizable-panel'}}
         >
           <SubmodeSwitcher
             @submode={{this.operatorModeStateService.state.submode}}
@@ -179,22 +279,25 @@ export default class SubmodeLayout extends Component<Signature> {
               @defaultLengthFraction={{0.3}}
               @minLengthPx={{371}}
               @collapsible={{false}}
+              {{sprite id='ai-assistant-resizable-panel'}}
             >
               <AiAssistantPanel
                 @onClose={{this.toggleChat}}
                 @resizeHandle={{ResizeHandle}}
+                {{sprite id='ai-assistant-panel'}}
                 class='ai-assistant-panel'
               />
             </ResizablePanel>
           {{else}}
             <AiAssistantButton
               class='chat-btn'
+              {{sprite id='ai-assistant-button'}}
               {{on 'click' this.toggleChat}}
             />
           {{/if}}
         {{/if}}
       </ResizablePanelGroup>
-    </div>
+    </AnimationContext>
 
     <div class='profile-icon-container'>
       <button

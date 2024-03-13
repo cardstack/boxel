@@ -13,7 +13,11 @@ module.exports = function (defaults) {
   const app = new EmberApp(defaults, {
     trees: {
       app: withSideWatch('app', {
-        watching: ['../runtime-common', '../boxel-ui/addon'],
+        watching: [
+          '../runtime-common',
+          '../boxel-motion/addon',
+          '../boxel-ui/addon',
+        ],
       }),
     },
     'ember-cli-babel': {
