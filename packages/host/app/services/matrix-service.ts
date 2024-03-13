@@ -12,7 +12,6 @@ import {
   type EmittedEvents,
   type IEvent,
   type MatrixClient,
-  type ISendEventResponse,
 } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -406,11 +405,11 @@ export default class MatrixService extends Service {
         }),
       );
     }
-    let attachedCardsEventIds: string[] = [];
+    let attachedCardsTxnIds: string[] = [];
     if (serializedAttachedCards.length > 0) {
       for (let attachedCard of serializedAttachedCards) {
-        let eventIds = await this.sendCardFragments(roomId, attachedCard);
-        attachedCardsEventIds.push(eventIds[0].event_id); // we only care about the first fragment
+        let txnIds = await this.sendCardFragments(roomId, attachedCard);
+        attachedCardsTxnIds.push(txnIds[0]); // we only care about the first fragment
       }
     }
     await this.sendEvent(roomId, 'm.room.message', {
@@ -419,7 +418,7 @@ export default class MatrixService extends Service {
       format: 'org.matrix.custom.html',
       formatted_body: html,
       data: {
-        attachedCardsEventIds,
+        attachedCardsTxnIds,
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
           functions,
@@ -432,18 +431,18 @@ export default class MatrixService extends Service {
   private async sendCardFragments(
     roomId: string,
     card: LooseSingleCardDocument,
-  ): Promise<ISendEventResponse[]> {
+  ): Promise<string[]> {
     let fragments = splitStringIntoChunks(
       JSON.stringify(card),
       MAX_CARD_SIZE_KB,
     );
-    let responses: ISendEventResponse[] = [];
+    let responses: string[] = [];
     for (let [index, cardFragment] of fragments.entries()) {
       let response = await this.sendEvent(roomId, 'm.room.message', {
         ...(responses.length > 0
           ? {
               'm.relates_to': {
-                event_id: responses[responses.length - 1].event_id,
+                event_id: responses[responses.length - 1],
                 rel_type: 'append',
               },
             }
@@ -453,15 +452,21 @@ export default class MatrixService extends Service {
         body: `card fragment ${index + 1} of ${fragments.length}`,
         formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
         data: {
-          ...(responses.length > 0
-            ? { firstFragment: responses[0].event_id }
-            : {}),
+          ...(responses.length > 0 ? { firstFragment: responses[0] } : {}),
           cardFragment,
           index,
           totalParts: fragments.length,
         },
       } as CardFragmentContent);
-      responses.push(response);
+      let { event_id: eventId } = response;
+      let event = await this.client.fetchRoomEvent(roomId, eventId);
+      let txnId = event.unsigned?.transaction_id;
+      if (!txnId) {
+        throw new Error(
+          `can not determine txn ID for card fragment event ${eventId}`,
+        );
+      }
+      responses.push(txnId);
     }
     return responses;
   }

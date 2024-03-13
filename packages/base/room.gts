@@ -281,7 +281,7 @@ const roomMemberCache = new WeakMap<RoomField, Map<string, RoomMemberField>>();
 const roomStateCache = new WeakMap<RoomField, RoomState>();
 const fragmentCache = new WeakMap<
   RoomField,
-  Map<string, CardFragmentContent>
+  Map<string, CardFragmentContent> // key is event's txn ID so that we can handle local echoes
 >();
 
 export class RoomField extends FieldDef {
@@ -438,13 +438,13 @@ export class RoomField extends FieldDef {
         if (event.type !== 'm.room.message') {
           continue;
         }
-        let event_id = event.event_id;
+        let eventId = event.event_id;
         let update = false;
         if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-          event_id = event.content['m.relates_to'].event_id;
+          eventId = event.content['m.relates_to'].event_id;
           update = true;
         }
-        if (cache.has(event_id) && !update) {
+        if (cache.has(eventId) && !update) {
           continue;
         }
 
@@ -467,13 +467,14 @@ export class RoomField extends FieldDef {
             fragments = new Map();
             fragmentCache.set(this, fragments);
           }
-          if (!fragments.has(event_id)) {
-            fragments.set(event_id, event.content);
+          let txnId = event.unsigned.transaction_id;
+          if (!fragments.has(txnId)) {
+            fragments.set(txnId, event.content);
           }
         } else if (event.content.msgtype === 'org.boxel.message') {
           // Safely skip over cases that don't have attached cards or a data type
-          let cardDocs = event.content.data?.attachedCardsEventIds
-            ? event.content.data.attachedCardsEventIds.map((eventId) =>
+          let cardDocs = event.content.data?.attachedCardsTxnIds
+            ? event.content.data.attachedCardsTxnIds.map((eventId) =>
                 this.serializedCardFromFragments(eventId),
               )
             : [];
@@ -511,7 +512,7 @@ export class RoomField extends FieldDef {
         }
 
         if (messageField) {
-          newMessages.set(event_id, messageField);
+          newMessages.set(eventId, messageField);
           index++;
         }
       }
@@ -541,18 +542,14 @@ export class RoomField extends FieldDef {
     },
   });
 
-  private serializedCardFromFragments(
-    eventId: string,
-  ): LooseSingleCardDocument {
+  private serializedCardFromFragments(txnId: string): LooseSingleCardDocument {
     let cache = fragmentCache.get(this);
     if (!cache) {
       throw new Error(`No card fragment cache exists for this room`);
     }
-    let fragment = cache.get(eventId);
+    let fragment = cache.get(txnId);
     if (!fragment) {
-      throw new Error(
-        `No card fragment found in cache for event id ${eventId}`,
-      );
+      throw new Error(`No card fragment found in cache for txn id ${txnId}`);
     }
     if (fragment.data.totalParts === 1) {
       return JSON.parse(fragment.data.cardFragment) as LooseSingleCardDocument;
@@ -561,12 +558,12 @@ export class RoomField extends FieldDef {
     let fragments = [
       fragment,
       ...[...cache.values()]
-        .filter((f) => f.data.firstFragment && f.data.firstFragment === eventId)
+        .filter((f) => f.data.firstFragment && f.data.firstFragment === txnId)
         .sort((a, b) => (a.data.index = b.data.index)),
     ];
     if (fragments.length !== fragment.data.totalParts) {
       throw new Error(
-        `Expected to find ${fragment.data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
+        `Expected to find ${fragment.data.totalParts} fragments for fragment of txn id ${txnId} but found ${fragments.length} fragments`,
       );
     }
     return JSON.parse(
@@ -730,7 +727,7 @@ export interface CardMessageContent {
   data: {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message
-    attachedCardsEventIds?: string[];
+    attachedCardsTxnIds?: string[];
     // we materialize this field on the server from the card
     // fragments that we receive
     attachedCards?: LooseSingleCardDocument[];

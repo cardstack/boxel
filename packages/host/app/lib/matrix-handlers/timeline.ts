@@ -34,13 +34,40 @@ async function drainTimeline(context: Context) {
 }
 
 async function processDecryptedEvent(context: Context, event: Event) {
-  await addRoomEvent(context, event);
   let { room_id: roomId } = event;
   if (!roomId) {
     throw new Error(
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
+
+  let roomField = await context.rooms.get(roomId);
+
+  // This logic is necessary to migrate historic events--unsure if we should
+  // continue to care about this as it is added tech debt.
+  if (
+    roomField &&
+    event.type === 'm.room.message' &&
+    event.content?.msgtype === 'org.boxel.message'
+  ) {
+    let data = JSON.parse(event.content.data);
+    if (
+      'attachedCardsEventIds' in data &&
+      Array.isArray(data.attachedCardsEventIds)
+    ) {
+      for (let attachedCardEventId of data.attachedCardsEventIds) {
+        if (!roomField.events.find((e) => e.event_id === attachedCardEventId)) {
+          let fragmentEvent = await context.client.fetchRoomEvent(
+            roomId,
+            attachedCardEventId,
+          );
+          await addRoomEvent(context, fragmentEvent);
+        }
+      }
+    }
+  }
+
+  await addRoomEvent(context, event);
 
   let room = context.client.getRoom(roomId);
   if (!room) {

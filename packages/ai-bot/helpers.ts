@@ -57,24 +57,16 @@ export function constructHistory(history: IRoomEvent[]) {
     }
     let eventId = event.event_id!;
     if (event.content.msgtype === 'org.boxel.cardFragment') {
-      fragments.set(eventId, event.content);
+      let txnId = event.unsigned.transaction_id;
+      fragments.set(txnId, event.content);
       continue;
     } else if (event.content.msgtype === 'org.boxel.message') {
       if (
-        event.content.data.attachedCardsEventIds &&
-        event.content.data.attachedCardsEventIds.length > 0
+        event.content.data.attachedCardsTxnIds &&
+        event.content.data.attachedCardsTxnIds.length > 0
       ) {
         event.content.data.attachedCards =
-          event.content.data.attachedCardsEventIds!.map((id) =>
-            serializedCardFromFragments(id, fragments),
-          );
-      }
-      if (
-        event.content.data.context.openCardsEventIds &&
-        event.content.data.context.openCardsEventIds.length > 0
-      ) {
-        event.content.data.context.openCards =
-          event.content.data.context.openCardsEventIds.map((id) =>
+          event.content.data.attachedCardsTxnIds!.map((id) =>
             serializedCardFromFragments(id, fragments),
           );
       }
@@ -103,13 +95,13 @@ export function constructHistory(history: IRoomEvent[]) {
 }
 
 function serializedCardFromFragments(
-  eventId: string,
+  txnId: string,
   fragments: Map<string, CardFragmentContent>,
 ): LooseSingleCardDocument {
-  let fragment = fragments.get(eventId);
+  let fragment = fragments.get(txnId);
   if (!fragment) {
     throw new Error(
-      `No card fragment found in fragments cache for event id ${eventId}`,
+      `No card fragment found in fragments cache for txn id ${txnId}`,
     );
   }
   if (fragment.data.totalParts === 1) {
@@ -119,12 +111,12 @@ function serializedCardFromFragments(
   let cardFragments = [
     fragment,
     ...[...fragments.values()]
-      .filter((f) => f.data.firstFragment && f.data.firstFragment === eventId)
+      .filter((f) => f.data.firstFragment && f.data.firstFragment === txnId)
       .sort((a, b) => (a.data.index = b.data.index)),
   ];
   if (cardFragments.length !== fragment.data.totalParts) {
     throw new Error(
-      `Expected to find ${fragment.data.totalParts} fragments for fragment of event id ${eventId} but found ${cardFragments.length} fragments`,
+      `Expected to find ${fragment.data.totalParts} fragments for fragment of txn id ${txnId} but found ${cardFragments.length} fragments`,
     );
   }
   return JSON.parse(

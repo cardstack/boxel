@@ -204,8 +204,8 @@ test.describe('Room messages', () => {
     let boxelMessageData = JSON.parse(boxelMessage.content.data);
     // the card fragment events need to come before the boxel message event they
     // are used in, and the boxel message should point to the first fragment
-    expect(boxelMessageData.attachedCardsEventIds).toMatchObject([
-      cardFragments[0].event_id,
+    expect(boxelMessageData.attachedCardsTxnIds).toMatchObject([
+      cardFragments[0].unsigned.transaction_id,
     ]);
   });
 
