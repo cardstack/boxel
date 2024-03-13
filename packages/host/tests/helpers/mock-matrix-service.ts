@@ -12,7 +12,13 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import type { RoomField } from 'https://cardstack.com/base/room';
+import type {
+  RoomField,
+  JoinEvent,
+  RoomCreateEvent,
+  RoomNameEvent,
+  InviteEvent,
+} from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
@@ -148,25 +154,36 @@ function generateMockMatrixService(
     }
 
     async createAndJoinRoom(roomId: string, name?: string) {
-      await addRoomEvent(this, {
+      let roomNameEvent: RoomNameEvent = {
         event_id: 'eventname',
         room_id: roomId,
         type: 'm.room.name',
+        state_key: '@testuser:staging',
+        sender: '@testuser:staging',
+        origin_server_ts: Date.now(),
         content: { name: name ?? roomId },
-      });
+        unsigned: { age: 0 },
+      };
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this, roomNameEvent);
+
+      let createEvent: RoomCreateEvent = {
         event_id: 'eventcreate',
         room_id: roomId,
         type: 'm.room.create',
+        state_key: '@testuser:staging',
+        sender: '@testuser:staging',
         origin_server_ts: Date.now(),
         content: {
           creator: '@testuser:staging',
           room_version: '0',
         },
-      });
+        unsigned: { age: 0 },
+      };
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this, createEvent);
+
+      let joinEvent: JoinEvent = {
         event_id: 'eventjoin',
         room_id: roomId,
         type: 'm.room.member',
@@ -176,22 +193,27 @@ function generateMockMatrixService(
         content: {
           displayname: 'testuser',
           membership: 'join',
-          membershipTs: Date.now(),
-          membershipInitiator: '@testuser:staging',
         },
-      });
+        unsigned: { age: 0 },
+      };
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this, joinEvent);
+
+      let inviteEvent: InviteEvent = {
         event_id: 'eventinvite',
         room_id: roomId,
         type: 'm.room.member',
         sender: '@testuser:staging',
         state_key: '@aibot:localhost',
+        origin_server_ts: Date.now(),
         content: {
           displayname: 'aibot',
           membership: 'invite',
         },
-      });
+        unsigned: { age: 0 },
+      };
+
+      await addRoomEvent(this, inviteEvent);
 
       return roomId;
     }

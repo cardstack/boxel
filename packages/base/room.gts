@@ -582,7 +582,7 @@ export class RoomField extends FieldDef {
   };
 }
 
-interface BaseMatrixEvent {
+export interface BaseMatrixEvent {
   sender: string;
   origin_server_ts: number;
   event_id: string;
@@ -604,7 +604,7 @@ interface RoomStateEvent extends BaseMatrixEvent {
   };
 }
 
-interface RoomCreateEvent extends RoomStateEvent {
+export interface RoomCreateEvent extends RoomStateEvent {
   type: 'm.room.create';
   content: {
     creator: string;
@@ -626,7 +626,7 @@ interface RoomPowerLevels extends RoomStateEvent {
   };
 }
 
-interface RoomNameEvent extends RoomStateEvent {
+export interface RoomNameEvent extends RoomStateEvent {
   type: 'm.room.name';
   content: {
     name: string;
@@ -640,7 +640,7 @@ interface RoomTopicEvent extends RoomStateEvent {
   };
 }
 
-interface InviteEvent extends RoomStateEvent {
+export interface InviteEvent extends RoomStateEvent {
   type: 'm.room.member';
   content: {
     membership: 'invite';
@@ -648,7 +648,7 @@ interface InviteEvent extends RoomStateEvent {
   };
 }
 
-interface JoinEvent extends RoomStateEvent {
+export interface JoinEvent extends RoomStateEvent {
   type: 'm.room.member';
   content: {
     membership: 'join';

@@ -43,7 +43,7 @@ export default class PastSessionItem extends Component<Signature> {
       >
         <div class='name'>{{@room.name}}</div>
         <div class='date'>
-          {{formatDate @room.created 'iiii MMM d, yyyy, h:mm aa'}}
+          {{formatDate this.lastActive 'iiii MMM d, yyyy, h:mm aa'}}
         </div>
       </button>
       <BoxelDropdown>
@@ -127,4 +127,9 @@ export default class PastSessionItem extends Component<Signature> {
       }
     </style>
   </template>
+
+  private get lastActive() {
+    let { events } = this.args.room;
+    return events[events.length - 1].origin_server_ts;
+  }
 }

@@ -361,9 +361,14 @@ export default class AiAssistantPanel extends Component<Signature> {
         rooms.push(room);
       }
     }
-    // member join date is at the time of room creation
-    // reverse chronological order
-    return rooms.sort((a, b) => b.created.getTime() - a.created.getTime());
+    // sort in reverse chronological order of last activity
+    let sorted = rooms.sort((a, b) => {
+      return (
+        b.events[b.events.length - 1]?.origin_server_ts -
+        a.events[a.events.length - 1]?.origin_server_ts
+      );
+    });
+    return sorted;
   }
 
   @action
