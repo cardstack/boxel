@@ -28,7 +28,7 @@
     "@types/qs": "^6.9.7",
     "@types/uuid": "^9.0.4",
     "babel-import-util": "^1.2.2",
-    "babel-plugin-ember-template-compilation": "^2.2.0",
+    "babel-plugin-ember-template-compilation": "^2.2.1",
     "date-fns": "^2.28.0",
     "diff": "^5.1.0",
     "ember-concurrency-async-plugin": "workspace:*",

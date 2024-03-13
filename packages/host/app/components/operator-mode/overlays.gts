@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { dropTask, task } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
 import { type TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
 
@@ -308,7 +308,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     return !!this.realmSessionByCard.get(card)?.canWrite;
   }
 
-  private viewCard = restartableTask(
+  private viewCard = dropTask(
     async (
       card: CardDef,
       format: Format = 'isolated',
