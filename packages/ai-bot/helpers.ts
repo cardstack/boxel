@@ -104,17 +104,17 @@ function serializedCardFromFragments(
     );
   }
   let cardFragments: CardFragmentContent[] = [];
-  let nextFragment: string | undefined = eventId;
+  let currentFragment: string | undefined = eventId;
   do {
-    let fragment = fragments.get(nextFragment);
+    let fragment = fragments.get(currentFragment);
     if (!fragment) {
       throw new Error(
         `No card fragment found in cache for event id ${eventId}`,
       );
     }
     cardFragments.push(fragment);
-    nextFragment = fragment.data.nextFragment;
-  } while (nextFragment);
+    currentFragment = fragment.data.nextFragment;
+  } while (currentFragment);
 
   cardFragments.sort((a, b) => (a.data.index = b.data.index));
   if (cardFragments.length !== cardFragments[0].data.totalParts) {

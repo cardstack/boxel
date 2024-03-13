@@ -62,10 +62,10 @@ async function processDecryptedEvent(context: Context, event: Event) {
       Array.isArray(data.attachedCardsEventIds)
     ) {
       for (let attachedCardEventId of data.attachedCardsEventIds) {
-        let nextFragment: string | undefined = attachedCardEventId;
+        let currentFragment: string | undefined = attachedCardEventId;
         do {
           let fragmentEvent = roomField.events.find(
-            (e) => e.event_id === nextFragment,
+            (e) => e.event_id === currentFragment,
           );
           let fragmentData: CardFragmentContent['data'];
           if (!fragmentEvent) {
@@ -90,8 +90,8 @@ async function processDecryptedEvent(context: Context, event: Event) {
             }
             fragmentData = fragmentEvent.content.data;
           }
-          nextFragment = fragmentData?.nextFragment; // using '?' so we can be kind to older event schemas
-        } while (nextFragment);
+          currentFragment = fragmentData?.nextFragment; // using '?' so we can be kind to older event schemas
+        } while (currentFragment);
       }
     }
   }

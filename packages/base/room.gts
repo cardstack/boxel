@@ -550,17 +550,17 @@ export class RoomField extends FieldDef {
     }
 
     let fragments: CardFragmentContent[] = [];
-    let nextFragment: string | undefined = eventId;
+    let currentFragment: string | undefined = eventId;
     do {
-      let fragment = cache.get(nextFragment);
+      let fragment = cache.get(currentFragment);
       if (!fragment) {
         throw new Error(
           `No card fragment found in cache for event id ${eventId}`,
         );
       }
       fragments.push(fragment);
-      nextFragment = fragment.data.nextFragment;
-    } while (nextFragment);
+      currentFragment = fragment.data.nextFragment;
+    } while (currentFragment);
 
     fragments.sort((a, b) => (a.data.index = b.data.index));
     if (fragments.length !== fragments[0].data.totalParts) {
