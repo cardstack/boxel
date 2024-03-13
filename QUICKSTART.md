@@ -6,6 +6,7 @@ To build the entire repository and run the application, follow these steps:
 
    - [volta](https://docs.volta.sh/guide/getting-started)
    - [docker](https://docs.docker.com/get-docker/)
+   - [pnpm](https://docs.volta.sh/advanced/pnpm) Note: If you don't have pnpm already on your system, **DON'T** install pnpm manually (volta will install it for you when you call `pnpm install`).
 
 2. Clone the repo:
 
@@ -16,7 +17,7 @@ To build the entire repository and run the application, follow these steps:
 3. Install the package dependencies:
 
    ```zsh
-   echo 'export VOLTA_FEATURE_PNPM=1"' >> ~/.zprofile && source ~/.zprofile
+   echo 'export VOLTA_FEATURE_PNPM=1"' >> ~/.profile && source ~/.profile
    pnpm install
    ```
 
@@ -42,6 +43,16 @@ To build the entire repository and run the application, follow these steps:
    pnpm start:all
    ```
 
+   Note: Ensure that the realm-server is completely started by looking out for tor the test-realm indexing output.
+
+   ```zsh
+   Realm http://localhost:4202/test/ has started ({
+   "instancesIndexed": 8,
+   "instanceErrors": 0,
+   "moduleErrors": 0
+   })
+   ```
+
 7. Register ALL:
 
    ```zsh
@@ -51,10 +62,10 @@ To build the entire repository and run the application, follow these steps:
 
 8. Verify registration:
 
-```zsh
-cd ./packages/matrix
-pnpm start:admin
-```
+   ```zsh
+   cd ./packages/matrix
+   pnpm start:admin
+   ```
 
 Visit http://localhost:8080. Type in Username = "admin", Password: "password" Homeserver URL: http://localhost:8008
 
