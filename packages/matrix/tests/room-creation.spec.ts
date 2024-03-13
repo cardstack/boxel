@@ -186,7 +186,7 @@ test.describe('Room creation', () => {
 
   test('it can delete a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    let roomsBeforeDeletion = await getRooms('user1', 'pass');
+    let roomsBeforeDeletion = await getRoomsFromSync('user1', 'pass');
     
     let room1 = await getRoomName(page);
     await sendMessage(page, room1, 'Room 1');
