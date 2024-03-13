@@ -61,18 +61,22 @@ async function sendMessage(
   room: Room,
   content: string,
   eventToUpdate: string | undefined,
+  customMessageMeta?: {},
 ) {
   log.info('Sending', content);
   let messageObject: IContent = {
-    body: content,
-    msgtype: 'm.text',
-    formatted_body: content,
-    format: 'org.matrix.custom.html',
-    'm.new_content': {
+    ...{
       body: content,
       msgtype: 'm.text',
       formatted_body: content,
       format: 'org.matrix.custom.html',
+      'm.new_content': {
+        body: content,
+        msgtype: 'm.text',
+        formatted_body: content,
+        format: 'org.matrix.custom.html',
+      },
+      ...{ customMessageMeta },
     },
   };
   return await sendEvent(
@@ -174,7 +178,7 @@ async function setTitle(
   let startOfConversation = [
     {
       role: 'system',
-      content: `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words. 
+      content: `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
               Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
               Explain the general actions and user intent.`,
     } as OpenAIPromptMessage,
@@ -325,10 +329,20 @@ Common issues are:
       if (event.getSender() === aiBotUserId) {
         return;
       }
-      let initialMessage: ISendEventResponse = await client.sendHtmlMessage(
-        room!.roomId,
+      // let initialMessage: ISendEventResponse = await client.sendMessage(
+      //   room!.roomId,
+      //   'Thinking...',
+      //   'Thinking...',
+      // );
+
+      let initialMessage = await sendMessage(
+        client,
+        room,
         'Thinking...',
-        'Thinking...',
+        undefined,
+        {
+          isInitialMessage: true,
+        },
       );
 
       let initial = await client.roomInitialSync(room!.roomId, 1000);
@@ -357,6 +371,7 @@ Common issues are:
           unsent += 1;
           if (unsent > 5) {
             unsent = 0;
+
             await sendMessage(
               client,
               room,
@@ -403,7 +418,9 @@ Common issues are:
         finalContent = cleanContent(finalContent);
       }
       if (finalContent) {
-        await sendMessage(client, room, finalContent, initialMessage.event_id);
+        await sendMessage(client, room, finalContent, initialMessage.event_id, {
+          isFinalMessage: true,
+        });
       }
 
       if (shouldSetRoomTitle(eventList, aiBotUserId, sentCommands)) {
