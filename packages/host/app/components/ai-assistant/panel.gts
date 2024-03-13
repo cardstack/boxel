@@ -352,7 +352,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       if (!resource.room) {
         continue;
       }
-      console.log(resource.room.roomId);
       let { room } = resource;
       if (
         (room.invitedMembers.find((m) => aiBotUserId === m.userId) ||
