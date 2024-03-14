@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+  "username": "jane_doe88",
+  "email": {
+    "value": "jane.doe88@example.com"
+  },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-user",
+        "name": "MatrixUser"
+      }
+    }
+  }
+}
