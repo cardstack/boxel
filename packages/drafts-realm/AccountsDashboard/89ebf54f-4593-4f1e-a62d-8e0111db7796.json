@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "accounts.0": {
+        "links": {
+          "self": "../CardDef/7298c9c6-2964-41a0-87f7-42127a16e12b"
+        }
+      },
+      "accounts.1": {
+        "links": {
+          "self": "../CardDef/992531db-9912-49eb-9b72-f710cbcdb085"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/accounts-dashboard",
+        "name": "AccountsDashboard"
+      }
+    }
+  }
+}

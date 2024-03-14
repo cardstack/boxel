@@ -1,0 +1,67 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "accountName": "Cardstack Malaysia",
+      "accountAlias": "Cardstack Malaysia",
+      "description": "Cardstack Malaysia wants to sell x1000 card templates to be used in their card catalog",
+      "contactInformation": {
+        "salutation": "Mrs",
+        "firstName": "Justin",
+        "lastName": "Thong",
+        "address": {
+          "streetAddress": "Jalan Permatang Gedong, Taman Sejati Indah,",
+          "city": "Kuala Lumpur",
+          "region": "Kuala Lumpur",
+          "postalCode": "55200",
+          "poBoxNumber": null,
+          "country": "Malaysia"
+        },
+        "phoneNumber": {
+          "country": 1,
+          "area": 212,
+          "number": 5551212
+        },
+        "email": {
+          "value": null
+        },
+        "website": {
+          "value": null
+        }
+      },
+      "billingAddress": {
+        "streetAddress": "Jalan Permatang Gedong, Taman Sejati Indah,",
+        "city": "Kuala Lumpur",
+        "region": "Kuala Lumpur",
+        "postalCode": "55200",
+        "poBoxNumber": null,
+        "country": "Malaysia"
+      },
+      "numberOfEmployees": 4,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "owner": {
+        "links": {
+          "self": "../MatrixUser/ca9dbfad-633a-4911-bc09-7fe3ebcb60c1"
+        }
+      },
+      "parentAccount": {
+        "links": {
+          "self": null
+        }
+      },
+      "company": {
+        "links": {
+          "self": "../Company/6b770bea-a852-46d0-bfbc-7ad60d1258ef"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/account",
+        "name": "CrmAccount"
+      }
+    }
+  }
+}
