@@ -120,8 +120,23 @@ async function processDecryptedEvent(context: Context, event: Event) {
       `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
     );
   }
+
+  let userId = context.client.getUserId();
+  if (!userId) {
+    throw new Error(
+      `bug: userId is required for event ${JSON.stringify(event, null, 2)}`,
+    );
+  }
+
+  // We might still receive events from the rooms that the user has left.
+  let member = room.getMember(userId);
+  if (!member || member.membership !== 'join') {
+    return;
+  }
+
+  await addRoomEvent(context, event);
   if (room.oldState.paginationToken != null) {
     // we need to scroll back to capture any room events fired before this one
-    await context.client.scrollback(context.client.getRoom(roomId)!);
+    await context.client.scrollback(room);
   }
 }
