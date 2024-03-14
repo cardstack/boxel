@@ -388,7 +388,7 @@ export async function assertMessages(
       ).toHaveCount(1);
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-card]`,
+          `[data-test-message-idx="${index}"] [data-test-selected-card]`,
         ),
       ).toHaveCount(cards.length);
       cards.map(async (card) => {
@@ -401,7 +401,7 @@ export async function assertMessages(
           // note: attached cards are in atom format (which display the title by default)
           await expect(
             page.locator(
-              `[data-test-message-idx="${index}"] [data-test-message-card="${card.id}"]`,
+              `[data-test-message-idx="${index}"] [data-test-selected-card="${card.id}"]`,
             ),
           ).toContainText(card.title);
         }
