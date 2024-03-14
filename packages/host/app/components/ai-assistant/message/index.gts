@@ -3,20 +3,14 @@ import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
-//@ts-expect-error cached type not available yet
-import { cached } from '@glimmer/tracking';
-
 import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
-
-import { trackedFunction } from 'ember-resources/util/function';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import Pill from '@cardstack/host/components/pill';
+import CardPill from '@cardstack/host/components/card-pill';
 
 import type CardService from '@cardstack/host/services/card-service';
 
@@ -240,58 +234,6 @@ export class AiAssistantConversation extends Component<AiAssistantConversationSi
         justify-content: flex-end;
         padding: var(--boxel-sp);
         overflow-y: auto;
-      }
-    </style>
-  </template>
-}
-
-interface CardPillSignature {
-  Element: HTMLDivElement;
-  Args: {
-    card: CardDef;
-  };
-  Blocks: {
-    default: [];
-  };
-}
-
-export class CardPill extends Component<CardPillSignature> {
-  @service private declare cardService: CardService;
-
-  get component() {
-    return this.args.card.constructor.getComponent(this.args.card, 'atom');
-  }
-
-  @cached
-  private get realmIconURL() {
-    return this.fetchRealmInfo.value?.iconURL || null;
-  }
-
-  @cached
-  private get realmName() {
-    return this.fetchRealmInfo.value?.name;
-  }
-
-  private fetchRealmInfo = trackedFunction(
-    this,
-    async () => await this.cardService.getRealmInfo(this.args.card),
-  );
-
-  <template>
-    <div data-test-message-card={{@card.id}}>
-      <Pill>
-        <RealmIcon
-          class='realm-icon'
-          @realmIconURL={{this.realmIconURL}}
-          @realmName={{this.realmName}}
-        />
-        <this.component @displayContainer={{false}} />
-      </Pill>
-    </div>
-    <style>
-      .realm-icon {
-        width: 18px;
-        height: 18px;
       }
     </style>
   </template>

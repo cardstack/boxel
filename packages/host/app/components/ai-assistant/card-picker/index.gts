@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -6,92 +5,15 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { AddButton, IconButton, Tooltip } from '@cardstack/boxel-ui/components';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import CardPill from '@cardstack/host/components/card-pill';
+import Pill from '@cardstack/host/components/pill';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-
-import RealmIcon from '../../operator-mode/realm-icon';
-import Pill from '../../pill';
-
-interface CardPillSignature {
-  Element: HTMLDivElement;
-  Args: {
-    card: CardDef;
-    isAutoAttachedCard?: boolean;
-    removeCard: (card: CardDef) => void;
-  };
-}
-
-class CardPill extends Component<CardPillSignature> {
-  <template>
-    <Pill
-      @inert={{true}}
-      class={{cn 'card-pill' is-autoattached=@isAutoAttachedCard}}
-      data-test-selected-card={{@card.id}}
-      data-test-autoattached-card={{@isAutoAttachedCard}}
-    >
-      <:icon>
-        <RealmInfoProvider @fileURL={{@card.id}}>
-          <:ready as |realmInfo|>
-            <RealmIcon
-              @realmIconURL={{realmInfo.iconURL}}
-              @realmName={{realmInfo.name}}
-              width='18'
-              height='18'
-            />
-          </:ready>
-        </RealmInfoProvider>
-      </:icon>
-      <:default>
-        <div class='card-title'>
-          {{if @card.title @card.title 'Untitled Card'}}
-        </div>
-        <IconButton
-          class='remove-button'
-          @icon={{IconX}}
-          {{on 'click' (fn @removeCard @card)}}
-          data-test-remove-card-btn
-        />
-      </:default>
-    </Pill>
-    <style>
-      .remove-button {
-        --boxel-icon-button-width: 25px;
-        --boxel-icon-button-height: 25px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        outline: 0;
-      }
-      .remove-button:focus:not(:disabled),
-      .remove-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight);
-      }
-      .card-pill {
-        --pill-icon-size: 18px;
-        padding: var(--boxel-sp-5xs);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-400);
-        height: var(--pill-height);
-      }
-      .card-title {
-        max-width: 10rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .is-autoattached {
-        border-style: dashed;
-      }
-    </style>
-  </template>
-}
 
 interface Signature {
   Element: HTMLDivElement;
