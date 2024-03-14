@@ -42,7 +42,7 @@ export default class PastSessionItem extends Component<Signature> {
         data-test-enter-room={{@room.name}}
       >
         <div class='name'>{{@room.name}}</div>
-        <div class='date'>
+        <div class='date' data-test-last-active={{this.lastActive}}>
           {{formatDate this.lastActive 'iiii MMM d, yyyy, h:mm aa'}}
         </div>
       </button>
@@ -129,7 +129,6 @@ export default class PastSessionItem extends Component<Signature> {
   </template>
 
   private get lastActive() {
-    let { events } = this.args.room;
-    return events[events.length - 1].origin_server_ts;
+    return Math.max(...this.args.room.events.map((e) => e.origin_server_ts));
   }
 }
