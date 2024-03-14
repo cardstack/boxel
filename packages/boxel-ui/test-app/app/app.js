@@ -5,7 +5,8 @@ import config from 'test-app/config/environment';
 import '@cardstack/boxel-ui/styles/global.css';
 import '@cardstack/boxel-ui/styles/fonts.css';
 import '@cardstack/boxel-ui/styles/variables.css';
-import 'ember-power-select/styles';
+// FIXME also
+// import 'ember-power-select/styles';
 
 export default class App extends Application {
   modulePrefix = config.modulePrefix;
