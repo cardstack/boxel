@@ -23,7 +23,6 @@ interface CardPillSignature {
   Element: HTMLDivElement;
   Args: {
     card: CardDef;
-    index: number;
     isAutoAttachedCard?: boolean;
     removeCard: (card: CardDef) => void;
   };
@@ -34,7 +33,6 @@ class CardPill extends Component<CardPillSignature> {
     <Pill
       @inert={{true}}
       class={{cn 'card-pill' is-autoattached=@isAutoAttachedCard}}
-      data-test-pill-index={{@index}}
       data-test-selected-card={{@card.id}}
       data-test-autoattached-card={{@isAutoAttachedCard}}
     >
@@ -58,7 +56,7 @@ class CardPill extends Component<CardPillSignature> {
           class='remove-button'
           @icon={{IconX}}
           {{on 'click' (fn @removeCard @card)}}
-          data-test-remove-card-btn={{@index}}
+          data-test-remove-card-btn
         />
       </:default>
     </Pill>
@@ -117,7 +115,6 @@ export default class AiAssistantCardPicker extends Component<Signature> {
               <:trigger>
                 <CardPill
                   @card={{card}}
-                  @index={{i}}
                   @isAutoAttachedCard={{true}}
                   @removeCard={{@removeCard}}
                 />
@@ -132,7 +129,6 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           {{else}}
             <CardPill
               @card={{card}}
-              @index={{i}}
               @isAutoAttachedCard={{false}}
               @removeCard={{@removeCard}}
             />
