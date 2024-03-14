@@ -54,9 +54,14 @@ async function processDecryptedEvent(context: Context, event: Event) {
   if (
     roomField &&
     event.type === 'm.room.message' &&
-    event.content?.msgtype === 'org.boxel.message'
+    event.content?.msgtype === 'org.boxel.message' &&
+    event.content.data
   ) {
-    let data = JSON.parse(event.content.data) as CardMessageContent['data'];
+    let data = (
+      typeof event.content.data === 'string'
+        ? JSON.parse(event.content.data)
+        : event.content.data
+    ) as CardMessageContent['data'];
     if (
       'attachedCardsEventIds' in data &&
       Array.isArray(data.attachedCardsEventIds)
