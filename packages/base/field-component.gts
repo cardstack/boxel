@@ -16,6 +16,7 @@ import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
+import { initSharedState } from './shared-state';
 
 interface BoxComponentSignature {
   Args: { Named: { format?: Format } };
@@ -24,7 +25,10 @@ interface BoxComponentSignature {
 
 export type BoxComponent = ComponentLike<BoxComponentSignature>;
 
-const componentCache = new WeakMap<Box<BaseDef>, BoxComponent>();
+const componentCache = initSharedState(
+  'componentCache',
+  () => new WeakMap<Box<BaseDef>, BoxComponent>(),
+);
 
 export function getBoxComponent(
   card: typeof BaseDef,

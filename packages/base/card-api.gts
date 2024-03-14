@@ -48,6 +48,7 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
+import { initSharedState } from './shared-state';
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -170,10 +171,22 @@ function isStaleValue(value: any): value is StaleValue {
     return false;
   }
 }
-const deserializedData = new WeakMap<BaseDef, Map<string, any>>();
-const recomputePromises = new WeakMap<BaseDef, Promise<any>>();
-const identityContexts = new WeakMap<BaseDef, IdentityContext>();
-const subscribers = new WeakMap<BaseDef, Set<CardChangeSubscriber>>();
+const deserializedData = initSharedState(
+  'deserializedData',
+  () => new WeakMap<BaseDef, Map<string, any>>(),
+);
+const recomputePromises = initSharedState(
+  'recomputePromises',
+  () => new WeakMap<BaseDef, Promise<any>>(),
+);
+const identityContexts = initSharedState(
+  'identityContexts',
+  () => new WeakMap<BaseDef, IdentityContext>(),
+);
+const subscribers = initSharedState(
+  'subscribers',
+  () => new WeakMap<BaseDef, Set<CardChangeSubscriber>>(),
+);
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
