@@ -8,7 +8,7 @@ import flatMap from 'lodash/flatMap';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
 
-export const SHIMMED_MODULE_FAKE_ORIGIN = 'https://shimmed-module/';
+export const PACKAGES_FAKE_ORIGIN = 'https://packages/';
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -166,13 +166,21 @@ export class Loader {
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    this.moduleShims.set(
-      moduleIdentifier,
-      this.createModuleProxy(module, moduleIdentifier),
-    );
+    moduleIdentifier = resolvedPackageName(moduleIdentifier);
+    let proxiedModule = this.createModuleProxy(module, moduleIdentifier);
+
+    for (let propName of Object.keys(module)) {
+      // Normal modules always end up in our identity map because the only way for other code to gain access to the module's exports is by getting it through the
+      // proxy our loader has wrapped around it. But shimmed modules may be used directly by our caller before we've had a chance to put them in the dientity map.
+      // So this eagerly puts them into the identity map.
+      proxiedModule[propName]; // Makes sure the shimmed modules get into the identity map.
+    }
+
+    this.moduleShims.set(moduleIdentifier, proxiedModule);
+
     this.setModule(moduleIdentifier, {
       state: 'evaluated',
-      moduleInstance: module,
+      moduleInstance: proxiedModule,
       consumedModules: new Set(),
     });
   }
@@ -253,17 +261,11 @@ export class Loader {
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
-    if (!isUrlLike(moduleIdentifier)) {
-      moduleIdentifier = new URL(moduleIdentifier, SHIMMED_MODULE_FAKE_ORIGIN)
-        .href;
-    }
+    moduleIdentifier = resolvedPackageName(moduleIdentifier);
 
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
-    let shimmed = this.moduleShims.get(moduleIdentifier);
-    if (shimmed) {
-      return shimmed as T;
-    }
+
     await this.advanceToState(resolvedModule, 'evaluated');
     let module = this.getModule(resolvedModuleIdentifier);
     switch (module?.state) {
@@ -520,6 +522,16 @@ export class Loader {
           return result;
         }
       }
+
+      let shimmedModule = this.moduleShims.get(
+        this.asUnresolvedRequest(urlOrRequest, init).url,
+      );
+      if (shimmedModule) {
+        let response = new Response();
+        (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
+        return response;
+      }
+
       return await this.fetchImplementation(
         this.asResolvedRequest(urlOrRequest, init),
       );
@@ -686,7 +698,7 @@ export class Loader {
           return {
             type: 'dep',
             moduleURL: this.resolve(
-              new URL(depId, SHIMMED_MODULE_FAKE_ORIGIN).href,
+              new URL(depId, PACKAGES_FAKE_ORIGIN).href,
               new URL(moduleIdentifier),
             ),
           };
@@ -824,6 +836,13 @@ export class Loader {
 
     return { type: 'source', source: await response.text() };
   }
+}
+
+function resolvedPackageName(moduleIdentifier: string) {
+  if (!isUrlLike(moduleIdentifier)) {
+    moduleIdentifier = new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
+  }
+  return moduleIdentifier;
 }
 
 function assertNever(value: never) {

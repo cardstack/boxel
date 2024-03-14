@@ -34,7 +34,6 @@ import {
   cleanWhiteSpace,
   p,
   testRealmURL,
-  shimModule,
   setupCardLogs,
   saveCard,
 } from '../../helpers';
@@ -163,7 +162,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = new Post({
       title: 'First Post',
@@ -413,7 +412,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    await shimModule(`${testRealmURL}test-cards`, { Guest, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Guest, Person });
 
     let g1 = new Guest({
       name: 'Madeleine',
@@ -470,7 +469,7 @@ module('Integration | card-basics', function (hooks) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Person });
 
     // deserialize a card with an ID to mark it as "saved"
     let card = new Person({ firstName: 'Mango' });
@@ -782,7 +781,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person, Pet }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
 
     let mango = new Pet({
       firstName: 'Mango',
@@ -879,7 +878,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringField);
       @field pets = linksToMany(Pet);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person, Pet }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
 
     let mango = new Pet({
       firstName: 'Mango',
@@ -967,7 +966,7 @@ module('Integration | card-basics', function (hooks) {
       // @ts-expect-error Have to purposefully bypass type-checking in order to get into this runtime error state
       @field pet = linksTo(StringField);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Person });
 
     try {
       new Person({ firstName: 'Hassan', pet: 'Mango' });
@@ -1006,11 +1005,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
-    await shimModule(
-      `${testRealmURL}test-cards`,
-      { Person, Pet, NotAPet },
-      loader,
-    );
+    loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet, NotAPet });
 
     let door = new NotAPet({ firstName: 'door' });
     try {
@@ -1060,7 +1055,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person, Pet }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
 
     let vanGogh = new Pet({ firstName: 'Van Gogh' });
     let mango = new Pet({ firstName: 'Mango', friend: vanGogh });
@@ -1149,7 +1144,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = new Post({
       author: new Person({
@@ -1196,16 +1191,12 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(
-      `${testRealmURL}test-cards`,
-      {
-        Post,
-        Person,
-        TestNumber,
-        TestString,
-      },
-      loader,
-    );
+    loader.shimModule(`${testRealmURL}test-cards`, {
+      Post,
+      Person,
+      TestNumber,
+      TestString,
+    });
 
     let helloWorld = new Post({
       author: new Person({ firstName: 'Arthur', number: 10 }),
@@ -1234,7 +1225,7 @@ module('Integration | card-basics', function (hooks) {
       @field title = contains(title);
       @field author = contains(Person);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = new Post({
       title: 'First Post',
@@ -1260,7 +1251,7 @@ module('Integration | card-basics', function (hooks) {
         },
       });
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Person });
     let helloWorld = new Person({
       firstName: 'Arthur',
       lastName: 'M',
@@ -1300,7 +1291,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Person });
     let helloWorld = new Person({ firstName: 'Arthur', age: 10 });
 
     await renderCard(loader, helloWorld, 'atom');
@@ -1376,7 +1367,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
     let abdelRahmans = new Family({
       people: [
@@ -1452,7 +1443,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
     let abdelRahmans = new Family({
       people: [
@@ -1498,7 +1489,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
     let mango = new Person({
       firstName: 'Mango',
     });
@@ -1559,16 +1550,12 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    await shimModule(
-      `${testRealmURL}test-cards`,
-      {
-        Person,
-        Employee,
-        Customer,
-        Group,
-      },
-      loader,
-    );
+    loader.shimModule(`${testRealmURL}test-cards`, {
+      Person,
+      Employee,
+      Customer,
+      Group,
+    });
 
     let group = new Group({
       people: [
@@ -1708,7 +1695,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringField);
       @field languagesSpoken = containsMany(StringField);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Person });
     assert.throws(
       () => new Person({ languagesSpoken: 'english' }),
       /Expected array for field value languagesSpoken/,
@@ -1735,7 +1722,7 @@ module('Integration | card-basics', function (hooks) {
       @field title = contains(StringField);
       @field author = contains(Person);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = new Post({
       title: 'My Post',
@@ -1777,7 +1764,7 @@ module('Integration | card-basics', function (hooks) {
         },
       });
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Person });
 
     let mango = new Person({ firstName: 'Mango', isCool: true });
     let root = await renderCard(loader, mango, 'isolated');
@@ -1797,7 +1784,7 @@ module('Integration | card-basics', function (hooks) {
       @field isCool = contains(BooleanField);
       @field isHuman = contains(BooleanField);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Person });
     let mango = new Person({
       firstName: 'Mango',
       isCool: true,
@@ -1903,7 +1890,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = new Post({
       title: 'First Post',
@@ -2199,11 +2186,7 @@ module('Integration | card-basics', function (hooks) {
       @field favoritePlaces = linksToMany(Country);
     }
 
-    await shimModule(
-      `${testRealmURL}test-cards`,
-      { Country, ContactCard },
-      loader,
-    );
+    loader.shimModule(`${testRealmURL}test-cards`, { Country, ContactCard });
 
     let us = new Country({ countryName: 'United States', flag: '🇺🇸' });
     let canada = new Country({ countryName: 'Canada', flag: '🇨🇦' });

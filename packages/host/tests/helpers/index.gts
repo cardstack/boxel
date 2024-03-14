@@ -481,7 +481,7 @@ async function setupTestRealm({
   for (const [path, mod] of Object.entries(contents)) {
     if (path.endsWith('.gts') && typeof mod !== 'string') {
       let moduleURLString = `${realmURL}${path.replace(/\.gts$/, '')}`;
-      await shimModule(moduleURLString, mod as object, loader);
+      loader.shimModule(moduleURLString, mod as object);
     }
   }
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
@@ -571,22 +571,6 @@ export async function saveCard(instance: CardDef, id: string, loader: Loader) {
   doc.data.id = id;
   await api.updateFromSerialized(instance, doc);
   return doc;
-}
-
-export async function shimModule(
-  moduleURL: string,
-  module: Record<string, any>,
-  loader: Loader,
-) {
-  if (loader) {
-    loader.shimModule(moduleURL, module);
-  }
-  await Promise.all(
-    Object.keys(module).map(async (name) => {
-      let m = await loader.import<any>(moduleURL);
-      m[name];
-    }),
-  );
 }
 
 export function setupCardLogs(
