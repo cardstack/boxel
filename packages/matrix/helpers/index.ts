@@ -4,6 +4,7 @@ import {
   getAllRoomEvents,
   getJoinedRooms,
   type SynapseInstance,
+  sync,
 } from '../docker/synapse';
 import { registerUser } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
@@ -522,4 +523,13 @@ export async function getRoomEvents(
     })!;
   }
   return await getAllRoomEvents(roomId, accessToken);
+}
+
+export async function getRoomsFromSync(
+  username = 'user1',
+  password = 'pass',
+) {
+  let { accessToken } = await loginUser(username, password);
+  let response = await sync(accessToken) as any;
+  return response.rooms;
 }
