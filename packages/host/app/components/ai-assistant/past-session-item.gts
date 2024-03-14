@@ -34,6 +34,15 @@ interface Signature {
 }
 
 export default class PastSessionItem extends Component<Signature> {
+  get createDate() {
+    if (!this.args.room.created) {
+      // there is a race condition in the matrix SDK where newly created
+      // rooms don't immediately have a created date
+      return new Date();
+    }
+    return this.args.room.created;
+  }
+
   <template>
     <li class='session' data-test-joined-room={{@room.name}}>
       <button
@@ -43,7 +52,7 @@ export default class PastSessionItem extends Component<Signature> {
       >
         <div class='name'>{{@room.name}}</div>
         <div class='date'>
-          {{formatDate @room.created 'iiii MMM d, yyyy, h:mm aa'}}
+          {{formatDate this.createDate 'iiii MMM d, yyyy, h:mm aa'}}
         </div>
       </button>
       <BoxelDropdown>

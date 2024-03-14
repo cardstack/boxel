@@ -46,8 +46,27 @@ async function processDecryptedEvent(context: Context, event: Event) {
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let roomField = await context.rooms.get(roomId);
+  let room = context.client.getRoom(roomId);
+  if (!room) {
+    throw new Error(
+      `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
+    );
+  }
 
+  let userId = context.client.getUserId();
+  if (!userId) {
+    throw new Error(
+      `bug: userId is required for event ${JSON.stringify(event, null, 2)}`,
+    );
+  }
+
+  // We might still receive events from the rooms that the user has left.
+  let member = room.getMember(userId);
+  if (!member || member.membership !== 'join') {
+    return;
+  }
+
+  let roomField = await context.rooms.get(roomId);
   // patch in any missing room events--this will support dealing with local
   // echoes, migrating older histories as well as handle any matrix syncing gaps
   // that might occur
@@ -114,27 +133,6 @@ async function processDecryptedEvent(context: Context, event: Event) {
   }
   await addRoomEvent(context, event);
 
-  let room = context.client.getRoom(roomId);
-  if (!room) {
-    throw new Error(
-      `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
-    );
-  }
-
-  let userId = context.client.getUserId();
-  if (!userId) {
-    throw new Error(
-      `bug: userId is required for event ${JSON.stringify(event, null, 2)}`,
-    );
-  }
-
-  // We might still receive events from the rooms that the user has left.
-  let member = room.getMember(userId);
-  if (!member || member.membership !== 'join') {
-    return;
-  }
-
-  await addRoomEvent(context, event);
   if (room.oldState.paginationToken != null) {
     // we need to scroll back to capture any room events fired before this one
     await context.client.scrollback(room);
