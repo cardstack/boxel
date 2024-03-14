@@ -1,5 +1,4 @@
 import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
 import {
   Component,
   CardDef,
@@ -9,6 +8,7 @@ import {
   containsMany,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
+import { PhoneField } from './phone-number';
 
 class Alias extends CardDef {
   static displayName = 'Alias';
@@ -22,19 +22,6 @@ class Alias extends CardDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <@fields.name />
-    </template>
-  };
-}
-
-export class PhoneField extends FieldDef {
-  static displayName = 'Phone';
-  @field country = contains(NumberField);
-  @field area = contains(NumberField);
-  @field number = contains(NumberField);
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      (+<@fields.country />) <@fields.area />-<@fields.number />
     </template>
   };
 }
