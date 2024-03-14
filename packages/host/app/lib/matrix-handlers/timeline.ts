@@ -67,20 +67,32 @@ async function processDecryptedEvent(context: Context, event: Event) {
       Array.isArray(data.attachedCardsEventIds)
     ) {
       for (let attachedCardEventId of data.attachedCardsEventIds) {
-        let currentFragment: string | undefined = attachedCardEventId;
+        let currentFragmentId: string | undefined = attachedCardEventId;
         do {
           let fragmentEvent = roomField.events.find(
-            (e) => e.event_id === currentFragment,
+            (e) => e.event_id === currentFragmentId,
           );
           let fragmentData: CardFragmentContent['data'];
           if (!fragmentEvent) {
             fragmentEvent = (await context.client.fetchRoomEvent(
               roomId,
-              attachedCardEventId,
+              currentFragmentId,
             )) as DiscreteMatrixEvent;
+            if (
+              fragmentEvent.type !== 'm.room.message' ||
+              fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
+            ) {
+              throw new Error(
+                `Expected event ${currentFragmentId} to be 'org.boxel.card' but was ${JSON.stringify(
+                  fragmentEvent,
+                )}`,
+              );
+            }
             await addRoomEvent(context, fragmentEvent);
-            fragmentData = JSON.parse(
-              (fragmentEvent.content as any).data,
+            fragmentData = (
+              typeof fragmentEvent.content.data === 'string'
+                ? JSON.parse((fragmentEvent.content as any).data)
+                : fragmentEvent.content.data
             ) as CardFragmentContent['data'];
           } else {
             if (
@@ -95,8 +107,8 @@ async function processDecryptedEvent(context: Context, event: Event) {
             }
             fragmentData = fragmentEvent.content.data;
           }
-          currentFragment = fragmentData?.nextFragment; // using '?' so we can be kind to older event schemas
-        } while (currentFragment);
+          currentFragmentId = fragmentData?.nextFragment; // using '?' so we can be kind to older event schemas
+        } while (currentFragmentId);
       }
     }
   }
