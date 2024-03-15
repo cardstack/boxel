@@ -258,6 +258,7 @@ export default class Room extends Component<Signature> {
     );
   }
 
+  @action
   private isLastMessage(messageIndex: number) {
     return (
       (this.room && messageIndex === this.room.messages.length - 1) ?? false
