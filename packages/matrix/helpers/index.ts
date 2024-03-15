@@ -390,7 +390,7 @@ export async function assertMessages(
       ).toHaveCount(1);
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"] [data-test-selected-card]`,
+          `[data-test-message-idx="${index}"] [data-test-attached-card]`,
         ),
       ).toHaveCount(cards.length);
       cards.map(async (card) => {
@@ -403,7 +403,7 @@ export async function assertMessages(
           // note: attached cards are in atom format (which display the title by default)
           await expect(
             page.locator(
-              `[data-test-message-idx="${index}"] [data-test-selected-card="${card.id}"]`,
+              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,
             ),
           ).toContainText(card.title);
         }
@@ -411,7 +411,7 @@ export async function assertMessages(
         if (card.realmIconUrl) {
           await expect(
             page.locator(
-              `[data-test-message-idx="${index}"] [data-test-selected-card="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
+              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
             ),
           ).toHaveCount(1);
         }

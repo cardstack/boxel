@@ -30,7 +30,7 @@ export default class CardPill extends Component<CardPillSignature> {
     <Pill
       @inert={{true}}
       class={{cn 'card-pill' is-autoattached=@isAutoAttachedCard}}
-      data-test-selected-card={{@card.id}}
+      data-test-attached-card={{@card.id}}
       data-test-autoattached-card={{@isAutoAttachedCard}}
     >
       <:icon>
