@@ -1692,9 +1692,6 @@ importers:
       transform-modules-amd-plugin:
         specifier: workspace:*
         version: link:../../vendor/transform-modules-amd-plugin
-      typescript-memoize:
-        specifier: ^1.1.1
-        version: 1.1.1
       uuid:
         specifier: ^9.0.1
         version: 9.0.1

@@ -28,6 +28,7 @@ export class BrowserQueue implements Queue {
   get isDestroyed() {
     return this.#isDestroyed;
   }
+
   get hasStarted() {
     return this.#hasStarted;
   }
@@ -76,7 +77,7 @@ export class BrowserQueue implements Queue {
   }, 250);
 
   private async drainJobs() {
-    await this.#flush;
+    await this.flush();
 
     let jobsDrained: () => void;
     this.#flush = new Promise((res) => (jobsDrained = res));
@@ -106,6 +107,6 @@ export class BrowserQueue implements Queue {
 
   async destroy() {
     this.#isDestroyed = true;
-    await this.#flush;
+    await this.flush();
   }
 }

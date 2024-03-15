@@ -26,6 +26,7 @@ module('Unit | queue | browser implementation', function (hooks) {
   });
 
   test(`a job can throw an exception`, async function (assert) {
+    queue.register('increment', async (a: number) => a + 1);
     queue.register('boom', async () => {
       throw new Error('boom!');
     });
@@ -33,7 +34,6 @@ module('Unit | queue | browser implementation', function (hooks) {
       queue.publish<number>('boom', null),
       queue.publish<number>('increment', 17),
     ]);
-    queue.register('increment', async (a: number) => a + 1);
 
     // assert that the error that was thrown does not prevent subsequent jobs
     // from running

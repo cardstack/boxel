@@ -1,5 +1,4 @@
 import { PgPrimitive } from './expression';
-import { Memoize } from 'typescript-memoize';
 import { Deferred } from './deferred';
 
 export interface QueueOpts {
@@ -31,7 +30,6 @@ export class Job<T> {
     public uuid: string,
     private notifier: Deferred<T>,
   ) {}
-  @Memoize()
   get done(): Promise<T> {
     return this.notifier.promise;
   }
