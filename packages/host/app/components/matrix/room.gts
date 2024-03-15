@@ -54,7 +54,7 @@ export default class Room extends Component<Signature> {
       {{/if}}
 
       <footer class='room-actions'>
-        <div class='chat-input-area'>
+        <div class='chat-input-area' data-test-chat-input-area>
           <AiAssistantChatInput
             @value={{this.messageToSend}}
             @onInput={{this.setMessage}}

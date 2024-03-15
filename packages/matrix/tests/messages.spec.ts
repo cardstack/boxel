@@ -420,7 +420,9 @@ test.describe('Room messages', () => {
         `[data-test-selected-card="${testCard}"] [data-test-remove-card-btn]`,
       )
       .click();
-    await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);
+    await expect(
+      page.locator(`[data-test-chat-input-area] [data-test-selected-card]`),
+    ).toHaveCount(0);
 
     await page.locator('[data-test-message-field]').fill('no card');
     await page.locator('[data-test-send-message-btn]').click();
