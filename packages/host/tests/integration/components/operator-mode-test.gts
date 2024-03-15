@@ -1234,6 +1234,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
 
+    await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists(); // Opens card on the stack
     assert
       .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
@@ -1244,7 +1245,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('create new card editor opens in the stack at each nesting level', async function (assert) {
-    assert.expect(11);
+    assert.expect(10);
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1352,11 +1353,14 @@ module('Integration | operator-mode', function (hooks) {
     });
 
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
-    assert
-      .dom(`[data-test-stack-card="${packetId}"]`)
-      .containsText(
-        'Everyone knows that Alice ran the show in the Brady household.',
-      );
+
+    await waitUntil(() =>
+      document
+        .querySelector(`[data-test-stack-card="${packetId}"]`)
+        ?.textContent?.includes(
+          'Everyone knows that Alice ran the show in the Brady household.',
+        ),
+    );
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {
@@ -1722,6 +1726,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     await waitFor('[data-test-person]');
 
@@ -1749,6 +1754,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     assert
       .dom(
@@ -1775,7 +1781,8 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
-    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor(`[data-test-stack-card-index="1"]`);
+
     assert
       .dom(
         `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-header-title]`,
@@ -2352,7 +2359,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-overlay-selected]').doesNotExist();
 
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
-    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor(`[data-test-stack-card-index="1"]`, { count: 1 });
   });
 
   test('displays realm name as header title when hovering realm icon', async function (assert) {
