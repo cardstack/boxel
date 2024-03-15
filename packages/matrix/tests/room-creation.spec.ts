@@ -371,6 +371,7 @@ test.describe('Room creation', () => {
     await page.locator(`[data-test-past-sessions-button]`).click();
     await expect(
       page.locator(`[data-test-joined-room]:nth-of-type(1) .name`),
+      'updated order is preserved on reload',
     ).toHaveText('test room 3');
   });
 });

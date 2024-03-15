@@ -2,7 +2,7 @@ import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import { format as formatDate } from 'date-fns';
+import { format as formatDate, isSameDay, isSameYear } from 'date-fns';
 
 import {
   BoxelDropdown,
@@ -43,7 +43,7 @@ export default class PastSessionItem extends Component<Signature> {
       >
         <div class='name'>{{@room.name}}</div>
         <div class='date' data-test-last-active={{this.lastActive}}>
-          {{formatDate this.lastActive 'iiii MMM d, yyyy, h:mm aa'}}
+          {{this.formattedDate}}
         </div>
       </button>
       <BoxelDropdown>
@@ -130,5 +130,14 @@ export default class PastSessionItem extends Component<Signature> {
 
   private get lastActive() {
     return Math.max(...this.args.room.events.map((e) => e.origin_server_ts));
+  }
+
+  private get formattedDate() {
+    if (isSameDay(this.lastActive, new Date())) {
+      return `Today ${formatDate(this.lastActive, 'MMM d, h:mm aa')}`;
+    } else if (isSameYear(this.lastActive, new Date())) {
+      return formatDate(this.lastActive, 'iiii MMM d, h:mm aa');
+    }
+    return formatDate(this.lastActive, 'iiii MMM d, yyyy, h:mm aa');
   }
 }
