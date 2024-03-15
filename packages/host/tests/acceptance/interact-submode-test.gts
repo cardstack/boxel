@@ -788,6 +788,10 @@ module('Acceptance | interact submode tests', function (hooks) {
         if (typeof json === 'string') {
           throw new Error('expected JSON save data');
         }
+        if (json.data.attributes?.firstName === null) {
+          // Because we create an empty card, upon choosing a catalog item, we must skip the scenario where attributes null
+          return;
+        }
         assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
         assert.strictEqual(json.data.meta.realmURL, testRealmURL);
         deferred.fulfill();
