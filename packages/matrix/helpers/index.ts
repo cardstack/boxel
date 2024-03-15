@@ -4,6 +4,7 @@ import {
   getAllRoomEvents,
   getJoinedRooms,
   type SynapseInstance,
+  sync,
 } from '../docker/synapse';
 import { registerUser } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
@@ -349,10 +350,11 @@ export async function sendMessage(
     await writeMessage(page, roomName, message);
   }
   if (cardIds?.length) {
-    await Promise.all(cardIds.map((id) => selectCardFromCatalog(page, id)));
+    for (let cardId of cardIds) {
+      await selectCardFromCatalog(page, cardId);
+    }
   }
   // can we check it's higher than before?
-  await page.waitForSelector(`[data-test-room-settled]`);
   await page.waitForSelector(`[data-test-room-settled]`);
   await page.waitForSelector(`[data-test-can-send-msg]`);
   await page.locator('[data-test-send-message-btn]').click();
@@ -514,4 +516,10 @@ export async function getRoomEvents(
     })!;
   }
   return await getAllRoomEvents(roomId, accessToken);
+}
+
+export async function getRoomsFromSync(username = 'user1', password = 'pass') {
+  let { accessToken } = await loginUser(username, password);
+  let response = (await sync(accessToken)) as any;
+  return response.rooms;
 }

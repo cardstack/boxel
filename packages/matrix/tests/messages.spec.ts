@@ -205,7 +205,9 @@ test.describe('Room messages', () => {
     // the card fragment events need to come before the boxel message event they
     // are used in, and the boxel message should point to the first fragment
     expect(boxelMessageData.attachedCardsEventIds).toMatchObject([
-      cardFragments[0].event_id,
+      // card fragments are posted in reverse order so we can fashion the
+      // nextFragment property, so the item at index #2 is the first fragment
+      cardFragments[2].event_id,
     ]);
   });
 
