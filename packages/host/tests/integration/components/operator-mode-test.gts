@@ -1114,9 +1114,8 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-card-catalog-go-button]');
-    assert
-      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
-      .isVisible();
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
   });
 
   test('displays cards on cards-grid and includes `catalog-entry` instances', async function (assert) {
@@ -1245,7 +1244,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('create new card editor opens in the stack at each nesting level', async function (assert) {
-    assert.expect(10);
+    assert.expect(9);
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1324,9 +1323,13 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-stack-card-index="3"] [data-test-close-button]');
     await waitFor('[data-test-stack-card-index="3"]', { count: 0 });
 
-    assert
-      .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
-      .containsText('Alice Enwunder');
+    await waitUntil(() =>
+      /Alice\s*Enwunder/.test(
+        document.querySelector(
+          '[data-test-stack-card-index="2"] [data-test-field="authorBio"]',
+        )!.textContent!,
+      ),
+    );
 
     await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
