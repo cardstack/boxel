@@ -57,6 +57,8 @@ export default class RadioInputUsage extends Component {
           @disabled={{this.disabled}}
           @orientation={{this.orientation}}
           @spacing={{this.spacing}}
+          @hideRadio={{this.hideRadio}}
+          @hideBorder={{this.hideBorder}}
           style={{cssVar
             boxel-radio-input-option-padding=this.boxelRadioInputOptionPadding.value
             boxel-radio-input-option-gap=this.boxelRadioInputOptionGap.value
