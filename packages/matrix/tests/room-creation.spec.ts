@@ -311,6 +311,14 @@ test.describe('Room creation', () => {
       page.locator(`[data-test-joined-room]:nth-of-type(2) .name`),
     ).toHaveText(room2);
 
+    let lastActive1 = await page
+      .locator(`[data-test-joined-room]:nth-of-type(1) [data-test-last-active]`)
+      .getAttribute('data-test-last-active');
+    let lastActive2 = await page
+      .locator(`[data-test-joined-room]:nth-of-type(2) [data-test-last-active]`)
+      .getAttribute('data-test-last-active');
+    expect(Number(lastActive1)).toBeGreaterThan(Number(lastActive2));
+
     await page.locator(`[data-test-joined-room="${room2}"]`).click();
     await isInRoom(page, room2);
     await page.locator(`[data-test-past-sessions-button]`).click();
