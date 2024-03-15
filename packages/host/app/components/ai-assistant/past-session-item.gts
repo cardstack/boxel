@@ -128,14 +128,27 @@ export default class PastSessionItem extends Component<Signature> {
     </style>
   </template>
 
+  get createDate() {
+    if (!this.args.room.created) {
+      // there is a race condition in the matrix SDK where newly created
+      // rooms don't immediately have a created date
+      return new Date();
+    }
+    return this.args.room.created;
+  }
+
   private get lastActive() {
-    return Math.max(...this.args.room.events.map((e) => e.origin_server_ts));
+    return (
+      Math.max(...this.args.room.events.map((e) => e.origin_server_ts)) ??
+      this.createDate
+    );
   }
 
   private get formattedDate() {
-    if (isSameDay(this.lastActive, new Date())) {
+    let now = new Date();
+    if (isSameDay(this.lastActive, now)) {
       return `Today ${formatDate(this.lastActive, 'MMM d, h:mm aa')}`;
-    } else if (isSameYear(this.lastActive, new Date())) {
+    } else if (isSameYear(this.lastActive, now)) {
       return formatDate(this.lastActive, 'iiii MMM d, h:mm aa');
     }
     return formatDate(this.lastActive, 'iiii MMM d, yyyy, h:mm aa');

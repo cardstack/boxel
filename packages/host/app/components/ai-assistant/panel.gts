@@ -353,6 +353,11 @@ export default class AiAssistantPanel extends Component<Signature> {
         continue;
       }
       let { room } = resource;
+      if (!room.created) {
+        // there is a race condition in the matrix SDK where newly created
+        // rooms don't immediately have a created date
+        room.created = new Date();
+      }
       if (
         (room.invitedMembers.find((m) => aiBotUserId === m.userId) ||
           room.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
@@ -363,8 +368,12 @@ export default class AiAssistantPanel extends Component<Signature> {
     }
     // sort in reverse chronological order of last activity
     let sorted = rooms.sort((a, b) => {
-      let lastEventA = Math.max(...a.events.map((e) => e.origin_server_ts));
-      let lastEventB = Math.max(...b.events.map((e) => e.origin_server_ts));
+      let lastEventA =
+        Math.max(...a.events.map((e) => e.origin_server_ts)) ??
+        a.created.getTime();
+      let lastEventB =
+        Math.max(...b.events.map((e) => e.origin_server_ts)) ??
+        b.created.getTime();
       return lastEventB - lastEventA;
     });
     return sorted;

@@ -53,13 +53,15 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     string = await loader.import(`${baseRealm.url}string`);
     number = await loader.import(`${baseRealm.url}number`);
 
-    setCardInOperatorModeState = async (cardURL, format = 'isolated') => {
+    setCardInOperatorModeState = async (
+      cardURL?: string,
+      format: 'isolated' | 'edit' = 'isolated',
+    ) => {
       let operatorModeStateService = this.owner.lookup(
         'service:operator-mode-state-service',
       ) as OperatorModeStateService;
-
       await operatorModeStateService.restore({
-        stacks: [[{ id: cardURL, format }]],
+        stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
       });
       await waitFor('[data-test-stack-item-content]');
     };
