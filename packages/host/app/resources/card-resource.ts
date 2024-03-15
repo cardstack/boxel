@@ -225,6 +225,8 @@ export class CardResource extends Resource<Args> {
             return;
           }
 
+          debugger;
+
           if (invalidations.includes(card.id)) {
             // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
             // the inputs with past values. This can happen if the user makes edits in the time between the auto

@@ -190,7 +190,10 @@ const subscribers = initSharedState(
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
-const cardTracking = new TrackedWeakMap<object, any>();
+const cardTracking = initSharedState(
+  'cardTracking',
+  () => new TrackedWeakMap<object, any>(),
+);
 
 const isBaseInstance = Symbol.for('isBaseInstance');
 
