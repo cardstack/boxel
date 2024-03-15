@@ -353,6 +353,11 @@ export default class AiAssistantPanel extends Component<Signature> {
         continue;
       }
       let { room } = resource;
+      if (!room.created) {
+        // there is a race condition in the matrix SDK where newly created
+        // rooms don't immediately have a created date
+        room.created = new Date();
+      }
       if (
         (room.invitedMembers.find((m) => aiBotUserId === m.userId) ||
           room.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
