@@ -386,7 +386,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.only('can remove a card from a pending message', async ({ page }) => {
+  test('can remove a card from a pending message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     await login(page, 'user1', 'pass');
