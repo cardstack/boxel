@@ -1,5 +1,6 @@
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { format as formatDate, isSameDay, isSameYear } from 'date-fns';
@@ -17,6 +18,8 @@ import {
   IconTrash,
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
+
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
 
@@ -128,6 +131,8 @@ export default class PastSessionItem extends Component<Signature> {
     </style>
   </template>
 
+  @service declare matrixService: MatrixService;
+
   get createDate() {
     if (!this.args.room.created) {
       // there is a race condition in the matrix SDK where newly created
@@ -139,8 +144,8 @@ export default class PastSessionItem extends Component<Signature> {
 
   private get lastActive() {
     return (
-      Math.max(...this.args.room.events.map((e) => e.origin_server_ts)) ??
-      this.createDate
+      this.matrixService.getLastActiveTimestamp(this.args.room) ??
+      this.createDate.getTime()
     );
   }
 

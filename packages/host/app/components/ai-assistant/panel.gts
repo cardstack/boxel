@@ -367,15 +367,11 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
     }
     // sort in reverse chronological order of last activity
-    let sorted = rooms.sort((a, b) => {
-      let lastEventA =
-        Math.max(...a.events.map((e) => e.origin_server_ts)) ??
-        a.created.getTime();
-      let lastEventB =
-        Math.max(...b.events.map((e) => e.origin_server_ts)) ??
-        b.created.getTime();
-      return lastEventB - lastEventA;
-    });
+    let sorted = rooms.sort(
+      (a, b) =>
+        this.matrixService.getLastActiveTimestamp(b) -
+        this.matrixService.getLastActiveTimestamp(a),
+    );
     return sorted;
   }
 
