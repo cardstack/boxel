@@ -377,7 +377,7 @@ export default class EditFieldModal extends Component<Signature> {
                       <:ready as |realmInfo|>
                         <img
                           src={{realmInfo.iconURL}}
-                          alt='Realm icon'
+                          alt='Workspace icon'
                           data-test-realm-icon-url={{realmInfo.iconURL}}
                         />
                       </:ready>
