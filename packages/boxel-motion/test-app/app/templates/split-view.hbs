@@ -1,0 +1,35 @@
+<style>
+  .split-view-toggle-button {
+      position: absolute;
+      bottom: 1.25rem;
+      right: 1.25rem;
+      margin-right: 0;
+    }
+</style>
+<AnimationContext
+  @use={{this.transition}} class="w-2/3 h-64 mx-auto border-2 border-red flex flex-row overflow-hidden"
+>
+  <div class="flex-grow bg-yellow-lightest">
+    <div class="border border-blue bg-white my-12 mx-16 h-32 rounded">
+      <h2 class="mx-auto mt-12 w-12 text-center font-bold">Hello</h2>
+    </div>
+  </div>
+  <div class="{{if this.isViewSplit 'w-64' 'w-0'}} flex-none sprite" {{sprite id="sidebar-container"}}>
+    {{#if this.isViewSplit}}
+      <div class="p-6 sprite" {{sprite id="sidebar-content"}}>
+        <h2>Sidebar</h2>
+        <button class="split-view-close-button w-6 h-6 border border-green rounded absolute pin-t pin-r" type="button" {{on "click" this.toggle}}>X</button>
+        <div>
+          This is my sidebar content. There is a lot of important information here.
+        </div>
+      </div>
+    {{/if}}
+  </div>
+  {{#unless this.isViewSplit}}
+    <button
+      class="split-view-toggle-button w-12 h-12 text-white bg-green-dark rounded shadow sprite"
+      type="button" {{on "click" this.toggle}}
+      {{sprite id="button"}}
+    >Toggle</button>
+  {{/unless}}
+</AnimationContext>

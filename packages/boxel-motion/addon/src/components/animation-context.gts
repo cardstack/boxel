@@ -12,6 +12,7 @@ import Sprite from '../models/sprite.ts';
 import registerContext from '../modifiers/register-context.ts';
 import registerContextOrphansEl from '../modifiers/register-context-orphans-el.ts';
 import AnimationsService from '../services/animations.ts';
+import { htmlSafe } from '@ember/template';
 
 const { VOLATILE_TAG, consumeTag } =
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -19,6 +20,7 @@ const { VOLATILE_TAG, consumeTag } =
   Ember.__loader.require('@glimmer/validator');
 
 interface AnimationContextArgs {
+  debugging?: boolean;
   id?: string;
   use: ((changeset: Changeset) => AnimationDefinition) | undefined;
 }
@@ -37,7 +39,7 @@ export default class AnimationContextComponent
 {
   <template>
     {{this.renderDetector}}
-    <div class='animation-context' {{registerContext this}} ...attributes>
+    <div class={{this.cssClasses}} {{registerContext this}} ...attributes>
       <div
         {{registerContextOrphansEl this}}
         data-animation-context-orphan-element='true'
@@ -51,6 +53,13 @@ export default class AnimationContextComponent
 
   get id(): string | undefined {
     return this.args.id;
+  }
+  get cssClasses() {
+    let result = 'animation-context';
+    if (this.args.debugging) {
+      result += ' debugging';
+    }
+    return htmlSafe(result);
   }
 
   element!: HTMLElement; //set by template

@@ -4,7 +4,7 @@ import StaticBehavior from './behaviors/static.ts';
 import TweenBehavior from './behaviors/tween.ts';
 import WaitBehavior from './behaviors/wait.ts';
 import AnimationContext from './components/animation-context.gts';
-import { type Changeset } from './models/animator.ts';
+import { type Changeset, type IContext } from './models/animator.ts';
 import {
   type AnimationDefinition,
   type AnimationTimeline,
@@ -21,6 +21,7 @@ export {
   AnimationTimeline,
   Changeset,
   FPS,
+  IContext,
   ISpriteModifier,
   OrchestrationMatrix,
   SpringBehavior,
