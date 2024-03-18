@@ -8,6 +8,7 @@ import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
 
+import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -41,7 +42,11 @@ export default class Room extends Component<Signature> {
       {{#if this.room.messages}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
-            <RoomMessage @message={{message}} data-test-message-idx={{i}} />
+            <RoomMessage
+              @message={{message}}
+              data-test-message-idx={{i}}
+              {{scrollIntoViewModifier (this.isLastMessage i)}}
+            />
           {{/each}}
         </AiAssistantConversation>
       {{else}}
@@ -49,7 +54,7 @@ export default class Room extends Component<Signature> {
       {{/if}}
 
       <footer class='room-actions'>
-        <div class='chat-input-area'>
+        <div class='chat-input-area' data-test-chat-input-area>
           <AiAssistantChatInput
             @value={{this.messageToSend}}
             @onInput={{this.setMessage}}
@@ -214,9 +219,23 @@ export default class Room extends Component<Signature> {
 
   private get autoAttachedCard(): CardDef | undefined {
     let stackItems = this.operatorModeStateService.topMostStackItems();
-    let topMostCard = stackItems[stackItems.length - 1]?.card;
+    if (stackItems.length === 0) {
+      return undefined;
+    }
+    let topMostItem = stackItems[stackItems.length - 1];
+    let topMostCard = topMostItem?.card;
     if (!topMostCard) {
       return undefined;
+    } else {
+      let realmURL = topMostItem.card[topMostItem.api.realmURL];
+      if (!realmURL) {
+        throw new Error(
+          `could not determine realm URL for card ${topMostItem.card.id}`,
+        );
+      }
+      if (topMostItem.card.id === `${realmURL.href}index`) {
+        return undefined;
+      }
     }
     this.setLastTopMostCard(topMostCard);
 
@@ -236,6 +255,13 @@ export default class Room extends Component<Signature> {
           this.cardsToAttach?.length ||
           this.autoAttachedCard,
       )
+    );
+  }
+
+  @action
+  private isLastMessage(messageIndex: number) {
+    return (
+      (this.room && messageIndex === this.room.messages.length - 1) ?? false
     );
   }
 }

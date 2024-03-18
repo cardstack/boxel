@@ -59,6 +59,7 @@
     "@simple-dom/interface": "^1.4.0",
     "@simple-dom/serializer": "^1.4.0",
     "@simple-dom/void-map": "^1.4.0",
+    "@sqlite.org/sqlite-wasm": "3.45.1-build1",
     "@types/filesize": "^5.0.0",
     "@types/flat": "^5.0.2",
     "@types/htmlbars-inline-precompile": "^3.0.0",
@@ -160,7 +161,7 @@
     "testem": "3.10.1",
     "testem-multi-reporter": "^1.2.0",
     "tracked-built-ins": "^3.2.0",
-    "typescript": "^5.1.6",
+    "typescript": "~5.1.6",
     "uuid": "^9.0.1",
     "webpack": "^5.89.0"
   },

@@ -195,6 +195,13 @@ function generateMockMatrixService(
 
       return roomId;
     }
+
+    getLastActiveTimestamp(room: RoomField) {
+      return (
+        room.events[room.events.length - 1]?.origin_server_ts ??
+        room.created.getTime()
+      );
+    }
   }
   return MockMatrixService;
 }

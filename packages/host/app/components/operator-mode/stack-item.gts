@@ -392,7 +392,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
         {{ContentElement onSetup=this.setupContainerEl}}
       >
         {{#if this.loadCard.isRunning}}
-          <LoadingIndicator />
+          <div class='loading' data-test-stack-item-loading-card>
+            <LoadingIndicator @color='var(--boxel-dark)' />
+            <span class='loading__message'>Loading card...</span>
+          </div>
         {{else}}
           <Header
             @title={{this.headerTitle}}
@@ -501,11 +504,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
               </Tooltip>
             </:actions>
             <:detail>
-              <div class='save-indicator'>
+              <div class='save-indicator' data-test-auto-save-indicator>
                 {{#if this.isSaving}}
                   Saving…
                 {{else if this.lastSavedMsg}}
-                  {{this.lastSavedMsg}}
+                  <div data-test-last-saved>
+                    {{this.lastSavedMsg}}
+                  </div>
                 {{/if}}
               </div>
             </:detail>
@@ -533,6 +538,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     <style>
       :global(:root) {
         --stack-card-footer-height: 6rem;
+        --stack-item-header-area-height: 3.5rem;
         --buried-operator-mode-header-height: 2.5rem;
       }
 
@@ -586,7 +592,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         position: relative;
         height: 100%;
         display: grid;
-        grid-template-rows: 3.5rem auto;
+        grid-template-rows: var(--stack-item-header-area-height) auto;
         box-shadow: var(--boxel-deep-box-shadow);
         pointer-events: auto;
       }
@@ -676,6 +682,26 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .header-icon {
         width: var(--boxel-header-icon-width);
         height: var(--boxel-header-icon-height);
+      }
+
+      .loading {
+        grid-area: 2;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: calc(100% - var(--stack-item-header-area-height));
+        padding: var(--boxel-sp);
+        color: var(--boxel-dark);
+
+        --icon-color: var(--boxel-dark);
+      }
+      .loading__message {
+        margin-left: var(--boxel-sp-5xs);
+      }
+      .loading :deep(.boxel-loading-indicator) {
+        display: flex;
+        justify: center;
+        align-items: center;
       }
     </style>
   </template>

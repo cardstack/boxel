@@ -8,9 +8,9 @@ flowchart TB
     E[LooseCardResource] -->|createFromSerialized| A
     C[JSON Storage on Realm Server] --> E
 
-    style A fill:#58D68D
+    style A fill:#63a45b
     style B fill:#3498DB
-    style C fill:#F5B041
+    style C fill:#cc3e33
     style E fill:#3498DB
 ```
 

@@ -377,15 +377,15 @@ module('constructHistory', () => {
       {
         type: 'm.room.message',
         event_id: '1',
-        origin_server_ts: 1234567890,
+        origin_server_ts: 1234567900,
         content: {
           msgtype: 'org.boxel.cardFragment',
           format: 'org.boxel.card',
           formatted_body: '',
           body: '',
           data: JSON.stringify({
-            cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Ter`,
-            index: 0,
+            cardFragment: `ry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
+            index: 1,
             totalParts: 2,
           }),
         },
@@ -399,20 +399,16 @@ module('constructHistory', () => {
       {
         type: 'm.room.message',
         event_id: '2',
-        origin_server_ts: 1234567900,
+        origin_server_ts: 1234567890,
         content: {
-          'm.relates_to': {
-            rel_type: 'append',
-            event_id: '1',
-          },
           msgtype: 'org.boxel.cardFragment',
           format: 'org.boxel.card',
           formatted_body: '',
           body: '',
           data: JSON.stringify({
-            firstFragment: '1',
-            cardFragment: `ry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
-            index: 1,
+            cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Ter`,
+            index: 0,
+            nextFragment: '1',
             totalParts: 2,
           }),
         },
@@ -457,9 +453,9 @@ module('constructHistory', () => {
           data: JSON.stringify({
             context: {
               functions: [],
-              openCardsEventIds: ['3'],
+              openCardIds: ['http://localhost:4201/drafts/Author/1'],
             },
-            attachedCardsEventIds: ['1'],
+            attachedCardsEventIds: ['2', '3'],
           }),
         },
         sender: '@user:localhost',
@@ -485,27 +481,9 @@ module('constructHistory', () => {
           data: {
             context: {
               functions: [],
-              openCardsEventIds: ['3'],
-              openCards: [
-                {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/drafts/Author/1',
-                    attributes: {
-                      firstName: 'Mango',
-                      lastName: 'Abdel-Rahman',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../author',
-                        name: 'Author',
-                      },
-                    },
-                  },
-                },
-              ],
+              openCardIds: ['http://localhost:4201/drafts/Author/1'],
             },
-            attachedCardsEventIds: ['1'],
+            attachedCardsEventIds: ['2', '3'],
             attachedCards: [
               {
                 data: {
@@ -514,6 +492,22 @@ module('constructHistory', () => {
                   attributes: {
                     firstName: 'Terry',
                     lastName: 'Pratchett',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Mango',
+                    lastName: 'Abdel-Rahman',
                   },
                   meta: {
                     adoptsFrom: {

@@ -187,7 +187,7 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
           </div>
         {{else if cardResource.card}}
           {{#let (getCardComponent cardResource.card) as |CardComponent|}}
-            <div data-test-message-card={{cardResource.card.id}}>
+            <div data-test-attached-card={{cardResource.card.id}}>
               <CardComponent />
             </div>
           {{/let}}
@@ -548,25 +548,24 @@ export class RoomField extends FieldDef {
     if (!cache) {
       throw new Error(`No card fragment cache exists for this room`);
     }
-    let fragment = cache.get(eventId);
-    if (!fragment) {
-      throw new Error(
-        `No card fragment found in cache for event id ${eventId}`,
-      );
-    }
-    if (fragment.data.totalParts === 1) {
-      return JSON.parse(fragment.data.cardFragment) as LooseSingleCardDocument;
-    }
 
-    let fragments = [
-      fragment,
-      ...[...cache.values()]
-        .filter((f) => f.data.firstFragment && f.data.firstFragment === eventId)
-        .sort((a, b) => (a.data.index = b.data.index)),
-    ];
-    if (fragments.length !== fragment.data.totalParts) {
+    let fragments: CardFragmentContent[] = [];
+    let currentFragment: string | undefined = eventId;
+    do {
+      let fragment = cache.get(currentFragment);
+      if (!fragment) {
+        throw new Error(
+          `No card fragment found in cache for event id ${eventId}`,
+        );
+      }
+      fragments.push(fragment);
+      currentFragment = fragment.data.nextFragment;
+    } while (currentFragment);
+
+    fragments.sort((a, b) => (a.data.index = b.data.index));
+    if (fragments.length !== fragments[0].data.totalParts) {
       throw new Error(
-        `Expected to find ${fragment.data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
+        `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
       );
     }
     return JSON.parse(
@@ -756,7 +755,7 @@ export interface CardFragmentContent {
   formatted_body: string;
   body: string;
   data: {
-    firstFragment?: string;
+    nextFragment?: string;
     cardFragment: string;
     index: number;
     totalParts: number;

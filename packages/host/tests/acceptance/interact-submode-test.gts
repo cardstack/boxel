@@ -788,6 +788,10 @@ module('Acceptance | interact submode tests', function (hooks) {
         if (typeof json === 'string') {
           throw new Error('expected JSON save data');
         }
+        if (json.data.attributes?.firstName === null) {
+          // Because we create an empty card, upon choosing a catalog item, we must skip the scenario where attributes null
+          return;
+        }
         assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
         assert.strictEqual(json.data.meta.realmURL, testRealmURL);
         deferred.fulfill();
@@ -804,6 +808,37 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       await deferred.promise;
+    });
+
+    test<TestContextWithSave>('duplicate card in a stack is not allowed', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await waitFor(
+        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+      );
+      // Simulate simultaneous clicks for spam-clicking
+      await Promise.all([
+        click(
+          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+        ),
+        click(
+          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+        ),
+      ]);
+
+      await waitFor(`[data-stack-card="${testRealmURL}Person/fadhlan"]`);
+      assert
+        .dom(`[data-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists({ count: 1 });
     });
 
     test('embedded card from writable realm shows pencil icon in edit mode', async (assert) => {
