@@ -78,7 +78,9 @@ export default class AiAssistantPanel extends Component<Signature> {
                 width='20'
                 height='20'
               />
-              <h3 class='panel-title-text'>Assistant</h3>
+              <h3 class='panel-title-text' data-test-chat-title>
+                {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
+              </h3>
             </div>
           {{/if}}
           <IconButton
@@ -193,11 +195,13 @@ export default class AiAssistantPanel extends Component<Signature> {
         z-index: 1;
       }
       .panel-header {
+        --panel-title-height: 44px;
         position: relative;
         padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
           var(--boxel-sp-lg);
       }
       .panel-title-group {
+        height: var(--panel-title-height);
         align-items: center;
         display: flex;
         gap: var(--boxel-sp-xs);
@@ -205,15 +209,22 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       .panel-title-text {
         margin: 0;
+        padding-right: var(--boxel-sp-xl);
         color: var(--boxel-light);
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
       }
       .close-ai-panel {
         --icon-color: var(--boxel-highlight);
         position: absolute;
         right: var(--boxel-sp-xs);
-        top: var(--boxel-sp-sm);
+        top: var(--boxel-sp);
+        height: var(--panel-title-height);
         z-index: 1;
       }
       .header-buttons {
