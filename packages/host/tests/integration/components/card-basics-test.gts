@@ -560,7 +560,7 @@ module('Integration | card-basics', function (hooks) {
       .dom('[data-test-actual-img]')
       .hasAttribute('alt', 'picture of mango');
 
-    await click('[data-test-contain-size-input]');
+    await click(getRadioQuerySelector('size', 'contain'));
     assert.dom('[data-test-height-warning]').exists('height warning exists');
     await fillIn('[data-test-field="height"] input', '200');
     assert.dom('[data-test-height-warning]').doesNotExist('warning dismissed');
@@ -1804,36 +1804,20 @@ module('Integration | card-basics', function (hooks) {
       isHuman: false,
     });
 
-    const TRUE = 'label:first-child input';
-    const FALSE = 'label:last-child input';
     await renderCard(loader, mango, 'edit');
-    assert
-      .dom(`[data-test-radio-group="isCool"] > ${TRUE}`)
-      .isChecked('the isCool true radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isCool"] > ${FALSE}`)
-      .isNotChecked('the isCool false radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isHuman"] > ${TRUE}`)
-      .isNotChecked('the isHuman true radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isHuman"] > ${FALSE}`)
-      .isChecked('the isHuman false radio has correct state');
 
-    await click(`[data-test-radio-group="isHuman"] > ${TRUE}`);
+    assertRadioInput(assert, 'isCool', 'true', true);
+    assertRadioInput(assert, 'isCool', 'false', false);
+    assertRadioInput(assert, 'isHuman', 'true', false);
+    assertRadioInput(assert, 'isHuman', 'false', true);
+
+    await click(getRadioQuerySelector('isHuman', 'true'));
+
     // make sure radio group changes don't bleed into one another
-    assert
-      .dom(`[data-test-radio-group="isCool"] > ${TRUE}`)
-      .isChecked('the isCool true radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isCool"] > ${FALSE}`)
-      .isNotChecked('the isCool false radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isHuman"] > ${TRUE}`)
-      .isChecked('the isHuman true radio has correct state');
-    assert
-      .dom(`[data-test-radio-group="isHuman"] > ${FALSE}`)
-      .isNotChecked('the isHuman false radio has correct state');
+    assertRadioInput(assert, 'isCool', 'true', true);
+    assertRadioInput(assert, 'isCool', 'false', false);
+    assertRadioInput(assert, 'isHuman', 'true', true);
+    assertRadioInput(assert, 'isHuman', 'false', false);
 
     assert.strictEqual(
       mango.isCool,
@@ -2430,3 +2414,25 @@ interface TestShape {
   firstName: string;
   age: number;
 }
+
+let getRadioQuerySelector = (fieldName: string, optionVal: string) => {
+  return `[data-test-radio-group="${fieldName}"]  [data-test-boxel-radio-option-id="${optionVal}"] input[type="radio"]`;
+};
+
+let assertRadioInput = (
+  assert: Assert,
+  fieldName: string,
+  optionVal: string,
+  checked: boolean,
+) => {
+  let querySelector = getRadioQuerySelector(fieldName, optionVal);
+  if (checked === true) {
+    assert
+      .dom(querySelector)
+      .isChecked('the isCool true radio has correct state');
+  } else {
+    assert
+      .dom(querySelector)
+      .isNotChecked('the isCool true radio has correct state');
+  }
+};

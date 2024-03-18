@@ -355,6 +355,18 @@ export async function getJoinedRooms(accessToken: string) {
   return joined_rooms;
 }
 
+export async function sync(accessToken: string) {
+  let response = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/sync`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  return await response.json();
+}
+
 interface MessageOptions {
   direction?: 'forward' | 'backward';
   pageSize: number;

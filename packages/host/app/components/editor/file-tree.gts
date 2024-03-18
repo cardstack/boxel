@@ -48,12 +48,12 @@ export default class FileTree extends Component<Signature> {
                 <IconPencil
                   width='18px'
                   height='18px'
-                  aria-label='Can edit files in this realm'
+                  aria-label='Can edit files in this workspace'
                   data-test-realm-writable
                 />
               </:trigger>
               <:content>
-                Can edit files in this realm
+                Can edit files in this workspace
               </:content>
             </Tooltip>
           {{else}}
@@ -62,12 +62,12 @@ export default class FileTree extends Component<Signature> {
                 <IconPencilCrossedOut
                   width='18px'
                   height='18px'
-                  aria-label='Cannot edit files in this realm'
+                  aria-label='Cannot edit files in this workspace'
                   data-test-realm-not-writable
                 />
               </:trigger>
               <:content>
-                Cannot edit files in this realm
+                Cannot edit files in this workspace
               </:content>
             </Tooltip>
 

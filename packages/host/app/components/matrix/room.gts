@@ -8,6 +8,7 @@ import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
 
+import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -41,7 +42,11 @@ export default class Room extends Component<Signature> {
       {{#if this.room.messages}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
-            <RoomMessage @message={{message}} data-test-message-idx={{i}} />
+            <RoomMessage
+              @message={{message}}
+              data-test-message-idx={{i}}
+              {{scrollIntoViewModifier (this.isLastMessage i)}}
+            />
           {{/each}}
         </AiAssistantConversation>
       {{else}}
@@ -250,6 +255,13 @@ export default class Room extends Component<Signature> {
           this.cardsToAttach?.length ||
           this.autoAttachedCard,
       )
+    );
+  }
+
+  @action
+  private isLastMessage(messageIndex: number) {
+    return (
+      (this.room && messageIndex === this.room.messages.length - 1) ?? false
     );
   }
 }

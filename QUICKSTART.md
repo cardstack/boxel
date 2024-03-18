@@ -67,24 +67,28 @@ To build the entire repository and run the application, follow these steps:
    pnpm start:admin
    ```
 
-Visit http://localhost:8080. Type in Username = "admin", Password: "password" Homeserver URL: http://localhost:8008
+   Visit http://localhost:8080. Type in Username = "admin", Password: "password" Homeserver URL: http://localhost:8008
 
-11. Host App
+9. Host App
+	- Visit http://localhost:4201/
+	-  Enter the registration flow and create a Boxel Account
+	- When prompted for an authentication token, type in "dev-token"
 
-- Visit http://localhost:4201/
-- Enter the registration flow and create a Boxel Account
-- When prompted for an authentication token, type in "dev-token"
+10. Validate email for login
+	- Visit SMTP UI at http://localhost:5001/
+	- Validate email
+	- Go back to Host and login
 
-12. Validate email for login:
-
-- Visit SMTP UI at http://localhost:5001/
-- Validate email
-- Go back to Host and login
+11. Validate email for login
+	- Visit SMTP UI at http://localhost:5001/
+	- Validate email
+	- Go back to Host and login
 
 13. Run ai bot (Optional):
 
     ```zsh
-    OPENAI_KEY=*** pnpm start
+    cd ./packages/ai-bot
+    OPENAI_API_KEY=*** pnpm start
     ```
 
 ## Cleanup command

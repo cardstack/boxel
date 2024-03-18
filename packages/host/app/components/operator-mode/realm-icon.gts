@@ -12,7 +12,7 @@ export default class RealmIcon extends Component<Signature> {
   <template>
     <img
       src={{@realmIconURL}}
-      alt='Icon for realm {{@realmName}}'
+      alt='Icon for workspace {{@realmName}}'
       data-test-realm-icon-url={{@realmIconURL}}
       ...attributes
     />
