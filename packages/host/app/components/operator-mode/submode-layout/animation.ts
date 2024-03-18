@@ -1,39 +1,12 @@
 import {
   type Changeset,
+  type IContext,
   SpriteType,
   SpringBehavior,
   AnimationDefinition,
-  type IContext,
 } from '@cardstack/boxel-motion';
-import Controller from '@ember/controller';
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
 
-export default class SplitView extends Controller {
-  @tracked isViewSplit = false;
-
-  @action
-  toggle() {
-    this.isViewSplit = !this.isViewSplit;
-  }
-
-  transition(changeset: Changeset): AnimationDefinition {
-    let animationDefinition: AnimationDefinition = {
-      timeline: {
-        type: 'parallel',
-        animations: [],
-      },
-    };
-    addButtonAnimation.call(
-      this,
-      changeset,
-      animationDefinition,
-      changeset.context,
-    );
-    addPanelAnimation.call(this, changeset, animationDefinition);
-    return animationDefinition;
-  }
-}
+type AiAssistantPanelState = 'open' | 'opening' | 'closed' | 'closing';
 
 function addButtonAnimation(
   changeset: Changeset,
@@ -41,7 +14,7 @@ function addButtonAnimation(
   context: IContext,
 ) {
   let buttonSprite = changeset.spriteFor({
-    id: 'button',
+    id: 'ai-assistant-button',
   });
   if (
     buttonSprite &&
@@ -49,9 +22,6 @@ function addButtonAnimation(
       buttonSprite.type === SpriteType.Removed ||
       (buttonSprite.boundsDelta?.x || 0) !== 0)
   ) {
-    if (buttonSprite.type === SpriteType.Removed) {
-      buttonSprite.element.style.zIndex = '100';
-    }
     let from =
       buttonSprite.initial?.left || `${context.element.clientWidth + 10}px`;
     let to =
@@ -65,7 +35,7 @@ function addButtonAnimation(
         },
       },
       timing: {
-        behavior: new SpringBehavior(),
+        behavior: new SpringBehavior({ overshootClamping: true }),
       },
     });
   }
@@ -76,7 +46,7 @@ function addPanelAnimation(
   animationDefinition: AnimationDefinition,
 ) {
   let containerSprite = changeset.spriteFor({
-    id: 'sidebar-container',
+    id: 'ai-assistant-resizable-panel',
   });
   if (!containerSprite) {
     return;
@@ -94,6 +64,10 @@ function addPanelAnimation(
           from: containerSprite.initial?.width,
           to: containerSprite.final?.width,
         },
+        minWidth: {
+          from: containerSprite.initial?.width,
+          to: containerSprite.final?.width,
+        },
       },
       timing: {
         behavior,
@@ -101,7 +75,7 @@ function addPanelAnimation(
     });
   }
   let contentSprite = changeset.spriteFor({
-    id: 'sidebar-content',
+    id: 'ai-assistant-panel',
   });
   if (contentSprite && contentSprite.type === SpriteType.Inserted) {
     contentSprite.element.style.width = contentSprite.final.width.toString();
@@ -155,9 +129,22 @@ function addPanelAnimation(
   }
 }
 
-// DO NOT DELETE: this is how TypeScript knows how to look up your controllers.
-declare module '@ember/controller' {
-  interface Registry {
-    'split-view': SplitView;
-  }
+export default function animate(
+  this: { aiAssistantPanelState: AiAssistantPanelState },
+  changeset: Changeset,
+) {
+  let animationDefinition: AnimationDefinition = {
+    timeline: {
+      type: 'parallel',
+      animations: [],
+    },
+  };
+  addButtonAnimation.call(
+    this,
+    changeset,
+    animationDefinition,
+    changeset.context,
+  );
+  addPanelAnimation.call(this, changeset, animationDefinition);
+  return animationDefinition;
 }

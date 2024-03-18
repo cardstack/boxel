@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
@@ -9,9 +10,6 @@ import {
   AnimationContext,
   type Changeset,
   sprite,
-  SpriteType,
-  type Sprite,
-  TweenBehavior,
 } from '@cardstack/boxel-motion';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
@@ -32,11 +30,13 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import SearchSheet, {
   SearchSheetMode,
   SearchSheetModes,
-} from '../search-sheet';
-import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
+} from '../../search-sheet';
+import SubmodeSwitcher, { Submode, Submodes } from '../../submode-switcher';
 
-import type MatrixService from '../../services/matrix-service';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import defineAnimation from './animation';
+
+import type MatrixService from '../../../services/matrix-service';
+import type OperatorModeStateService from '../../../services/operator-mode-state-service';
 
 const { APP } = ENV;
 
@@ -63,6 +63,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
+  @tracked private isInteractivelyResizingPanels = false;
   private panelWidths: PanelWidths = {
     submodePanel: 500,
     aiAssistantPanel: 200,
@@ -158,94 +159,15 @@ export default class SubmodeLayout extends Component<Signature> {
     this.searchElement = element;
   }
 
+  aiAssistantPanelState: 'open' | 'opening' | 'closed' | 'closing' = 'closed';
+
   @action
   animate(changeset: Changeset) {
-    let aiAssistantPanelSprite = changeset.spriteFor({
-      id: 'ai-assistant-panel',
-    });
-    let aiAssistantButtonSprite = changeset.spriteFor({
-      id: 'ai-assistant-button',
-    });
-    function isAiAssistantOpening(button: Sprite, panel: Sprite) {
-      return (
-        button.type === SpriteType.Removed && panel.type === SpriteType.Inserted
-      );
+    if (this.isInteractivelyResizingPanels) {
+      console.log('interactively resizing panels... skipping animation');
+      return;
     }
-    function isAiAssistantClosing(button: Sprite, panel: Sprite) {
-      return (
-        button.type === SpriteType.Inserted && panel.type === SpriteType.Removed
-      );
-    }
-    if (aiAssistantButtonSprite && aiAssistantPanelSprite) {
-      if (
-        isAiAssistantOpening(aiAssistantButtonSprite, aiAssistantPanelSprite)
-      ) {
-        console.log('ai assistant opening');
-        let mainResizablePanelSprite = changeset.spriteFor({
-          id: 'submode-main-resizable-panel',
-        });
-        let aiAssistantResizablePanelSprite = changeset.spriteFor({
-          id: 'ai-assistant-resizable-panel',
-        });
-        aiAssistantPanelSprite.element.style.opacity = 0;
-        mainResizablePanelSprite.element.style['--boxel-panel-width'] = '100vw';
-        aiAssistantResizablePanelSprite.element.style['--boxel-panel-width'] =
-          '0';
-        let buttonTargetX =
-          document.body.clientWidth -
-          parseInt(aiAssistantButtonSprite.initial.left);
-        return {
-          timeline: {
-            type: 'sequential',
-            animations: [
-              {
-                sprites: new Set([aiAssistantButtonSprite]),
-                properties: {
-                  x: { from: '0px', to: `${buttonTargetX}px` },
-                },
-                timing: {
-                  behavior: new TweenBehavior(),
-                  duration: 2000,
-                },
-              },
-              // {
-              //   sprites: new Set([aiAssistantSprite.counterpart]),
-              //   properties: {
-              //     x: {
-              //       from: 0,
-              //       to: aiAssistantSprite.counterpart!.initial.width,
-              //     },
-              //   },
-              //   timing: {
-              //     behavior: new TweenBehavior(),
-              //     duration: 2000,
-              //   },
-              // },
-              // {
-              //   sprites: new Set([aiAssistantSprite]),
-              //   properties: {
-              //     x: {},
-              //   },
-              //   timing: {
-              //     behavior: new TweenBehavior(),
-              //     duration: 2000,
-              //   },
-              // },
-            ],
-          },
-        };
-      } else if (
-        isAiAssistantClosing(aiAssistantButtonSprite, aiAssistantPanelSprite)
-      ) {
-        console.log('ai assistant closing');
-        return {
-          timeline: {
-            type: 'parallel',
-            animations: [],
-          },
-        };
-      }
-    }
+    return defineAnimation.call(this, changeset);
   }
 
   <template>
@@ -258,6 +180,14 @@ export default class SubmodeLayout extends Component<Signature> {
         @orientation='horizontal'
         @onListPanelContextChange={{this.onListPanelContextChange}}
         class='columns'
+        @onBeginInteractiveResize={{fn
+          (mut this.isInteractivelyResizingPanels)
+          true
+        }}
+        @onEndInteractiveResize={{fn
+          (mut this.isInteractivelyResizingPanels)
+          false
+        }}
         as |ResizablePanel ResizeHandle|
       >
         <ResizablePanel
@@ -274,27 +204,29 @@ export default class SubmodeLayout extends Component<Signature> {
           {{yield this.openSearchSheetToPrompt}}
         </ResizablePanel>
         {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
-          {{#if this.isAiAssistantVisible}}
-            <ResizablePanel
-              @defaultLengthFraction={{0.3}}
-              @minLengthPx={{371}}
-              @collapsible={{false}}
-              {{sprite id='ai-assistant-resizable-panel'}}
-            >
+          <ResizablePanel
+            @defaultLengthFraction={{0.3}}
+            @minLengthPx={{371}}
+            @collapsible={{false}}
+            @isHidden={{not this.isAiAssistantVisible}}
+            {{sprite id='ai-assistant-resizable-panel'}}
+          >
+            {{#if this.isAiAssistantVisible}}
               <AiAssistantPanel
                 @onClose={{this.toggleChat}}
                 @resizeHandle={{ResizeHandle}}
                 {{sprite id='ai-assistant-panel'}}
                 class='ai-assistant-panel'
               />
-            </ResizablePanel>
-          {{else}}
+            {{/if}}
+          </ResizablePanel>
+          {{#unless this.isAiAssistantVisible}}
             <AiAssistantButton
               class='chat-btn'
               {{sprite id='ai-assistant-button'}}
               {{on 'click' this.toggleChat}}
             />
-          {{/if}}
+          {{/unless}}
         {{/if}}
       </ResizablePanelGroup>
     </AnimationContext>
@@ -340,6 +272,10 @@ export default class SubmodeLayout extends Component<Signature> {
         display: flex;
         height: 100%;
       }
+      .operator-mode-with-ai-assistant
+        > :deep([data-animation-context-orphan-element]) {
+        position: absolute;
+      }
 
       .operator-mode-with-ai-assistant > .boxel-panel-group {
         width: 100%;
@@ -356,6 +292,7 @@ export default class SubmodeLayout extends Component<Signature> {
         margin-right: 0;
         background-color: var(--boxel-ai-purple);
         box-shadow: var(--boxel-deep-box-shadow);
+        z-index: 100;
       }
 
       .ai-assistant-panel {
