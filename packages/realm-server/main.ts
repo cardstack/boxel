@@ -11,6 +11,7 @@ import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
 import { type RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common/realm';
 import * as Sentry from '@sentry/node';
+import { setErrorReporter } from '@cardstack/runtime-common/realm';
 
 import fs from 'fs';
 
@@ -19,6 +20,8 @@ if (process.env.REALM_SENTRY_DSN) {
     dsn: process.env.REALM_SENTRY_DSN,
     environment: process.env.REALM_SENTRY_ENVIRONMENT || 'development',
   });
+
+  setErrorReporter(Sentry.captureException);
 }
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;

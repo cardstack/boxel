@@ -7,6 +7,7 @@ import {
   type RunnerOpts,
 } from '@cardstack/runtime-common/search-index';
 import { JSDOM } from 'jsdom';
+import * as Sentry from '@sentry/node';
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
@@ -21,7 +22,12 @@ export async function makeFastBootIndexRunner(
       distPath,
       resilient: false,
       buildSandboxGlobals(defaultGlobals: any) {
+        let sentryScope = Sentry.getCurrentScope();
+        console.log('sentry scope', sentryScope);
+        // debugger;
         return Object.assign({}, defaultGlobals, {
+          errorReporter: globalThis.errorReporter,
+          __SENTRY__: globalThis.__SENTRY__,
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,

@@ -1676,6 +1676,22 @@ function lastModifiedHeader(
   ) as {} | { 'last-modified': string };
 }
 
+type ErrorReporter = (error: Error) => void;
+
+let errorReporter: ErrorReporter;
+
+export function setErrorReporter(reporter: ErrorReporter) {
+  console.log('setting an error reporter', reporter);
+  globalThis.errorReporter = reporter;
+}
+
+export function reportError(error: Error) {
+  debugger;
+  if (globalThis.errorReporter) {
+    globalThis.errorReporter(error);
+  }
+}
+
 export interface CardDefinitionResource {
   id: string;
   type: 'card-definition';
