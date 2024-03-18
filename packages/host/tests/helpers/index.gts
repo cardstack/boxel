@@ -557,10 +557,6 @@ async function setupTestRealm({
     permissions,
     realmSecretSeed: testRealmSecretSeed,
   });
-  loader.prependURLHandlers([
-    (req) => sourceFetchRedirectHandle(req, adapter, realm),
-    (req) => sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm)),
-  ]);
 
   await realm.ready;
   return { realm, adapter };
@@ -888,87 +884,6 @@ export function diff(
     removed: removed.map((e) => e.path),
     changed: changed.map((e) => e.path),
   };
-}
-
-function isCardSourceFetch(request: Request) {
-  return (
-    request.method === 'GET' &&
-    request.headers.get('Accept') === SupportedMimeType.CardSource &&
-    request.url.includes(testRealmURL)
-  );
-}
-
-export async function sourceFetchReturnUrlHandle(
-  request: Request,
-  defaultHandle: (req: Request) => Promise<Response | null>,
-) {
-  if (isCardSourceFetch(request)) {
-    let r = await defaultHandle(request);
-    if (r) {
-      return new MockRedirectedResponse(r.body, r, request.url) as Response;
-    }
-  }
-  return null;
-}
-
-export async function sourceFetchRedirectHandle(
-  request: Request,
-  adapter: RealmAdapter,
-  realm: Realm,
-) {
-  let urlParts = new URL(request.url).pathname.split('.');
-  if (
-    isCardSourceFetch(request) &&
-    urlParts.length === 1 //has no extension
-  ) {
-    const realmPaths = new RealmPaths(realm.url);
-    const localPath = realmPaths.local(request.url);
-    const ref = await getFileWithFallbacks(
-      localPath,
-      adapter.openFile.bind(adapter),
-      executableExtensions,
-    );
-    let maybeExtension = ref?.path.split('.').pop();
-    let responseUrl = maybeExtension
-      ? `${request.url}.${maybeExtension}`
-      : request.url;
-
-    if (
-      ref &&
-      (ref.content instanceof ReadableStream ||
-        ref.content instanceof Uint8Array ||
-        typeof ref.content === 'string')
-    ) {
-      let r = createResponse(realm, ref.content, {
-        headers: {
-          'last-modified': formatRFC7231(ref.lastModified),
-        },
-      });
-      return new MockRedirectedResponse(r.body, r, responseUrl) as Response;
-    }
-  }
-  return null;
-}
-
-export class MockRedirectedResponse extends Response {
-  private _mockUrl: string;
-
-  constructor(
-    body?: BodyInit | null | undefined,
-    init?: ResponseInit,
-    url?: string,
-  ) {
-    super(body, init);
-    this._mockUrl = url || '';
-  }
-
-  get redirected() {
-    return true;
-  }
-
-  get url() {
-    return this._mockUrl;
-  }
 }
 
 export async function elementIsVisible(element: Element) {
