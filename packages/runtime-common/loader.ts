@@ -496,7 +496,10 @@ export class Loader {
   }
 
   // For following redirects of responses returned by loader's urlHandlers
-  async simulateFetch(request: Request, result: Response): Promise<Response> {
+  private async simulateFetch(
+    request: Request,
+    result: Response,
+  ): Promise<Response> {
     const urlString = request.url;
     let redirectedHeaderKey = 'simulated-fetch-redirected'; // Temporary header to track if the request was redirected in the redirection chain
 
