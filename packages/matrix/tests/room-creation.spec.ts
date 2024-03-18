@@ -20,6 +20,7 @@ import {
   createRoomWithMessage,
   deleteRoom,
   isInRoom,
+  getRoomsFromSync,
 } from '../helpers';
 
 test.describe('Room creation', () => {
@@ -185,6 +186,8 @@ test.describe('Room creation', () => {
 
   test('it can delete a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
+    let roomsBeforeDeletion = await getRoomsFromSync();
+
     let room1 = await getRoomName(page);
     await sendMessage(page, room1, 'Room 1');
     let room2 = await createRoomWithMessage(page, 'Room 2');
@@ -201,32 +204,18 @@ test.describe('Room creation', () => {
     await expect(
       page.locator(`[data-test-joined-room="${room3}"]`),
     ).toHaveCount(1);
+    await page.locator(`[data-test-close-past-sessions]`).click(); // close past sessions tab
 
-    await page
-      .locator(`[data-test-past-session-options-button="${room2}"]`)
-      .click();
-    await page.locator(`[data-test-boxel-menu-item-text="Delete"]`).click();
-    await page
-      .locator(
-        `[data-test-delete-modal-container] [data-test-confirm-delete-button]`,
-      )
-      .click();
+    await deleteRoom(page, room2);
     await expect(
       page.locator(`[data-test-joined-room="${room2}"]`),
     ).toHaveCount(0);
     await expect(
       page.locator(`[data-test-joined-room="${room3}"]`),
     ).toHaveCount(1);
+    await page.locator(`[data-test-close-past-sessions]`).click(); // close past sessions tab
 
-    await page
-      .locator(`[data-test-past-session-options-button="${room3}"]`)
-      .click();
-    await page.locator(`[data-test-boxel-menu-item-text="Delete"]`).click();
-    await page
-      .locator(
-        `[data-test-delete-modal-container] [data-test-confirm-delete-button]`,
-      )
-      .click();
+    await deleteRoom(page, room3);
     await expect(page.locator(`[data-test-past-sessions]`)).toHaveCount(0);
 
     await page.waitForTimeout(500); // wait for new room to be created
@@ -235,6 +224,16 @@ test.describe('Room creation', () => {
     expect(newRoom).not.toEqual(room2);
     expect(newRoom).not.toEqual(room3);
     await assertRooms(page, [newRoom]);
+
+    // For asserting the result of the forget matrix API
+    let roomsAfterDeletion = await getRoomsFromSync();
+    let roomsAfterDeletionKeys = Object.keys(roomsAfterDeletion.join);
+    let roomsBeforeDeletionKeys = Object.keys(roomsBeforeDeletion.join);
+    expect(roomsAfterDeletionKeys.length).toEqual(
+      roomsBeforeDeletionKeys.length,
+    );
+    expect(roomsAfterDeletionKeys[0]).toEqual(roomsBeforeDeletionKeys[0]); // Existing room
+    expect(roomsAfterDeletionKeys[1]).not.toEqual(roomsBeforeDeletion[2]); // The new room after deletions
   });
 
   test('it can cancel deleting a room', async ({ page }) => {

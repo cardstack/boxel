@@ -106,7 +106,7 @@ export class CatalogEntry extends CardDef {
         <FieldContainer @label='Ref' data-test-field='ref'>
           <@fields.ref />
         </FieldContainer>
-        <FieldContainer @label='Realm Name' data-test-field='realmName'>
+        <FieldContainer @label='Workspace Name' data-test-field='realmName'>
           <@fields.realmName />
         </FieldContainer>
         <FieldContainer @vertical={{true}} @label='Demo' data-test-field='demo'>
