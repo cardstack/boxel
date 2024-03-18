@@ -1,8 +1,10 @@
 import { registerDestructor } from '@ember/destroyable';
+import { action } from '@ember/object';
 import { scheduleOnce } from '@ember/runloop';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import createRef from 'ember-ref-bucket/modifiers/create-ref';
 
 import cssVars from '../../helpers/css-var.ts';
@@ -22,6 +24,7 @@ interface Signature {
   Args: {
     collapsible?: boolean; //default true
     defaultLengthFraction: number;
+    isHidden?: boolean; //default false
     isLastPanel: (panelId: number) => boolean;
     lengthPx?: number;
     minLengthPx?: number;
@@ -43,6 +46,16 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
+let managePanelRegistration = modifier(
+  (_element, [panel, isHidden]: [Panel, boolean | undefined]) => {
+    if (isHidden) {
+      scheduleOnce('afterRender', panel, panel.unregisterPanel);
+    } else {
+      scheduleOnce('afterRender', panel, panel.registerPanel);
+    }
+  },
+);
+
 export default class Panel extends Component<Signature> {
   <template>
     <div
@@ -60,6 +73,8 @@ export default class Panel extends Component<Signature> {
         )
       }}
       {{createRef (@resizablePanelElId this.id) bucket=@panelGroupComponent}}
+      {{managePanelRegistration this @isHidden}}
+      ...attributes
     >
       {{yield}}
     </div>
@@ -90,16 +105,11 @@ export default class Panel extends Component<Signature> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    scheduleOnce('afterRender', this, this.registerPanel);
-
-    registerDestructor(this, () => {
-      if (this.id) {
-        this.args.unregisterPanel(this.id);
-      }
-    });
+    registerDestructor(this, this.unregisterPanel);
   }
 
-  private registerPanel() {
+  @action
+  registerPanel() {
     if (this.id == undefined) {
       this.id = this.args.registerPanel({
         lengthPx: this.args.lengthPx,
@@ -107,6 +117,14 @@ export default class Panel extends Component<Signature> {
         minLengthPx: this.args.minLengthPx,
         collapsible: this.args.collapsible,
       });
+    }
+  }
+
+  @action
+  unregisterPanel() {
+    if (this.id) {
+      this.args.unregisterPanel(this.id);
+      this.id = undefined;
     }
   }
 
@@ -122,7 +140,9 @@ export default class Panel extends Component<Signature> {
   }
 
   get minLengthCssValue() {
-    if (this.panelContext?.minLengthPx !== undefined) {
+    if (this.args.isHidden) {
+      return htmlSafe('0px');
+    } else if (this.panelContext?.minLengthPx !== undefined) {
       return htmlSafe(`${this.panelContext.minLengthPx}px`);
     } else if (this.args.minLengthPx !== undefined) {
       return htmlSafe(`${this.args.minLengthPx}px`);
@@ -133,7 +153,9 @@ export default class Panel extends Component<Signature> {
   get lengthCssValue() {
     let lengthPx = this.panelContext?.lengthPx;
     let defaultLengthFraction = this.panelContext?.defaultLengthFraction;
-    if (lengthPx === -1 && defaultLengthFraction) {
+    if (this.args.isHidden) {
+      return htmlSafe('0px');
+    } else if (lengthPx === -1 && defaultLengthFraction) {
       return htmlSafe(`${defaultLengthFraction * 100}%`);
     } else if (lengthPx !== -1 && lengthPx !== undefined) {
       return htmlSafe(`${lengthPx}px`);

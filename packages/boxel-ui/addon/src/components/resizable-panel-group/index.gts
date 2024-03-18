@@ -24,6 +24,8 @@ const ResizeHandleElIdPrefix = 'resize-handler';
 
 interface Signature {
   Args: {
+    onBeginInteractiveResize?: () => void;
+    onEndInteractiveResize?: () => void;
     onListPanelContextChange?: (listPanelContext: PanelContext[]) => void;
     orientation: 'horizontal' | 'vertical';
     reverseCollapse?: boolean;
@@ -245,6 +247,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       (panelContext) => panelContext.lengthPx,
     );
 
+    this.panelRatios = [];
     for (let index = 0; index < panelLengths.length; index++) {
       let panelLength = panelLengths[index];
       if (panelLength == undefined) {
@@ -294,11 +297,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
       prevPanelEl: prevPanelEl,
       nextPanelEl: nextPanelEl,
     };
+    this.args.onBeginInteractiveResize?.();
   }
 
   @action
   onResizeHandleMouseUp(_event: MouseEvent) {
     this.currentResizeHandle = null;
+    this.args.onEndInteractiveResize?.();
   }
 
   @action
