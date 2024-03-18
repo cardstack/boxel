@@ -22,6 +22,10 @@ if (process.env.REALM_SENTRY_DSN) {
   });
 
   setErrorReporter(Sentry.captureException);
+} else {
+  console.warn(
+    `No REALM_SENTRY_DSN environment variable found, skipping Sentry setup.`,
+  );
 }
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
