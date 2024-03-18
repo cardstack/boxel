@@ -47,6 +47,10 @@ jobs:
         run: pnpm build
         working-directory: packages/boxel-ui/addon
 
+      - name: Build boxel-motion
+        run: pnpm build
+        working-directory: packages/boxel-motion/addon
+
       - name: Build host
         run: pnpm deploy:boxel-host build-only --verbose
 
