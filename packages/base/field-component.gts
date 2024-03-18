@@ -93,57 +93,26 @@ export function getBoxComponent(
   let component: TemplateOnlyComponent<{
     Args: { format?: Format; displayContainer?: boolean };
   }> = <template>
-    {{#let (lookupFormat @format) as |f|}}
-      {{#let
-        (if (eq @displayContainer false) false true)
-        as |displayContainer|
-      }}
-        {{#if (isCard model.value)}}
-          <CardContainer
-            @displayBoundaries={{displayContainer}}
-            class='field-component-card
-              {{f.format}}-format display-container-{{displayContainer}}'
-            {{cardComponentModifier
-              card=model.value
-              format=f.format
-              fieldType=field.fieldType
-              fieldName=field.name
-            }}
-            data-test-card-format={{f.format}}
-            data-test-field-component-card
-            {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-            ...attributes
-          >
-            <f.Implementation
-              @cardOrField={{card}}
-              @model={{model.value}}
-              @fields={{f.fields}}
-              @format={{f.format}}
-              @displayContainer={{@displayContainer}}
-              @set={{model.set}}
-              @fieldName={{model.name}}
-              @context={{context}}
-            />
-          </CardContainer>
-        {{else if (isCompoundField model.value)}}
-          <div
-            data-test-compound-field-format={{f.format}}
-            data-test-compound-field-component
-            {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-            ...attributes
-          >
-            <f.Implementation
-              @cardOrField={{card}}
-              @model={{model.value}}
-              @fields={{f.fields}}
-              @format={{f.format}}
-              @displayContainer={{@displayContainer}}
-              @set={{model.set}}
-              @fieldName={{model.name}}
-              @context={{context}}
-            />
-          </div>
-        {{else}}
+    {{#let
+      (lookupFormat @format) (if (eq @displayContainer false) false true)
+      as |f displayContainer|
+    }}
+      {{#if (isCard model.value)}}
+        <CardContainer
+          @displayBoundaries={{displayContainer}}
+          class='field-component-card
+            {{f.format}}-format display-container-{{displayContainer}}'
+          {{cardComponentModifier
+            card=model.value
+            format=f.format
+            fieldType=field.fieldType
+            fieldName=field.name
+          }}
+          data-test-card-format={{f.format}}
+          data-test-field-component-card
+          {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+          ...attributes
+        >
           <f.Implementation
             @cardOrField={{card}}
             @model={{model.value}}
@@ -154,8 +123,37 @@ export function getBoxComponent(
             @fieldName={{model.name}}
             @context={{context}}
           />
-        {{/if}}
-      {{/let}}
+        </CardContainer>
+      {{else if (isCompoundField model.value)}}
+        <div
+          data-test-compound-field-format={{f.format}}
+          data-test-compound-field-component
+          {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+          ...attributes
+        >
+          <f.Implementation
+            @cardOrField={{card}}
+            @model={{model.value}}
+            @fields={{f.fields}}
+            @format={{f.format}}
+            @displayContainer={{@displayContainer}}
+            @set={{model.set}}
+            @fieldName={{model.name}}
+            @context={{context}}
+          />
+        </div>
+      {{else}}
+        <f.Implementation
+          @cardOrField={{card}}
+          @model={{model.value}}
+          @fields={{f.fields}}
+          @format={{f.format}}
+          @displayContainer={{@displayContainer}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+          @context={{context}}
+        />
+      {{/if}}
     {{/let}}
     <style>
       .field-component-card.embedded-format {
