@@ -58,7 +58,7 @@ export default class CardCatalogFilters extends Component<Signature> {
               disabled={{@disableRealmFilter}}
               data-test-realm-filter-button
             >
-              Realm:
+              Workspace:
               {{this.realmFilterSummary}}
             </button>
           </:trigger>
