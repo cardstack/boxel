@@ -15,7 +15,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { and, not } from '@cardstack/boxel-ui/helpers';
+import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
@@ -194,6 +194,7 @@ export default class SubmodeLayout extends Component<Signature> {
           @defaultLengthFraction={{1}}
           @minLengthPx={{371}}
           @collapsible={{false}}
+          class='main-panel'
           {{sprite id='submode-main-resizable-panel'}}
         >
           <SubmodeSwitcher
@@ -202,6 +203,10 @@ export default class SubmodeLayout extends Component<Signature> {
             class='submode-switcher'
           />
           {{yield this.openSearchSheetToPrompt}}
+          <AiAssistantButton
+            class={{cn 'chat-btn' is-assistant-open=this.isAiAssistantVisible}}
+            {{on 'click' this.toggleChat}}
+          />
         </ResizablePanel>
         {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
           <ResizablePanel
@@ -220,13 +225,6 @@ export default class SubmodeLayout extends Component<Signature> {
               />
             {{/if}}
           </ResizablePanel>
-          {{#unless this.isAiAssistantVisible}}
-            <AiAssistantButton
-              class='chat-btn'
-              {{sprite id='ai-assistant-button'}}
-              {{on 'click' this.toggleChat}}
-            />
-          {{/unless}}
         {{/if}}
       </ResizablePanelGroup>
     </AnimationContext>
@@ -279,6 +277,10 @@ export default class SubmodeLayout extends Component<Signature> {
 
       .operator-mode-with-ai-assistant > .boxel-panel-group {
         width: 100%;
+      }
+
+      .main-panel {
+        position: relative;
       }
 
       .ai-assistant-open {
