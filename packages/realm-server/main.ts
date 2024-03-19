@@ -16,6 +16,7 @@ import { setErrorReporter } from '@cardstack/runtime-common/realm';
 import fs from 'fs';
 
 if (process.env.REALM_SENTRY_DSN) {
+  console.info('Setting up Sentry.');
   Sentry.init({
     dsn: process.env.REALM_SENTRY_DSN,
     environment: process.env.REALM_SENTRY_ENVIRONMENT || 'development',
