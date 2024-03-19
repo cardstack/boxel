@@ -4,7 +4,6 @@ import { ComponentLike } from '@glint/template';
 import FreestyleGuide from 'ember-freestyle/components/freestyle-guide';
 import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 
-// @ts-expect-error no types
 import { pageTitle } from 'ember-page-title';
 import RouteTemplate from 'ember-route-template';
 
