@@ -809,9 +809,11 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom(`[data-test-preferredcarrier="DHL"]`).exists();
 
       let roomId = await openAiAssistant();
-      let data = {
-        firstName: 'Joy',
-        address: { shippingInfo: { preferredCarrier: 'UPS' } },
+      let patchData = {
+        attributes: {
+          firstName: 'Joy',
+          address: { shippingInfo: { preferredCarrier: 'UPS' } },
+        },
       };
       addRoomEvent(matrixService, {
         event_id: 'event1',
@@ -829,7 +831,7 @@ module('Integration | operator-mode', function (hooks) {
             command: {
               type: 'patch',
               id: `${testRealmURL}Person/fadhlan`,
-              patch: { attributes: data },
+              patch: patchData,
             },
           }),
         },
@@ -839,7 +841,7 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-view-code-button]');
 
       await waitForCodeEditor();
-      assert.deepEqual(JSON.parse(getMonacoContent()), data);
+      assert.deepEqual(JSON.parse(getMonacoContent()), patchData);
 
       await click('[data-test-view-code-button]');
       assert.dom('[data-test-code-editor]').doesNotExist();
