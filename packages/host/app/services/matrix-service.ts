@@ -56,6 +56,7 @@ import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
+import AiService from './ai-service';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
@@ -71,6 +72,7 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare aiService: AiService;
   @service declare router: RouterService;
   @tracked private _client: MatrixClient | undefined;
   private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
@@ -291,6 +293,7 @@ export default class MatrixService extends Service {
     let invite = invites.map((i) =>
       i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`,
     );
+
     let { room_id: roomId } = await this.client.createRoom({
       preset: this.matrixSDK.Preset.PrivateChat,
       invite,
@@ -330,6 +333,7 @@ export default class MatrixService extends Service {
     eventType: string,
     content: CardMessageContent | CardFragmentContent,
   ) {
+    console.log('Sending event', content);
     if (content.data) {
       const encodedContent = {
         ...content,
@@ -345,54 +349,10 @@ export default class MatrixService extends Service {
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
-    context?: OperatorModeContext,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
-    let functions = [];
+
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
-    let attachedOpenCards: CardDef[] = [];
-    let submode = context?.submode;
-    if (submode === 'interact') {
-      let mappings = await basicMappings(this.loaderService.loader);
-      // Open cards are attached automatically
-      // If they are not attached, the user is not allowing us to
-      // modify them
-      attachedOpenCards = attachedCards.filter((c) =>
-        (context?.openCardIds ?? []).includes(c.id),
-      );
-      // Generate function calls for patching currently open cards permitted for modification
-      for (let attachedOpenCard of attachedOpenCards) {
-        let patchSpec = generateCardPatchCallSpecification(
-          attachedOpenCard.constructor as typeof CardDef,
-          this.cardAPI,
-          mappings,
-        );
-        let realmSession = getRealmSession(this, {
-          card: () => attachedOpenCard,
-        });
-        await realmSession.loaded;
-        if (realmSession.canWrite) {
-          functions.push({
-            name: 'patchCard',
-            description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-            parameters: {
-              type: 'object',
-              properties: {
-                description: {
-                  type: 'string',
-                },
-                card_id: {
-                  type: 'string',
-                  const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-                },
-                attributes: patchSpec,
-              },
-              required: ['card_id', 'attributes', 'description'],
-            },
-          });
-        }
-      }
-    }
 
     if (attachedCards?.length) {
       serializedAttachedCards = await Promise.all(
@@ -420,11 +380,7 @@ export default class MatrixService extends Service {
       formatted_body: html,
       data: {
         attachedCardsEventIds,
-        context: {
-          openCardIds: attachedOpenCards.map((c) => c.id),
-          functions,
-          submode,
-        },
+        context: await this.aiService.aiContext(attachedCards),
       },
     } as CardMessageContent);
   }
