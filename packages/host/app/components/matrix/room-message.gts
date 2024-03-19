@@ -4,9 +4,11 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { marked } from 'marked';
 
+import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common';
@@ -49,6 +51,14 @@ export default class Room extends Component<Signature> {
           data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
         >
           {{#let @message.command.payload as |payload|}}
+            <Button
+              class='view-code-button'
+              {{on 'click' this.viewCodeToggle}}
+              @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
+              @size='extra-small'
+            >
+              {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
+            </Button>
             <ApplyButton
               @state={{if
                 this.operatorModeStateService.patchCard.isRunning
@@ -63,6 +73,13 @@ export default class Room extends Component<Signature> {
             />
           {{/let}}
         </div>
+        {{#if this.isDisplayingCode}}
+          <div>
+            <code>
+              {{this.previewPatchCode}}
+            </code>
+          </div>
+        {{/if}}
       {{/if}}
     </AiAssistantMessage>
 
@@ -70,12 +87,23 @@ export default class Room extends Component<Signature> {
       .patch-button-bar {
         display: flex;
         justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp);
+      }
+      .view-code-button {
+        --boxel-button-font: 700 var(--boxel-font-xs);
+        --boxel-button-min-height: 1.5rem;
+        --boxel-button-padding: 0 var(--boxel-sp-xs);
+        min-width: initial;
+        width: auto;
+        max-height: 1.5rem;
       }
     </style>
   </template>
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+
+  @tracked private isDisplayingCode = false;
 
   private get formattedMessage() {
     return sanitizeHtml(marked(this.args.message.formattedMessage));
@@ -111,6 +139,18 @@ export default class Room extends Component<Signature> {
           `cannot render card ${e.id}: ${e.error.message}`,
       )
       .join(', ');
+  }
+
+  private get previewPatchCode() {
+    return JSON.stringify(
+      this.args.message.command.payload.patch.attributes,
+      null,
+      2,
+    );
+  }
+
+  @action private viewCodeToggle() {
+    this.isDisplayingCode = !this.isDisplayingCode;
   }
 
   @action patchCard(cardId: string, attributes: Record<string, unknown>) {

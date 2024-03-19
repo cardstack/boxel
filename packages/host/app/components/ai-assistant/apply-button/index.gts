@@ -35,8 +35,7 @@ export default class AiAssistantApplyButton extends Component<Signature> {
     </BoxelButton>
     <style>
       .apply-button {
-        --boxel-button-font: 700 var(--boxel-font-size-xs) / calc(15 / 11)
-          var(--boxel-font-family);
+        --boxel-button-font: 700 var(--boxel-font-xs);
         --boxel-button-min-height: 1.5rem;
         --boxel-button-padding: 0;
         position: relative;
@@ -70,6 +69,9 @@ export default class AiAssistantApplyButton extends Component<Signature> {
         width: 17px;
         height: 17px;
         --icon-color: var(--boxel-light);
+      }
+      .apply-button:focus:not(:disabled) {
+        --boxel-button-color: var(--boxel-highlight-hover);
       }
     </style>
   </template>
