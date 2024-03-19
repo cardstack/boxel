@@ -6,8 +6,6 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
-
 import { marked } from 'marked';
 
 import { Button } from '@cardstack/boxel-ui/components';
@@ -17,7 +15,6 @@ import { sanitizeHtml } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
-import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -33,6 +30,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     message: MessageField;
+    monacoSDK: MonacoSDK;
   };
 }
 
@@ -85,7 +83,7 @@ export default class Room extends Component<Signature> {
             {{monacoModifier
               content=this.previewPatchCode
               contentChanged=undefined
-              monacoSDK=this.monacoSDK
+              monacoSDK=@monacoSDK
               language='json'
               readOnly=true
               darkTheme=true
@@ -125,11 +123,9 @@ export default class Room extends Component<Signature> {
     fontWeight: 'bold',
   };
 
-  @service private declare monacoService: MonacoService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   @tracked private isDisplayingCode = false;
-  @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
   private get formattedMessage() {
     return sanitizeHtml(marked(this.args.message.formattedMessage));
@@ -167,17 +163,6 @@ export default class Room extends Component<Signature> {
       .join(', ');
   }
 
-  private loadMonaco = task(async () => {
-    this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
-  });
-
-  private get monacoSDK() {
-    if (this.maybeMonacoSDK) {
-      return this.maybeMonacoSDK;
-    }
-    throw new Error(`cannot use monaco SDK before it has loaded`);
-  }
-
   private get previewPatchCode() {
     return JSON.stringify(
       this.args.message.command.payload.patch.attributes,
@@ -187,9 +172,6 @@ export default class Room extends Component<Signature> {
   }
 
   @action private async viewCodeToggle() {
-    if (!this.maybeMonacoSDK && !this.isDisplayingCode) {
-      await this.loadMonaco.perform();
-    }
     this.isDisplayingCode = !this.isDisplayingCode;
   }
 
