@@ -112,7 +112,8 @@ export default class Room extends Component<Signature> {
         max-height: 1.5rem;
       }
       .monaco-container {
-        height: 13rem;
+        height: 30vh;
+        min-height: 7rem;
       }
     </style>
   </template>
