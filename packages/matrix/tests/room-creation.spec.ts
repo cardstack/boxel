@@ -105,9 +105,13 @@ test.describe('Room creation', () => {
 
     let room1 = await getRoomName(page);
     await assertRooms(page, [room1]);
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveCount(0);
     await sendMessage(page, room1, 'Hello');
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveText(room1);
 
     let room2 = await createRoomWithMessage(page);
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveText(room2);
+
     let room3 = await createRoom(page);
     await assertRooms(page, [room1, room2, room3]);
 
@@ -136,6 +140,7 @@ test.describe('Room creation', () => {
 
     await openRoom(page, newRoom1);
     await expect(page.locator(`[data-test-room="${newRoom1}"]`)).toHaveCount(1);
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveText(newRoom1);
 
     await reloadAndOpenAiAssistant(page);
     await assertRooms(page, [newRoom1, room2, room3]);
@@ -273,10 +278,12 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room1, room2, room3]);
 
     await isInRoom(page, room3);
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveText(room3);
     await deleteRoom(page, room3); // current room is deleted
     await page.locator(`[data-test-close-past-sessions]`).click();
     await assertRooms(page, [room1, room2]);
     await isInRoom(page, room2); // is in latest available room
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveText(room2);
 
     await deleteRoom(page, room1); // a different room is deleted
     await page.locator(`[data-test-close-past-sessions]`).click();
@@ -289,6 +296,7 @@ test.describe('Room creation', () => {
     let newRoom = await getRoomName(page);
     await isInRoom(page, newRoom);
     await assertRooms(page, [newRoom]);
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveCount(0);
   });
 
   test('it orders past-sessions list items based on last activity in reverse chronological order', async ({
