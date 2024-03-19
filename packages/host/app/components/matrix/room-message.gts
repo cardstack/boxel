@@ -60,6 +60,7 @@ export default class Room extends Component<Signature> {
               {{on 'click' this.viewCodeToggle}}
               @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
               @size='extra-small'
+              data-test-view-code-button
             >
               {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
             </Button>
@@ -89,7 +90,7 @@ export default class Room extends Component<Signature> {
               darkTheme=true
               editorDisplayOptions=this.editorDisplayOptions
             }}
-            data-test-view-code-panel
+            data-test-editor
             data-test-percy-hide
           ></div>
         {{/if}}
