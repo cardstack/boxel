@@ -1686,9 +1686,13 @@ export function setErrorReporter(reporter: ErrorReporter) {
 }
 
 export function reportError(error: Error) {
-  debugger;
+  console.log('in report error');
+  console.log(error);
   if (globalThis.errorReporter) {
+    console.log('error reporter exists');
     globalThis.errorReporter(error);
+  } else {
+    console.log('error reporter does not exist');
   }
 }
 
