@@ -25,6 +25,10 @@ export async function makeFastBootIndexRunner(
         let sentryScope = Sentry.getCurrentScope();
         console.log('sentry scope', sentryScope);
         // debugger;
+        console.log(
+          'does error reporter exist when setting up fastboot',
+          globalThis.errorReporter,
+        );
         return Object.assign({}, defaultGlobals, {
           errorReporter: globalThis.errorReporter,
           __SENTRY__: globalThis.__SENTRY__,
