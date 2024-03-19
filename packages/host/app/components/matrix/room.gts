@@ -94,6 +94,9 @@ export default class Room extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
       }
+      :deep(.ai-assistant-conversation > *:first-child) {
+        margin-top: auto;
+      }
     </style>
   </template>
 

@@ -1202,7 +1202,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-create-new-card-button]');
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a CatalogEntry card');
+      .containsText('Choose a Catalog Entry card');
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
     );
@@ -1279,7 +1279,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a CatalogEntry card');
+      .containsText('Choose a Catalog Entry card');
     assert.dom('[data-test-card-catalog-item]').exists({ count: 4 });
 
     await click(
@@ -2788,7 +2788,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-create-new-card-button]');
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a CatalogEntry card');
+      .containsText('Choose a Catalog Entry card');
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
     );
