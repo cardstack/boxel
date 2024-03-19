@@ -6,6 +6,8 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { task } from 'ember-concurrency';
+
 import { marked } from 'marked';
 
 import { Button } from '@cardstack/boxel-ui/components';
@@ -13,6 +15,10 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
+import monacoModifier from '@cardstack/host/modifiers/monaco';
+import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import type MonacoService from '@cardstack/host/services/monaco-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -74,11 +80,20 @@ export default class Room extends Component<Signature> {
           {{/let}}
         </div>
         {{#if this.isDisplayingCode}}
-          <div>
-            <code>
-              {{this.previewPatchCode}}
-            </code>
-          </div>
+          <div
+            class='monaco-container'
+            {{monacoModifier
+              content=this.previewPatchCode
+              contentChanged=undefined
+              monacoSDK=this.monacoSDK
+              language='json'
+              readOnly=true
+              darkTheme=true
+              editorDisplayOptions=this.editorDisplayOptions
+            }}
+            data-test-view-code-panel
+            data-test-percy-hide
+          ></div>
         {{/if}}
       {{/if}}
     </AiAssistantMessage>
@@ -98,12 +113,23 @@ export default class Room extends Component<Signature> {
         width: auto;
         max-height: 1.5rem;
       }
+      .monaco-container {
+        height: 13rem;
+      }
     </style>
   </template>
 
+  editorDisplayOptions: MonacoEditorOptions = {
+    wordWrap: 'on',
+    wrappingIndent: 'indent',
+    fontWeight: 'bold',
+  };
+
+  @service private declare monacoService: MonacoService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   @tracked private isDisplayingCode = false;
+  @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
   private get formattedMessage() {
     return sanitizeHtml(marked(this.args.message.formattedMessage));
@@ -141,6 +167,17 @@ export default class Room extends Component<Signature> {
       .join(', ');
   }
 
+  private loadMonaco = task(async () => {
+    this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
+  });
+
+  private get monacoSDK() {
+    if (this.maybeMonacoSDK) {
+      return this.maybeMonacoSDK;
+    }
+    throw new Error(`cannot use monaco SDK before it has loaded`);
+  }
+
   private get previewPatchCode() {
     return JSON.stringify(
       this.args.message.command.payload.patch.attributes,
@@ -149,7 +186,10 @@ export default class Room extends Component<Signature> {
     );
   }
 
-  @action private viewCodeToggle() {
+  @action private async viewCodeToggle() {
+    if (!this.maybeMonacoSDK && !this.isDisplayingCode) {
+      await this.loadMonaco.perform();
+    }
     this.isDisplayingCode = !this.isDisplayingCode;
   }
 
