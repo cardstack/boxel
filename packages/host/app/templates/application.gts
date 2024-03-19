@@ -12,8 +12,8 @@ interface ApplicationRouteSignature {
 class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
   <template>
     {{outlet}}
-    <BasicDropdownWormhole />
     <CardPrerender />
+    <BasicDropdownWormhole />
 
     {{! this is a signal for the Realm DOM tests to know that app has loaded }}
     {{! template-lint-disable no-inline-styles }}
