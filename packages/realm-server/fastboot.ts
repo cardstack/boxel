@@ -26,7 +26,7 @@ export async function makeFastBootIndexRunner(
         console.log('sentry scope', sentryScope);
         // debugger;
         console.log(
-          'does error reporter exist when setting up fastboot',
+          'does error reporter exist when setting up fastboot v1',
           globalThis.errorReporter,
         );
         return Object.assign({}, defaultGlobals, {
@@ -36,7 +36,7 @@ export async function makeFastBootIndexRunner(
           Request: globalThis.Request,
           Response: globalThis.Response,
           btoa,
-          getRunnerOpts,
+          getRunnerOpts
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),
         });
@@ -47,7 +47,12 @@ export async function makeFastBootIndexRunner(
       appName,
       dist,
       (defaultGlobals: any) => {
+        console.log(
+          'does error reporter exist when setting up fastboot v2',
+          globalThis.errorReporter,
+        );
         return Object.assign({}, defaultGlobals, {
+          errorReporter: globalThis.errorReporter,
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,
