@@ -188,7 +188,7 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
           </div>
         {{else if cardResource.card}}
           {{#let (getCardComponent cardResource.card) as |CardComponent|}}
-            <div data-test-message-card={{cardResource.card.id}}>
+            <div data-test-attached-card={{cardResource.card.id}}>
               <CardComponent />
             </div>
           {{/let}}

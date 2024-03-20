@@ -1,0 +1,13 @@
+diff --git a/declarations/components/basic-dropdown-content.d.ts b/declarations/components/basic-dropdown-content.d.ts
+index 962ffe86daca8fb3b2d7935ffc5b6329fb475dbb..c00274fa1ef225f196f35b3f5416440da3110ef1 100644
+--- a/declarations/components/basic-dropdown-content.d.ts
++++ b/declarations/components/basic-dropdown-content.d.ts
+@@ -1,7 +1,7 @@
+ import Component from '@glimmer/component';
+ import type { Dropdown } from './basic-dropdown.ts';
+ export interface BasicDropdownContentSignature {
+-    Element: Element;
++    Element: HTMLElement;
+     Args: {
+         animationEnabled?: boolean;
+         transitioningInClass?: string;

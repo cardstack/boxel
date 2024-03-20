@@ -1,4 +1,5 @@
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
@@ -8,6 +9,10 @@ import Modifier from 'ember-modifier';
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
+
+import CardPill from '@cardstack/host/components/card-pill';
+
+import type CardService from '@cardstack/host/services/card-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -35,6 +40,8 @@ class ScrollIntoView extends Modifier {
 }
 
 export default class AiAssistantMessage extends Component<Signature> {
+  @service private declare cardService: CardService;
+
   <template>
     <div
       class={{cn 'ai-assistant-message' is-from-assistant=@isFromAssistant}}
@@ -82,10 +89,8 @@ export default class AiAssistantMessage extends Component<Signature> {
 
           {{#if @attachedCards.length}}
             <div class='cards' data-test-message-cards>
-              {{#each this.cardResources as |resource|}}
-                <div data-test-message-card={{resource.card.id}}>
-                  <resource.component />
-                </div>
+              {{#each @attachedCards as |card|}}
+                <CardPill @card={{card}} />
               {{/each}}
             </div>
           {{/if}}
@@ -215,13 +220,6 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
     </style>
   </template>
-
-  private get cardResources() {
-    return this.args.attachedCards?.map((card) => ({
-      card,
-      component: card.constructor.getComponent(card, 'atom'),
-    }));
-  }
 
   private get isAvatarAnimated() {
     return this.args.isStreaming && !this.args.errorMessage;

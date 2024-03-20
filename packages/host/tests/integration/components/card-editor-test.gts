@@ -84,6 +84,7 @@ module('Integration | card-editor', function (hooks) {
     let { default: StringField } = string;
 
     class Pet extends CardDef {
+      static displayName = 'Pet';
       @field name = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -94,6 +95,7 @@ module('Integration | card-editor', function (hooks) {
       };
     }
     class FancyPet extends Pet {
+      static displayName = 'FancyPet';
       @field favoriteToy = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -106,6 +108,7 @@ module('Integration | card-editor', function (hooks) {
       };
     }
     class Person extends CardDef {
+      static displayName = 'Person';
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
       static isolated = class Embedded extends Component<typeof this> {

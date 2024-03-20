@@ -57,7 +57,7 @@ export default class Room extends Component<Signature> {
       {{/if}}
 
       <footer class='room-actions'>
-        <div class='chat-input-area'>
+        <div class='chat-input-area' data-test-chat-input-area>
           <AiAssistantChatInput
             @value={{this.messageToSend}}
             @onInput={{this.setMessage}}
@@ -96,6 +96,9 @@ export default class Room extends Component<Signature> {
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
+      }
+      :deep(.ai-assistant-conversation > *:first-child) {
+        margin-top: auto;
       }
     </style>
   </template>
