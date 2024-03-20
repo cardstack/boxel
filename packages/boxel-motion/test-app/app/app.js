@@ -2,6 +2,7 @@ import Application from '@ember/application';
 import config from 'boxel-motion-test-app/config/environment';
 import loadInitializers from 'ember-load-initializers';
 import Resolver from 'ember-resolver';
+import '@cardstack/boxel-motion/styles/addon.css';
 import './deprecation-workflow';
 
 export default class App extends Application {
