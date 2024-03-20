@@ -1683,18 +1683,12 @@ let globalWithErrorReporter = global as typeof globalThis & {
 };
 
 export function setErrorReporter(reporter: ErrorReporter) {
-  console.log('setting an error reporter', reporter);
   globalWithErrorReporter.__boxelErrorReporter = reporter;
 }
 
 export function reportError(error: Error) {
-  console.log('in report error');
-  console.log(error);
   if (globalWithErrorReporter.__boxelErrorReporter) {
-    console.log('error reporter exists');
     globalWithErrorReporter.__boxelErrorReporter(error);
-  } else {
-    console.log('error reporter does not exist');
   }
 }
 

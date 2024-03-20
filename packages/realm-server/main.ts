@@ -15,8 +15,10 @@ import { setErrorReporter } from '@cardstack/runtime-common/realm';
 
 import fs from 'fs';
 
+let log = logger('main');
+
 if (process.env.REALM_SENTRY_DSN) {
-  console.info('Setting up Sentry.');
+  log.info('Setting up Sentry.');
   Sentry.init({
     dsn: process.env.REALM_SENTRY_DSN,
     environment: process.env.REALM_SENTRY_ENVIRONMENT || 'development',
@@ -24,7 +26,7 @@ if (process.env.REALM_SENTRY_DSN) {
 
   setErrorReporter(Sentry.captureException);
 } else {
-  console.warn(
+  log.warn(
     `No REALM_SENTRY_DSN environment variable found, skipping Sentry setup.`,
   );
 }
@@ -127,8 +129,6 @@ if (
   );
   process.exit(-1);
 }
-
-let log = logger('main');
 
 let loader = new Loader();
 shimExternals(loader);
