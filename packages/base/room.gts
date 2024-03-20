@@ -734,7 +734,7 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   formatted_body: string;
-  isStreamingFinished: boolean;
+  isStreamingFinished?: boolean;
   data: {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message
