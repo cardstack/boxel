@@ -7,7 +7,7 @@ import {
   type RunnerOpts,
 } from '@cardstack/runtime-common/search-index';
 import { JSDOM } from 'jsdom';
-import * as Sentry from '@sentry/node';
+import { type ErrorReporter } from '@cardstack/runtime-common/realm';
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
@@ -16,22 +16,19 @@ export async function makeFastBootIndexRunner(
 ): Promise<{ getRunner: IndexRunner; distPath: string }> {
   let fastboot: FastBootInstance;
   let distPath: string;
+
+  let globalWithErrorReporter = global as typeof globalThis & {
+    __boxelErrorReporter: ErrorReporter;
+  };
+
   if (typeof dist === 'string') {
     distPath = dist;
     fastboot = new FastBoot({
       distPath,
       resilient: false,
       buildSandboxGlobals(defaultGlobals: any) {
-        let sentryScope = Sentry.getCurrentScope();
-        console.log('sentry scope', sentryScope);
-        // debugger;
-        console.log(
-          'does error reporter exist when setting up fastboot v1',
-          globalThis.errorReporter,
-        );
         return Object.assign({}, defaultGlobals, {
-          errorReporter: globalThis.errorReporter,
-          __SENTRY__: globalThis.__SENTRY__,
+          __boxelErrorReporter: globalWithErrorReporter.__boxelErrorReporter,
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,
@@ -47,12 +44,8 @@ export async function makeFastBootIndexRunner(
       appName,
       dist,
       (defaultGlobals: any) => {
-        console.log(
-          'does error reporter exist when setting up fastboot v2',
-          globalThis.errorReporter,
-        );
         return Object.assign({}, defaultGlobals, {
-          errorReporter: globalThis.errorReporter,
+          __boxelErrorReporter: globalWithErrorReporter.__boxelErrorReporter,
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,

@@ -1676,21 +1676,23 @@ function lastModifiedHeader(
   ) as {} | { 'last-modified': string };
 }
 
-type ErrorReporter = (error: Error) => void;
+export type ErrorReporter = (error: Error) => void;
 
-let errorReporter: ErrorReporter;
+let globalWithErrorReporter = global as typeof globalThis & {
+  __boxelErrorReporter: ErrorReporter;
+};
 
 export function setErrorReporter(reporter: ErrorReporter) {
   console.log('setting an error reporter', reporter);
-  globalThis.errorReporter = reporter;
+  globalWithErrorReporter.__boxelErrorReporter = reporter;
 }
 
 export function reportError(error: Error) {
   console.log('in report error');
   console.log(error);
-  if (globalThis.errorReporter) {
+  if (globalWithErrorReporter.__boxelErrorReporter) {
     console.log('error reporter exists');
-    globalThis.errorReporter(error);
+    globalWithErrorReporter.__boxelErrorReporter(error);
   } else {
     console.log('error reporter does not exist');
   }
