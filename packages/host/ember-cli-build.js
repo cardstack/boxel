@@ -49,6 +49,10 @@ module.exports = function (defaults) {
                 type: 'asset',
               },
               {
+                test: /\.png$/,
+                type: 'asset',
+              },
+              {
                 test: /\.webp$/,
                 type: 'asset',
               },
