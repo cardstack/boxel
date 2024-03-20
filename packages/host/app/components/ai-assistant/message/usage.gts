@@ -14,6 +14,7 @@ export default class AiAssistantMessageUsage extends Component {
   @tracked formattedMessage = 'Hello, world';
   @tracked datetime = new Date(2024, 0, 3, 12, 30);
   @tracked isFromAssistant = false;
+  @tracked isStreaming = false;
   @tracked userId = 'johndoe:boxel.ai';
   @tracked errorMessage = '';
 
@@ -59,6 +60,7 @@ export default class AiAssistantMessageUsage extends Component {
               }}
               @errorMessage={{this.errorMessage}}
               @retryAction={{this.retryAction}}
+              @isStreaming={{this.isStreaming}}
             >
               <em>Optional embedded content</em>
             </AiAssistantMessage>
