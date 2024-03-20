@@ -410,13 +410,6 @@ Common issues are:
         await sendMessage(client, room, finalContent, initialMessage.event_id, {
           isStreamingFinished: true,
         });
-        await sendMessage(
-          client,
-          room,
-          finalContent,
-          initialMessage.event_id,
-          {},
-        );
       }
 
       if (shouldSetRoomTitle(eventList, aiBotUserId, sentCommands)) {
