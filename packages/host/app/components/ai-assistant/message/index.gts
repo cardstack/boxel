@@ -19,6 +19,7 @@ interface Signature {
     formattedMessage: SafeString;
     datetime: Date;
     isFromAssistant: boolean;
+    isStreaming: boolean;
     profileAvatar?: ComponentLike;
     attachedCards?: CardDef[];
     errorMessage?: string;
@@ -43,7 +44,9 @@ export default class AiAssistantMessage extends Component<Signature> {
     >
       <div class='meta'>
         {{#if @isFromAssistant}}
-          <div class='ai-avatar'></div>
+          <div
+            class='ai-avatar {{if this.isAvatarAnimated "ai-avatar-animated"}}'
+          ></div>
         {{else if @profileAvatar}}
           <@profileAvatar />
         {{/if}}
@@ -117,6 +120,11 @@ export default class AiAssistantMessage extends Component<Signature> {
         background-repeat: no-repeat;
         background-size: var(--ai-assistant-message-avatar-size);
       }
+
+      .ai-avatar-animated {
+        background-image: url('../ai-assist-icon-animated.webp');
+      }
+
       .avatar-img {
         width: var(--ai-assistant-message-avatar-size);
         height: var(--ai-assistant-message-avatar-size);
@@ -213,6 +221,10 @@ export default class AiAssistantMessage extends Component<Signature> {
       card,
       component: card.constructor.getComponent(card, 'atom'),
     }));
+  }
+
+  private get isAvatarAnimated() {
+    return this.args.isStreaming && !this.args.errorMessage;
   }
 }
 

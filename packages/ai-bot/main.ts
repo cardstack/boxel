@@ -61,19 +61,23 @@ async function sendMessage(
   room: Room,
   content: string,
   eventToUpdate: string | undefined,
+  data: any = {},
 ) {
   log.info('Sending', content);
   let messageObject: IContent = {
-    body: content,
-    msgtype: 'm.text',
-    formatted_body: content,
-    format: 'org.matrix.custom.html',
-    'm.new_content': {
+    ...{
       body: content,
       msgtype: 'm.text',
       formatted_body: content,
       format: 'org.matrix.custom.html',
+      'm.new_content': {
+        body: content,
+        msgtype: 'm.text',
+        formatted_body: content,
+        format: 'org.matrix.custom.html',
+      },
     },
+    ...data,
   };
   return await sendEvent(
     client,
@@ -174,7 +178,7 @@ async function setTitle(
   let startOfConversation = [
     {
       role: 'system',
-      content: `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words. 
+      content: `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
               Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
               Explain the general actions and user intent.`,
     } as OpenAIPromptMessage,
@@ -325,10 +329,12 @@ Common issues are:
       if (event.getSender() === aiBotUserId) {
         return;
       }
-      let initialMessage: ISendEventResponse = await client.sendHtmlMessage(
-        room!.roomId,
+
+      let initialMessage = await sendMessage(
+        client,
+        room,
         'Thinking...',
-        'Thinking...',
+        undefined,
       );
 
       let initial = await client.roomInitialSync(room!.roomId, 1000);
@@ -401,9 +407,16 @@ Common issues are:
       });
       if (finalContent) {
         finalContent = cleanContent(finalContent);
-      }
-      if (finalContent) {
-        await sendMessage(client, room, finalContent, initialMessage.event_id);
+        await sendMessage(client, room, finalContent, initialMessage.event_id, {
+          isStreamingFinished: true,
+        });
+        await sendMessage(
+          client,
+          room,
+          finalContent,
+          initialMessage.event_id,
+          {},
+        );
       }
 
       if (shouldSetRoomTitle(eventList, aiBotUserId, sentCommands)) {
