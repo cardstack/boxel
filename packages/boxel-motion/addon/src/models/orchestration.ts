@@ -1,5 +1,4 @@
 import type Behavior from '../behaviors/base.ts';
-import StaticBehavior from '../behaviors/static.ts';
 import WaitBehavior from '../behaviors/wait.ts';
 import generateFrames from '../utils/generate-frames.ts';
 import { type Keyframe, type Value } from '../value/index.ts';
@@ -8,9 +7,9 @@ import { type MotionOptions, type MotionProperty } from './motion.ts';
 import type Sprite from './sprite.ts';
 
 interface RowFragment {
+  fill: boolean;
   frames: Frame[];
   startColumn: number;
-  static: boolean;
 }
 
 export class OrchestrationMatrix {
@@ -39,8 +38,8 @@ export class OrchestrationMatrix {
         fragmentsByColumn[rowFragment.startColumn] =
           fragmentsByColumn[rowFragment.startColumn] ?? [];
         fragmentsByColumn[rowFragment.startColumn]!.push(rowFragment);
-        // don't backfill static frames, they're intended to only be set for their duration
-        if (rowFragment.static === false && rowFragment.frames[0]) {
+        // some frames (where fill == false) are intended to only be set for their duration
+        if (rowFragment.fill && rowFragment.frames[0]) {
           baseFrames.push(rowFragment.frames[0] as Frame);
         }
       }
@@ -80,8 +79,8 @@ export class OrchestrationMatrix {
           if (frame) {
             frames.push(frame);
 
-            // Detect the final frame for static behaviors, so we can exclude it from future frames (no forward-fill).
-            if (!fragment.frames.length && fragment.static) {
+            // Detect the final frame for behaviors that should not fill, so we can exclude it from future frames (no forward-fill).
+            if (!fragment.frames.length && !fragment.fill) {
               propertiesToRemoveFromPreviousKeyframe.push(frame.property);
             }
           } else {
@@ -195,7 +194,7 @@ export class OrchestrationMatrix {
           rowFragments.push({
             frames,
             startColumn: 0,
-            static: true,
+            fill: timing.behavior.fill,
           });
           maxLength = Math.max(frames.length, maxLength);
         }
@@ -213,7 +212,7 @@ export class OrchestrationMatrix {
             rowFragments.push({
               frames,
               startColumn: 0,
-              static: timing.behavior instanceof StaticBehavior,
+              fill: timing.behavior.fill,
             });
             maxLength = Math.max(frames.length, maxLength);
           }

@@ -22,4 +22,5 @@ Router.map(function () {
   this.route('simple-orchestration');
   this.route('list');
   this.route('in-out');
+  this.route('split-view');
 });
