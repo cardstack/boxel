@@ -129,6 +129,7 @@ export default class AiAssistantMessageUsage extends Component {
                 isReady=true
                 profileInitials=this.profileInitials
               }}
+              @isStreaming={{false}}
             />
             <AiAssistantMessage
               @formattedMessage={{htmlSafe
@@ -136,6 +137,7 @@ export default class AiAssistantMessageUsage extends Component {
               }}
               @datetime={{this.oneMinutesAgo}}
               @isFromAssistant={{true}}
+              @isStreaming={{false}}
             />
           </AiAssistantConversation>
         </div>
