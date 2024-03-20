@@ -4,7 +4,6 @@ import {
   RoomMemberEvent,
   RoomEvent,
   createClient,
-  ISendEventResponse,
   Room,
   MatrixClient,
 } from 'matrix-js-sdk';
