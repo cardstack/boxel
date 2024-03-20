@@ -53,6 +53,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         {{#if @isFromAssistant}}
           <div
             class='ai-avatar {{if this.isAvatarAnimated "ai-avatar-animated"}}'
+            data-test-ai-avatar
           ></div>
         {{else if @profileAvatar}}
           <@profileAvatar />
