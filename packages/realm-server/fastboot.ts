@@ -36,7 +36,7 @@ export async function makeFastBootIndexRunner(
           Request: globalThis.Request,
           Response: globalThis.Response,
           btoa,
-          getRunnerOpts
+          getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),
         });
