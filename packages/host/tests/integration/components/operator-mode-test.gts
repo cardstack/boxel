@@ -3058,17 +3058,17 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-    let savedCards = new Set<string>();
-    this.onSave((url) => savedCards.add(url.href));
+
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
     assert.dom('[data-test-add-new]').exists();
     await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
-    await waitFor('[data-test-edit-button]');
+    await waitFor('[data-test-stack-card-index="1"]');
+
     await click('[data-test-edit-button]');
-    await waitFor('[data-test-isolated-author');
+    await waitFor('[data-test-isolated-author]');
     assert.dom('[data-test-isolated-author]').exists();
   });
 });
