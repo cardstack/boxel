@@ -1391,10 +1391,6 @@ importers:
         version: 4.14.182
 
   packages/realm-server:
-    dependencies:
-      '@sentry/node':
-        specifier: ^7.105.0
-        version: 7.105.0
     devDependencies:
       '@cardstack/boxel-ui':
         specifier: workspace:*
@@ -1408,6 +1404,9 @@ importers:
       '@koa/router':
         specifier: ^12.0.0
         version: 12.0.0
+      '@sentry/node':
+        specifier: ^7.105.0
+        version: 7.105.0
       '@types/basic-auth':
         specifier: ^1.1.3
         version: 1.1.3
@@ -4867,7 +4866,6 @@ packages:
       '@sentry/core': 7.105.0
       '@sentry/types': 7.105.0
       '@sentry/utils': 7.105.0
-    dev: false
 
   /@sentry/core@7.105.0:
     resolution: {integrity: sha512-5xsaTG6jZincTeJUmZomlv20mVRZUEF1U/g89lmrSOybyk2+opEnB1JeBn4ODwnvmSik8r2QLr6/RiYlaxRJCg==}
@@ -4875,7 +4873,6 @@ packages:
     dependencies:
       '@sentry/types': 7.105.0
       '@sentry/utils': 7.105.0
-    dev: false
 
   /@sentry/node@7.105.0:
     resolution: {integrity: sha512-b0QwZ7vT4hcJi6LmNRh3dcaYpLtXnkYXkL0rfhMb8hN8sUx8zuOWFMI7j0cfAloVThUeJVwGyv9dERfzGS2r2w==}
@@ -4885,19 +4882,16 @@ packages:
       '@sentry/core': 7.105.0
       '@sentry/types': 7.105.0
       '@sentry/utils': 7.105.0
-    dev: false
 
   /@sentry/types@7.105.0:
     resolution: {integrity: sha512-80o0KMVM+X2Ym9hoQxvJetkJJwkpCg7o6tHHFXI+Rp7fawc2iCMTa0IRQMUiSkFvntQLYIdDoNNuKdzz2PbQGA==}
     engines: {node: '>=8'}
-    dev: false
 
   /@sentry/utils@7.105.0:
     resolution: {integrity: sha512-YVAV0c2KLM8+VZCicQ/E/P2+J9Vs0hGhrXwV7w6ZEAtvxrg4oF270toL1WRhvcaf8JO4J1v4V+LuU6Txs4uEeQ==}
     engines: {node: '>=8'}
     dependencies:
       '@sentry/types': 7.105.0
-    dev: false
 
   /@sideway/address@4.1.4:
     resolution: {integrity: sha512-7vwq+rOHVWjyXxVlR76Agnvhy8I9rpzjosTESvmhNeXOXdZZB15Fl+TI9x1SiHZH5Jv2wTGduSxFDIaq0m3DUw==}
