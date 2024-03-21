@@ -530,6 +530,19 @@ export default class MatrixService extends Service {
     }
   }
 
+  getLastActiveTimestamp(room: RoomField) {
+    let maybeLastActive = room.events[room.events.length - 1]?.origin_server_ts;
+
+    let matrixRoom = this.client.getRoom(room.roomId);
+    let lastMatrixEvent = matrixRoom?.getLastActiveTimestamp();
+
+    if (lastMatrixEvent && maybeLastActive) {
+      return Math.max(lastMatrixEvent, maybeLastActive);
+    }
+
+    return lastMatrixEvent ?? maybeLastActive ?? room.created?.getTime();
+  }
+
   async requestRegisterEmailToken(
     email: string,
     clientSecret: string,
