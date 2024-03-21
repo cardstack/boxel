@@ -169,7 +169,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         font-weight: 500;
         line-height: 1.25rem;
         letter-spacing: var(--boxel-lsp-xs);
-        padding: var(--boxel-sp);
+        padding: var(--ai-assistant-message-padding, var(--boxel-sp));
       }
       .is-from-assistant .content {
         background: #3b394b;

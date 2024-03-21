@@ -13,6 +13,7 @@ import { marked } from 'marked';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
@@ -41,6 +42,7 @@ interface Signature {
 export default class Room extends Component<Signature> {
   <template>
     <AiAssistantMessage
+      class='room-message'
       @formattedMessage={{htmlSafe this.formattedMessage}}
       @datetime={{@message.created}}
       @isFromAssistant={{eq @message.author.userId aiBotUserId}}
@@ -84,30 +86,44 @@ export default class Room extends Component<Signature> {
           {{/let}}
         </div>
         {{#if this.isDisplayingCode}}
-          <Button
-            @kind='text-only'
-            @size='small'
-            {{on 'click' (perform this.copyToClipboard)}}
-          >Copy to clipboard</Button>
-          <div
-            class='monaco-container'
-            {{monacoModifier
-              content=this.previewPatchCode
-              contentChanged=undefined
-              monacoSDK=@monacoSDK
-              language='json'
-              readOnly=true
-              darkTheme=true
-              editorDisplayOptions=this.editorDisplayOptions
-            }}
-            data-test-editor
-            data-test-percy-hide
-          ></div>
+          <div class='preview-code'>
+            <Button
+              class='copy-to-clipboard-button'
+              @kind='text-only'
+              @size='extra-small'
+              {{on 'click' (perform this.copyToClipboard)}}
+            >
+              <CopyIcon
+                width='16'
+                height='16'
+                role='presentation'
+                aria-hidden='true'
+              />
+              Copy to clipboard
+            </Button>
+            <div
+              class='monaco-container'
+              {{monacoModifier
+                content=this.previewPatchCode
+                contentChanged=undefined
+                monacoSDK=@monacoSDK
+                language='json'
+                readOnly=true
+                darkTheme=true
+                editorDisplayOptions=this.editorDisplayOptions
+              }}
+              data-test-editor
+              data-test-percy-hide
+            />
+          </div>
         {{/if}}
       {{/if}}
     </AiAssistantMessage>
 
     <style>
+      .room-message {
+        --ai-assistant-message-padding: var(--boxel-sp);
+      }
       .patch-button-bar {
         display: flex;
         justify-content: flex-end;
@@ -121,6 +137,30 @@ export default class Room extends Component<Signature> {
         min-width: initial;
         width: auto;
         max-height: 1.5rem;
+      }
+      .preview-code {
+        --spacing: var(--boxel-sp-sm);
+        --fill-container-spacing: calc(
+          -1 * var(--ai-assistant-message-padding)
+        );
+        margin: var(--boxel-sp) var(--fill-container-spacing)
+          var(--fill-container-spacing);
+        padding: var(--spacing) 0;
+        background-color: var(--boxel-dark);
+      }
+      .copy-to-clipboard-button {
+        --boxel-button-font: 700 var(--boxel-font-xs);
+        --boxel-button-padding: 0 var(--boxel-sp-xs);
+        --icon-color: var(--boxel-highlight);
+        --icon-stroke-width: 2px;
+        margin-left: var(--spacing);
+        margin-bottom: var(--spacing);
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: var(--spacing);
+      }
+      .copy-to-clipboard-button:hover:not(:disabled) {
+        --icon-color: var(--boxel-highlight-hover);
       }
       .monaco-container {
         height: 30vh;
