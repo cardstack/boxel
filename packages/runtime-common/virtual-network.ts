@@ -1,7 +1,8 @@
-import { Loader, PACKAGES_FAKE_ORIGIN } from './loader';
+import { Loader } from './loader';
 import type { RunnerOpts } from './search-index';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
+const PACKAGES_FAKE_ORIGIN = 'https://packages/';
 
 function getNativeFetch(): typeof fetch {
   if (isFastBoot) {
@@ -24,9 +25,16 @@ export class VirtualNetwork {
   private nativeFetch = getNativeFetch();
   private handlers: Handler[] = [];
 
+  private resolveImport = (moduleIdentifier: string) => {
+    if (!isUrlLike(moduleIdentifier)) {
+      moduleIdentifier = new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
+    }
+    return moduleIdentifier;
+  };
+
   private shimmingLoader = new Loader(() => {
     throw new Error('This loader should never call fetch');
-  });
+  }, this.resolveImport);
 
   constructor() {
     this.mount(async (request) => {
@@ -36,6 +44,10 @@ export class VirtualNetwork {
 
       return null;
     });
+  }
+
+  createLoader() {
+    return new Loader(this.fetch, this.resolveImport);
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -64,4 +76,13 @@ export class VirtualNetwork {
 
     return this.nativeFetch(request, init);
   };
+}
+
+function isUrlLike(moduleIdentifier: string): boolean {
+  return (
+    moduleIdentifier.startsWith('.') ||
+    moduleIdentifier.startsWith('/') ||
+    moduleIdentifier.startsWith('http://') ||
+    moduleIdentifier.startsWith('https://')
+  );
 }

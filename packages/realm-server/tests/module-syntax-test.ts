@@ -14,7 +14,7 @@ import { shimExternals } from '../lib/externals';
 
 module('module-syntax', function () {
   let virtualNetwork = new VirtualNetwork();
-  let loader = new Loader(virtualNetwork.fetch);
+  let loader = virtualNetwork.createLoader();
 
   loader.addURLMapping(
     new URL(baseRealm.url),

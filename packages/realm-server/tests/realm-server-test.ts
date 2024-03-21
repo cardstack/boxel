@@ -117,7 +117,7 @@ module('Realm Server', function (hooks) {
   let dir: DirResult;
 
   let virtualNetwork = new VirtualNetwork();
-  let loader = new Loader(virtualNetwork.fetch);
+  let loader = virtualNetwork.createLoader();
 
   loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   shimExternals(virtualNetwork);
@@ -1717,7 +1717,7 @@ module('Realm Server', function (hooks) {
 
       let virtualNetwork = new VirtualNetwork();
 
-      let testRealmServer2Loader = new Loader(virtualNetwork.fetch);
+      let testRealmServer2Loader = virtualNetwork.createLoader();
       testRealmServer2Loader.addURLMapping(
         new URL(baseRealm.url),
         new URL(localBaseRealm),
@@ -2031,7 +2031,7 @@ module('Realm Server serving from root', function (hooks) {
   let dir: DirResult;
 
   let virtualNetwork = new VirtualNetwork();
-  let loader = new Loader(virtualNetwork.fetch);
+  let loader = virtualNetwork.createLoader();
 
   loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   shimExternals(virtualNetwork);
@@ -2049,7 +2049,7 @@ module('Realm Server serving from root', function (hooks) {
 
     let virtualNetwork = new VirtualNetwork();
 
-    let testRealmServerLoader = new Loader(virtualNetwork.fetch);
+    let testRealmServerLoader = virtualNetwork.createLoader();
     testRealmServerLoader.addURLMapping(
       new URL(baseRealm.url),
       new URL(localBaseRealm),
@@ -2236,7 +2236,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
   let dir: DirResult;
 
   let virtualNetwork = new VirtualNetwork();
-  let loader = new Loader(virtualNetwork.fetch);
+  let loader = virtualNetwork.createLoader();
   loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   shimExternals(virtualNetwork);
 
@@ -2251,7 +2251,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    let testRealmServerLoader = new Loader(virtualNetwork.fetch);
+    let testRealmServerLoader = virtualNetwork.createLoader();
     testRealmServerLoader.addURLMapping(
       new URL(baseRealm.url),
       new URL(localBaseRealm),
@@ -2304,7 +2304,7 @@ async function setupPermissionedRealm(permissions: RealmPermissions) {
   let dir = dirSync();
   copySync(join(__dirname, 'cards'), dir.name);
   let virtualNetwork = new VirtualNetwork();
-  let testRealmServerLoader = new Loader(virtualNetwork.fetch);
+  let testRealmServerLoader = virtualNetwork.createLoader();
   testRealmServerLoader.addURLMapping(
     new URL(baseRealm.url),
     new URL(localBaseRealm),

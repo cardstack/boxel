@@ -35,7 +35,7 @@ setGracefulCleanup();
 // as to test through loader caching)
 module('indexing', function (hooks) {
   let virtualNetwork = new VirtualNetwork();
-  let loader = new Loader(virtualNetwork.fetch);
+  let loader = virtualNetwork.createLoader();
 
   loader.addURLMapping(
     new URL(baseRealm.url),
@@ -54,7 +54,7 @@ module('indexing', function (hooks) {
   setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
-    let testRealmLoader = new Loader(virtualNetwork.fetch);
+    let testRealmLoader = virtualNetwork.createLoader();
     testRealmLoader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/'),

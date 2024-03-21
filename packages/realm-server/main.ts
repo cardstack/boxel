@@ -114,7 +114,7 @@ if (
 
 let log = logger('main');
 let virtualNetwork = new VirtualNetwork();
-let loader = new Loader(virtualNetwork.fetch);
+let loader = virtualNetwork.createLoader();
 shimExternals(virtualNetwork);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [

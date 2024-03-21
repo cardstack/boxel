@@ -8,8 +8,6 @@ import flatMap from 'lodash/flatMap';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
 
-export const PACKAGES_FAKE_ORIGIN = 'https://packages/';
-
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
 export interface ResolvedURL extends URL {
@@ -91,7 +89,6 @@ type EvaluatableModule =
 
 type UnregisteredDep =
   | { type: 'dep'; moduleURL: ResolvedURL }
-  | { type: 'shim-dep'; moduleId: string }
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
@@ -103,10 +100,6 @@ type EvaluatableDep =
   | {
       type: 'completing-dep';
       moduleURL: ResolvedURL;
-    }
-  | {
-      type: 'shim-dep';
-      moduleId: string;
     }
   | { type: '__import_meta__' }
   | { type: 'exports' };
@@ -138,13 +131,19 @@ export class Loader {
   private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
+  private resolveImport: (moduleIdentifier: string) => string;
 
-  constructor(fetch: Fetch) {
+  constructor(
+    fetch: Fetch,
+    resolveImport?: (moduleIdentifier: string) => string,
+  ) {
     this.fetchImplementation = fetch;
+    this.resolveImport =
+      resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
   }
 
   static cloneLoader(loader: Loader): Loader {
-    let clone = new Loader(loader.fetchImplementation);
+    let clone = new Loader(loader.fetchImplementation, loader.resolveImport);
     clone.urlHandlers = loader.urlHandlers;
     clone.urlMappings = loader.urlMappings;
     for (let [moduleIdentifier, module] of loader.moduleShims) {
@@ -166,7 +165,7 @@ export class Loader {
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    moduleIdentifier = resolvedPackageName(moduleIdentifier);
+    moduleIdentifier = this.resolveImport(moduleIdentifier);
     let proxiedModule = this.createModuleProxy(module, moduleIdentifier);
 
     for (let propName of Object.keys(module)) {
@@ -194,13 +193,9 @@ export class Loader {
     }
     consumed.add(moduleIdentifier);
 
-    let module: Module | undefined;
-    if (isUrlLike(moduleIdentifier)) {
-      let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
-      module = this.getModule(resolvedModuleIdentifier.href);
-    } else {
-      module = this.getModule(moduleIdentifier);
-    }
+    let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
+    let module = this.getModule(resolvedModuleIdentifier.href);
+
     if (!module || module.state === 'fetching') {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
@@ -261,7 +256,7 @@ export class Loader {
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
-    moduleIdentifier = resolvedPackageName(moduleIdentifier);
+    moduleIdentifier = this.resolveImport(moduleIdentifier);
 
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
@@ -315,16 +310,7 @@ export class Loader {
               maybeReadyDeps.push(entry);
               continue;
             }
-            let depModule = this.getModule(
-              entry.type === 'dep' ? entry.moduleURL.href : entry.moduleId,
-            );
-            if (entry.type === 'shim-dep') {
-              maybeReadyDeps.push({
-                type: 'shim-dep',
-                moduleId: entry.moduleId,
-              });
-              continue;
-            }
+            let depModule = this.getModule(entry.moduleURL.href);
             if (!isEvaluatable(depModule)) {
               // we always only await the first dep that actually needs work and
               // then break back to the top-level state machine, so that we'll
@@ -386,18 +372,7 @@ export class Loader {
               readyDeps.push(entry);
               continue;
             }
-            let depModuleId =
-              entry.type === 'dep' || entry.type === 'completing-dep'
-                ? entry.moduleURL.href
-                : entry.moduleId;
-            let depModule = this.getModule(depModuleId);
-            if (entry.type === 'shim-dep') {
-              readyDeps.push({
-                type: 'shim-dep',
-                moduleId: entry.moduleId,
-              });
-              continue;
-            }
+            let depModule = this.getModule(entry.moduleURL.href);
             if (entry.type === 'dep') {
               readyDeps.push({
                 type: 'dep',
@@ -636,9 +611,9 @@ export class Loader {
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
-    let moduleId = isUrlLike(moduleIdentifier)
-      ? trimExecutableExtension(this.reverseResolution(moduleIdentifier)).href
-      : moduleIdentifier;
+    let moduleId = trimExecutableExtension(
+      this.reverseResolution(moduleIdentifier),
+    ).href;
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
@@ -725,16 +700,11 @@ export class Loader {
           return { type: 'exports' };
         } else if (depId === '__import_meta__') {
           return { type: '__import_meta__' };
-        } else if (isUrlLike(depId)) {
-          return {
-            type: 'dep',
-            moduleURL: this.resolve(depId, new URL(moduleIdentifier)),
-          };
         } else {
           return {
             type: 'dep',
             moduleURL: this.resolve(
-              new URL(depId, PACKAGES_FAKE_ORIGIN).href,
+              this.resolveImport(depId),
               new URL(moduleIdentifier),
             ),
           };
@@ -779,11 +749,7 @@ export class Loader {
     );
     let consumedModules = new Set(
       flatMap(module.dependencies, (dep) =>
-        dep.type === 'dep'
-          ? [dep.moduleURL.href]
-          : dep.type === 'shim-dep'
-          ? [dep.moduleId]
-          : [],
+        dep.type === 'dep' ? [dep.moduleURL.href] : [],
       ),
     );
 
@@ -810,15 +776,6 @@ export class Loader {
               );
             }
             return this.evaluate(entry.moduleURL.href, depModule!);
-          }
-          case 'shim-dep': {
-            let shimModule = this.getModule(entry.moduleId);
-            if (shimModule?.state !== 'evaluated') {
-              throw new Error(
-                `bug: shimmed modules should always be in an 'evaluated' state, but ${entry.moduleId} was in '${module.state}' state`,
-              );
-            }
-            return shimModule.moduleInstance;
           }
           default:
             throw assertNever(entry);
@@ -874,30 +831,12 @@ export class Loader {
   }
 }
 
-function resolvedPackageName(moduleIdentifier: string) {
-  if (!isUrlLike(moduleIdentifier)) {
-    moduleIdentifier = new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
-  }
-  return moduleIdentifier;
-}
-
 function assertNever(value: never) {
   throw new Error(`should never happen ${value}`);
 }
 
-function isUrlLike(moduleIdentifier: string): boolean {
-  return (
-    moduleIdentifier.startsWith('.') ||
-    moduleIdentifier.startsWith('/') ||
-    moduleIdentifier.startsWith('http://') ||
-    moduleIdentifier.startsWith('https://')
-  );
-}
-
 function trimModuleIdentifier(moduleIdentifier: string): string {
-  return isUrlLike(moduleIdentifier)
-    ? trimExecutableExtension(new URL(moduleIdentifier)).href
-    : moduleIdentifier;
+  return trimExecutableExtension(new URL(moduleIdentifier)).href;
 }
 
 type ModuleState = Module['state'];

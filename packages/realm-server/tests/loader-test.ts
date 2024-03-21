@@ -23,7 +23,7 @@ module('loader', function (hooks) {
   let testRealmServer: Server;
 
   let virtualNetwork = new VirtualNetwork();
-  let loader = new Loader(virtualNetwork.fetch);
+  let loader = virtualNetwork.createLoader();
 
   loader.addURLMapping(
     new URL(baseRealm.url),
@@ -47,7 +47,7 @@ module('loader', function (hooks) {
   });
 
   test('can dynamically load modules with cycles', async function (assert) {
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let module = await loader.import<{ three(): number }>(
       `${testRealmHref}cycle-two`,
@@ -56,7 +56,7 @@ module('loader', function (hooks) {
   });
 
   test('can resolve multiple import load races against a common dep', async function (assert) {
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let a = loader.import<{ a(): string }>(`${testRealmHref}a`);
     let b = loader.import<{ b(): string }>(`${testRealmHref}b`);
@@ -66,7 +66,7 @@ module('loader', function (hooks) {
   });
 
   test('can resolve a import deadlock', async function (assert) {
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let a = loader.import<{ a(): string }>(`${testRealmHref}deadlock/a`);
     let b = loader.import<{ b(): string }>(`${testRealmHref}deadlock/b`);
@@ -78,7 +78,7 @@ module('loader', function (hooks) {
   });
 
   test('supports import.meta', async function (assert) {
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
     let realm = await createRealm(
       loader,
       dir.name,
@@ -103,7 +103,7 @@ module('loader', function (hooks) {
   });
 
   test('can determine consumed modules', async function (assert) {
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
     await loader.import<{ a(): string }>(`${testRealmHref}a`);
     assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}a`), [
       `${testRealmHref}a`,
@@ -113,7 +113,7 @@ module('loader', function (hooks) {
   });
 
   test('can determine consumed modules when an error is encountered during loading', async function (assert) {
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     try {
       await loader.import<{ d(): string }>(`${testRealmHref}d`);
@@ -131,7 +131,7 @@ module('loader', function (hooks) {
   });
 
   test('can get consumed modules within a cycle', async function (assert) {
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     await loader.import<{ three(): number }>(`${testRealmHref}cycle-two`);
     let modules = await loader.getConsumedModules(`${testRealmHref}cycle-two`);
@@ -142,7 +142,7 @@ module('loader', function (hooks) {
   });
 
   test('supports identify API', async function (assert) {
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
     shimExternals(virtualNetwork);
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let { Person } = await loader.import<{ Person: unknown }>(
@@ -160,7 +160,7 @@ module('loader', function (hooks) {
   });
 
   test('exports cannot be mutated', async function (assert) {
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
     shimExternals(virtualNetwork);
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let module = await loader.import<{ Person: unknown }>(
@@ -172,7 +172,7 @@ module('loader', function (hooks) {
   });
 
   test('can get a loader used to import a specific card', async function (assert) {
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
     shimExternals(virtualNetwork);
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let module = await loader.import<any>(`${testRealmHref}person`);

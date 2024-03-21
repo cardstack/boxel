@@ -35,7 +35,7 @@ module('realm-auth-client', function (assert) {
     } as RealmAuthMatrixClientInterface;
 
     let virtualNetwork = new VirtualNetwork();
-    let loader = new Loader(virtualNetwork.fetch);
+    let loader = virtualNetwork.createLoader();
 
     client = new RealmAuthClient(
       new URL('http://testrealm.com/'),
