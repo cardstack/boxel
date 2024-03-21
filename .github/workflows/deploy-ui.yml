@@ -58,8 +58,6 @@ jobs:
       - name: Deploy
         # run: pnpm deploy:boxel-ui ${{ inputs.environment }} --verbose
         run: pnpm deploy:boxel-ui staging --verbose
-        env:
-          EMBER_CLI_DEPLOY_REUSE_BUILD: "1"
 
       # FIXME restore?
       # - name: Send notification to Discord
