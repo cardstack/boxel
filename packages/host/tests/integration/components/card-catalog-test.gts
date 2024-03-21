@@ -170,7 +170,7 @@ module('Integration | card-catalog', function (hooks) {
       assert
         .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
         .exists({ count: 1 });
-      assert.dom('[data-test-realm-filter-button]').hasText('Realm: All');
+      assert.dom('[data-test-realm-filter-button]').hasText('Workspace: All');
 
       let localResults = [
         ...document.querySelectorAll(
@@ -194,7 +194,7 @@ module('Integration | card-catalog', function (hooks) {
       await click(`[data-test-boxel-menu-item-text="Base Workspace"]`); // base realm is selected
       assert
         .dom('[data-test-realm-filter-button]')
-        .hasText(`Realm: Base Workspace`, 'Only base realm is selected');
+        .hasText(`Workspace: Base Workspace`, 'Only base realm is selected');
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
         .exists({ count: 1 });
@@ -216,7 +216,7 @@ module('Integration | card-catalog', function (hooks) {
 
       assert
         .dom('[data-test-realm-filter-button]')
-        .hasText(`Realm: ${realmName}, Base Workspace`);
+        .hasText(`Workspace: ${realmName}, Base Workspace`);
       assert
         .dom('[data-test-realm]')
         .exists({ count: 2 }, 'Both realms are selected');
@@ -241,7 +241,7 @@ module('Integration | card-catalog', function (hooks) {
 
       assert
         .dom('[data-test-realm-filter-button]')
-        .hasText(`Realm: Base Workspace`);
+        .hasText(`Workspace: Base Workspace`);
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
       assert
         .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
@@ -260,13 +260,13 @@ module('Integration | card-catalog', function (hooks) {
       await click(`[data-test-boxel-menu-item-text="Base Workspace"]`);
       assert
         .dom('[data-test-realm-filter-button]')
-        .hasText(`Realm: ${realmName}, Base Workspace`); // all realms selected
+        .hasText(`Workspace: ${realmName}, Base Workspace`); // all realms selected
       await click('[data-test-realm-filter-button]');
       await click(`[data-test-boxel-menu-item-text="Base Workspace"]`);
       await click('[data-test-realm-filter-button]');
       await click(`[data-test-boxel-menu-item-text="${realmName}"]`); // all realms unselected
 
-      assert.dom('[data-test-realm-filter-button]').hasText('Realm: All');
+      assert.dom('[data-test-realm-filter-button]').hasText('Workspace: All');
       assert
         .dom('[data-test-realm]')
         .exists(

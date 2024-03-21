@@ -48,7 +48,7 @@ export interface Signature {
     before: [AccessoriesBlockArg, InputGroupBlockArg];
     default: [ControlsBlockArg, AccessoriesBlockArg, InputGroupBlockArg];
   };
-  Element: HTMLDivElement;
+  Element: HTMLElement;
 }
 
 export default class InputGroup extends Component<Signature> {

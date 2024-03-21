@@ -62,7 +62,7 @@ export default class RealmDropdown extends Component<Signature> {
               {{this.selectedRealm.name}}
             </div>
           {{else}}
-            Select a realm
+            Select a workspace
           {{/if}}
           <DropdownArrowDown class='arrow-icon' width='22px' height='22px' />
         </Button>

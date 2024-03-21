@@ -180,4 +180,28 @@ module('loader', function (hooks) {
     let testingLoader = Loader.getLoaderFor(card);
     assert.strictEqual(testingLoader, loader, 'the loaders are the same');
   });
+
+  test('is able to follow redirects', async function (assert) {
+    loader.prependURLHandlers([
+      async (request) => {
+        if (request.url.includes('node-b.abc')) {
+          return new Response('final redirection url');
+        }
+        return null;
+      },
+      async (request) => {
+        if (!request.url.includes('node-a.abc')) {
+          return null;
+        }
+        return new Response('redirected', {
+          status: 301,
+          headers: new Headers({ Location: `http://node-b.abc` }),
+        });
+      },
+    ]);
+
+    let response = await loader.fetch(`http://node-a.abc`);
+    assert.strictEqual(response.url, 'http://node-b.abc/');
+    assert.true(response.redirected);
+  });
 });

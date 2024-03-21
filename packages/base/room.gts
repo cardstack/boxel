@@ -22,6 +22,7 @@ import {
 //@ts-expect-error cached type not available yet
 import { cached } from '@glimmer/tracking';
 import { initSharedState } from './shared-state';
+import BooleanField from './boolean';
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -188,7 +189,7 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
           </div>
         {{else if cardResource.card}}
           {{#let (getCardComponent cardResource.card) as |CardComponent|}}
-            <div data-test-message-card={{cardResource.card.id}}>
+            <div data-test-attached-card={{cardResource.card.id}}>
               <CardComponent />
             </div>
           {{/let}}
@@ -241,6 +242,7 @@ export class MessageField extends FieldDef {
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
   @field command = contains(PatchField);
+  @field isStreamingFinished = contains(BooleanField);
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -520,6 +522,11 @@ export class RoomField extends FieldDef {
             }),
           });
         } else {
+          // Text from the AI bot
+          if (event.content.msgtype === 'm.text') {
+            (cardArgs as any).isStreamingFinished =
+              !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+          }
           messageField = new MessageField(cardArgs);
         }
 
@@ -687,6 +694,7 @@ interface MessageEvent extends BaseMatrixEvent {
     format: 'org.matrix.custom.html';
     body: string;
     formatted_body: string;
+    isStreamingFinished: boolean;
   };
   unsigned: {
     age: number;
@@ -739,6 +747,7 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   formatted_body: string;
+  isStreamingFinished?: boolean;
   data: {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message
