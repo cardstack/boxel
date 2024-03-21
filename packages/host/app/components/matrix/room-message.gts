@@ -6,6 +6,9 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+
 import { marked } from 'marked';
 
 import { Button } from '@cardstack/boxel-ui/components';
@@ -81,6 +84,11 @@ export default class Room extends Component<Signature> {
           {{/let}}
         </div>
         {{#if this.isDisplayingCode}}
+          <Button
+            @kind='text-only'
+            @size='small'
+            {{on 'click' (perform this.copyToClipboard)}}
+          >Copy to clipboard</Button>
           <div
             class='monaco-container'
             {{monacoModifier
@@ -130,6 +138,10 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   @tracked private isDisplayingCode = false;
+
+  private copyToClipboard = task(async () => {
+    await navigator.clipboard.writeText(this.previewPatchCode);
+  });
 
   private get formattedMessage() {
     return sanitizeHtml(marked(this.args.message.formattedMessage));
