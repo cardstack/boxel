@@ -176,7 +176,13 @@ export default class InteractSubmode extends Component<Signature> {
           isLinkedCard: opts?.isLinkedCard,
           stackIndex,
         });
+
+        // TODO: it is important saveModel happens after newItem because it
+        // looks like perhaps there is a race condition (or something else) when a
+        // new linked card is created, and when it is added to the stack and closed
+        // - the parent card is not updated with the new linked card
         await here.cardService.saveModel(here, newCard);
+
         await newItem.ready();
         here.addToStack(newItem);
         return await newItem.request?.promise;
