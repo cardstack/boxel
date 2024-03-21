@@ -27,7 +27,9 @@ jobs:
 
       - name: Set up env
         env:
-          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          # FIXME restore
+          INPUT_ENVIRONMENT: staging
+          # INPUT_ENVIRONMENT: ${{ inputs.environment }}
         run: |
           echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
           if [ "$INPUT_ENVIRONMENT" = "production" ]; then
