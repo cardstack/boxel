@@ -21,7 +21,8 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type MessageField } from 'https://cardstack.com/base/room';
+
+import type { MessageField } from 'https://cardstack.com/base/room';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -50,13 +51,14 @@ export default class Room extends Component<Signature> {
           {{#each this.room.messages as |message i|}}
             <RoomMessage
               @message={{message}}
+              @isStreaming={{this.isMessageStreaming message i}}
               data-test-message-idx={{i}}
               {{scrollIntoViewModifier (this.isLastMessage i)}}
             />
           {{/each}}
           {{#if this.isMessagePendingDisplayed}}
             <RoomMessage
-              @isPending={{true}}
+              @isSending={{true}}
               {{! @glint-ignore messagePending must be not undefined here}}
               @message={{this.lastMessageSent}}
               data-test-message-idx={{this.room.messages.length}}
@@ -132,6 +134,14 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+  }
+
+  @action isMessageStreaming(message: MessageField, messageIndex: number) {
+    return (
+      !message.isStreamingFinished &&
+      this.isLastMessage(messageIndex) &&
+      (new Date().getTime() - message.created.getTime()) / 1000 < 60 // Older events do not come with isStreamingFinished property so we have no other way to determine if the message is done streaming other than checking if they are old messages (older than 60 seconds as an arbitrary threshold)
+    );
   }
 
   private doMatrixEventFlush = restartableTask(async () => {

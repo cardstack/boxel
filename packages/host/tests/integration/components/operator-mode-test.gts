@@ -1062,7 +1062,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-message-field]').hasValue('');
       assert.dom('[data-test-send-message-btn]').isDisabled();
       assert.dom('[data-test-ai-assistant-message]').exists();
-      assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
+      assert.dom('[data-test-ai-assistant-message]').hasClass('is-sending');
       await percySnapshot(assert);
 
       sendMessageDeffered.fulfill();
@@ -1074,8 +1074,152 @@ module('Integration | operator-mode', function (hooks) {
             ) as HTMLButtonElement
           ).disabled,
       );
-      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-pending');
+      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-sending');
       matrixService.sendMessage = originalSendMessage;
+    });
+
+    test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event0',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@matic:boxel',
+        content: {
+          body: 'Say one word.',
+          msgtype: 'org.boxel.message',
+          formatted_body: 'Say one word.',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now() - 100,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'French.',
+          msgtype: 'm.text',
+          formatted_body: 'French.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: Date.now() - 99,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event2',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@matic:boxel',
+        content: {
+          body: 'What is a french bulldog?',
+          msgtype: 'org.boxel.message',
+          formatted_body: 'What is a french bulldog?',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now() - 98,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event3',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'French bulldog is a',
+          msgtype: 'm.text',
+          formatted_body: 'French bulldog is a',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now() - 97,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await waitFor('[data-test-message-idx="3"]');
+
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
+        .doesNotHaveClass(
+          'ai-avatar-animated',
+          'Answer to my previous question is not in progress',
+        );
+      assert
+        .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
+        .hasClass(
+          'ai-avatar-animated',
+          'Answer to my current question is in progress',
+        );
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event4',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'French bulldog is a French breed of companion dog or toy dog.',
+          msgtype: 'm.text',
+          formatted_body:
+            'French bulldog is a French breed of companion dog or toy dog',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true, // This is an indicator from the ai bot that the message is finalized and the openai is done streaming
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event3',
+          },
+        },
+        origin_server_ts: Date.now() - 96,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await waitFor('[data-test-message-idx="3"]');
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
+        .doesNotHaveClass(
+          'ai-avatar-animated',
+          'Answer to my previous question is not in progress',
+        );
+      assert
+        .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
+        .doesNotHaveClass(
+          'ai-avatar-animated',
+          'Answer to my last question is not in progress',
+        );
     });
   });
 
