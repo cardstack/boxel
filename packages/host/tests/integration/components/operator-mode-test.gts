@@ -842,6 +842,7 @@ module('Integration | operator-mode', function (hooks) {
 
       await waitForCodeEditor();
       assert.deepEqual(JSON.parse(getMonacoContent()), patchData);
+      assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
 
       await click('[data-test-view-code-button]');
       assert.dom('[data-test-code-editor]').doesNotExist();

@@ -94,6 +94,7 @@ export default class Room extends Component<Signature> {
               @kind='text-only'
               @size='extra-small'
               {{on 'click' (perform this.copyToClipboard)}}
+              data-test-copy-code
             >
               <CopyIcon
                 width='16'
