@@ -6,6 +6,9 @@ on:
       environment:
         required: true
         type: string
+  # FIXME remove
+  push:
+    branches: [ui/deploy-cs-6634]
 
 permissions:
   contents: read
