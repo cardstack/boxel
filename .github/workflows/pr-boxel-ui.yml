@@ -70,7 +70,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
-          role-to-assume: arn:aws:iam::120317779495:role/boxel-host
+          role-to-assume: arn:aws:iam::120317779495:role/boxel-ui
           aws-region: us-east-1
       - name: Deploy boxel-ui preview
         uses: ./.github/actions/deploy-ember-preview
