@@ -1,4 +1,3 @@
-import * as JSON from 'json-typescript';
 import flatten from 'lodash/flatten';
 import { logger, LooseSingleCardDocument } from '../index';
 import {
@@ -19,7 +18,7 @@ interface IndexedCardsTable {
   pristine_doc: LooseSingleCardDocument | null;
   error_doc: SerializedError | null;
   search_doc: Record<string, PgPrimitive> | null;
-  deps: JSON.Arr | null; // ideally this should be an array, but SQLite doesn't support that, rather we can use JSONB arrays
+  deps: string[] | null; // ideally this should be an array, but SQLite doesn't support that, rather we can use JSONB arrays
   embedded_html: string | null;
   isolated_html: string | null;
   indexed_at: number | null;
@@ -80,7 +79,7 @@ export class IndexerClient {
       // SQLite doesn't support arrays!!
       { kind: 'param', param: cardId },
     ])) as Pick<IndexedCardsTable, 'deps'>[];
-    return flatten(rows.map((r) => (r.deps || []) as string[]));
+    return flatten(rows.map((r) => r.deps || []));
   }
 
   private expressionToSql(query: Expression) {
@@ -162,9 +161,11 @@ export class Batch {
     ]);
   }
 
+  // TODO catch the primary key constraint violation exception and rethrow
+  // it with a clearer error around what went wrong: concurrent batch
+  // invalidation graph intersection
   async makeNewGeneration() {
     this.isNewGeneration = true;
-    // create tombstones for all card URLs
     let { nameExpressions, valueExpressions } = asExpressions({
       card_url: 'card_url',
       realm_url: 'realm_url',
@@ -172,9 +173,7 @@ export class Batch {
       is_deleted: true,
     } as IndexedCardsTable);
 
-    // TODO catch the primary key constraint violation exception and rethrow
-    // it with a clearer error around what went wrong: concurrent batch
-    // invalidation graph intersection
+    // create tombstones for all card URLs
     await this.client.query([
       `INSERT INTO indexed_cards`,
       ...addExplicitParens(separatedByCommas(nameExpressions)),
@@ -219,7 +218,7 @@ export class Batch {
     }
   }
 
-  // these invalidations may include modules...
+  // FYI: these invalidations may include modules...
   get invalidations() {
     return [...this._invalidations];
   }
