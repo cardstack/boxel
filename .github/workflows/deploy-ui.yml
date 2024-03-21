@@ -6,9 +6,6 @@ on:
       environment:
         required: true
         type: string
-  # FIXME remove
-  push:
-    branches: [ui/deploy-cs-6634]
 
 permissions:
   contents: read
@@ -27,9 +24,7 @@ jobs:
 
       - name: Set up env
         env:
-          # FIXME restore
-          INPUT_ENVIRONMENT: staging
-          # INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
         run: |
           echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
           if [ "$INPUT_ENVIRONMENT" = "production" ]; then
@@ -55,14 +50,12 @@ jobs:
           aws-region: us-east-1
 
       - name: Deploy
-        # run: pnpm deploy:boxel-ui ${{ inputs.environment }} --verbose
-        run: pnpm deploy:boxel-ui staging --verbose
+        run: pnpm deploy:boxel-ui ${{ inputs.environment }} --verbose
 
-        # FIXME restore?
-        # - name: Send notification to Discord
-        #   uses: cardstack/gh-actions/discord-notification-deploy@main
-        #   with:
-        #     app: "boxel-ui"
-        #     status: ${{ job.status }}
-        #     environment: ${{ inputs.environment }}
-        #     webhook: ${{ secrets.DISCORD_WEBHOOK }}
+      - name: Send notification to Discord
+        uses: cardstack/gh-actions/discord-notification-deploy@main
+        with:
+          app: "boxel-ui"
+          status: ${{ job.status }}
+          environment: ${{ inputs.environment }}
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
