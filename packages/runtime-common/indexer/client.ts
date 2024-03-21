@@ -67,20 +67,19 @@ export class IndexerClient {
     // for large invalidations. But beware, cursor support for SQLite in worker
     // mode is very limited. This will likely require some custom work...
 
-    // TODO convert this into an expression that uses this.query
     // TODO need to double-check that postgres supports these json functions
-    let rows = (await this.dbAdapter.execute(
+    let rows = (await this.query([
       `SELECT json_type(deps) as deps_type, 
               json_each(deps) as deps_each, 
          FROM indexed_cards 
          WHERE 
            pristine_doc IS NOT NULL AND 
-           deps_type='array' AND
-           deps_each.type='text' AND
-           deps_each.value=$1
-           `, // SQLite doesn't support arrays!!
-      [cardId],
-    )) as unknown as Pick<IndexedCardsTable, 'deps'>[];
+           deps_type = 'array' AND
+           deps_each.type = 'text' AND
+           deps_each.value =`,
+      // SQLite doesn't support arrays!!
+      { kind: 'param', param: cardId },
+    ])) as Pick<IndexedCardsTable, 'deps'>[];
     return flatten(rows.map((r) => (r.deps || []) as string[]));
   }
 
@@ -108,6 +107,7 @@ export class IndexerClient {
 export class Batch {
   readonly ready: Promise<void>;
   private _invalidations = new Set<string>();
+  private isNewGeneration = false;
   private declare realmVersion: number;
 
   constructor(
@@ -162,6 +162,28 @@ export class Batch {
     ]);
   }
 
+  async makeNewGeneration() {
+    this.isNewGeneration = true;
+    // create tombstones for all card URLs
+    let { nameExpressions, valueExpressions } = asExpressions({
+      card_url: 'card_url',
+      realm_url: 'realm_url',
+      realm_version: this.realmVersion,
+      is_deleted: true,
+    } as IndexedCardsTable);
+
+    // TODO catch the primary key constraint violation exception and rethrow
+    // it with a clearer error around what went wrong: concurrent batch
+    // invalidation graph intersection
+    await this.client.query([
+      `INSERT INTO indexed_cards`,
+      ...addExplicitParens(separatedByCommas(nameExpressions)),
+      `SELECT`,
+      ...separatedByCommas(valueExpressions),
+      'FROM indexed_cards GROUP BY card_url',
+    ]);
+  }
+
   async done(): Promise<void> {
     let { nameExpressions, valueExpressions } = asExpressions({
       realm_url: this.realmURL.href,
@@ -176,17 +198,25 @@ export class Batch {
     ]);
 
     // prune obsolete index entries
-    await this.client.query([
-      `DELETE FROM indexed_cards`,
-      `WHERE card_url in `,
-      ...addExplicitParens(
-        separatedByCommas(
-          this.invalidations.map((i) => [{ kind: 'param', param: i }]),
+    if (this.isNewGeneration) {
+      await this.client.query([
+        `DELETE FROM indexed_cards`,
+        'WHERE realm_version <',
+        { kind: 'param', param: this.realmVersion },
+      ]);
+    } else {
+      await this.client.query([
+        `DELETE FROM indexed_cards`,
+        `WHERE card_url IN`,
+        ...addExplicitParens(
+          separatedByCommas(
+            this.invalidations.map((i) => [{ kind: 'param', param: i }]),
+          ),
         ),
-      ),
-      'AND realm_version <',
-      { kind: 'param', param: this.realmVersion },
-    ]);
+        'AND realm_version <',
+        { kind: 'param', param: this.realmVersion },
+      ]);
+    }
   }
 
   // these invalidations may include modules...
