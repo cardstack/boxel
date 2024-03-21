@@ -61,10 +61,11 @@ jobs:
         env:
           EMBER_CLI_DEPLOY_REUSE_BUILD: "1"
 
-      - name: Send notification to Discord
-        uses: cardstack/gh-actions/discord-notification-deploy@main
-        with:
-          app: "boxel-ui"
-          status: ${{ job.status }}
-          environment: ${{ inputs.environment }}
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+      # FIXME restore?
+      # - name: Send notification to Discord
+      #   uses: cardstack/gh-actions/discord-notification-deploy@main
+      #   with:
+      #     app: "boxel-ui"
+      #     status: ${{ job.status }}
+      #     environment: ${{ inputs.environment }}
+      #     webhook: ${{ secrets.DISCORD_WEBHOOK }}
