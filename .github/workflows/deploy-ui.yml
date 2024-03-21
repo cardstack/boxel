@@ -45,11 +45,9 @@ jobs:
             exit 1;
           fi
       # FIXME production distribution is incorrect
-      - name: Download dist
-        uses: actions/download-artifact@v3
-        with:
-          name: ui-dist
-          path: packages/ui/tmp/deploy-dist
+      - name: Build boxel-ui addon
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
