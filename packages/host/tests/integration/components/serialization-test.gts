@@ -16,13 +16,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
-import {
-  p,
-  cleanWhiteSpace,
-  shimModule,
-  setupCardLogs,
-  saveCard,
-} from '../../helpers';
+import { p, cleanWhiteSpace, setupCardLogs, saveCard } from '../../helpers';
 
 import { renderCard } from '../../helpers/render-component';
 
@@ -83,7 +77,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Post }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Post });
 
     // initialize card data as serialized to force us to deserialize instead of using cached data
     let resource = {
@@ -127,7 +121,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Item }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Item });
 
     // initialize card data as serialized to force us to deserialize instead of using cached data
     let resource = {
@@ -160,7 +154,8 @@ module('Integration | serialization', function (hooks) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person });
 
     // deserialize a card with an ID to mark it as "saved"
     let resource = {
@@ -216,7 +211,8 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person });
 
     let mango = new Person({
       id: `${realmURL}Person/mango`,
@@ -248,7 +244,8 @@ module('Integration | serialization', function (hooks) {
       @field firstName = contains(StringField);
       @field picture = contains(Base64ImageField);
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person });
 
     let mango = new Person({
       firstName: 'Mango',
@@ -283,7 +280,8 @@ module('Integration | serialization', function (hooks) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person });
 
     let card = new Person({
       id: `${realmURL}Person/mango`,
@@ -329,7 +327,8 @@ module('Integration | serialization', function (hooks) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person });
 
     // deserialize a card with an ID to mark it as "saved"
     let resource = {
@@ -386,7 +385,8 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { DriverCard }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { DriverCard });
 
     let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
     let resource = {
@@ -428,7 +428,8 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { DriverCard }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { DriverCard });
 
     let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
@@ -453,7 +454,8 @@ module('Integration | serialization', function (hooks) {
       @field created = contains(DateField);
       @field published = contains(DatetimeField);
     }
-    await shimModule(`${realmURL}test-cards`, { Post }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Post });
 
     // initialize card data as deserialized to force us to serialize instead of using cached data
     let firstPost = new Post({
@@ -489,7 +491,9 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Post }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Post });
+
     let resource = {
       attributes: {
         title: 'First Post',
@@ -552,7 +556,8 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
 
     let spookyToiletPaper = new Toy({
       description: 'Toilet paper ghost: Poooo!',
@@ -662,7 +667,7 @@ module('Integration | serialization', function (hooks) {
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -816,7 +821,9 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet });
+
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -921,7 +928,8 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet });
 
     let hassan = new Person({ firstName: 'Hassan' });
 
@@ -984,7 +992,8 @@ module('Integration | serialization', function (hooks) {
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet });
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -1044,7 +1053,8 @@ module('Integration | serialization', function (hooks) {
       @field favoriteToy = contains(Toy);
       @field toys = containsMany(Toy);
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -1162,7 +1172,8 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person });
 
     let mango = new Person({ firstName: 'Mango' });
     let hassan = new Person({ firstName: 'Hassan', friend: mango });
@@ -1226,7 +1237,8 @@ module('Integration | serialization', function (hooks) {
       @field firstName = contains(StringField);
       @field friend = linksTo(() => Person);
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person });
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -1300,7 +1312,8 @@ module('Integration | serialization', function (hooks) {
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet });
 
     let mango = new Pet({ firstName: 'Mango' });
     let hassan = new Person({ firstName: 'Hassan', pet: mango });
@@ -1362,7 +1375,8 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
 
     let spookyToiletPaper = new Toy({
       description: 'Toilet paper ghost: Poooo!',
@@ -1491,7 +1505,8 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
 
     let spookyToiletPaper = new Toy({
       description: 'Toilet paper ghost: Poooo!',
@@ -1624,7 +1639,8 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
 
     let spookyToiletPaper = new Toy({
       description: 'Toilet paper ghost: Poooo!',
@@ -1731,7 +1747,8 @@ module('Integration | serialization', function (hooks) {
       @field parent = linksTo(() => Person);
       @field favorite = linksTo(() => Person);
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person });
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -1806,7 +1823,8 @@ module('Integration | serialization', function (hooks) {
       @field created = contains(DateField);
       @field published = contains(DatetimeField);
     }
-    await shimModule(`${realmURL}test-cards`, { Post }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Post });
 
     let firstPost = new Post({ created: null, published: null });
     let serialized = serializeCard(firstPost, {
@@ -1846,7 +1864,8 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Post, Person }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Post, Person });
 
     let doc = {
       data: {
@@ -1915,7 +1934,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Post, Person }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Post, Person });
 
     let doc = {
       data: {
@@ -1974,7 +1993,8 @@ module('Integration | serialization', function (hooks) {
         },
       });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Post }, loader);
+
+    loader.shimModule(`${realmURL}test-cards`, { Person, Post });
 
     let firstPost = new Post({
       author: new Person({
@@ -2027,11 +2047,7 @@ module('Integration | serialization', function (hooks) {
       @field author = contains(Person);
     }
 
-    await shimModule(
-      `${realmURL}test-cards`,
-      { Person, Employee, Post },
-      loader,
-    );
+    loader.shimModule(`${realmURL}test-cards`, { Person, Employee, Post });
 
     let firstPost = new Post({
       author: new Employee({
@@ -2104,7 +2120,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Post, Person }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Post, Person });
 
     let helloWorld = new Post({
       title: 'First Post',
@@ -2154,7 +2170,7 @@ module('Integration | serialization', function (hooks) {
         },
       });
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Person });
     let mango = new Person({ birthdate: p('2019-10-30') });
     let serialized = serializeCard(mango, {
       includeComputeds: true,
@@ -2190,7 +2206,7 @@ module('Integration | serialization', function (hooks) {
           computeVia: () => '../../person.svg',
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Pet, Person });
       let mango = new Pet({ name: 'Mango' });
       let hassan = new Person({ firstName: 'Hassan', pet: mango });
       await saveCard(mango, `${realmURL}Pet/mango`, loader);
@@ -2286,7 +2302,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Pet, Person });
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -2391,7 +2407,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Pet, Person });
       let person = new Person({ firstName: 'Burcu' });
       let serialized = serializeCard(person, {
         includeUnrenderedFields: true,
@@ -2441,7 +2457,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Pet, Person });
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -2493,7 +2509,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Pet, Person });
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -2553,7 +2569,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Schedule }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Schedule });
 
     let doc = {
       data: {
@@ -2615,11 +2631,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(
-      `${realmURL}test-cards`,
-      { Schedule, Appointment },
-      loader,
-    );
+    loader.shimModule(`${realmURL}test-cards`, { Schedule, Appointment });
 
     let doc = {
       data: {
@@ -2661,7 +2673,7 @@ module('Integration | serialization', function (hooks) {
     class Schedule extends CardDef {
       @field dates = containsMany(DateField);
     }
-    await shimModule(`${realmURL}test-cards`, { Schedule }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Schedule });
 
     let classSchedule = new Schedule({ dates: [p('2022-4-1'), p('2022-4-4')] });
     assert.deepEqual(
@@ -2689,11 +2701,7 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(
-      `${realmURL}test-cards`,
-      { Schedule, Appointment },
-      loader,
-    );
+    loader.shimModule(`${realmURL}test-cards`, { Schedule, Appointment });
 
     let classSchedule = new Schedule({
       appointments: [
@@ -2738,7 +2746,7 @@ module('Integration | serialization', function (hooks) {
       @field created = contains(DateField);
       @field published = contains(DatetimeField);
     }
-    await shimModule(`${realmURL}test-cards`, { Post }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Post });
 
     let firstPost = new Post({
       title: 'First Post',
@@ -2800,7 +2808,7 @@ module('Integration | serialization', function (hooks) {
       @field description = contains(StringField, { computeVia: () => 'Post' });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Post, Person, Animal }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Post, Person, Animal });
 
     let firstPost = new Post({
       title: 'First Post',
@@ -2871,11 +2879,7 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    await shimModule(
-      `${realmURL}test-cards`,
-      { Person, Employee, Post },
-      loader,
-    );
+    loader.shimModule(`${realmURL}test-cards`, { Person, Employee, Post });
 
     let firstPost = new Post({
       title: 'First Post',
@@ -2976,11 +2980,7 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    await shimModule(
-      `${realmURL}test-cards`,
-      { Person, Employee, Post, Pet },
-      loader,
-    );
+    loader.shimModule(`${realmURL}test-cards`, { Person, Employee, Post, Pet });
 
     let firstPost = new Post({
       title: 'First Post',
@@ -3108,16 +3108,12 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    await shimModule(
-      `${realmURL}test-cards`,
-      {
-        Person,
-        Employee,
-        Customer,
-        Group,
-      },
-      loader,
-    );
+    loader.shimModule(`${realmURL}test-cards`, {
+      Person,
+      Employee,
+      Customer,
+      Group,
+    });
 
     let group = new Group({
       people: [
@@ -3252,17 +3248,13 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    await shimModule(
-      `${realmURL}test-cards`,
-      {
-        Person,
-        Role,
-        DogWalker,
-        Employee,
-        Group,
-      },
-      loader,
-    );
+    loader.shimModule(`${realmURL}test-cards`, {
+      Person,
+      Role,
+      DogWalker,
+      Employee,
+      Group,
+    });
 
     let group = new Group({
       people: [
@@ -3378,7 +3370,7 @@ module('Integration | serialization', function (hooks) {
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -3472,7 +3464,7 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}person`, { Person }, loader);
+    loader.shimModule(`${realmURL}person`, { Person });
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -3545,8 +3537,8 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    await shimModule(`${realmURL}person`, { Person }, loader);
-    await shimModule(`${realmURL}post`, { Post }, loader);
+    loader.shimModule(`${realmURL}person`, { Person });
+    loader.shimModule(`${realmURL}post`, { Post });
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -3636,9 +3628,9 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}person`, { Person }, loader);
-    await shimModule(`${realmURL}post`, { Post }, loader);
-    await shimModule(`${realmURL}blog`, { Blog }, loader);
+    loader.shimModule(`${realmURL}person`, { Person });
+    loader.shimModule(`${realmURL}post`, { Post });
+    loader.shimModule(`${realmURL}blog`, { Blog });
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -3764,11 +3756,12 @@ module('Integration | serialization', function (hooks) {
       @field editor = contains(Person);
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(
-      `${realmURL}test-cards`,
-      { Certificate, Person, Post, Blog },
-      loader,
-    );
+    loader.shimModule(`${realmURL}test-cards`, {
+      Certificate,
+      Person,
+      Post,
+      Blog,
+    });
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -4024,7 +4017,7 @@ module('Integration | serialization', function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Person });
 
     let mango = new Person({ birthdate: p('2019-10-30') });
     await renderCard(loader, mango, 'isolated');
@@ -4083,7 +4076,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Person }, loader);
+    loader.shimModule(`${realmURL}test-cards`, { Person });
 
     let mango = new Person({
       id: `${realmURL}Person/mango`,
@@ -4133,7 +4126,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({
         firstName: 'Mango',
@@ -4224,7 +4217,7 @@ module('Integration | serialization', function (hooks) {
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Person, Pet });
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -4377,7 +4370,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
 
       let spookyToiletPaper = new Toy({
         description: 'Toilet paper ghost: Poooo!',
@@ -4518,7 +4511,7 @@ module('Integration | serialization', function (hooks) {
           computeVia: () => 'person.svg',
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Person, Pet });
 
       let hassan = new Person({ firstName: 'Hassan' });
 
@@ -4576,7 +4569,7 @@ module('Integration | serialization', function (hooks) {
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Person, Pet });
 
       let doc: LooseSingleCardDocument = {
         data: {
@@ -4648,7 +4641,7 @@ module('Integration | serialization', function (hooks) {
           computeVia: () => 'person.svg',
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Person, Pet });
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -4785,7 +4778,7 @@ module('Integration | serialization', function (hooks) {
           computeVia: () => 'person.svg',
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Person }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Person });
 
       let mango = new Person({ firstName: 'Mango' });
       let vanGogh = new Person({ firstName: 'Van Gogh' });
@@ -4869,7 +4862,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Person }, loader);
+      loader.shimModule(`${realmURL}test-cards`, { Person });
 
       let doc: LooseSingleCardDocument = {
         data: {
@@ -4976,11 +4969,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(
-        `${realmURL}test-cards`,
-        { Pet, Friend, Person },
-        loader,
-      );
+      loader.shimModule(`${realmURL}test-cards`, { Pet, Friend, Person });
       let mango = new Pet({ name: 'Mango' });
       let vanGogh = new Pet({ name: 'Van Gogh' });
       let hassan = new Friend({ firstName: 'Hassan', pets: [mango, vanGogh] });
@@ -5100,11 +5089,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(
-        `${realmURL}test-cards`,
-        { Pet, Friend, Person },
-        loader,
-      );
+      loader.shimModule(`${realmURL}test-cards`, { Pet, Friend, Person });
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -5216,11 +5201,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(
-        `${realmURL}test-cards`,
-        { Pet, Friend, Person },
-        loader,
-      );
+      loader.shimModule(`${realmURL}test-cards`, { Pet, Friend, Person });
       let person = new Person({ firstName: 'Burcu' });
       let serialized = serializeCard(person, {
         includeUnrenderedFields: true,
@@ -5272,11 +5253,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(
-        `${realmURL}test-cards`,
-        { Pet, Friend, Person },
-        loader,
-      );
+      loader.shimModule(`${realmURL}test-cards`, { Pet, Friend, Person });
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -5330,11 +5307,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(
-        `${realmURL}test-cards`,
-        { Pet, Friend, Person },
-        loader,
-      );
+      loader.shimModule(`${realmURL}test-cards`, { Pet, Friend, Person });
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -5456,7 +5429,7 @@ module('Integration | serialization', function (hooks) {
           @field notANumber = contains(NumberField);
           @field infinity = contains(NumberField);
         }
-        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+        loader.shimModule(`${realmURL}test-cards`, { Sample });
 
         let resource = {
           attributes: {
@@ -5512,7 +5485,7 @@ module('Integration | serialization', function (hooks) {
           @field someNull = contains(NumberField);
         }
 
-        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+        loader.shimModule(`${realmURL}test-cards`, { Sample });
 
         let sample = new Sample({
           someNumber: 42,
@@ -5554,7 +5527,7 @@ module('Integration | serialization', function (hooks) {
           @field someDecimal = contains(BigIntegerField);
           @field someZeroString = contains(BigIntegerField);
         }
-        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+        loader.shimModule(`${realmURL}test-cards`, { Sample });
 
         let resource = {
           attributes: {
@@ -5602,7 +5575,7 @@ module('Integration | serialization', function (hooks) {
           @field someNull = contains(BigIntegerField);
         }
 
-        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+        loader.shimModule(`${realmURL}test-cards`, { Sample });
 
         let sample = new Sample({
           someBigInt: BigInt('9223372036854775808'),
@@ -5665,7 +5638,7 @@ module('Integration | serialization', function (hooks) {
           //   },
           // });
         }
-        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+        loader.shimModule(`${realmURL}test-cards`, { Sample });
 
         let sample = new Sample({
           someBigInt: BigInt('1'),
@@ -5704,7 +5677,7 @@ module('Integration | serialization', function (hooks) {
           @field someString = contains(EthereumAddressField);
           @field someNull = contains(EthereumAddressField);
         }
-        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+        loader.shimModule(`${realmURL}test-cards`, { Sample });
 
         let resource = {
           attributes: {
@@ -5757,7 +5730,7 @@ module('Integration | serialization', function (hooks) {
           @field someNull = contains(EthereumAddressField);
         }
 
-        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+        loader.shimModule(`${realmURL}test-cards`, { Sample });
 
         let sample = new Sample({
           someAddress: '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
