@@ -10,6 +10,7 @@
     "deploy:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy",
     "deploy:boxel-host:preview-staging": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy s3-preview-staging --verbose",
     "deploy:boxel-host:preview-production": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy s3-preview-production --verbose",
+    "deploy:boxel-ui": "cd packages/boxel-ui/addon && pnpm build && cd ../test-app && pnpm exec ember deploy",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix"
   },
