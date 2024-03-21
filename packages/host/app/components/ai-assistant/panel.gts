@@ -37,6 +37,8 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
@@ -146,7 +148,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             @color='var(--boxel-light)'
           />
         {{else if this.currentRoomId}}
-          <Room @roomId={{this.currentRoomId}} />
+          <Room @roomId={{this.currentRoomId}} @monacoSDK={{this.monacoSDK}} />
         {{/if}}
       </div>
     </Velcro>
@@ -246,6 +248,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   </template>
 
   @service private declare matrixService: MatrixService;
+  @service private declare monacoService: MonacoService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare router: RouterService;
 
@@ -255,10 +258,12 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private roomToDelete: RoomField | undefined = undefined;
   @tracked private roomDeleteError: string | undefined = undefined;
   @tracked private displayRoomError = false;
+  @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadRoomsTask.perform();
+    this.loadMonaco.perform();
   }
 
   private enterRoomInitially() {
@@ -454,4 +459,15 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
     }
   });
+
+  private loadMonaco = restartableTask(async () => {
+    this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
+  });
+
+  private get monacoSDK() {
+    if (this.maybeMonacoSDK) {
+      return this.maybeMonacoSDK;
+    }
+    throw new Error(`cannot use monaco SDK before it has loaded`);
+  }
 }

@@ -36,6 +36,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     message: MessageField;
+    monacoSDK: MonacoSDK;
     isStreaming: boolean;
   };
 }
@@ -108,7 +109,7 @@ export default class Room extends Component<Signature> {
               {{monacoModifier
                 content=this.previewPatchCode
                 contentChanged=undefined
-                monacoSDK=this.monacoSDK
+                monacoSDK=@monacoSDK
                 language='json'
                 readOnly=true
                 darkTheme=true
@@ -182,7 +183,6 @@ export default class Room extends Component<Signature> {
   @service private declare monacoService: MonacoService;
 
   @tracked private isDisplayingCode = false;
-  @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -236,19 +236,7 @@ export default class Room extends Component<Signature> {
   }
 
   @action private async viewCodeToggle() {
-    await this.loadMonaco.perform();
     this.isDisplayingCode = !this.isDisplayingCode;
-  }
-
-  private loadMonaco = task(async () => {
-    this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
-  });
-
-  private get monacoSDK() {
-    if (this.maybeMonacoSDK) {
-      return this.maybeMonacoSDK;
-    }
-    throw new Error(`cannot use monaco SDK before it has loaded`);
   }
 
   private get monacoContainerHeight() {
