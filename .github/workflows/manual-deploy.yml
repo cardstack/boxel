@@ -29,6 +29,13 @@ jobs:
     with:
       environment: ${{ inputs.environment }}
 
+  deploy-motion:
+    name: Deploy boxel-motion
+    uses: ./.github/workflows/deploy-motion.yml
+    secrets: inherit
+    with:
+      environment: ${{ inputs.environment }}
+
   build-realm-server:
     name: Build Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main

@@ -451,6 +451,24 @@ importers:
       ember-cli-dependency-checker:
         specifier: ^3.3.1
         version: 3.3.1(ember-cli@4.12.1)
+      ember-cli-deploy:
+        specifier: ^1.0.2
+        version: 1.0.2
+      ember-cli-deploy-build:
+        specifier: ^2.0.0
+        version: 2.0.0
+      ember-cli-deploy-cloudfront:
+        specifier: ^5.0.0
+        version: 5.0.0
+      ember-cli-deploy-revision-data:
+        specifier: ^2.0.0
+        version: 2.0.0
+      ember-cli-deploy-s3:
+        specifier: ^3.1.0
+        version: 3.1.0
+      ember-cli-deploy-smart-compress:
+        specifier: ^2.0.0
+        version: 2.0.0
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0
@@ -8366,15 +8384,15 @@ packages:
     deprecated: Browserslist 2 could fail on reading Browserslist >3.0 config used in other tools.
     hasBin: true
     dependencies:
-      caniuse-lite: 1.0.30001551
-      electron-to-chromium: 1.4.560
+      caniuse-lite: 1.0.30001599
+      electron-to-chromium: 1.4.708
     dev: true
 
   /browserslist@3.2.8:
     resolution: {integrity: sha512-WHVocJYavUwVgVViC0ORikPHQquXwVh939TaelZ4WDqpWgTX/FsGhl/+P4qBUAGcRvtOgDgC+xftNWWp2RUTAQ==}
     hasBin: true
     dependencies:
-      caniuse-lite: 1.0.30001551
+      caniuse-lite: 1.0.30001599
       electron-to-chromium: 1.4.560
     dev: true
 
@@ -8652,7 +8670,7 @@ packages:
     resolution: {integrity: sha512-425yJRcUDCCMKc0Zga2KSUe7Qp7nCtL8H0BJIsDxF9yMzG2eSYvOggi5U1wXzxgcSgDGnzVLvZ8dZGMBrA6Ltg==}
     dependencies:
       browserslist: 2.11.3
-      caniuse-lite: 1.0.30001551
+      caniuse-lite: 1.0.30001599
       lodash.memoize: 4.1.2
       lodash.uniq: 4.5.0
     dev: true
@@ -9455,7 +9473,7 @@ packages:
   /core-js-compat@3.33.0:
     resolution: {integrity: sha512-0w4LcLXsVEuNkIqwjjf9rjCoPhK8uqA4tMRh4Ge26vfLtUutshn+aRJU21I9LCJlh2QQHfisNToLjw1XEJLTWw==}
     dependencies:
-      browserslist: 4.22.1
+      browserslist: 4.23.0
 
   /core-js@2.6.12:
     resolution: {integrity: sha512-Kb2wC0fvsWfQrgk8HU5lW6U/Lcs8+9aaYcy4ZFc6DDlo4nZ7n70dEgE5rtR0oG6ufKDUnrwfWL1mXR5ljDatrQ==}
