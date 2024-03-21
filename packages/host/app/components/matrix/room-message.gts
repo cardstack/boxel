@@ -14,12 +14,14 @@ import { marked } from 'marked';
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
+import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
-import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -35,7 +37,6 @@ interface Signature {
   Args: {
     message: MessageField;
     isStreaming: boolean;
-    monacoSDK: MonacoSDK;
   };
 }
 
@@ -103,10 +104,11 @@ export default class Room extends Component<Signature> {
             </Button>
             <div
               class='monaco-container'
+              {{setCssVar monaco-container-height=this.monacoContainerHeight}}
               {{monacoModifier
                 content=this.previewPatchCode
                 contentChanged=undefined
-                monacoSDK=@monacoSDK
+                monacoSDK=this.monacoSDK
                 language='json'
                 readOnly=true
                 darkTheme=true
@@ -163,8 +165,9 @@ export default class Room extends Component<Signature> {
         --icon-color: var(--boxel-highlight-hover);
       }
       .monaco-container {
-        height: 30vh;
+        height: var(--monaco-container-height);
         min-height: 7rem;
+        max-height: 30vh;
       }
     </style>
   </template>
@@ -176,8 +179,10 @@ export default class Room extends Component<Signature> {
   };
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare monacoService: MonacoService;
 
   @tracked private isDisplayingCode = false;
+  @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -219,18 +224,35 @@ export default class Room extends Component<Signature> {
       .join(', ');
   }
 
-  private get previewPatchCode() {
-    return JSON.stringify(this.args.message.command.payload.patch, null, 2);
-  }
-
-  @action private async viewCodeToggle() {
-    this.isDisplayingCode = !this.isDisplayingCode;
-  }
-
   @action patchCard(cardId: string, attributes: Record<string, unknown>) {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
     this.operatorModeStateService.patchCard.perform(cardId, attributes);
+  }
+
+  private get previewPatchCode() {
+    return JSON.stringify(this.args.message.command.payload.patch, null, 2);
+  }
+
+  @action private async viewCodeToggle() {
+    await this.loadMonaco.perform();
+    this.isDisplayingCode = !this.isDisplayingCode;
+  }
+
+  private loadMonaco = task(async () => {
+    this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
+  });
+
+  private get monacoSDK() {
+    if (this.maybeMonacoSDK) {
+      return this.maybeMonacoSDK;
+    }
+    throw new Error(`cannot use monaco SDK before it has loaded`);
+  }
+
+  private get monacoContainerHeight() {
+    let height = this.monacoService.getContentHeight();
+    return height && height > 0 ? `${height}px` : '7rem';
   }
 }
