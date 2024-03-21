@@ -51,7 +51,7 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.22.11",
+    "@babel/core": "^7.24.0",
     "@types/dompurify": "^3.0.2",
     "@types/js-string-escape": "^1.0.1",
     "@types/qunit": "^2.11.3",
@@ -59,7 +59,7 @@
     "ember-cli-htmlbars": "^6.3.0"
   },
   "peerDependencies": {
-    "@babel/core": "^7.22.11",
+    "@babel/core": "^7.24.0",
     "ember-cli-htmlbars": "^6.3.0"
   }
 }

@@ -14,6 +14,7 @@ export default class AiAssistantMessageUsage extends Component {
   @tracked formattedMessage = 'Hello, world';
   @tracked datetime = new Date(2024, 0, 3, 12, 30);
   @tracked isFromAssistant = false;
+  @tracked isStreaming = false;
   @tracked userId = 'johndoe:boxel.ai';
   @tracked errorMessage = '';
 
@@ -59,6 +60,7 @@ export default class AiAssistantMessageUsage extends Component {
               }}
               @errorMessage={{this.errorMessage}}
               @retryAction={{this.retryAction}}
+              @isStreaming={{this.isStreaming}}
             >
               <em>Optional embedded content</em>
             </AiAssistantMessage>
@@ -127,6 +129,7 @@ export default class AiAssistantMessageUsage extends Component {
                 isReady=true
                 profileInitials=this.profileInitials
               }}
+              @isStreaming={{false}}
             />
             <AiAssistantMessage
               @formattedMessage={{htmlSafe
@@ -134,6 +137,7 @@ export default class AiAssistantMessageUsage extends Component {
               }}
               @datetime={{this.oneMinutesAgo}}
               @isFromAssistant={{true}}
+              @isStreaming={{false}}
             />
           </AiAssistantConversation>
         </div>

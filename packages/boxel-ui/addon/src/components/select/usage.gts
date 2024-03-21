@@ -62,6 +62,7 @@ export default class BoxelSelectUsage extends Component {
           @renderInPlace={{this.renderInPlace}}
           @disabled={{this.disabled}}
           @dropdownClass='boxel-select-usage-dropdown'
+          aria-label='Select an item'
           as |item itemCssClass|
         >
           <div class={{itemCssClass}}>{{item}}</div>

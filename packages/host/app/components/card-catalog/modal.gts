@@ -24,6 +24,7 @@ import {
   type CreateNewCard,
   Deferred,
   type RealmInfo,
+  Loader,
 } from '@cardstack/runtime-common';
 
 import type { Query, Filter } from '@cardstack/runtime-common/query';
@@ -327,7 +328,11 @@ export default class CardCatalogModal extends Component<Signature> {
       } = {},
     ) => {
       this.stateId++;
-      let title = chooseCardTitle(query.filter, opts?.multiSelect);
+      let title = await chooseCardTitle(
+        query.filter,
+        this.loaderService.loader,
+        opts?.multiSelect,
+      );
       let request = new TrackedObject<Request>({
         search: getSearchResults(this, () => query),
         deferred: new Deferred(),
@@ -527,14 +532,18 @@ export default class CardCatalogModal extends Component<Signature> {
   );
 }
 
-function chooseCardTitle(
+async function chooseCardTitle(
   filter: Filter | undefined,
+  loader: Loader,
   multiSelect?: boolean,
-): string {
+): Promise<string> {
   if (!filter) {
     return DEFAULT_CHOOOSE_CARD_TITLE;
   }
-  let suggestions = suggestCardChooserTitle(filter, 0, { multiSelect });
+  let suggestions = await suggestCardChooserTitle(filter, 0, {
+    loader,
+    multiSelect,
+  });
   return (
     getSuggestionWithLowestDepth(suggestions) ?? DEFAULT_CHOOOSE_CARD_TITLE
   );

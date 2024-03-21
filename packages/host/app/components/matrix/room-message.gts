@@ -30,6 +30,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     message: MessageField;
+    isStreaming: boolean;
     monacoSDK: MonacoSDK;
   };
 }
@@ -46,6 +47,7 @@ export default class Room extends Component<Signature> {
       }}
       @attachedCards={{this.resources.cards}}
       @errorMessage={{this.errorMessage}}
+      @isStreaming={{@isStreaming}}
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
     >
