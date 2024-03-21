@@ -14,6 +14,7 @@ class RenderController {
   @tracked containerStyle = '';
   @tracked panel1LengthPx: number | undefined;
   @tracked panel2LengthPx: number | undefined;
+  @tracked isPanel2Hidden = false;
   panel1InnerContentStyle: string | undefined;
 }
 
@@ -56,6 +57,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
             @defaultLengthFraction={{0.4}}
             @minLengthPx={{50}}
             @lengthPx={{renderController.panel2LengthPx}}
+            @isHidden={{renderController.isPanel2Hidden}}
           >
             <div
               class='panel-2-content'
@@ -209,5 +211,57 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     // expected behavior: panel height percentages would remain consistent
     assert.hasNumericStyle('.panel-1-content', 'height', 360, 1);
     assert.hasNumericStyle('.panel-2-content', 'height', 240, 1);
+  });
+
+  test('it excludes hidden panels from participating in layout', async function (this: MyTestContext, assert) {
+    this.renderController.isPanel2Hidden = true;
+    this.renderController.containerStyle =
+      'max-height: 100%; width: 200px; height: 218px;';
+    let { renderController } = this;
+
+    await render(<template>
+      {{! template-lint-disable no-inline-styles }}
+      <div id='test-container' style={{renderController.containerStyle}}>
+        <ResizablePanelGroup
+          @orientation='vertical'
+          @reverseCollapse={{true}}
+          as |ResizablePanel|
+        >
+          <ResizablePanel
+            @defaultLengthFraction={{0.6}}
+            @lengthPx={{renderController.panel1LengthPx}}
+          >
+            <div class='panel-1-content' style='height: 100%; overflow-y:auto'>
+              <div style={{renderController.panel1InnerContentStyle}}>
+                Panel 1
+              </div>
+            </div>
+          </ResizablePanel>
+          <ResizablePanel
+            @defaultLengthFraction={{0.4}}
+            @minLengthPx={{50}}
+            @lengthPx={{renderController.panel2LengthPx}}
+            @isHidden={{renderController.isPanel2Hidden}}
+          >
+            <div class='panel-2-content' style='height: 100%;'>
+              {{#unless renderController.isPanel2Hidden}}
+                Panel 2
+              {{/unless}}
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
+    </template>);
+    await sleep(100); // let didResizeModifier run
+    assert.hasNumericStyle('.panel-1-content', 'height', 218, 1);
+    assert.hasNumericStyle('.panel-2-content', 'height', 0, 0);
+    this.renderController.isPanel2Hidden = false;
+    await sleep(100); // let didResizeModifier run
+    assert.hasNumericStyle('.panel-1-content', 'height', 156, 1);
+    assert.hasNumericStyle('.panel-2-content', 'height', 62, 1);
+    this.renderController.isPanel2Hidden = true;
+    await sleep(100); // let didResizeModifier run
+    assert.hasNumericStyle('.panel-1-content', 'height', 218, 1);
+    assert.hasNumericStyle('.panel-2-content', 'height', 0, 0);
   });
 });
