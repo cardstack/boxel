@@ -2,22 +2,24 @@ import { module, test } from 'qunit';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import { dirSync } from 'tmp';
 import {
-  Loader,
   baseRealm,
   baseCardRef,
   baseFieldRef,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { testRealm, createRealm } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '../lib/externals';
 
 module('module-syntax', function () {
-  let loader = new Loader();
+  let virtualNetwork = new VirtualNetwork();
+  let loader = virtualNetwork.createLoader();
+
   loader.addURLMapping(
     new URL(baseRealm.url),
     new URL('http://localhost:4201/base/'),
   );
-  shimExternals(loader);
+  shimExternals(virtualNetwork);
 
   function addField(src: string, addFieldAtIndex?: number) {
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person.gts`));

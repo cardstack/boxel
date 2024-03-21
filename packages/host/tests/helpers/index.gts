@@ -471,14 +471,14 @@ async function setupTestRealm({
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
 }) {
+  let owner = (getContext() as TestContext).owner;
+
   realmURL = realmURL ?? testRealmURL;
+
   for (const [path, mod] of Object.entries(contents)) {
     if (path.endsWith('.gts') && typeof mod !== 'string') {
-      await shimModule(
-        `${realmURL}${path.replace(/\.gts$/, '')}`,
-        mod as object,
-        loader,
-      );
+      let moduleURLString = `${realmURL}${path.replace(/\.gts$/, '')}`;
+      loader.shimModule(moduleURLString, mod as object);
     }
   }
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
@@ -506,7 +506,6 @@ async function setupTestRealm({
     }
   }
   let adapter = new TestRealmAdapter(flatFiles, new URL(realmURL));
-  let owner = (getContext() as TestContext).owner;
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
   } else {
@@ -565,22 +564,6 @@ export async function saveCard(instance: CardDef, id: string, loader: Loader) {
   doc.data.id = id;
   await api.updateFromSerialized(instance, doc);
   return doc;
-}
-
-export async function shimModule(
-  moduleURL: string,
-  module: Record<string, any>,
-  loader: Loader,
-) {
-  if (loader) {
-    loader.shimModule(moduleURL, module);
-  }
-  await Promise.all(
-    Object.keys(module).map(async (name) => {
-      let m = await loader.import<any>(moduleURL);
-      m[name];
-    }),
-  );
 }
 
 export function setupCardLogs(

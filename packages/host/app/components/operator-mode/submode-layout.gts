@@ -9,7 +9,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { and, not } from '@cardstack/boxel-ui/helpers';
+import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
@@ -152,8 +152,10 @@ export default class SubmodeLayout extends Component<Signature> {
 
   <template>
     <div
-      class='operator-mode-with-ai-assistant
-        {{this.aiAssistantVisibilityClass}}'
+      class={{cn
+        'operator-mode-with-ai-assistant'
+        this.aiAssistantVisibilityClass
+      }}
     >
       <ResizablePanelGroup
         @orientation='horizontal'
@@ -165,6 +167,7 @@ export default class SubmodeLayout extends Component<Signature> {
           @defaultLengthFraction={{1}}
           @minLengthPx={{371}}
           @collapsible={{false}}
+          class='main-panel'
         >
           <SubmodeSwitcher
             @submode={{this.operatorModeStateService.state.submode}}
@@ -172,26 +175,29 @@ export default class SubmodeLayout extends Component<Signature> {
             class='submode-switcher'
           />
           {{yield this.openSearchSheetToPrompt}}
+          {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
+            <AiAssistantButton
+              class='chat-btn'
+              @isActive={{this.isAiAssistantVisible}}
+              {{on 'click' this.toggleChat}}
+            />
+          {{/if}}
         </ResizablePanel>
         {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
-          {{#if this.isAiAssistantVisible}}
-            <ResizablePanel
-              @defaultLengthFraction={{0.3}}
-              @minLengthPx={{371}}
-              @collapsible={{false}}
-            >
+          <ResizablePanel
+            @defaultLengthFraction={{0.3}}
+            @minLengthPx={{371}}
+            @collapsible={{false}}
+            @isHidden={{not this.isAiAssistantVisible}}
+          >
+            {{#if this.isAiAssistantVisible}}
               <AiAssistantPanel
                 @onClose={{this.toggleChat}}
                 @resizeHandle={{ResizeHandle}}
                 class='ai-assistant-panel'
               />
-            </ResizablePanel>
-          {{else}}
-            <AiAssistantButton
-              class='chat-btn'
-              {{on 'click' this.toggleChat}}
-            />
-          {{/if}}
+            {{/if}}
+          </ResizablePanel>
         {{/if}}
       </ResizablePanelGroup>
     </div>
@@ -242,6 +248,10 @@ export default class SubmodeLayout extends Component<Signature> {
         width: 100%;
       }
 
+      .main-panel {
+        position: relative;
+      }
+
       .ai-assistant-open {
         grid-template-columns: 1.5fr 0.5fr;
       }
@@ -253,6 +263,7 @@ export default class SubmodeLayout extends Component<Signature> {
         margin-right: 0;
         background-color: var(--boxel-ai-purple);
         box-shadow: var(--boxel-deep-box-shadow);
+        z-index: 100;
       }
 
       .ai-assistant-panel {
