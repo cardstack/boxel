@@ -6,7 +6,12 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
+import { marked } from 'marked';
 import { TrackedMap } from 'tracked-built-ins';
+
+import { bool, gt, or } from '@cardstack/boxel-ui/helpers';
+
+import { sanitizeHtml } from '@cardstack/runtime-common';
 
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { getRoom } from '@cardstack/host/resources/room';
@@ -16,6 +21,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type MessageField } from 'https://cardstack.com/base/room';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -39,7 +45,7 @@ export default class Room extends Component<Signature> {
       data-test-room={{this.room.name}}
       data-test-room-id={{this.room.roomId}}
     >
-      {{#if this.room.messages}}
+      {{#if (or (gt this.room.messages.length 0) (bool this.lastMessageSent))}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
@@ -48,6 +54,14 @@ export default class Room extends Component<Signature> {
               {{scrollIntoViewModifier (this.isLastMessage i)}}
             />
           {{/each}}
+          {{#if this.isMessagePendingDisplayed}}
+            <RoomMessage
+              @isPending={{true}}
+              {{! @glint-ignore messagePending must be not undefined here}}
+              @message={{this.lastMessageSent}}
+              data-test-message-idx={{this.room.messages.length}}
+            />
+          {{/if}}
         </AiAssistantConversation>
       {{else}}
         <NewSession @sendPrompt={{this.sendPrompt}} />
@@ -107,6 +121,8 @@ export default class Room extends Component<Signature> {
   private roomResource = getRoom(this, () => this.args.roomId);
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
+  private lastMessagesSent: TrackedMap<string, MessageField | undefined> =
+    new TrackedMap();
   private cardsToSend: TrackedMap<string, CardDef[] | undefined> =
     new TrackedMap();
   private lastTopMostCard: CardDef | undefined;
@@ -138,6 +154,14 @@ export default class Room extends Component<Signature> {
 
   private get cardsToAttach() {
     return this.cardsToSend.get(this.args.roomId);
+  }
+
+  private get lastMessageSent() {
+    return this.lastMessagesSent.get(this.args.roomId);
+  }
+
+  private get isMessagePendingDisplayed() {
+    return (this.room?.messages.length ?? 0) === this.lastMessageSent?.index;
   }
 
   @action sendPrompt(prompt: string) {
@@ -195,6 +219,23 @@ export default class Room extends Component<Signature> {
 
   private doSendMessage = enqueueTask(
     async (message: string | undefined, cards?: CardDef[]) => {
+      let roomModule = await this.matrixService.getRoomModule();
+      let roomMember = new roomModule.RoomMemberField({
+        id: this.matrixService.userId,
+        userId: this.matrixService.userId,
+        roomId: this.args.roomId,
+      });
+      let lastMessageSent = new roomModule.MessageField({
+        author: roomMember,
+        message,
+        formattedMessage: message ? sanitizeHtml(marked(message)) : '',
+        created: new Date().getTime(),
+        index: this.room?.messages.length ?? 0,
+        transactionId: null,
+        attachedCardIds: cards?.map((c) => c.id) || [],
+      });
+      this.lastMessagesSent.set(this.args.roomId, lastMessageSent);
+
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
       let context = {
@@ -203,6 +244,7 @@ export default class Room extends Component<Signature> {
           .topMostStackItems()
           .map((stackItem) => stackItem.card.id),
       };
+
       await this.matrixService.sendMessage(
         this.args.roomId,
         message,

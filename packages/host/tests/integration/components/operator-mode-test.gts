@@ -91,6 +91,9 @@ module('Integration | operator-mode', function (hooks) {
       'service:matrixService',
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
+    matrixService.getRoomModule = async function () {
+      return await loader.import(`${baseRealm.url}room`);
+    };
 
     //Generate 11 person card to test recent card menu in card sheet
     let personCards: Map<String, any> = new Map<String, any>();
@@ -1012,6 +1015,67 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-message-idx="0"] p').exists({ count: 2 });
       assert.dom('[data-test-message-idx="0"] em').hasText('love');
       assert.dom('[data-test-message-idx="0"]').doesNotContainText('_love_');
+    });
+
+    test('displays message slightly muted when it is being sent', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      let sendMessageDeffered = new Deferred<void>();
+      let originalSendMessage = matrixService.sendMessage;
+      matrixService.sendMessage = async function (
+        roomId: string,
+        body: string,
+        _attachedCards: [],
+        _context?: any,
+      ) {
+        await sendMessageDeffered.promise;
+        addRoomEvent(matrixService, {
+          event_id: 'event1',
+          room_id: roomId,
+          state_key: 'state',
+          type: 'm.room.message',
+          origin_server_ts: 1709652566421,
+          content: {
+            body,
+            msgtype: 'org.boxel.message',
+            formatted_body: body,
+            format: 'org.matrix.custom.html',
+          },
+        });
+      };
+      await openAiAssistant();
+
+      await fillIn('[data-test-message-field]', 'Test Message');
+      assert.dom('[data-test-message-field]').hasValue('Test Message');
+      assert.dom('[data-test-send-message-btn]').isEnabled();
+      assert.dom('[data-test-ai-assistant-message]').doesNotExist();
+      await click('[data-test-send-message-btn]');
+
+      assert.dom('[data-test-message-field]').hasValue('');
+      assert.dom('[data-test-send-message-btn]').isDisabled();
+      assert.dom('[data-test-ai-assistant-message]').exists();
+      assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
+      await percySnapshot(assert);
+
+      sendMessageDeffered.fulfill();
+      await waitUntil(
+        () =>
+          !(
+            document.querySelector(
+              '[data-test-send-message-btn]',
+            ) as HTMLButtonElement
+          ).disabled,
+      );
+      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-pending');
+      matrixService.sendMessage = originalSendMessage;
     });
   });
 

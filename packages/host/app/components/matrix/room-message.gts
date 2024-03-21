@@ -25,6 +25,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     message: MessageField;
+    isPending?: boolean;
   };
 }
 
@@ -40,6 +41,7 @@ export default class Room extends Component<Signature> {
       }}
       @attachedCards={{this.resources.cards}}
       @errorMessage={{this.errorMessage}}
+      @isPending={{@isPending}}
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
     >

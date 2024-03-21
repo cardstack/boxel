@@ -22,6 +22,7 @@ import {
   aiBotUsername,
   splitStringIntoChunks,
   baseRealm,
+  Loader,
   loaderFor,
 } from '@cardstack/runtime-common';
 import {
@@ -40,6 +41,7 @@ import { getRealmSession } from '@cardstack/host/resources/realm-session';
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import * as RoomModule from 'https://cardstack.com/base/room';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
@@ -104,6 +106,11 @@ export default class MatrixService extends Service {
     () => 'https://cardstack.com/base/card-api',
   );
 
+  loaderToRoomModuleLoadingCache = new WeakMap<
+    Loader,
+    Promise<typeof RoomModule>
+  >();
+
   private loadSDK = task(async () => {
     await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
@@ -120,6 +127,18 @@ export default class MatrixService extends Service {
       [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
     ];
   });
+
+  async getRoomModule(loader?: Loader): Promise<typeof RoomModule> {
+    loader = loader ?? this.loaderService.loader;
+    if (!this.loaderToRoomModuleLoadingCache.has(loader)) {
+      let apiPromise = loader.import<typeof RoomModule>(
+        'https://cardstack.com/base/room',
+      );
+      this.loaderToRoomModuleLoadingCache.set(loader, apiPromise);
+      return apiPromise;
+    }
+    return this.loaderToRoomModuleLoadingCache.get(loader)!;
+  }
 
   get isLoggedIn() {
     return this.client.isLoggedIn();
