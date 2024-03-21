@@ -35,7 +35,7 @@ jobs:
           if [ "$INPUT_ENVIRONMENT" = "production" ]; then
             echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/boxel-ui" >> $GITHUB_ENV
             echo "AWS_S3_BUCKET=cardstack-boxel-ui-production" >> $GITHUB_ENV
-            echo "AWS_CLOUDFRONT_DISTRIBUTION=E2DDEHLJXF5LQ8" >> $GITHUB_ENV
+            echo "AWS_CLOUDFRONT_DISTRIBUTION=ENCCIR73TMO8S" >> $GITHUB_ENV
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
             echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-ui" >> $GITHUB_ENV
             echo "AWS_S3_BUCKET=cardstack-boxel-ui-staging" >> $GITHUB_ENV
@@ -44,7 +44,6 @@ jobs:
             echo "unrecognized environment"
             exit 1;
           fi
-      # FIXME production distribution is incorrect
       - name: Build boxel-ui addon
         run: pnpm build
         working-directory: packages/boxel-ui/addon

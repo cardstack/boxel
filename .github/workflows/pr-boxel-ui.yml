@@ -78,8 +78,7 @@ jobs:
           S3_PREVIEW_BUCKET_NAME: boxel-ui-preview.cardstack.com
           AWS_S3_BUCKET: boxel-ui-preview.cardstack.com
           AWS_REGION: us-east-1
-          # FIXME incorrect
-          AWS_CLOUDFRONT_DISTRIBUTION: E1JS2AYUPFW775
+          AWS_CLOUDFRONT_DISTRIBUTION: E1A4IR2R5TJZJZ
         with:
           package: boxel-ui
           environment: production
