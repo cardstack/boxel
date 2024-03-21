@@ -5,7 +5,7 @@ import {
   RealmAuthClient,
   type RealmAuthMatrixClientInterface,
 } from '@cardstack/runtime-common/realm-auth-client';
-import { Loader, VirtualNetwork } from '@cardstack/runtime-common';
+import { VirtualNetwork } from '@cardstack/runtime-common';
 import jwt from 'jsonwebtoken';
 
 function createJWT(expiresIn: string | number) {

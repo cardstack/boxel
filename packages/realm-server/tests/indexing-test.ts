@@ -1,7 +1,6 @@
 import { module, test } from 'qunit';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import {
-  Loader,
   baseRealm,
   LooseSingleCardDocument,
   Realm,

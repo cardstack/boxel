@@ -18,7 +18,6 @@ import {
 } from '@cardstack/runtime-common/etc/test-fixtures';
 import {
   isSingleCardDocument,
-  Loader,
   baseRealm,
   loadCard,
   Deferred,

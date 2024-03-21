@@ -2,7 +2,6 @@ import { module, test } from 'qunit';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import { dirSync } from 'tmp';
 import {
-  Loader,
   baseRealm,
   baseCardRef,
   baseFieldRef,
