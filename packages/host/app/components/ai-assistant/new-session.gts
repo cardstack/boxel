@@ -86,6 +86,7 @@ export default class NewSession extends Component<Signature> {
         padding: var(--boxel-sp-4xs);
         font: 700 var(--boxel-font);
         line-height: 1.5;
+        text-wrap: pretty;
       }
       .prompts {
         list-style-type: none;
@@ -123,6 +124,7 @@ export default class NewSession extends Component<Signature> {
         color: var(--boxel-450);
         font: var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xs);
+        text-wrap: pretty;
       }
     </style>
   </template>

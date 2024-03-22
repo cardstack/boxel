@@ -208,11 +208,11 @@ export default class AiAssistantPanel extends Component<Signature> {
         align-items: center;
         display: flex;
         gap: var(--boxel-sp-xs);
-        margin-bottom: var(--boxel-sp);
+        margin-bottom: var(--boxel-sp-sm);
       }
       .panel-title-text {
         margin: 0;
-        padding-right: var(--boxel-sp-xl);
+        padding-right: var(--boxel-sp-xxl);
         color: var(--boxel-light);
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
@@ -221,6 +221,11 @@ export default class AiAssistantPanel extends Component<Signature> {
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
+        text-wrap: pretty;
+        /* the below font-smoothing options are only recommended for light-colored
+          text on dark background (otherwise not good for accessibility) */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
       .close-ai-panel {
         --icon-color: var(--boxel-highlight);
@@ -230,10 +235,14 @@ export default class AiAssistantPanel extends Component<Signature> {
         height: var(--panel-title-height);
         z-index: 1;
       }
+      .close-ai-panel:hover:not(:disabled) {
+        --icon-color: var(--boxel-highlight-hover);
+      }
       .header-buttons {
         position: relative;
         align-items: center;
         display: inline-flex;
+        height: var(--panel-title-height);
       }
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);
