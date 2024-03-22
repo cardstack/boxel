@@ -198,7 +198,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         z-index: 1;
       }
       .panel-header {
-        --panel-title-height: 44px;
+        --panel-title-height: 40px;
         position: relative;
         padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
           var(--boxel-sp-lg);
@@ -212,7 +212,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       .panel-title-text {
         margin: 0;
-        padding-right: var(--boxel-sp-xxl);
+        padding-right: var(--boxel-sp-xl);
         color: var(--boxel-light);
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
