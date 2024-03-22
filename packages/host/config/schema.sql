@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS indexed_cards (
-  card_url TEXT NOT NULL
+  card_url TEXT NOT NULL,
   realm_version INTEGER NOT NULL,
   realm_url TEXT NOT NULL,
   pristine_doc JSON,
@@ -14,10 +14,10 @@ CREATE TABLE IF NOT EXISTS indexed_cards (
 );
 
 CREATE TABLE IF NOT EXISTS realm_versions (
-  realm_url TEXT PRIMARY KEY,
-  current_version INTEGER,
+  realm_url TEXT NOT NULL PRIMARY KEY,
+  current_version INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS realm_version_idx ON indexed_cards (realm_version);
-CREATE INDEX IF NOT EXISTS deps_type_idx ON indexed_cards (json_type(deps));
-CREATE INDEX IF NOT EXISTS deps_each_idx ON indexed_cards (json_each(deps));
+CREATE INDEX IF NOT EXISTS realm_url_idx ON indexed_cards (realm_url);
+CREATE INDEX IF NOT EXISTS current_version_idx ON realm_versions (current_version);

@@ -39,6 +39,8 @@ import { Loader } from './loader';
 export * from './constants';
 export * from './queue';
 export * from './indexer/expression';
+export * from './indexer/client';
+export * from './db';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
 export { NotLoaded, isNotLoadedError } from './not-loaded';

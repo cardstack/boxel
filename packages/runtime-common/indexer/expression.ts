@@ -1,4 +1,4 @@
-import * as JSON from 'json-typescript';
+import * as JSONTypes from 'json-typescript';
 import isPlainObject from 'lodash/isPlainObject';
 
 export type Expression = (string | Param)[];
@@ -7,8 +7,8 @@ export type PgPrimitive =
   | number
   | string
   | boolean
-  | JSON.Object
-  | JSON.Arr
+  | JSONTypes.Object
+  | JSONTypes.Arr
   | null;
 
 export interface Param {
@@ -67,14 +67,26 @@ export function any(expressions: unknown[][]): unknown {
     .reduce((accum, expression: Expression) => [...accum, 'OR', ...expression]);
 }
 
-export function asExpressions(values: Record<string, any>): {
+interface Options {
+  jsonFields?: string[];
+}
+
+export function asExpressions(
+  values: Record<string, any>,
+  opts?: Options,
+): {
   nameExpressions: string[][];
   valueExpressions: Param[][];
 } {
   let paramBucket = Object.fromEntries(
     Object.entries(values).map(([col, val]) => [
       col,
-      { kind: 'param' as const, param: val },
+      {
+        kind: 'param' as const,
+        // TODO: SQLite requires JSON be referenced in a stringified
+        // manner--need to confirm if postgres is ok with this
+        param: opts?.jsonFields?.includes(col) ? JSON.stringify(val) : val,
+      },
     ]),
   );
   let nameExpressions = Object.keys(paramBucket).map((name) => [name]);

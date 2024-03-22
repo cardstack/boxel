@@ -1,17 +1,18 @@
 import flatten from 'lodash/flatten';
-import { logger, LooseSingleCardDocument } from '../index';
+import { LooseSingleCardDocument } from '../index';
 import {
-  PgPrimitive,
-  Expression,
+  type PgPrimitive,
+  type Expression,
   isParam,
   separatedByCommas,
   addExplicitParens,
   asExpressions,
 } from './expression';
 import { type SerializedError } from '../error';
+import { type DBAdapter } from '../db';
 import { type SearchEntryWithErrors } from '../search-index';
 
-interface IndexedCardsTable {
+export interface IndexedCardsTable {
   card_url: string;
   realm_version: number;
   realm_url: string;
@@ -25,39 +26,72 @@ interface IndexedCardsTable {
   is_deleted: boolean | null;
 }
 
-interface RealmVersionsTable {
+export interface RealmVersionsTable {
   realm_url: string;
   current_version: number;
 }
 
-interface DBAdapter {
-  // DB implementations perform DB connection and migration in this method.
-  // DBAdapter implementations can take in DB specific config in their
-  // constructors (username, password, etc)
-  createClient: () => Promise<void>;
-  execute: (
-    sql: string,
-    bind?: PgPrimitive[],
-  ) => Promise<Record<string, PgPrimitive>[]>;
+interface GetEntryOptions {
+  useWorkInProgressIndex?: boolean;
 }
 
-let log = logger('indexer-client');
-
-export class IndexerClient {
+export class IndexerDBClient {
   #ready: Promise<void>;
 
   constructor(private dbAdapter: DBAdapter) {
-    this.#ready = this.dbAdapter.createClient();
+    this.#ready = this.dbAdapter.startClient();
   }
 
   async ready() {
     return this.#ready;
   }
 
+  async teardown() {
+    await this.dbAdapter.close();
+  }
+
   async query(query: Expression) {
     let sql = await this.expressionToSql(query);
-    log.trace('search: %s trace: %j', sql.text, sql.values);
+    // set chrome console to "Verbose" to see these queries in the console
+    console.debug(`sql: ${sql.text} bindings: ${sql.values}`);
     return await this.dbAdapter.execute(sql.text, sql.values);
+  }
+
+  async getIndexEntry(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedCardsTable | undefined> {
+    let result = (await this.query([
+      `SELECT i.* 
+         FROM indexed_cards as i
+         JOIN realm_versions r ON i.realm_url = r.realm_url
+         WHERE i.card_url =`,
+      { kind: 'param', param: url.href },
+      ...(!opts?.useWorkInProgressIndex
+        ? // if we are not using the work in progress index then we limit the max
+          // version permitted to the current version for the realm
+          ['AND i.realm_version <= r.current_version']
+        : // otherwise we choose the highest version in the system
+          []),
+      'ORDER BY i.realm_version DESC',
+      'LIMIT 1',
+    ])) as unknown as IndexedCardsTable[];
+    let maybeResult: IndexedCardsTable | undefined = result[0];
+
+    if (maybeResult.is_deleted) {
+      return undefined;
+    }
+
+    if (maybeResult && typeof maybeResult.deps === 'string') {
+      maybeResult.deps = JSON.parse(maybeResult.deps); // SQLite returns TEXT instead of JSON, ugh...
+    }
+    return maybeResult;
+  }
+
+  async createBatch(realmURL: URL) {
+    let batch = new Batch(this, realmURL);
+    await batch.ready;
+    return batch;
   }
 
   async cardsThatReference(cardId: string): Promise<string[]> {
@@ -66,20 +100,20 @@ export class IndexerClient {
     // for large invalidations. But beware, cursor support for SQLite in worker
     // mode is very limited. This will likely require some custom work...
 
-    // TODO need to double-check that postgres supports these json functions
     let rows = (await this.query([
-      `SELECT json_type(deps) as deps_type, 
-              json_each(deps) as deps_each, 
-         FROM indexed_cards 
+      `SELECT indexed_cards.card_url
+         FROM
+           indexed_cards,
+           json_each(indexed_cards.deps) as deps_each
          WHERE 
-           pristine_doc IS NOT NULL AND 
-           deps_type = 'array' AND
-           deps_each.type = 'text' AND
            deps_each.value =`,
-      // SQLite doesn't support arrays!!
+      // WARNING!!! SQLite doesn't support arrays, and the json_each() and
+      // json_tree() functions that it does support are table-valued functions
+      // meaning that we can only use them like tables. unsure if there is a
+      // postgres equivalent. Need to research this.
       { kind: 'param', param: cardId },
-    ])) as Pick<IndexedCardsTable, 'deps'>[];
-    return flatten(rows.map((r) => r.deps || []));
+    ])) as Pick<IndexedCardsTable, 'card_url'>[];
+    return rows.map((r) => r.card_url);
   }
 
   private expressionToSql(query: Expression) {
@@ -105,18 +139,19 @@ export class IndexerClient {
 
 export class Batch {
   readonly ready: Promise<void>;
-  private _invalidations = new Set<string>();
+  private touched = new Set<string>();
   private isNewGeneration = false;
   private declare realmVersion: number;
 
   constructor(
-    private client: IndexerClient,
+    private client: IndexerDBClient,
     private realmURL: URL, // this assumes that we only index cards in our own realm...
   ) {
     this.ready = this.setNextRealmVersion();
   }
 
   async updateEntry(url: URL, entry: SearchEntryWithErrors): Promise<void> {
+    this.touched.add(url.href);
     let { nameExpressions, valueExpressions } = asExpressions({
       card_url: url.href,
       realm_version: this.realmVersion,
@@ -145,6 +180,7 @@ export class Batch {
   }
 
   async deleteEntry(url: URL): Promise<void> {
+    this.touched.add(url.href);
     let { nameExpressions, valueExpressions } = asExpressions({
       card_url: url.href,
       realm_version: this.realmVersion,
@@ -209,7 +245,7 @@ export class Batch {
         `WHERE card_url IN`,
         ...addExplicitParens(
           separatedByCommas(
-            this.invalidations.map((i) => [{ kind: 'param', param: i }]),
+            [...this.touched].map((i) => [{ kind: 'param', param: i }]),
           ),
         ),
         'AND realm_version <',
@@ -218,14 +254,9 @@ export class Batch {
     }
   }
 
-  // FYI: these invalidations may include modules...
-  get invalidations() {
-    return [...this._invalidations];
-  }
-
   private async setNextRealmVersion() {
     let [row] = (await this.client.query([
-      'select current_version from realm_versions where realm_url =',
+      'SELECT current_version FROM realm_versions WHERE realm_url =',
       { kind: 'param', param: this.realmURL.href },
     ])) as Pick<RealmVersionsTable, 'current_version'>[];
     if (!row) {
@@ -241,7 +272,7 @@ export class Batch {
   // original notifier to try again
   async invalidate(
     url: URL /* this can be a card or module URL*/,
-  ): Promise<void> {
+  ): Promise<string[]> {
     await this.ready;
 
     let invalidations = await this.calculateInvalidations(url.href);
@@ -276,6 +307,10 @@ export class Batch {
         ),
       ]);
     }
+
+    // FYI: these invalidations may include modules...
+    this.touched = new Set([...this.touched, ...invalidations]);
+    return invalidations;
   }
 
   private async calculateInvalidations(id: string): Promise<string[]> {
