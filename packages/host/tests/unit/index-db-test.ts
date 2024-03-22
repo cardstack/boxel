@@ -30,7 +30,9 @@ async function setupIndex(
     >)[],
 ) {
   let indexedCardsExpressions = indexRows.map((r) =>
-    asExpressions(r, { jsonFields: ['deps'] }),
+    asExpressions(r, {
+      jsonFields: ['deps', 'pristine_doc', 'error_doc', 'search_doc'],
+    }),
   );
   let versionExpressions = versionRows.map((r) => asExpressions(r));
 

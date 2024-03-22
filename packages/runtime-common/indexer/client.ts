@@ -77,13 +77,25 @@ export class IndexerDBClient {
       'LIMIT 1',
     ])) as unknown as IndexedCardsTable[];
     let maybeResult: IndexedCardsTable | undefined = result[0];
-
+    if (!maybeResult) {
+      return undefined;
+    }
     if (maybeResult.is_deleted) {
       return undefined;
     }
 
-    if (maybeResult && typeof maybeResult.deps === 'string') {
-      maybeResult.deps = JSON.parse(maybeResult.deps); // SQLite returns TEXT instead of JSON, ugh...
+    // SQLite returns TEXT instead of JSON, ugh...
+    for (let jsonField of [
+      'deps' as const,
+      'pristine_doc' as const,
+      'error_doc' as const,
+      'search_doc' as const,
+    ]) {
+      if (typeof maybeResult[jsonField] === 'string') {
+        maybeResult[jsonField] = JSON.parse(
+          maybeResult[jsonField] as unknown as string,
+        );
+      }
     }
     return maybeResult;
   }
