@@ -55,6 +55,7 @@
     "ember-cli": "^4.12.1",
     "ember-cli-babel": "^8.2.0",
     "ember-cli-dependency-checker": "^3.3.1",
+    "ember-cli-deprecation-workflow": "mixonic/ember-cli-deprecation-workflow#0b4cbe7",
     "ember-cli-htmlbars": "^6.3.0",
     "ember-cli-inject-live-reload": "^2.1.0",
     "ember-cli-sri": "^2.1.1",

@@ -451,6 +451,9 @@ importers:
       ember-cli-dependency-checker:
         specifier: ^3.3.1
         version: 3.3.1(ember-cli@4.12.1)
+      ember-cli-deprecation-workflow:
+        specifier: mixonic/ember-cli-deprecation-workflow#0b4cbe7
+        version: github.com/mixonic/ember-cli-deprecation-workflow/0b4cbe7(ember-source@4.12.0)
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0
