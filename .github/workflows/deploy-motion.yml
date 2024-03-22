@@ -30,12 +30,11 @@ jobs:
           if [ "$INPUT_ENVIRONMENT" = "production" ]; then
             echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/boxel-motion" >> $GITHUB_ENV
             echo "AWS_S3_BUCKET=cardstack-boxel-motion-production" >> $GITHUB_ENV
-            echo "AWS_CLOUDFRONT_DISTRIBUTION=ENCCIR73TMO8S" >> $GITHUB_ENV
+            echo "AWS_CLOUDFRONT_DISTRIBUTION=E33N4WQHDRTVBM" >> $GITHUB_ENV
           else
             echo "unrecognized environment"
             exit 1;
           fi
-        # FIXME production cloudfront distribution
       - name: Build boxel-motion addon
         run: pnpm build
         working-directory: packages/boxel-motion/addon

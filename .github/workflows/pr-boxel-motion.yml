@@ -52,8 +52,7 @@ jobs:
           S3_PREVIEW_BUCKET_NAME: boxel-motion-preview.cardstack.com
           AWS_S3_BUCKET: boxel-motion-preview.cardstack.com
           AWS_REGION: us-east-1
-          AWS_CLOUDFRONT_DISTRIBUTION: E1A4IR2R5TJZJZ
-          # FIXME update
+          AWS_CLOUDFRONT_DISTRIBUTION: E1LZQB073YSRH
         with:
           package: boxel-motion
           environment: production
