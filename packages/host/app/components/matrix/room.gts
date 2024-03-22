@@ -50,6 +50,8 @@ export default class Room extends Component<Signature> {
               @message={{message}}
               @monacoSDK={{@monacoSDK}}
               @isStreaming={{this.isMessageStreaming message i}}
+              @currentEditor={{this.currentEditor}}
+              @setCurrentEditor={{this.setCurrentEditor}}
               data-test-message-idx={{i}}
               {{scrollIntoViewModifier (this.isLastMessage i)}}
             />
@@ -118,6 +120,7 @@ export default class Room extends Component<Signature> {
   private lastTopMostCard: CardDef | undefined;
 
   @tracked private isAutoAttachedCardDisplayed = true;
+  @tracked private currentEditor: number | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -280,6 +283,10 @@ export default class Room extends Component<Signature> {
     return (
       (this.room && messageIndex === this.room.messages.length - 1) ?? false
     );
+  }
+
+  @action private setCurrentEditor(num: number | undefined) {
+    this.currentEditor = num;
   }
 }
 

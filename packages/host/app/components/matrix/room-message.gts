@@ -14,7 +14,7 @@ import { marked } from 'marked';
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
-import { setCssVar } from '@cardstack/boxel-ui/modifiers';
+// import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
@@ -38,12 +38,15 @@ interface Signature {
     message: MessageField;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
+    currentEditor: number | undefined;
+    setCurrentEditor: (editor: number | undefined) => void;
   };
 }
 
 export default class Room extends Component<Signature> {
   <template>
     <AiAssistantMessage
+      id='scroll-location-{{@message.index}}'
       class='room-message'
       @formattedMessage={{htmlSafe this.formattedMessage}}
       @datetime={{@message.created}}
@@ -106,7 +109,7 @@ export default class Room extends Component<Signature> {
             </Button>
             <div
               class='monaco-container'
-              {{setCssVar monaco-container-height=this.monacoContainerHeight}}
+              id='monaco-container-{{@message.index}}'
               {{monacoModifier
                 content=this.previewPatchCode
                 contentChanged=undefined
@@ -119,6 +122,7 @@ export default class Room extends Component<Signature> {
               data-test-editor
               data-test-percy-hide
             />
+            {{log this.monacoContainerHeight}}
           </div>
         {{/if}}
       {{/if}}
@@ -236,12 +240,34 @@ export default class Room extends Component<Signature> {
     return JSON.stringify(this.args.message.command.payload.patch, null, 2);
   }
 
-  @action private async viewCodeToggle() {
+  @action private viewCodeToggle() {
     this.isDisplayingCode = !this.isDisplayingCode;
+    if (this.isDisplayingCode) {
+      this.args.setCurrentEditor(this.args.message.index);
+    }
   }
 
   private get monacoContainerHeight() {
-    let height = this.monacoService.getContentHeight();
-    return height && height > 0 ? `${height}px` : '7rem';
+    if (this.args.currentEditor === this.args.message.index) {
+      let height = this.monacoService.getEditor()?.getContentHeight();
+      let container: HTMLElement | null = document.getElementById(
+        `monaco-container-${this.args.message.index}`,
+      );
+      let el = document.getElementById(
+        `scroll-location-${this.args.message.index}`,
+      );
+      if (container && height && height > 0) {
+        container.style.height = `${height}px`;
+        if (el && !isElementInViewport(el)) {
+          el.scrollIntoView({ block: 'end' });
+        }
+      }
+    }
+    return;
   }
+}
+
+function isElementInViewport(el: HTMLElement) {
+  const { top, bottom } = el.getBoundingClientRect();
+  return top >= 0 && bottom <= window.innerHeight;
 }
