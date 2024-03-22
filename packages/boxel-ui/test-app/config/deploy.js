@@ -19,10 +19,6 @@ module.exports = function (deployTarget) {
     },
   };
 
-  if (deployTarget === 'staging') {
-    ENV.build.environment = 'production';
-  }
-
   if (deployTarget === 'production') {
     ENV.build.environment = 'production';
   }
@@ -32,10 +28,7 @@ module.exports = function (deployTarget) {
     ENV.plugins = ['build'];
   }
 
-  if (
-    deployTarget === 's3-preview-staging' ||
-    deployTarget === 's3-preview-production'
-  ) {
+  if (deployTarget === 's3-preview-production') {
     ENV.s3.prefix = process.env.PR_BRANCH_NAME;
   }
 
