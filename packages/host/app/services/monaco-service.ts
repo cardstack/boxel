@@ -178,7 +178,7 @@ export default class MonacoService extends Service {
     this.editor.revealLineInCenter(cursorPosition.lineNumber);
   }
 
-  getEditor() {
-    return this.editor;
+  getContentHeight() {
+    return this.editor?.getContentHeight();
   }
 }
