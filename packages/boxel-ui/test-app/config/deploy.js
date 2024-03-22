@@ -23,11 +23,6 @@ module.exports = function (deployTarget) {
     ENV.build.environment = 'production';
   }
 
-  if (deployTarget === 'build-only') {
-    ENV.build.environment = 'production';
-    ENV.plugins = ['build'];
-  }
-
   if (deployTarget === 's3-preview-production') {
     ENV.s3.prefix = process.env.PR_BRANCH_NAME;
   }
