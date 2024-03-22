@@ -1144,8 +1144,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       ember-cli-deprecation-workflow:
-        specifier: ^2.2.0
-        version: 2.2.0
+        specifier: mixonic/ember-cli-deprecation-workflow#0b4cbe7
+        version: github.com/mixonic/ember-cli-deprecation-workflow/0b4cbe7(ember-source@4.12.0)
       ember-cli-fastboot:
         specifier: ^4.1.0
         version: 4.1.0
@@ -10711,18 +10711,6 @@ packages:
       lodash: 4.17.21
       rsvp: 3.6.2
       silent-error: 1.1.1
-    transitivePeerDependencies:
-      - supports-color
-    dev: true
-
-  /ember-cli-deprecation-workflow@2.2.0:
-    resolution: {integrity: sha512-23bXZqZJBJSKBTfT0LK7qzSJX861TgafL6RVdMfn/iubpLnoZIWergYwEdgs24CNTUbuehVbHy2Q71o8jYfwfw==}
-    engines: {node: 12.* || 14.* || >= 16}
-    dependencies:
-      '@ember/string': 3.1.1
-      broccoli-funnel: 3.0.8
-      broccoli-merge-trees: 4.2.0
-      broccoli-plugin: 4.0.7
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -22611,4 +22599,24 @@ packages:
       eslint: ^7.11.0 || ^8.0.0
     dependencies:
       eslint: 8.37.0
+    dev: true
+
+  github.com/mixonic/ember-cli-deprecation-workflow/0b4cbe7(ember-source@4.12.0):
+    resolution: {tarball: https://codeload.github.com/mixonic/ember-cli-deprecation-workflow/tar.gz/0b4cbe7}
+    id: github.com/mixonic/ember-cli-deprecation-workflow/0b4cbe7
+    name: ember-cli-deprecation-workflow
+    version: 2.2.0
+    engines: {node: '>= 18'}
+    peerDependencies:
+      ember-source: '>= 4.0.0'
+    dependencies:
+      '@babel/core': 7.24.0(supports-color@8.1.1)
+      '@ember/string': 3.1.1
+      broccoli-funnel: 3.0.8
+      broccoli-merge-trees: 4.2.0
+      broccoli-plugin: 4.0.7
+      ember-cli-babel: 8.2.0(@babel/core@7.24.0)
+      ember-source: 4.12.0(@babel/core@7.24.0)(@glimmer/component@1.1.2)(@glint/template@1.2.1)(webpack@5.89.0)
+    transitivePeerDependencies:
+      - supports-color
     dev: true
