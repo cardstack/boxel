@@ -144,6 +144,9 @@ export default class Room extends Component<Signature> {
         width: auto;
         max-height: 1.5rem;
       }
+      .view-code-button:hover:not(:disabled) {
+        filter: brightness(1.1);
+      }
       .preview-code {
         --spacing: var(--boxel-sp-sm);
         --fill-container-spacing: calc(
@@ -166,7 +169,8 @@ export default class Room extends Component<Signature> {
         gap: var(--spacing);
       }
       .copy-to-clipboard-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight-hover);
+        --boxel-button-text-color: var(--boxel-highlight);
+        filter: brightness(1.1);
       }
       .monaco-container {
         height: var(--monaco-container-height);

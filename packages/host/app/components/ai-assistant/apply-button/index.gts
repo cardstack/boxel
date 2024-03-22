@@ -70,8 +70,10 @@ export default class AiAssistantApplyButton extends Component<Signature> {
         height: 17px;
         --icon-color: var(--boxel-light);
       }
+      .apply-button:hover:not(:disabled),
       .apply-button:focus:not(:disabled) {
-        --boxel-button-color: var(--boxel-highlight-hover);
+        --boxel-button-color: var(--boxel-highlight);
+        filter: brightness(1.1);
       }
     </style>
   </template>
