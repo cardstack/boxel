@@ -34,7 +34,7 @@ jobs:
     uses: ./.github/workflows/deploy-motion.yml
     secrets: inherit
     with:
-      environment: ${{ inputs.environment }}
+      environment: production
 
   build-realm-server:
     name: Build Docker image
