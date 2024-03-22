@@ -1143,6 +1143,9 @@ importers:
       ember-cli-deploy-smart-compress:
         specifier: ^2.0.0
         version: 2.0.0
+      ember-cli-deprecation-workflow:
+        specifier: ^2.2.0
+        version: 2.2.0
       ember-cli-fastboot:
         specifier: ^4.1.0
         version: 4.1.0
@@ -10708,6 +10711,18 @@ packages:
       lodash: 4.17.21
       rsvp: 3.6.2
       silent-error: 1.1.1
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
+
+  /ember-cli-deprecation-workflow@2.2.0:
+    resolution: {integrity: sha512-23bXZqZJBJSKBTfT0LK7qzSJX861TgafL6RVdMfn/iubpLnoZIWergYwEdgs24CNTUbuehVbHy2Q71o8jYfwfw==}
+    engines: {node: 12.* || 14.* || >= 16}
+    dependencies:
+      '@ember/string': 3.1.1
+      broccoli-funnel: 3.0.8
+      broccoli-merge-trees: 4.2.0
+      broccoli-plugin: 4.0.7
     transitivePeerDependencies:
       - supports-color
     dev: true
