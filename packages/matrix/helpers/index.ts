@@ -9,6 +9,7 @@ import {
 import { registerUser } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
+export const initialRoomName = 'New AI Assistant Chat';
 
 interface ProfileAssertions {
   userId?: string;

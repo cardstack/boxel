@@ -1,6 +1,5 @@
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
-
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
@@ -296,7 +295,9 @@ export default class MatrixService extends Service {
       invite,
       name,
       topic,
-      room_alias_name: encodeURIComponent(name),
+      room_alias_name: encodeURIComponent(
+        `${name} - ${this.userId} - ${Math.random()}`,
+      ),
     });
     invites.map((i) => {
       let fullId = i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`;

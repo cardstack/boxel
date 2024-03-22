@@ -313,10 +313,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       this.enterRoom(this.newSessionId!);
       return;
     }
-    let newRoomName = `${format(
-      new Date(),
-      "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
-    )} - ${this.matrixService.userId}`;
+    let newRoomName = 'New AI Assistant Chat';
     this.doCreateRoom.perform(newRoomName, [aiBotUsername]);
   }
 
