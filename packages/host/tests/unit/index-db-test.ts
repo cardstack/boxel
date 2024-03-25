@@ -90,37 +90,37 @@ module('Unit | index-db', function (hooks) {
       ],
       [
         {
-          card_url: `${testRealmURL}1`,
+          card_url: `${testRealmURL}1.json`,
           realm_version: 1,
           realm_url: testRealmURL,
-          deps: [`${testRealmURL}2`],
+          deps: [`${testRealmURL}2.json`],
         },
         {
-          card_url: `${testRealmURL}2`,
+          card_url: `${testRealmURL}2.json`,
           realm_version: 1,
           realm_url: testRealmURL,
-          deps: [`${testRealmURL}4`],
+          deps: [`${testRealmURL}4.json`],
         },
         {
-          card_url: `${testRealmURL}3`,
+          card_url: `${testRealmURL}3.json`,
           realm_version: 1,
           realm_url: testRealmURL,
-          deps: [`${testRealmURL}2`],
+          deps: [`${testRealmURL}2.json`],
         },
         {
-          card_url: `${testRealmURL}4`,
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [],
-        },
-        {
-          card_url: `${testRealmURL}5`,
+          card_url: `${testRealmURL}4.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [],
         },
         {
-          card_url: `${testRealmURL2}A`,
+          card_url: `${testRealmURL}5.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          card_url: `${testRealmURL2}A.json`,
           realm_version: 5,
           realm_url: testRealmURL2,
           deps: [],
@@ -129,30 +129,79 @@ module('Unit | index-db', function (hooks) {
     );
 
     let batch = await client.createBatch(new URL(testRealmURL));
-    let invalidations = await batch.invalidate(new URL(`${testRealmURL}4`));
+    let invalidations = await batch.invalidate(
+      new URL(`${testRealmURL}4.json`),
+    );
 
     assert.deepEqual(invalidations.sort(), [
-      `${testRealmURL}1`,
-      `${testRealmURL}2`,
-      `${testRealmURL}3`,
-      `${testRealmURL}4`,
+      `${testRealmURL}1.json`,
+      `${testRealmURL}2.json`,
+      `${testRealmURL}3.json`,
+      `${testRealmURL}4.json`,
     ]);
 
-    // TODO Flesh out these assertions
-
-    // let originalEntries = await adapter.execute(
-    //   'SELECT card_url, realm_url, is_deleted FROM indexed_cards WHERE realm_version = 1 ORDER BY card_url',
-    // );
-    // let invalidatedEntries = await adapter.execute(
-    //   'SELECT card_url, realm_url, is_deleted FROM indexed_cards WHERE realm_version = 2 ORDER BY card_url',
-    // );
-    // let otherRealms = await adapter.execute(
-    //   `SELECT card_url, realm_url, realm_version, is_deleted FROM indexed_cards WHERE realm_url != '${testRealmURL}'`,
-    // );
-    // let realmVersions = await adapter.execute(
-    //   'select * from realm_versions ORDER BY realm_url',
-    // );
+    let originalEntries = await adapter.execute(
+      'SELECT card_url, realm_url, is_deleted FROM indexed_cards WHERE realm_version = 1 ORDER BY card_url',
+      { coerceTypes: { is_deleted: 'BOOLEAN' } },
+    );
+    assert.deepEqual(
+      originalEntries,
+      [1, 2, 3, 4, 5].map((i) => ({
+        card_url: `${testRealmURL}${i}.json`,
+        realm_url: testRealmURL,
+        is_deleted: null,
+      })),
+      'the "production" version of the index entries are unchanged',
+    );
+    let invalidatedEntries = await adapter.execute(
+      'SELECT card_url, realm_url, is_deleted FROM indexed_cards WHERE realm_version = 2 ORDER BY card_url',
+      { coerceTypes: { is_deleted: 'BOOLEAN' } },
+    );
+    assert.deepEqual(
+      invalidatedEntries,
+      [1, 2, 3, 4].map((i) => ({
+        card_url: `${testRealmURL}${i}.json`,
+        realm_url: testRealmURL,
+        is_deleted: true,
+      })),
+      'the "work-in-progress" version of the index entries have been marked as deleted',
+    );
+    let otherRealms = await adapter.execute(
+      `SELECT card_url, realm_url, realm_version, is_deleted FROM indexed_cards WHERE realm_url != '${testRealmURL}'`,
+      { coerceTypes: { is_deleted: 'BOOLEAN' } },
+    );
+    assert.deepEqual(
+      otherRealms,
+      [
+        {
+          card_url: `${testRealmURL2}A.json`,
+          realm_url: testRealmURL2,
+          realm_version: 5,
+          is_deleted: null,
+        },
+      ],
+      'the index entries from other realms are unchanged',
+    );
+    let realmVersions = await adapter.execute(
+      'select * from realm_versions ORDER BY realm_url',
+    );
+    assert.deepEqual(
+      realmVersions,
+      [
+        {
+          realm_url: `${testRealmURL}`,
+          current_version: 1,
+        },
+        {
+          realm_url: `${testRealmURL2}`,
+          current_version: 5,
+        },
+      ],
+      'the "production" realm versions are correct',
+    );
   });
+
+  skip('does not create invalidation record for non-JSON invalidation', async function (_assert) {});
 
   skip('can prevent concurrent batch invalidations from colliding', async function (_assert) {});
 

@@ -2,6 +2,9 @@ CREATE TABLE IF NOT EXISTS indexed_cards (
   card_url TEXT NOT NULL,
   realm_version INTEGER NOT NULL,
   realm_url TEXT NOT NULL,
+  -- WARNING SQLite doesn't actually have a JSON type. Rather JSON just falls
+  -- back to TEXT which can be recognized as JSON via SQLite JSON functions as
+  -- part of queries
   pristine_doc JSON,
   search_doc JSON,
   error_doc JSON,
@@ -9,6 +12,8 @@ CREATE TABLE IF NOT EXISTS indexed_cards (
   embedded_html TEXT,
   isolated_html TEXT,
   indexed_at INTEGER,
+  -- WARNING SQLite doesn't have a BOOLEAN type, but it does recognize TRUE and
+  -- FALSE. These values will be returned as 1 and 0 in SQLite result sets
   is_deleted BOOLEAN,
   PRIMARY KEY (card_url, realm_version)
 );

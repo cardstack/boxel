@@ -1,5 +1,12 @@
 import { type PgPrimitive } from './index';
 
+export interface ExecuteOptions {
+  // SQLite has a very limited set of data types. we can coerce the resulting
+  // types into values that resemble pg using this option
+  bind?: PgPrimitive[];
+  coerceTypes?: { [column: string]: 'BOOLEAN' | 'JSON' };
+}
+
 export interface DBAdapter {
   // DB implementations perform DB connection and migration in this method.
   // DBAdapter implementations can take in DB specific config in their
@@ -7,7 +14,7 @@ export interface DBAdapter {
   startClient: () => Promise<void>;
   execute: (
     sql: string,
-    bind?: PgPrimitive[],
+    opts?: ExecuteOptions,
   ) => Promise<Record<string, PgPrimitive>[]>;
   close: () => Promise<void>;
 }

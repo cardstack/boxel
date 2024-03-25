@@ -6,6 +6,7 @@ import {
 import {
   type DBAdapter,
   type PgPrimitive,
+  type ExecuteOptions,
   Deferred,
 } from '@cardstack/runtime-common';
 
@@ -54,8 +55,8 @@ export default class SQLiteAdapter implements DBAdapter {
     }
   }
 
-  async execute(sql: string, bind?: PgPrimitive[]) {
-    return await this.query(sql, bind);
+  async execute(sql: string, opts?: ExecuteOptions) {
+    return await this.query(sql, opts);
   }
 
   async close() {
@@ -80,13 +81,13 @@ export default class SQLiteAdapter implements DBAdapter {
     return this._dbId;
   }
 
-  private async query(sql: string, bind?: any[]) {
+  private async query(sql: string, opts?: ExecuteOptions) {
     let results: Record<string, PgPrimitive>[] = [];
     try {
       await this.sqlite('exec', {
         dbId: this.dbId,
         sql,
-        bind,
+        bind: opts?.bind,
         // Nested execs are not possible with this async interface--we can't call
         // into the exec in this callback due to the way we communicate to the
         // worker thread via postMessage. if we need nesting do it all in the SQL
@@ -95,7 +96,26 @@ export default class SQLiteAdapter implements DBAdapter {
           // row === undefined indicates that the end of the result set has been reached
           if (row) {
             for (let [index, col] of columnNames.entries()) {
-              rowObject[col] = row[index];
+              let coerceAs = opts?.coerceTypes?.[col];
+              if (coerceAs) {
+                switch (coerceAs) {
+                  case 'JSON': {
+                    rowObject[col] = JSON.parse(row[index]);
+                    break;
+                  }
+                  case 'BOOLEAN': {
+                    let value = row[index];
+                    rowObject[col] =
+                      // respect DB NULL values
+                      value === null ? value : Boolean(row[index]);
+                    break;
+                  }
+                  default:
+                    assertNever(coerceAs);
+                }
+              } else {
+                rowObject[col] = row[index];
+              }
             }
             results.push(rowObject);
           }
@@ -104,7 +124,7 @@ export default class SQLiteAdapter implements DBAdapter {
     } catch (e: any) {
       console.error(
         `Error executing SQL ${e.result.message}:\n${sql}${
-          bind ? ' with bindings: ' + JSON.stringify(bind) : ''
+          opts?.bind ? ' with bindings: ' + JSON.stringify(opts?.bind) : ''
         }`,
         e,
       );
@@ -113,4 +133,8 @@ export default class SQLiteAdapter implements DBAdapter {
 
     return results;
   }
+}
+
+function assertNever(value: never) {
+  return new Error(`should never happen ${value}`);
 }

@@ -9,7 +9,7 @@ import {
   asExpressions,
 } from './expression';
 import { type SerializedError } from '../error';
-import { type DBAdapter } from '../db';
+import { type DBAdapter, type ExecuteOptions } from '../db';
 import { type SearchEntryWithErrors } from '../search-index';
 
 export interface IndexedCardsTable {
@@ -50,32 +50,51 @@ export class IndexerDBClient {
     await this.dbAdapter.close();
   }
 
-  async query(query: Expression) {
+  async query(query: Expression, opts?: Omit<ExecuteOptions, 'bind'>) {
     let sql = await this.expressionToSql(query);
     // set chrome console to "Verbose" to see these queries in the console
     console.debug(`sql: ${sql.text} bindings: ${sql.values}`);
-    return await this.dbAdapter.execute(sql.text, sql.values);
+    return await this.dbAdapter.execute(sql.text, {
+      ...opts,
+      bind: sql.values,
+    });
   }
 
   async getIndexEntry(
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<IndexedCardsTable | undefined> {
-    let result = (await this.query([
-      `SELECT i.* 
+    let result = (await this.query(
+      [
+        `SELECT i.* 
          FROM indexed_cards as i
          JOIN realm_versions r ON i.realm_url = r.realm_url
          WHERE i.card_url =`,
-      { kind: 'param', param: url.href },
-      ...(!opts?.useWorkInProgressIndex
-        ? // if we are not using the work in progress index then we limit the max
-          // version permitted to the current version for the realm
-          ['AND i.realm_version <= r.current_version']
-        : // otherwise we choose the highest version in the system
-          []),
-      'ORDER BY i.realm_version DESC',
-      'LIMIT 1',
-    ])) as unknown as IndexedCardsTable[];
+        {
+          kind: 'param',
+          param: `${
+            !url.href.endsWith('.json') ? url.href + '.json' : url.href
+          }`,
+        },
+        ...(!opts?.useWorkInProgressIndex
+          ? // if we are not using the work in progress index then we limit the max
+            // version permitted to the current version for the realm
+            ['AND i.realm_version <= r.current_version']
+          : // otherwise we choose the highest version in the system
+            []),
+        'ORDER BY i.realm_version DESC',
+        'LIMIT 1',
+      ],
+      {
+        coerceTypes: {
+          deps: 'JSON',
+          pristine_doc: 'JSON',
+          error_doc: 'JSON',
+          search_doc: 'JSON',
+          is_deleted: 'BOOLEAN',
+        },
+      },
+    )) as unknown as IndexedCardsTable[];
     let maybeResult: IndexedCardsTable | undefined = result[0];
     if (!maybeResult) {
       return undefined;
@@ -84,19 +103,6 @@ export class IndexerDBClient {
       return undefined;
     }
 
-    // SQLite returns TEXT instead of JSON, ugh...
-    for (let jsonField of [
-      'deps' as const,
-      'pristine_doc' as const,
-      'error_doc' as const,
-      'search_doc' as const,
-    ]) {
-      if (typeof maybeResult[jsonField] === 'string') {
-        maybeResult[jsonField] = JSON.parse(
-          maybeResult[jsonField] as unknown as string,
-        );
-      }
-    }
     return maybeResult;
   }
 
@@ -283,7 +289,7 @@ export class Batch {
   // primary key constraint violation and re-add it to the job queue with the
   // original notifier to try again
   async invalidate(
-    url: URL /* this can be a card or module URL*/,
+    url: URL /* this can be a card or module URL. This must include .json extension for cards */,
   ): Promise<string[]> {
     await this.ready;
 
