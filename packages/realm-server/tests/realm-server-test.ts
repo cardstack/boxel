@@ -118,7 +118,7 @@ module('Realm Server', function (hooks) {
   let virtualNetwork = new VirtualNetwork();
   let loader = virtualNetwork.createLoader();
 
-  loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   shimExternals(virtualNetwork);
 
   setupCardLogs(
@@ -126,7 +126,7 @@ module('Realm Server', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, loader);
+  setupBaseRealmServer(hooks, loader, virtualNetwork);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -1717,7 +1717,7 @@ module('Realm Server', function (hooks) {
       let virtualNetwork = new VirtualNetwork();
 
       let testRealmServer2Loader = virtualNetwork.createLoader();
-      testRealmServer2Loader.addURLMapping(
+      virtualNetwork.addURLMapping(
         new URL(baseRealm.url),
         new URL(localBaseRealm),
       );
@@ -2032,7 +2032,7 @@ module('Realm Server serving from root', function (hooks) {
   let virtualNetwork = new VirtualNetwork();
   let loader = virtualNetwork.createLoader();
 
-  loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   shimExternals(virtualNetwork);
 
   setupCardLogs(
@@ -2040,7 +2040,7 @@ module('Realm Server serving from root', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, loader);
+  setupBaseRealmServer(hooks, loader, virtualNetwork);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -2049,7 +2049,7 @@ module('Realm Server serving from root', function (hooks) {
     let virtualNetwork = new VirtualNetwork();
 
     let testRealmServerLoader = virtualNetwork.createLoader();
-    testRealmServerLoader.addURLMapping(
+    virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
       new URL(localBaseRealm),
     );
@@ -2236,7 +2236,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
 
   let virtualNetwork = new VirtualNetwork();
   let loader = virtualNetwork.createLoader();
-  loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   shimExternals(virtualNetwork);
 
   setupCardLogs(
@@ -2244,14 +2244,14 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, loader);
+  setupBaseRealmServer(hooks, loader, virtualNetwork);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
     let testRealmServerLoader = virtualNetwork.createLoader();
-    testRealmServerLoader.addURLMapping(
+    virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
       new URL(localBaseRealm),
     );
@@ -2304,10 +2304,7 @@ async function setupPermissionedRealm(permissions: RealmPermissions) {
   copySync(join(__dirname, 'cards'), dir.name);
   let virtualNetwork = new VirtualNetwork();
   let testRealmServerLoader = virtualNetwork.createLoader();
-  testRealmServerLoader.addURLMapping(
-    new URL(baseRealm.url),
-    new URL(localBaseRealm),
-  );
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
 
   shimExternals(virtualNetwork);
 

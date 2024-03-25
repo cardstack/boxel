@@ -7,6 +7,7 @@ import {
   Loader,
   baseRealm,
   RealmPermissions,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
@@ -62,10 +63,14 @@ export async function createRealm(
   });
 }
 
-export function setupBaseRealmServer(hooks: NestedHooks, loader: Loader) {
+export function setupBaseRealmServer(
+  hooks: NestedHooks,
+  loader: Loader,
+  virtualNetwork: VirtualNetwork,
+) {
   let baseRealmServer: Server;
   hooks.before(async function () {
-    baseRealmServer = await runBaseRealmServer(loader);
+    baseRealmServer = await runBaseRealmServer(loader, virtualNetwork);
   });
 
   hooks.after(function () {
@@ -73,9 +78,12 @@ export function setupBaseRealmServer(hooks: NestedHooks, loader: Loader) {
   });
 }
 
-export async function runBaseRealmServer(loader: Loader) {
+async function runBaseRealmServer(
+  loader: Loader,
+  virtualNetwork: VirtualNetwork,
+) {
   let localBaseRealmURL = new URL(localBaseRealm);
-  loader.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
   let testBaseRealm = await createRealm(
     loader,

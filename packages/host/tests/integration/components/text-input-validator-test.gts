@@ -12,7 +12,7 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { VirtualNetwork, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -37,6 +37,7 @@ import { renderComponent } from '../../helpers/render-component';
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 let loader: Loader;
+let virtualNetwork: VirtualNetwork;
 
 module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
@@ -64,10 +65,11 @@ module('Integration | text-input-validator', function (hooks) {
   }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    ({ loader, virtualNetwork } = this.owner.lookup(
+      'service:loader-service',
+    ) as LoaderService);
 
-    loader.addURLMapping(
+    virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/'),
     );

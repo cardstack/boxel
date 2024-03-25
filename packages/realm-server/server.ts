@@ -44,9 +44,7 @@ export class RealmServer {
     this.realms = realms;
     // defaults to using the base realm to host assets (this is the dev env default)
     // All realms should have URL mapping for the base realm
-    this.assetsURL =
-      opts?.assetsURL ??
-      realms[0].loader.resolve(`${baseRealm.url}${assetsDir}`);
+    this.assetsURL = opts?.assetsURL ?? new URL(`${baseRealm.url}${assetsDir}`);
   }
 
   @Memoize()

@@ -121,7 +121,7 @@ let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(toUrls[i]), `http://localhost:${port}`),
 ]);
 for (let [from, to] of urlMappings) {
-  loader.addURLMapping(from, to);
+  virtualNetwork.addURLMapping(from, to);
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: string | URL;
