@@ -256,6 +256,6 @@ export default class Room extends Component<Signature> {
         return `${height}px`;
       }
     }
-    return;
+    return undefined;
   }
 }
