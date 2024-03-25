@@ -250,40 +250,40 @@ export async function logout(page: Page) {
 
 export async function createRoom(page: Page) {
   await page.locator('[data-test-create-room-btn]').click();
-  let roomName = await getRoomName(page);
-  await isInRoom(page, roomName);
-  return roomName;
+  let roomId = await getRoomId(page);
+  await isInRoom(page, roomId);
+  return roomId;
 }
 
 export async function createRoomWithMessage(page: Page, message?: string) {
-  let roomName = await createRoom(page);
-  await sendMessage(page, roomName, message ?? 'Hello, world!');
-  return roomName;
+  let roomId = await createRoom(page);
+  await sendMessage(page, roomId, message ?? 'Hello, world!');
+  return roomId;
 }
 
-export async function getRoomName(page: Page) {
+export async function getRoomId(page: Page) {
   await page.locator(`[data-test-room-settled]`).waitFor();
-  let name = await page
+  let roomId = await page
     .locator('[data-test-room]')
     .getAttribute('data-test-room');
-  if (name == null) {
-    throw new Error('room name is not found');
+  if (roomId == null) {
+    throw new Error('room ID is not found');
   }
-  return name;
+  return roomId;
 }
 
-export async function isInRoom(page: Page, roomName: string) {
-  await page.locator(`[data-test-room="${roomName}"]`).waitFor();
+export async function isInRoom(page: Page, roomId: string) {
+  await page.locator(`[data-test-room="${roomId}"]`).waitFor();
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
 }
 
-export async function deleteRoom(page: Page, roomName: string) {
+export async function deleteRoom(page: Page, roomId: string) {
   await page.locator(`[data-test-past-sessions-button]`).click();
 
   // Here, past sessions could be rerendered because in one case we're creating a new room when opening an AI panel, so we need to wait for the past sessions to settle
   await page.waitForTimeout(500);
   await page
-    .locator(`[data-test-past-session-options-button="${roomName}"]`)
+    .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();
 
   await page.locator(`[data-test-boxel-menu-item-text="Delete"]`).click();
@@ -294,16 +294,16 @@ export async function deleteRoom(page: Page, roomName: string) {
     .click();
 }
 
-export async function openRoom(page: Page, roomName: string) {
+export async function openRoom(page: Page, roomId: string) {
   await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
-  await page.locator(`[data-test-enter-room="${roomName}"]`).click();
-  await isInRoom(page, roomName);
+  await page.locator(`[data-test-enter-room="${roomId}"]`).click();
+  await isInRoom(page, roomId);
 }
 
-export async function openRenameMenu(page: Page, name: string) {
+export async function openRenameMenu(page: Page, roomId: string) {
   await page.locator(`[data-test-past-sessions-button]`).click();
   await page
-    .locator(`[data-test-past-session-options-button="${name}"]`)
+    .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();
   await expect(
     page.locator(`[data-test-boxel-menu-item-text="Rename"]`),
@@ -314,12 +314,12 @@ export async function openRenameMenu(page: Page, name: string) {
 
 export async function writeMessage(
   page: Page,
-  roomName: string,
+  roomId: string,
   message: string,
 ) {
-  await page.locator(`[data-test-message-field="${roomName}"]`).fill(message);
+  await page.locator(`[data-test-message-field="${roomId}"]`).fill(message);
   await expect(
-    page.locator(`[data-test-message-field="${roomName}"]`),
+    page.locator(`[data-test-message-field="${roomId}"]`),
   ).toHaveValue(message);
 }
 
@@ -338,7 +338,7 @@ export async function selectCardFromCatalog(
 
 export async function sendMessage(
   page: Page,
-  roomName: string,
+  roomId: string,
   message: string | undefined,
   cardIds?: string[],
 ) {
@@ -348,7 +348,7 @@ export async function sendMessage(
     );
   }
   if (message != null) {
-    await writeMessage(page, roomName, message);
+    await writeMessage(page, roomId, message);
   }
   if (cardIds?.length) {
     for (let cardId of cardIds) {
