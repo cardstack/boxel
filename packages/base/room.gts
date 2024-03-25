@@ -520,6 +520,7 @@ export class RoomField extends FieldDef {
               commandType: command.type,
               payload: command,
             }),
+            isStreamingFinished: true,
           });
         } else {
           // Text from the AI bot

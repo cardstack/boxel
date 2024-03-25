@@ -1157,6 +1157,51 @@ module('Integration | operator-mode', function (hooks) {
           'Answer to my last question is not in progress',
         );
     });
+
+    test('it does not display the streaming indicator when ai bot sends an option', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+
+      addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          body: 'i am the body',
+          msgtype: 'org.boxel.command',
+          formatted_body: 'A patch',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
+          }),
+        },
+      });
+
+      await waitFor('[data-test-message-idx="0"]');
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
+        .doesNotHaveClass(
+          'ai-avatar-animated',
+          'ai bot patch message does not have a spinner',
+        );
+    });
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
