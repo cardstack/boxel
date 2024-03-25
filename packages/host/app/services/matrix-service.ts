@@ -3,6 +3,7 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
+import format from 'date-fns/format';
 import { marked } from 'marked';
 import {
   type LoginResponse,
@@ -296,7 +297,9 @@ export default class MatrixService extends Service {
       name,
       topic,
       room_alias_name: encodeURIComponent(
-        `${name} - ${this.userId} - ${Math.random()}`,
+        `${name} - ${format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")} - ${
+          this.userId
+        }`,
       ),
     });
     invites.map((i) => {
