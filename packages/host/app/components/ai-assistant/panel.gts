@@ -37,6 +37,8 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
@@ -146,7 +148,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             @color='var(--boxel-light)'
           />
         {{else if this.currentRoomId}}
-          <Room @roomId={{this.currentRoomId}} />
+          <Room @roomId={{this.currentRoomId}} @monacoSDK={{this.monacoSDK}} />
         {{/if}}
       </div>
     </Velcro>
@@ -169,6 +171,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         grid-template-rows: auto 1fr;
         background-color: var(--boxel-ai-purple);
         border: none;
+        border-radius: 0;
         color: var(--boxel-light);
         height: 100%;
         position: relative;
@@ -195,7 +198,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         z-index: 1;
       }
       .panel-header {
-        --panel-title-height: 44px;
+        --panel-title-height: 40px;
         position: relative;
         padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
           var(--boxel-sp-lg);
@@ -218,6 +221,10 @@ export default class AiAssistantPanel extends Component<Signature> {
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
+        /* the below font-smoothing options are only recommended for light-colored
+          text on dark background (otherwise not good for accessibility) */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
       .close-ai-panel {
         --icon-color: var(--boxel-highlight);
@@ -225,12 +232,19 @@ export default class AiAssistantPanel extends Component<Signature> {
         right: var(--boxel-sp-xs);
         top: var(--boxel-sp);
         height: var(--panel-title-height);
+        display: flex;
+        align-items: center;
+        justify-content: center;
         z-index: 1;
+      }
+      .close-ai-panel:hover:not(:disabled) {
+        filter: brightness(1.1);
       }
       .header-buttons {
         position: relative;
         align-items: center;
         display: inline-flex;
+        height: var(--panel-title-height);
       }
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);
@@ -246,6 +260,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   </template>
 
   @service private declare matrixService: MatrixService;
+  @service private declare monacoService: MonacoService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare router: RouterService;
 
@@ -255,10 +270,12 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private roomToDelete: RoomField | undefined = undefined;
   @tracked private roomDeleteError: string | undefined = undefined;
   @tracked private displayRoomError = false;
+  @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadRoomsTask.perform();
+    this.loadMonaco.perform();
   }
 
   private enterRoomInitially() {
@@ -454,4 +471,15 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
     }
   });
+
+  private loadMonaco = restartableTask(async () => {
+    this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
+  });
+
+  private get monacoSDK() {
+    if (this.maybeMonacoSDK) {
+      return this.maybeMonacoSDK;
+    }
+    throw new Error(`cannot use monaco SDK before it has loaded`);
+  }
 }

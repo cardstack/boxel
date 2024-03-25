@@ -40,6 +40,8 @@ import {
   showSearchResult,
   type TestContextWithSave,
   TestRealmAdapter,
+  getMonacoContent,
+  waitForCodeEditor,
 } from '../../helpers';
 import {
   setupMatrixServiceMock,
@@ -170,8 +172,9 @@ module('Integration | operator-mode', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
-          <@fields.preferredCarrier />
+          <span data-test-preferredCarrier={{@model.preferredCarrier}}>
+            <@fields.preferredCarrier />
+          </span>
         </template>
       };
     }
@@ -792,6 +795,59 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Fadhlan');
     });
 
+    test<TestContextWithSave>('it can preview code when a change is proposed', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person="Fadhlan"]');
+      assert.dom(`[data-test-preferredcarrier="DHL"]`).exists();
+
+      let roomId = await openAiAssistant();
+      let patchData = {
+        attributes: {
+          firstName: 'Joy',
+          address: { shippingInfo: { preferredCarrier: 'UPS' } },
+        },
+      };
+      addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          body: 'A patch',
+          msgtype: 'org.boxel.command',
+          formatted_body: 'A patch',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/fadhlan`,
+              patch: patchData,
+            },
+          }),
+        },
+      });
+
+      await waitFor('[data-test-view-code-button]');
+      await click('[data-test-view-code-button]');
+
+      await waitForCodeEditor();
+      assert.deepEqual(JSON.parse(getMonacoContent()), patchData);
+      assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
+
+      await click('[data-test-view-code-button]');
+      assert.dom('[data-test-code-editor]').doesNotExist();
+    });
+
     test('it can handle an error in a card attached to a matrix message', async function (assert) {
       await setCardInOperatorModeState();
       await renderComponent(
@@ -1276,9 +1332,8 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-card-catalog-go-button]');
-    assert
-      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
-      .isVisible();
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
   });
 
   test('displays cards on cards-grid and includes `catalog-entry` instances', async function (assert) {
@@ -1390,6 +1445,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
 
+    await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists(); // Opens card on the stack
     assert
       .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
@@ -1400,7 +1456,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('create new card editor opens in the stack at each nesting level', async function (assert) {
-    assert.expect(11);
+    assert.expect(9);
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1479,9 +1535,13 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-stack-card-index="3"] [data-test-close-button]');
     await waitFor('[data-test-stack-card-index="3"]', { count: 0 });
 
-    assert
-      .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
-      .containsText('Alice Enwunder');
+    await waitUntil(() =>
+      /Alice\s*Enwunder/.test(
+        document.querySelector(
+          '[data-test-stack-card-index="2"] [data-test-field="authorBio"]',
+        )!.textContent!,
+      ),
+    );
 
     await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
@@ -1508,11 +1568,14 @@ module('Integration | operator-mode', function (hooks) {
     });
 
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
-    assert
-      .dom(`[data-test-stack-card="${packetId}"]`)
-      .containsText(
-        'Everyone knows that Alice ran the show in the Brady household.',
-      );
+
+    await waitUntil(() =>
+      document
+        .querySelector(`[data-test-stack-card="${packetId}"]`)
+        ?.textContent?.includes(
+          'Everyone knows that Alice ran the show in the Brady household.',
+        ),
+    );
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {
@@ -1878,6 +1941,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     await waitFor('[data-test-person]');
 
@@ -1905,6 +1969,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     assert
       .dom(
@@ -1931,7 +1996,8 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
-    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor(`[data-test-stack-card-index="1"]`);
+
     assert
       .dom(
         `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-header-title]`,
@@ -2510,7 +2576,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-overlay-selected]').doesNotExist();
 
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
-    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor(`[data-test-stack-card-index="1"]`, { count: 1 });
   });
 
   test('displays realm name as header title when hovering realm icon', async function (assert) {
@@ -3048,17 +3114,17 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-    let savedCards = new Set<string>();
-    this.onSave((url) => savedCards.add(url.href));
+
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
     assert.dom('[data-test-add-new]').exists();
     await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
-    await waitFor('[data-test-edit-button]');
+    await waitFor('[data-test-stack-card-index="1"]');
+
     await click('[data-test-edit-button]');
-    await waitFor('[data-test-isolated-author');
+    await waitFor('[data-test-isolated-author]');
     assert.dom('[data-test-isolated-author]').exists();
   });
 });

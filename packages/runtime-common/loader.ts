@@ -5,11 +5,8 @@ import { trimExecutableExtension, logger } from './index';
 import { RealmPaths } from './paths';
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
-import { type RunnerOpts } from './search-index';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
-
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -92,7 +89,6 @@ type EvaluatableModule =
 
 type UnregisteredDep =
   | { type: 'dep'; moduleURL: ResolvedURL }
-  | { type: 'shim-dep'; moduleId: string }
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
@@ -105,14 +101,12 @@ type EvaluatableDep =
       type: 'completing-dep';
       moduleURL: ResolvedURL;
     }
-  | {
-      type: 'shim-dep';
-      moduleId: string;
-    }
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
 export type RequestHandler = (req: Request) => Promise<Response | null>;
+
+type Fetch = typeof fetch;
 
 let nonce = 0;
 export class Loader {
@@ -136,8 +130,20 @@ export class Loader {
   private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
 
+  private fetchImplementation: Fetch;
+  private resolveImport: (moduleIdentifier: string) => string;
+
+  constructor(
+    fetch: Fetch,
+    resolveImport?: (moduleIdentifier: string) => string,
+  ) {
+    this.fetchImplementation = fetch;
+    this.resolveImport =
+      resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
+  }
+
   static cloneLoader(loader: Loader): Loader {
-    let clone = new Loader();
+    let clone = new Loader(loader.fetchImplementation, loader.resolveImport);
     clone.urlHandlers = loader.urlHandlers;
     clone.urlMappings = loader.urlMappings;
     for (let [moduleIdentifier, module] of loader.moduleShims) {
@@ -159,13 +165,21 @@ export class Loader {
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    this.moduleShims.set(
-      moduleIdentifier,
-      this.createModuleProxy(module, moduleIdentifier),
-    );
+    moduleIdentifier = this.resolveImport(moduleIdentifier);
+    let proxiedModule = this.createModuleProxy(module, moduleIdentifier);
+
+    for (let propName of Object.keys(module)) {
+      // Normal modules always end up in our identity map because the only way for other code to gain access to the module's exports is by getting it through the
+      // proxy our loader has wrapped around it. But shimmed modules may be used directly by our caller before we've had a chance to put them in the dientity map.
+      // So this eagerly puts them into the identity map.
+      proxiedModule[propName]; // Makes sure the shimmed modules get into the identity map.
+    }
+
+    this.moduleShims.set(moduleIdentifier, proxiedModule);
+
     this.setModule(moduleIdentifier, {
       state: 'evaluated',
-      moduleInstance: module,
+      moduleInstance: proxiedModule,
       consumedModules: new Set(),
     });
   }
@@ -179,13 +193,9 @@ export class Loader {
     }
     consumed.add(moduleIdentifier);
 
-    let module: Module | undefined;
-    if (isUrlLike(moduleIdentifier)) {
-      let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
-      module = this.getModule(resolvedModuleIdentifier.href);
-    } else {
-      module = this.getModule(moduleIdentifier);
-    }
+    let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
+    let module = this.getModule(resolvedModuleIdentifier.href);
+
     if (!module || module.state === 'fetching') {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
@@ -246,12 +256,11 @@ export class Loader {
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
+    moduleIdentifier = this.resolveImport(moduleIdentifier);
+
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
-    let shimmed = this.moduleShims.get(moduleIdentifier);
-    if (shimmed) {
-      return shimmed as T;
-    }
+
     await this.advanceToState(resolvedModule, 'evaluated');
     let module = this.getModule(resolvedModuleIdentifier);
     switch (module?.state) {
@@ -301,16 +310,7 @@ export class Loader {
               maybeReadyDeps.push(entry);
               continue;
             }
-            let depModule = this.getModule(
-              entry.type === 'dep' ? entry.moduleURL.href : entry.moduleId,
-            );
-            if (entry.type === 'shim-dep') {
-              maybeReadyDeps.push({
-                type: 'shim-dep',
-                moduleId: entry.moduleId,
-              });
-              continue;
-            }
+            let depModule = this.getModule(entry.moduleURL.href);
             if (!isEvaluatable(depModule)) {
               // we always only await the first dep that actually needs work and
               // then break back to the top-level state machine, so that we'll
@@ -372,18 +372,7 @@ export class Loader {
               readyDeps.push(entry);
               continue;
             }
-            let depModuleId =
-              entry.type === 'dep' || entry.type === 'completing-dep'
-                ? entry.moduleURL.href
-                : entry.moduleId;
-            let depModule = this.getModule(depModuleId);
-            if (entry.type === 'shim-dep') {
-              readyDeps.push({
-                type: 'shim-dep',
-                moduleId: entry.moduleId,
-              });
-              continue;
-            }
+            let depModule = this.getModule(entry.moduleURL.href);
             if (entry.type === 'dep') {
               readyDeps.push({
                 type: 'dep',
@@ -544,7 +533,19 @@ export class Loader {
           return await this.simulateFetch(request, result);
         }
       }
-      return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
+
+      let shimmedModule = this.moduleShims.get(
+        this.asUnresolvedRequest(urlOrRequest, init).url,
+      );
+      if (shimmedModule) {
+        let response = new Response();
+        (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
+        return response;
+      }
+
+      return await this.fetchImplementation(
+        this.asResolvedRequest(urlOrRequest, init),
+      );
     } catch (err: any) {
       let url =
         urlOrRequest instanceof Request
@@ -610,9 +611,9 @@ export class Loader {
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
-    let moduleId = isUrlLike(moduleIdentifier)
-      ? trimExecutableExtension(this.reverseResolution(moduleIdentifier)).href
-      : moduleIdentifier;
+    let moduleId = trimExecutableExtension(
+      this.reverseResolution(moduleIdentifier),
+    ).href;
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
@@ -646,9 +647,12 @@ export class Loader {
     };
     this.setModule(moduleIdentifier, module);
 
-    let src: string | null | undefined;
+    let loaded:
+      | { type: 'source'; source: string }
+      | { type: 'shimmed'; module: Record<string, unknown> };
+
     try {
-      src = await this.load(moduleURL);
+      loaded = await this.load(moduleURL);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
@@ -657,6 +661,19 @@ export class Loader {
       });
       throw exception;
     }
+
+    if (loaded.type === 'shimmed') {
+      this.setModule(moduleIdentifier, {
+        state: 'evaluated',
+        moduleInstance: loaded.module,
+        consumedModules: new Set(),
+      });
+      module.deferred.fulfill();
+      return;
+    }
+
+    let src: string | null | undefined = loaded.source;
+
     src = transformSync(src, {
       plugins: [
         [
@@ -683,13 +700,14 @@ export class Loader {
           return { type: 'exports' };
         } else if (depId === '__import_meta__') {
           return { type: '__import_meta__' };
-        } else if (isUrlLike(depId)) {
+        } else {
           return {
             type: 'dep',
-            moduleURL: this.resolve(depId, new URL(moduleIdentifier)),
+            moduleURL: this.resolve(
+              this.resolveImport(depId),
+              new URL(moduleIdentifier),
+            ),
           };
-        } else {
-          return { type: 'shim-dep', moduleId: depId }; // for npm imports
         }
       });
       implementation = impl;
@@ -731,11 +749,7 @@ export class Loader {
     );
     let consumedModules = new Set(
       flatMap(module.dependencies, (dep) =>
-        dep.type === 'dep'
-          ? [dep.moduleURL.href]
-          : dep.type === 'shim-dep'
-          ? [dep.moduleId]
-          : [],
+        dep.type === 'dep' ? [dep.moduleURL.href] : [],
       ),
     );
 
@@ -763,15 +777,6 @@ export class Loader {
             }
             return this.evaluate(entry.moduleURL.href, depModule!);
           }
-          case 'shim-dep': {
-            let shimModule = this.getModule(entry.moduleId);
-            if (shimModule?.state !== 'evaluated') {
-              throw new Error(
-                `bug: shimmed modules should always be in an 'evaluated' state, but ${entry.moduleId} was in '${module.state}' state`,
-              );
-            }
-            return shimModule.moduleInstance;
-          }
           default:
             throw assertNever(entry);
         }
@@ -794,7 +799,12 @@ export class Loader {
     }
   }
 
-  private async load(moduleURL: ResolvedURL): Promise<string> {
+  private async load(
+    moduleURL: ResolvedURL,
+  ): Promise<
+    | { type: 'source'; source: string }
+    | { type: 'shimmed'; module: Record<string, unknown> }
+  > {
     let response: Response;
     try {
       response = await this.fetch(moduleURL);
@@ -809,22 +819,15 @@ export class Loader {
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
       throw error;
     }
-    return await response.text();
-  }
-}
 
-function getNativeFetch(): typeof fetch {
-  if (isFastBoot) {
-    let optsId = (globalThis as any).runnerOptsId;
-    if (optsId == null) {
-      throw new Error(`Runner Options Identifier was not set`);
+    if (Symbol.for('shimmed-module') in response) {
+      return {
+        type: 'shimmed',
+        module: (response as any)[Symbol.for('shimmed-module')],
+      };
     }
-    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
-      optsId: number,
-    ) => RunnerOpts;
-    return getRunnerOpts(optsId)._fetch;
-  } else {
-    return fetch;
+
+    return { type: 'source', source: await response.text() };
   }
 }
 
@@ -832,19 +835,8 @@ function assertNever(value: never) {
   throw new Error(`should never happen ${value}`);
 }
 
-function isUrlLike(moduleIdentifier: string): boolean {
-  return (
-    moduleIdentifier.startsWith('.') ||
-    moduleIdentifier.startsWith('/') ||
-    moduleIdentifier.startsWith('http://') ||
-    moduleIdentifier.startsWith('https://')
-  );
-}
-
 function trimModuleIdentifier(moduleIdentifier: string): string {
-  return isUrlLike(moduleIdentifier)
-    ? trimExecutableExtension(new URL(moduleIdentifier)).href
-    : moduleIdentifier;
+  return trimExecutableExtension(new URL(moduleIdentifier)).href;
 }
 
 type ModuleState = Module['state'];
