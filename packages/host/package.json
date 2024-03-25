@@ -109,7 +109,6 @@
     "ember-elsewhere": "^2.0.0",
     "ember-focus-trap": "^1.0.1",
     "ember-freestyle": "^0.20.0",
-    "ember-functions-as-helper-polyfill": "^2.0.1",
     "ember-keyboard": "^8.2.1",
     "ember-load-initializers": "^2.1.2",
     "ember-modifier": "^4.1.0",
