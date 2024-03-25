@@ -2,7 +2,7 @@ import { type PgPrimitive } from './index';
 
 export interface ExecuteOptions {
   // SQLite has a very limited set of data types. we can coerce the resulting
-  // types into values that resemble pg using this option
+  // types into values that match pg using this option
   bind?: PgPrimitive[];
   coerceTypes?: { [column: string]: 'BOOLEAN' | 'JSON' };
 }
