@@ -167,6 +167,7 @@ export default class InteractSubmode extends Component<Signature> {
           doc,
           relativeTo,
         );
+
         let newItem = new StackItem({
           owner: here,
           card: newCard,
@@ -175,6 +176,13 @@ export default class InteractSubmode extends Component<Signature> {
           isLinkedCard: opts?.isLinkedCard,
           stackIndex,
         });
+
+        // TODO: it is important saveModel happens after newItem because it
+        // looks like perhaps there is a race condition (or something else) when a
+        // new linked card is created, and when it is added to the stack and closed
+        // - the parent card is not updated with the new linked card
+        await here.cardService.saveModel(here, newCard);
+
         await newItem.ready();
         here.addToStack(newItem);
         return await newItem.request?.promise;
@@ -297,29 +305,15 @@ export default class InteractSubmode extends Component<Signature> {
     if (updatedCard) {
       request?.fulfill(updatedCard);
       if (!dismissStackItem) {
-        // if this is a newly created card from auto-save then we
-        // need to replace the stack item to account for the new card's ID
-        if (!item.card.id && updatedCard.id) {
-          await item.setCardURL(new URL(updatedCard.id));
-        }
         return;
       }
-
-      if (item.isLinkedCard) {
-        this.operatorModeStateService.trimItemsFromStack(item); // closes the 'create new card' editor for linked card fields
-      } else {
-        if (!item.card.id && updatedCard.id) {
-          this.operatorModeStateService.trimItemsFromStack(item);
-        } else {
-          this.operatorModeStateService.replaceItemInStack(
-            item,
-            item.clone({
-              request,
-              format: 'isolated',
-            }),
-          );
-        }
-      }
+      this.operatorModeStateService.replaceItemInStack(
+        item,
+        item.clone({
+          request,
+          format: 'isolated',
+        }),
+      );
     }
   });
 

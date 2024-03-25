@@ -124,7 +124,7 @@ interface SelectAccessorySignature<ItemT = any> {
   Blocks: {
     default: [ItemT, string];
   };
-  Element: HTMLDivElement;
+  Element: HTMLElement;
 }
 
 // eslint-disable-next-line prettier/prettier

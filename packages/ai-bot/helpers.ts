@@ -69,15 +69,6 @@ export function constructHistory(history: IRoomEvent[]) {
             serializedCardFromFragments(id, fragments),
           );
       }
-      if (
-        event.content.data.context.openCardsEventIds &&
-        event.content.data.context.openCardsEventIds.length > 0
-      ) {
-        event.content.data.context.openCards =
-          event.content.data.context.openCardsEventIds.map((id) =>
-            serializedCardFromFragments(id, fragments),
-          );
-      }
     }
 
     if (event.content['m.relates_to']?.rel_type === 'm.replace') {
@@ -112,19 +103,23 @@ function serializedCardFromFragments(
       `No card fragment found in fragments cache for event id ${eventId}`,
     );
   }
-  if (fragment.data.totalParts === 1) {
-    return JSON.parse(fragment.data.cardFragment) as LooseSingleCardDocument;
-  }
+  let cardFragments: CardFragmentContent[] = [];
+  let currentFragment: string | undefined = eventId;
+  do {
+    let fragment = fragments.get(currentFragment);
+    if (!fragment) {
+      throw new Error(
+        `No card fragment found in cache for event id ${eventId}`,
+      );
+    }
+    cardFragments.push(fragment);
+    currentFragment = fragment.data.nextFragment;
+  } while (currentFragment);
 
-  let cardFragments = [
-    fragment,
-    ...[...fragments.values()]
-      .filter((f) => f.data.firstFragment && f.data.firstFragment === eventId)
-      .sort((a, b) => (a.data.index = b.data.index)),
-  ];
-  if (cardFragments.length !== fragment.data.totalParts) {
+  cardFragments.sort((a, b) => (a.data.index = b.data.index));
+  if (cardFragments.length !== cardFragments[0].data.totalParts) {
     throw new Error(
-      `Expected to find ${fragment.data.totalParts} fragments for fragment of event id ${eventId} but found ${cardFragments.length} fragments`,
+      `Expected to find ${cardFragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${cardFragments.length} fragments`,
     );
   }
   return JSON.parse(
@@ -241,7 +236,7 @@ export function getStartOfConversation(
 ) {
   /**
    * Get just the start of the conversation
-   * useful for summarising while limiting the context
+   * useful for summarizing while limiting the context
    */
   let messages: OpenAIPromptMessage[] = [];
   let totalLength = 0;

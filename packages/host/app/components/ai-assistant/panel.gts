@@ -78,7 +78,9 @@ export default class AiAssistantPanel extends Component<Signature> {
                 width='20'
                 height='20'
               />
-              <h3 class='panel-title-text'>Assistant</h3>
+              <h3 class='panel-title-text' data-test-chat-title>
+                {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
+              </h3>
             </div>
           {{/if}}
           <IconButton
@@ -167,6 +169,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         grid-template-rows: auto 1fr;
         background-color: var(--boxel-ai-purple);
         border: none;
+        border-radius: 0;
         color: var(--boxel-light);
         height: 100%;
         position: relative;
@@ -193,11 +196,13 @@ export default class AiAssistantPanel extends Component<Signature> {
         z-index: 1;
       }
       .panel-header {
+        --panel-title-height: 44px;
         position: relative;
         padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
           var(--boxel-sp-lg);
       }
       .panel-title-group {
+        height: var(--panel-title-height);
         align-items: center;
         display: flex;
         gap: var(--boxel-sp-xs);
@@ -205,15 +210,22 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       .panel-title-text {
         margin: 0;
+        padding-right: var(--boxel-sp-xl);
         color: var(--boxel-light);
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
       }
       .close-ai-panel {
         --icon-color: var(--boxel-highlight);
         position: absolute;
         right: var(--boxel-sp-xs);
-        top: var(--boxel-sp-sm);
+        top: var(--boxel-sp);
+        height: var(--panel-title-height);
         z-index: 1;
       }
       .header-buttons {
@@ -353,6 +365,11 @@ export default class AiAssistantPanel extends Component<Signature> {
         continue;
       }
       let { room } = resource;
+      if (!room.created) {
+        // there is a race condition in the matrix SDK where newly created
+        // rooms don't immediately have a created date
+        room.created = new Date();
+      }
       if (
         (room.invitedMembers.find((m) => aiBotUserId === m.userId) ||
           room.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
@@ -361,9 +378,13 @@ export default class AiAssistantPanel extends Component<Signature> {
         rooms.push(room);
       }
     }
-    // member join date is at the time of room creation
-    // reverse chronological order
-    return rooms.sort((a, b) => b.created.getTime() - a.created.getTime());
+    // sort in reverse chronological order of last activity
+    let sorted = rooms.sort(
+      (a, b) =>
+        this.matrixService.getLastActiveTimestamp(b) -
+        this.matrixService.getLastActiveTimestamp(a),
+    );
+    return sorted;
   }
 
   @action
@@ -406,6 +427,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   private doLeaveRoom = restartableTask(async (roomId: string) => {
     try {
       await this.matrixService.client.leave(roomId);
+      await this.matrixService.client.forget(roomId);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
       this.roomResources.delete(roomId);
 

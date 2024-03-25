@@ -32,13 +32,14 @@
       "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch",
       "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
       "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
-      "matrix-js-sdk@31.0.0": "patches/matrix-js-sdk@31.0.0.patch"
+      "matrix-js-sdk@31.0.0": "patches/matrix-js-sdk@31.0.0.patch",
+      "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch"
     }
   },
   "devDependencies": {
     "@actions/core": "^1.2.6",
     "@actions/github": "^4.0.0",
-    "@babel/core": "^7.22.11",
+    "@babel/core": "^7.24.0",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.0.4",
     "@glint/core": "^1.2.1",
@@ -58,7 +59,7 @@
     "hcl2-parser": "^1.0.3",
     "prettier": "^2.7.1",
     "prettier-plugin-ember-template-tag": "^1.1.0",
-    "typescript": "^5.1.6"
+    "typescript": "~5.1.6"
   },
   "engines": {
     "pnpm": "^8"

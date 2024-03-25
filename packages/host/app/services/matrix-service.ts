@@ -394,30 +394,23 @@ export default class MatrixService extends Service {
       MAX_CARD_SIZE_KB,
     );
     let responses: ISendEventResponse[] = [];
-    for (let [index, cardFragment] of fragments.entries()) {
+    for (let index = fragments.length - 1; index >= 0; index--) {
+      let cardFragment = fragments[index];
       let response = await this.sendEvent(roomId, 'm.room.message', {
-        ...(responses.length > 0
-          ? {
-              'm.relates_to': {
-                event_id: responses[responses.length - 1].event_id,
-                rel_type: 'append',
-              },
-            }
-          : {}),
         msgtype: 'org.boxel.cardFragment' as const,
         format: 'org.boxel.card' as const,
         body: `card fragment ${index + 1} of ${fragments.length}`,
         formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
         data: {
-          ...(responses.length > 0
-            ? { firstFragment: responses[0].event_id }
+          ...(index < fragments.length - 1
+            ? { nextFragment: responses[0].event_id }
             : {}),
           cardFragment,
           index,
           totalParts: fragments.length,
         },
       } as CardFragmentContent);
-      responses.push(response);
+      responses.unshift(response);
     }
     return responses;
   }
@@ -491,6 +484,19 @@ export default class MatrixService extends Service {
       error.status = response.status;
       throw error;
     }
+  }
+
+  getLastActiveTimestamp(room: RoomField) {
+    let maybeLastActive = room.events[room.events.length - 1]?.origin_server_ts;
+
+    let matrixRoom = this.client.getRoom(room.roomId);
+    let lastMatrixEvent = matrixRoom?.getLastActiveTimestamp();
+
+    if (lastMatrixEvent && maybeLastActive) {
+      return Math.max(lastMatrixEvent, maybeLastActive);
+    }
+
+    return lastMatrixEvent ?? maybeLastActive ?? room.created?.getTime();
   }
 
   async requestRegisterEmailToken(

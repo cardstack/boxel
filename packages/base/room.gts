@@ -21,6 +21,8 @@ import {
 } from '@cardstack/runtime-common';
 //@ts-expect-error cached type not available yet
 import { cached } from '@glimmer/tracking';
+import { initSharedState } from './shared-state';
+import BooleanField from './boolean';
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -187,7 +189,7 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
           </div>
         {{else if cardResource.card}}
           {{#let (getCardComponent cardResource.card) as |CardComponent|}}
-            <div data-test-message-card={{cardResource.card.id}}>
+            <div data-test-attached-card={{cardResource.card.id}}>
               <CardComponent />
             </div>
           {{/let}}
@@ -240,6 +242,7 @@ export class MessageField extends FieldDef {
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
   @field command = contains(PatchField);
+  @field isStreamingFinished = contains(BooleanField);
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -275,14 +278,26 @@ interface RoomState {
 
 // in addition to acting as a cache, this also ensures we have
 // triple equal equivalence for the interior cards of RoomField
-const eventCache = new WeakMap<RoomField, Map<string, MatrixEvent>>();
-const messageCache = new WeakMap<RoomField, Map<string, MessageField>>();
-const roomMemberCache = new WeakMap<RoomField, Map<string, RoomMemberField>>();
-const roomStateCache = new WeakMap<RoomField, RoomState>();
-const fragmentCache = new WeakMap<
-  RoomField,
-  Map<string, CardFragmentContent>
->();
+const eventCache = initSharedState(
+  'eventCache',
+  () => new WeakMap<RoomField, Map<string, MatrixEvent>>(),
+);
+const messageCache = initSharedState(
+  'messageCache',
+  () => new WeakMap<RoomField, Map<string, MessageField>>(),
+);
+const roomMemberCache = initSharedState(
+  'roomMemberCache',
+  () => new WeakMap<RoomField, Map<string, RoomMemberField>>(),
+);
+const roomStateCache = initSharedState(
+  'roomStateCache',
+  () => new WeakMap<RoomField, RoomState>(),
+);
+const fragmentCache = initSharedState(
+  'fragmentCache',
+  () => new WeakMap<RoomField, Map<string, CardFragmentContent>>(),
+);
 
 export class RoomField extends FieldDef {
   static displayName = 'Room';
@@ -507,6 +522,11 @@ export class RoomField extends FieldDef {
             }),
           });
         } else {
+          // Text from the AI bot
+          if (event.content.msgtype === 'm.text') {
+            (cardArgs as any).isStreamingFinished =
+              !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+          }
           messageField = new MessageField(cardArgs);
         }
 
@@ -548,25 +568,24 @@ export class RoomField extends FieldDef {
     if (!cache) {
       throw new Error(`No card fragment cache exists for this room`);
     }
-    let fragment = cache.get(eventId);
-    if (!fragment) {
-      throw new Error(
-        `No card fragment found in cache for event id ${eventId}`,
-      );
-    }
-    if (fragment.data.totalParts === 1) {
-      return JSON.parse(fragment.data.cardFragment) as LooseSingleCardDocument;
-    }
 
-    let fragments = [
-      fragment,
-      ...[...cache.values()]
-        .filter((f) => f.data.firstFragment && f.data.firstFragment === eventId)
-        .sort((a, b) => (a.data.index = b.data.index)),
-    ];
-    if (fragments.length !== fragment.data.totalParts) {
+    let fragments: CardFragmentContent[] = [];
+    let currentFragment: string | undefined = eventId;
+    do {
+      let fragment = cache.get(currentFragment);
+      if (!fragment) {
+        throw new Error(
+          `No card fragment found in cache for event id ${eventId}`,
+        );
+      }
+      fragments.push(fragment);
+      currentFragment = fragment.data.nextFragment;
+    } while (currentFragment);
+
+    fragments.sort((a, b) => (a.data.index = b.data.index));
+    if (fragments.length !== fragments[0].data.totalParts) {
       throw new Error(
-        `Expected to find ${fragment.data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
+        `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
       );
     }
     return JSON.parse(
@@ -675,6 +694,7 @@ interface MessageEvent extends BaseMatrixEvent {
     format: 'org.matrix.custom.html';
     body: string;
     formatted_body: string;
+    isStreamingFinished: boolean;
   };
   unsigned: {
     age: number;
@@ -727,6 +747,7 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   formatted_body: string;
+  isStreamingFinished?: boolean;
   data: {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message
@@ -756,7 +777,7 @@ export interface CardFragmentContent {
   formatted_body: string;
   body: string;
   data: {
-    firstFragment?: string;
+    nextFragment?: string;
     cardFragment: string;
     index: number;
     totalParts: number;

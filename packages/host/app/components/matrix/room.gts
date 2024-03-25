@@ -8,6 +8,7 @@ import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
 
+import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -15,6 +16,8 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import type { MessageField } from 'https://cardstack.com/base/room';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -41,7 +44,12 @@ export default class Room extends Component<Signature> {
       {{#if this.room.messages}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
-            <RoomMessage @message={{message}} data-test-message-idx={{i}} />
+            <RoomMessage
+              @message={{message}}
+              @isStreaming={{this.isMessageStreaming message i}}
+              data-test-message-idx={{i}}
+              {{scrollIntoViewModifier (this.isLastMessage i)}}
+            />
           {{/each}}
         </AiAssistantConversation>
       {{else}}
@@ -49,7 +57,7 @@ export default class Room extends Component<Signature> {
       {{/if}}
 
       <footer class='room-actions'>
-        <div class='chat-input-area'>
+        <div class='chat-input-area' data-test-chat-input-area>
           <AiAssistantChatInput
             @value={{this.messageToSend}}
             @onInput={{this.setMessage}}
@@ -89,6 +97,9 @@ export default class Room extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
       }
+      :deep(.ai-assistant-conversation > *:first-child) {
+        margin-top: auto;
+      }
     </style>
   </template>
 
@@ -108,6 +119,14 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+  }
+
+  @action isMessageStreaming(message: MessageField, messageIndex: number) {
+    return (
+      !message.isStreamingFinished &&
+      this.isLastMessage(messageIndex) &&
+      (new Date().getTime() - message.created.getTime()) / 1000 < 60 // Older events do not come with isStreamingFinished property so we have no other way to determine if the message is done streaming other than checking if they are old messages (older than 60 seconds as an arbitrary threshold)
+    );
   }
 
   private doMatrixEventFlush = restartableTask(async () => {
@@ -250,6 +269,13 @@ export default class Room extends Component<Signature> {
           this.cardsToAttach?.length ||
           this.autoAttachedCard,
       )
+    );
+  }
+
+  @action
+  private isLastMessage(messageIndex: number) {
+    return (
+      (this.room && messageIndex === this.room.messages.length - 1) ?? false
     );
   }
 }

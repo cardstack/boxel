@@ -7,16 +7,18 @@ import {
   Component,
   primitive,
   useIndexBasedKey,
+  BaseDefConstructor,
+  BaseInstanceType,
+  deserialize,
 } from './card-api';
 import { tracked } from '@glimmer/tracking';
-import Modifier from 'ember-modifier';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
-import { pick, eq } from '@cardstack/boxel-ui/helpers';
 import { FieldContainer, BoxelInput } from '@cardstack/boxel-ui/components';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import { htmlSafe } from '@ember/template';
+import { RadioInput } from '@cardstack/boxel-ui/components';
 
 const atomImgHeight = 200;
 
@@ -196,6 +198,16 @@ class ImageSizeField extends FieldDef {
   static displayName = 'Image Size';
   static [primitive]: 'actual' | 'contain' | 'cover';
   static [useIndexBasedKey]: never;
+
+  static async [deserialize]<T extends BaseDefConstructor>(
+    this: T,
+    val: any,
+  ): Promise<BaseInstanceType<T>> {
+    if (val === undefined || val === null) {
+      return 'actual' as BaseInstanceType<T>;
+    }
+    return val as BaseInstanceType<T>;
+  }
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{@model}}
@@ -204,58 +216,32 @@ class ImageSizeField extends FieldDef {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div class='radio-group' data-test-radio-group={{@fieldName}}>
-        <label for='{{this.radioGroup}}_actual'>
-          Actual
-          <input
-            data-test-actual-size-input
-            type='radio'
-            {{RadioInitializer @model 'actual'}}
-            id='{{this.radioGroup}}_actual'
-            name='{{this.radioGroup}}'
-            checked={{eq @model 'actual'}}
-            {{on 'change' (pick 'target.value' (fn @set 'actual'))}}
-          />
-        </label>
-        <label for='{{this.radioGroup}}_contain'>
-          Contain
-          <input
-            data-test-contain-size-input
-            type='radio'
-            {{RadioInitializer @model 'contain'}}
-            id='{{this.radioGroup}}_contain'
-            name='{{this.radioGroup}}'
-            checked={{eq @model 'contain'}}
-            {{on 'change' (pick 'target.value' (fn @set 'contain'))}}
-          />
-        </label>
-        <label for='{{this.radioGroup}}_cover'>
-          Cover
-          <input
-            data-test-cover-size-input
-            type='radio'
-            {{RadioInitializer @model 'cover'}}
-            id='{{this.radioGroup}}_cover'
-            name='{{this.radioGroup}}'
-            checked={{eq @model 'cover'}}
-            {{on 'change' (pick 'target.value' (fn @set 'cover'))}}
-          />
-        </label>
+        <RadioInput
+          @items={{this.items}}
+          @groupDescription='Image Size Field'
+          name='{{this.radioGroup}}'
+          @checkedId={{this.checkedId}}
+          @hideBorder={{true}}
+          as |item|
+        >
+          <item.component @onChange={{fn @set item.data.id}}>
+            {{item.data.text}}
+          </item.component>
+        </RadioInput>
       </div>
-      <style>
-        .radio-group {
-          display: flex;
-          justify-content: space-between;
-        }
-      </style>
+      <style></style>
     </template>
 
     private radioGroup = `__cardstack_img_size${groupNumber++}__`;
-    constructor(owner: unknown, args: any) {
-      super(owner, args);
-      // initializes to 'actual'
-      if (!this.args.model) {
-        this.args.set('actual');
-      }
+
+    private items = [
+      { id: 'actual', text: 'Actual' },
+      { id: 'contain', text: 'Contain' },
+      { id: 'cover', text: 'Cover' },
+    ];
+
+    get checkedId() {
+      return this.args.model;
     }
   };
   static atom = class Atom extends Component<typeof this> {
@@ -263,25 +249,6 @@ class ImageSizeField extends FieldDef {
       {{@model}}
     </template>
   };
-}
-
-interface RadioSignature {
-  element: HTMLInputElement;
-  Args: {
-    Positional: [
-      model: 'actual' | 'cover' | 'contain' | null,
-      inputType: 'actual' | 'cover' | 'contain',
-    ];
-  };
-}
-
-class RadioInitializer extends Modifier<RadioSignature> {
-  modify(
-    element: HTMLInputElement,
-    [model, inputType]: RadioSignature['Args']['Positional'],
-  ) {
-    element.checked = model === inputType;
-  }
 }
 
 function getConstrainedImageSize(maxHeight: number) {

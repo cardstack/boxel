@@ -1,8 +1,9 @@
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { format as formatDate } from 'date-fns';
+import { format as formatDate, isSameDay, isSameYear } from 'date-fns';
 
 import {
   BoxelDropdown,
@@ -17,6 +18,8 @@ import {
   IconTrash,
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
+
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
 
@@ -42,8 +45,8 @@ export default class PastSessionItem extends Component<Signature> {
         data-test-enter-room={{@room.name}}
       >
         <div class='name'>{{@room.name}}</div>
-        <div class='date'>
-          {{formatDate @room.created 'iiii MMM d, yyyy, h:mm aa'}}
+        <div class='date' data-test-last-active={{this.lastActive}}>
+          {{this.formattedDate}}
         </div>
       </button>
       <BoxelDropdown>
@@ -127,4 +130,32 @@ export default class PastSessionItem extends Component<Signature> {
       }
     </style>
   </template>
+
+  @service declare matrixService: MatrixService;
+
+  get createDate() {
+    if (!this.args.room.created) {
+      // there is a race condition in the matrix SDK where newly created
+      // rooms don't immediately have a created date
+      return new Date();
+    }
+    return this.args.room.created;
+  }
+
+  private get lastActive() {
+    return (
+      this.matrixService.getLastActiveTimestamp(this.args.room) ??
+      this.createDate.getTime()
+    );
+  }
+
+  private get formattedDate() {
+    let now = new Date();
+    if (isSameDay(this.lastActive, now)) {
+      return `Today ${formatDate(this.lastActive, 'MMM d, h:mm aa')}`;
+    } else if (isSameYear(this.lastActive, now)) {
+      return formatDate(this.lastActive, 'iiii MMM d, h:mm aa');
+    }
+    return formatDate(this.lastActive, 'iiii MMM d, yyyy, h:mm aa');
+  }
 }

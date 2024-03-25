@@ -1,34 +1,12 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import PowerSelect, {
-  type PatchedPowerSelectArgs,
-  BeforeOptions,
+  type PowerSelectArgs,
 } from 'ember-power-select/components/power-select';
+import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 
 import cn from '../../helpers/cn.ts';
 
-type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
-
-type BasePowerSelectArgs = PartialBy<
-  Pick<
-    PatchedPowerSelectArgs,
-    | 'searchField'
-    | 'searchEnabled'
-    | 'selected'
-    | 'disabled'
-    | 'placeholder'
-    | 'onChange'
-    | 'onBlur'
-    | 'renderInPlace'
-    | 'verticalPosition'
-    | 'dropdownClass'
-    | 'beforeOptionsComponent'
-    | 'selectedItemComponent'
-    | 'triggerComponent'
-  >,
-  'disabled' | 'renderInPlace'
->;
-
-export interface BoxelSelectArgs<ItemT> extends BasePowerSelectArgs {
+export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
   options: ItemT[];
 }
 
@@ -37,7 +15,7 @@ interface Signature<ItemT = any> {
   Blocks: {
     default: [ItemT, string];
   };
-  Element: HTMLDivElement;
+  Element: HTMLElement;
 }
 
 const BoxelSelect: TemplateOnlyComponent<Signature> = <template>

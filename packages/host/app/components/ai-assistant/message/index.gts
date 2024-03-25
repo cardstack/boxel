@@ -1,4 +1,5 @@
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
@@ -8,6 +9,10 @@ import Modifier from 'ember-modifier';
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
+
+import CardPill from '@cardstack/host/components/card-pill';
+
+import type CardService from '@cardstack/host/services/card-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -19,6 +24,7 @@ interface Signature {
     formattedMessage: SafeString;
     datetime: Date;
     isFromAssistant: boolean;
+    isStreaming: boolean;
     profileAvatar?: ComponentLike;
     attachedCards?: CardDef[];
     errorMessage?: string;
@@ -34,6 +40,8 @@ class ScrollIntoView extends Modifier {
 }
 
 export default class AiAssistantMessage extends Component<Signature> {
+  @service private declare cardService: CardService;
+
   <template>
     <div
       class={{cn 'ai-assistant-message' is-from-assistant=@isFromAssistant}}
@@ -43,7 +51,10 @@ export default class AiAssistantMessage extends Component<Signature> {
     >
       <div class='meta'>
         {{#if @isFromAssistant}}
-          <div class='ai-avatar'></div>
+          <div
+            class='ai-avatar {{if this.isAvatarAnimated "ai-avatar-animated"}}'
+            data-test-ai-avatar
+          ></div>
         {{else if @profileAvatar}}
           <@profileAvatar />
         {{/if}}
@@ -79,10 +90,8 @@ export default class AiAssistantMessage extends Component<Signature> {
 
           {{#if @attachedCards.length}}
             <div class='cards' data-test-message-cards>
-              {{#each this.cardResources as |resource|}}
-                <div data-test-message-card={{resource.card.id}}>
-                  <resource.component />
-                </div>
+              {{#each @attachedCards as |card|}}
+                <CardPill @card={{card}} />
               {{/each}}
             </div>
           {{/if}}
@@ -117,6 +126,11 @@ export default class AiAssistantMessage extends Component<Signature> {
         background-repeat: no-repeat;
         background-size: var(--ai-assistant-message-avatar-size);
       }
+
+      .ai-avatar-animated {
+        background-image: url('../ai-assist-icon-animated.webp');
+      }
+
       .avatar-img {
         width: var(--ai-assistant-message-avatar-size);
         height: var(--ai-assistant-message-avatar-size);
@@ -208,11 +222,8 @@ export default class AiAssistantMessage extends Component<Signature> {
     </style>
   </template>
 
-  private get cardResources() {
-    return this.args.attachedCards?.map((card) => ({
-      card,
-      component: card.constructor.getComponent(card, 'atom'),
-    }));
+  private get isAvatarAnimated() {
+    return this.args.isStreaming && !this.args.errorMessage;
   }
 }
 
@@ -233,7 +244,6 @@ export class AiAssistantConversation extends Component<AiAssistantConversationSi
       .ai-assistant-conversation {
         display: flex;
         flex-direction: column;
-        justify-content: flex-end;
         padding: var(--boxel-sp);
         overflow-y: auto;
       }

@@ -430,7 +430,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     );
     assert
       .dom('[data-test-code-mode-card-preview-header] img')
-      .hasAttribute('alt', 'Icon for realm Test Workspace A');
+      .hasAttribute('alt', 'Icon for workspace Test Workspace A');
     assert.dom('[data-test-card-resource-loaded]').containsText('Card');
     assert.dom('[data-test-field="title"] input').hasValue('');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileURL}.json`);
@@ -487,7 +487,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert
       .dom('[data-test-code-mode-card-preview-header] img')
-      .hasAttribute('alt', 'Icon for realm Test Workspace B');
+      .hasAttribute('alt', 'Icon for workspace Test Workspace B');
     assert.dom('[data-test-card-resource-loaded]').containsText('Card');
     assert.dom('[data-test-field="title"] input').hasValue('');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
@@ -551,7 +551,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
     assert
       .dom('[data-test-code-mode-card-preview-header] img')
-      .hasAttribute('alt', 'Icon for realm Test Workspace B');
+      .hasAttribute('alt', 'Icon for workspace Test Workspace B');
     assert.dom('[data-test-card-resource-loaded]').containsText('Person');
     assert.dom('[data-test-field="firstName"] input').hasValue('');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
