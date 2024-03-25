@@ -1,4 +1,3 @@
-import { type EmptyObject } from '@ember/component/helper';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import type { ComponentLike } from '@glint/template';
@@ -17,7 +16,7 @@ interface InputSignature {
     required?: boolean;
     value?: string;
   };
-  Blocks: EmptyObject;
+  Blocks: Record<string, never>;
   Element: HTMLSpanElement;
 }
 
@@ -66,7 +65,7 @@ interface TextareaSignature {
     placeholder?: string;
     value?: string;
   };
-  Blocks: EmptyObject;
+  Blocks: Record<string, never>;
   Element: HTMLSpanElement;
 }
 
