@@ -40,6 +40,8 @@ import {
   showSearchResult,
   type TestContextWithSave,
   TestRealmAdapter,
+  getMonacoContent,
+  waitForCodeEditor,
 } from '../../helpers';
 import {
   setupMatrixServiceMock,
@@ -170,8 +172,9 @@ module('Integration | operator-mode', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
-          <@fields.preferredCarrier />
+          <span data-test-preferredCarrier={{@model.preferredCarrier}}>
+            <@fields.preferredCarrier />
+          </span>
         </template>
       };
     }
@@ -790,6 +793,59 @@ module('Integration | operator-mode', function (hooks) {
 
       await waitFor('[data-test-person="Fadhlan"]');
       assert.dom('[data-test-person]').hasText('Fadhlan');
+    });
+
+    test<TestContextWithSave>('it can preview code when a change is proposed', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person="Fadhlan"]');
+      assert.dom(`[data-test-preferredcarrier="DHL"]`).exists();
+
+      let roomId = await openAiAssistant();
+      let patchData = {
+        attributes: {
+          firstName: 'Joy',
+          address: { shippingInfo: { preferredCarrier: 'UPS' } },
+        },
+      };
+      addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          body: 'A patch',
+          msgtype: 'org.boxel.command',
+          formatted_body: 'A patch',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/fadhlan`,
+              patch: patchData,
+            },
+          }),
+        },
+      });
+
+      await waitFor('[data-test-view-code-button]');
+      await click('[data-test-view-code-button]');
+
+      await waitForCodeEditor();
+      assert.deepEqual(JSON.parse(getMonacoContent()), patchData);
+      assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
+
+      await click('[data-test-view-code-button]');
+      assert.dom('[data-test-code-editor]').doesNotExist();
     });
 
     test('it can handle an error in a card attached to a matrix message', async function (assert) {
