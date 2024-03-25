@@ -24,7 +24,6 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
-  shimModule,
   setupCardLogs,
   setupLocalIndexing,
   saveCard,
@@ -241,7 +240,7 @@ module('Integration | card-editor', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { TestCard });
     let card = new TestCard({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
     await saveCard(card, `${testRealmURL}test-cards/test-card`, loader);
 
@@ -284,7 +283,7 @@ module('Integration | card-editor', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { TestCard });
 
     let card = new TestCard({ firstName: 'Mango' });
     await saveCard(card, `${testRealmURL}test-cards/test-card`, loader);
@@ -334,7 +333,7 @@ module('Integration | card-editor', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { TestCard });
     let card = new TestCard({ firstName: 'Mango' });
     await saveCard(card, `${testRealmURL}test-cards/test-card`, loader);
     await renderComponent(

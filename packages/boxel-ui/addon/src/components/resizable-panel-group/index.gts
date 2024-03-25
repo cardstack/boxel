@@ -245,6 +245,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       (panelContext) => panelContext.lengthPx,
     );
 
+    this.panelRatios = [];
     for (let index = 0; index < panelLengths.length; index++) {
       let panelLength = panelLengths[index];
       if (panelLength == undefined) {

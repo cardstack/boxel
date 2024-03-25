@@ -8,12 +8,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import {
-  cleanWhiteSpace,
-  testRealmURL,
-  shimModule,
-  setupCardLogs,
-} from '../../helpers';
+import { cleanWhiteSpace, testRealmURL, setupCardLogs } from '../../helpers';
 import { renderCard } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -107,7 +102,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let firstPost = new Post({
       title: 'First Post',
@@ -277,7 +272,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let firstPost = new Post({
       title: 'First Post',
@@ -412,7 +407,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
     let abdelRahmans = new Family({
       people: [
@@ -495,7 +490,7 @@ module('Integration | computeds', function (hooks) {
         return totalAge;
       }
     }
-    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
     let family = new Family({
       people: [
@@ -571,7 +566,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Location, Person }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { Location, Person });
 
     let person = new Person({
       firstName: 'Mango',

@@ -21,6 +21,8 @@ import {
 } from '@cardstack/runtime-common';
 //@ts-expect-error cached type not available yet
 import { cached } from '@glimmer/tracking';
+import { initSharedState } from './shared-state';
+import BooleanField from './boolean';
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -240,6 +242,7 @@ export class MessageField extends FieldDef {
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
   @field command = contains(PatchField);
+  @field isStreamingFinished = contains(BooleanField);
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -275,14 +278,26 @@ interface RoomState {
 
 // in addition to acting as a cache, this also ensures we have
 // triple equal equivalence for the interior cards of RoomField
-const eventCache = new WeakMap<RoomField, Map<string, MatrixEvent>>();
-const messageCache = new WeakMap<RoomField, Map<string, MessageField>>();
-const roomMemberCache = new WeakMap<RoomField, Map<string, RoomMemberField>>();
-const roomStateCache = new WeakMap<RoomField, RoomState>();
-const fragmentCache = new WeakMap<
-  RoomField,
-  Map<string, CardFragmentContent>
->();
+const eventCache = initSharedState(
+  'eventCache',
+  () => new WeakMap<RoomField, Map<string, MatrixEvent>>(),
+);
+const messageCache = initSharedState(
+  'messageCache',
+  () => new WeakMap<RoomField, Map<string, MessageField>>(),
+);
+const roomMemberCache = initSharedState(
+  'roomMemberCache',
+  () => new WeakMap<RoomField, Map<string, RoomMemberField>>(),
+);
+const roomStateCache = initSharedState(
+  'roomStateCache',
+  () => new WeakMap<RoomField, RoomState>(),
+);
+const fragmentCache = initSharedState(
+  'fragmentCache',
+  () => new WeakMap<RoomField, Map<string, CardFragmentContent>>(),
+);
 
 export class RoomField extends FieldDef {
   static displayName = 'Room';
@@ -507,6 +522,11 @@ export class RoomField extends FieldDef {
             }),
           });
         } else {
+          // Text from the AI bot
+          if (event.content.msgtype === 'm.text') {
+            (cardArgs as any).isStreamingFinished =
+              !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+          }
           messageField = new MessageField(cardArgs);
         }
 
@@ -674,6 +694,7 @@ interface MessageEvent extends BaseMatrixEvent {
     format: 'org.matrix.custom.html';
     body: string;
     formatted_body: string;
+    isStreamingFinished: boolean;
   };
   unsigned: {
     age: number;
@@ -726,6 +747,7 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   formatted_body: string;
+  isStreamingFinished?: boolean;
   data: {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message
