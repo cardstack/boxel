@@ -5,8 +5,11 @@ import {
   asExpressions,
   addExplicitParens,
   separatedByCommas,
+  internalKeyFor,
+  baseCardRef,
   type IndexedCardsTable,
   type RealmVersionsTable,
+  type LooseCardResource,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -17,6 +20,7 @@ const testRealmURL2 = `http://test-realm/test2/`;
 
 let { sqlSchema } = ENV;
 
+// TODO move this into a helper
 async function setupIndex(
   client: IndexerDBClient,
   versionRows: RealmVersionsTable[],
@@ -31,7 +35,7 @@ async function setupIndex(
 ) {
   let indexedCardsExpressions = indexRows.map((r) =>
     asExpressions(r, {
-      jsonFields: ['deps', 'pristine_doc', 'error_doc', 'search_doc'],
+      jsonFields: ['deps', 'types', 'pristine_doc', 'error_doc', 'search_doc'],
     }),
   );
   let versionExpressions = versionRows.map((r) => asExpressions(r));
@@ -201,12 +205,220 @@ module('Unit | index-db', function (hooks) {
     );
   });
 
-  skip('does not create invalidation record for non-JSON invalidation', async function (_assert) {});
+  test('does not create invalidation record for non-JSON invalidation', async function (assert) {
+    await setupIndex(
+      client,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [],
+    );
+    let batch = await client.createBatch(new URL(testRealmURL));
+    let invalidations = await batch.invalidate(
+      new URL(`${testRealmURL}module`),
+    );
+    assert.deepEqual(invalidations.sort(), [`${testRealmURL}module`]);
+    let entries = await adapter.execute('SELECT card_url FROM indexed_cards');
+    assert.deepEqual(
+      entries,
+      [],
+      'an index entry was not created for a non-JSON URL',
+    );
+  });
 
-  skip('can prevent concurrent batch invalidations from colliding', async function (_assert) {});
+  test('can prevent concurrent batch invalidations from colliding', async function (assert) {
+    await setupIndex(
+      client,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          card_url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          card_url: `${testRealmURL}2.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}1.json`],
+        },
+        {
+          card_url: `${testRealmURL}3.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}1.json`],
+        },
+      ],
+    );
 
-  skip('can update an index entry', async function (_assert) {
-    // test before and after the Batch.done ?
+    // both batches have the same WIP version number
+    let batch1 = await client.createBatch(new URL(testRealmURL));
+    let batch2 = await client.createBatch(new URL(testRealmURL));
+    await batch1.invalidate(new URL(`${testRealmURL}1.json`));
+
+    try {
+      await batch2.invalidate(new URL(`${testRealmURL}3.json`));
+      throw new Error(`expected invalidation conflict error`);
+    } catch (e: any) {
+      assert.ok(
+        e.message.includes(
+          'Invalidation conflict error in realm http://test-realm/test/ version 2',
+        ),
+        'received invalidation conflict error',
+      );
+    }
+  });
+
+  test('can update an index entry', async function (assert) {
+    await setupIndex(
+      client,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          card_url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          pristine_doc: {
+            id: `${testRealmURL}1.json`,
+            type: 'card',
+            attributes: {
+              name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `./person`,
+                name: 'Person',
+              },
+            },
+          } as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          deps: [`${testRealmURL}person`],
+          types: [{ module: `./person`, name: 'Person' }, baseCardRef].map(
+            (i) => internalKeyFor(i, new URL(testRealmURL)),
+          ),
+        },
+      ],
+    );
+
+    let batch = await client.createBatch(new URL(testRealmURL));
+    await batch.invalidate(new URL(`${testRealmURL}1.json`));
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'entry',
+      entry: {
+        resource: {
+          id: `${testRealmURL}1.json`,
+          type: 'card',
+          attributes: {
+            name: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `./person`,
+              name: 'Person',
+            },
+          },
+        },
+        searchData: { name: 'Van Gogh' },
+        deps: new Set([`${testRealmURL}person`]),
+        types: [{ module: `./person`, name: 'Person' }, baseCardRef].map((i) =>
+          internalKeyFor(i, new URL(testRealmURL)),
+        ),
+      },
+    });
+
+    let versions = await adapter.execute(
+      `SELECT realm_version, pristine_doc, search_doc FROM indexed_cards WHERE card_url = $1 ORDER BY realm_version`,
+      {
+        bind: [`${testRealmURL}1.json`],
+        coerceTypes: { pristine_doc: 'JSON', search_doc: 'JSON' },
+      },
+    );
+    assert.strictEqual(
+      versions.length,
+      2,
+      'correct number of versions exist for the entry before finishing the batch',
+    );
+
+    let [liveVersion, wipVersion] = versions;
+    assert.deepEqual(
+      liveVersion,
+      {
+        realm_version: 1,
+        pristine_doc: {
+          id: `${testRealmURL}1.json`,
+          type: 'card',
+          attributes: {
+            name: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `./person`,
+              name: 'Person',
+            },
+          },
+        },
+        search_doc: { name: 'Mango' },
+      },
+      'live version of the doc has not changed',
+    );
+    assert.deepEqual(
+      wipVersion,
+      {
+        realm_version: 2,
+        pristine_doc: {
+          id: `${testRealmURL}1.json`,
+          type: 'card',
+          attributes: {
+            name: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `./person`,
+              name: 'Person',
+            },
+          },
+        },
+        search_doc: { name: 'Van Gogh' },
+      },
+      'WIP version of the doc exists',
+    );
+
+    await batch.done();
+
+    versions = await adapter.execute(
+      `SELECT realm_version, pristine_doc, search_doc FROM indexed_cards WHERE card_url = $1 ORDER BY realm_version`,
+      {
+        bind: [`${testRealmURL}1.json`],
+        coerceTypes: { pristine_doc: 'JSON', search_doc: 'JSON' },
+      },
+    );
+    assert.strictEqual(
+      versions.length,
+      1,
+      'correct number of versions exist for the entry after finishing the batch',
+    );
+
+    let [finalVersion] = versions;
+    assert.deepEqual(
+      finalVersion,
+      {
+        realm_version: 2,
+        pristine_doc: {
+          id: `${testRealmURL}1.json`,
+          type: 'card',
+          attributes: {
+            name: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `./person`,
+              name: 'Person',
+            },
+          },
+        },
+        search_doc: { name: 'Van Gogh' },
+      },
+      'final version of the doc exists',
+    );
   });
 
   skip('can remove an index entry', async function (_assert) {

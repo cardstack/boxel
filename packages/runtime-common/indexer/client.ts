@@ -1,5 +1,5 @@
 import flatten from 'lodash/flatten';
-import { LooseSingleCardDocument } from '../index';
+import { type LooseCardResource } from '../index';
 import {
   type PgPrimitive,
   type Expression,
@@ -16,10 +16,16 @@ export interface IndexedCardsTable {
   card_url: string;
   realm_version: number;
   realm_url: string;
-  pristine_doc: LooseSingleCardDocument | null;
+  // TODO in followup PR update this to be a document not a resource
+  pristine_doc: LooseCardResource | null;
   error_doc: SerializedError | null;
   search_doc: Record<string, PgPrimitive> | null;
-  deps: string[] | null; // ideally this should be an array, but SQLite doesn't support that, rather we can use JSONB arrays
+  // `deps` is a list of URLs that the card depends on, either card URL's or
+  // module URL's
+  deps: string[] | null;
+  // `types` is the adoption chain for card where each code ref is serialized
+  // using `internalKeyFor()`
+  types: string[] | null;
   embedded_html: string | null;
   isolated_html: string | null;
   indexed_at: number | null;
@@ -88,6 +94,7 @@ export class IndexerDBClient {
       {
         coerceTypes: {
           deps: 'JSON',
+          types: 'JSON',
           pristine_doc: 'JSON',
           error_doc: 'JSON',
           search_doc: 'JSON',
@@ -170,24 +177,38 @@ export class Batch {
 
   async updateEntry(url: URL, entry: SearchEntryWithErrors): Promise<void> {
     this.touched.add(url.href);
-    let { nameExpressions, valueExpressions } = asExpressions({
-      card_url: url.href,
-      realm_version: this.realmVersion,
-      realm_url: this.realmURL.href,
-      is_deleted: false,
-      indexed_at: Date.now(),
-      ...(entry.type === 'entry'
-        ? {
-            pristine_doc: entry.entry.resource,
-            search_doc: entry.entry.searchData,
-            isolated_html: entry.entry.html,
-            deps: entry.entry.deps,
-          }
-        : {
-            error_doc: entry.error,
-            deps: entry.error.deps,
-          }),
-    } as IndexedCardsTable);
+    let { nameExpressions, valueExpressions } = asExpressions(
+      {
+        card_url: url.href,
+        realm_version: this.realmVersion,
+        realm_url: this.realmURL.href,
+        is_deleted: false,
+        indexed_at: Date.now(),
+        ...(entry.type === 'entry'
+          ? {
+              // TODO in followup PR we need to alter the SearchEntry type to use
+              // a document instead of a resource
+              pristine_doc: entry.entry.resource,
+              search_doc: entry.entry.searchData,
+              isolated_html: entry.entry.html,
+              deps: entry.entry.deps,
+              types: entry.entry.types,
+            }
+          : {
+              error_doc: entry.error,
+              deps: entry.error.deps,
+            }),
+      } as IndexedCardsTable,
+      {
+        jsonFields: [
+          'pristine_doc',
+          'search_doc',
+          'deps',
+          'types',
+          'error_doc',
+        ],
+      },
+    );
 
     await this.client.query([
       `INSERT OR REPLACE INTO indexed_cards`,
@@ -313,17 +334,31 @@ export class Batch {
           ]),
         );
 
-      // TODO catch the primary key constraint violation exception and rethrow
-      // it with a clearer error around what went wrong: concurrent batch
-      // invalidation graph intersection
-      await this.client.query([
-        `INSERT INTO indexed_cards`,
-        ...addExplicitParens(separatedByCommas(columns)),
-        'VALUES',
-        ...separatedByCommas(
-          rows.map((value) => addExplicitParens(separatedByCommas(value))),
-        ),
-      ]);
+      try {
+        await this.client.query([
+          `INSERT INTO indexed_cards`,
+          ...addExplicitParens(separatedByCommas(columns)),
+          'VALUES',
+          ...separatedByCommas(
+            rows.map((value) => addExplicitParens(separatedByCommas(value))),
+          ),
+        ]);
+      } catch (e: any) {
+        // TODO need to also catch the pg form of this error
+        // which would be great to bake into the adapter layer
+        if (e.result?.message?.includes('UNIQUE constraint failed')) {
+          throw new Error(
+            `Invalidation conflict error in realm ${
+              this.realmURL.href
+            } version ${this.realmVersion}: the invalidation ${
+              url.href
+            } resulted in invalidation graph: ${JSON.stringify(
+              invalidations,
+            )} that collides with unfinished indexing`,
+          );
+        }
+        throw e;
+      }
     }
 
     // FYI: these invalidations may include modules...

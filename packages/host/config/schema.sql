@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS indexed_cards (
   search_doc JSON,
   error_doc JSON,
   deps JSON,
+  types JSON,
   embedded_html TEXT,
   isolated_html TEXT,
   indexed_at INTEGER,
