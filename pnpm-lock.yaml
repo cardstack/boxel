@@ -566,7 +566,7 @@ importers:
         specifier: ^1.8.6
         version: 1.8.6
       '@floating-ui/dom':
-        specifier: ^1.4.3
+        specifier: ^1.6.3
         version: 1.6.3
       '@glint/environment-ember-loose':
         specifier: ^1.4.0
@@ -1003,7 +1003,7 @@ importers:
         specifier: ^3.2.2
         version: 3.2.2(@embroider/core@3.3.0)(webpack@5.89.0)
       '@floating-ui/dom':
-        specifier: ^1.4.3
+        specifier: ^1.6.3
         version: 1.6.3
       '@glimmer/component':
         specifier: ^1.1.2

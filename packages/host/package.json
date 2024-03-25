@@ -47,7 +47,7 @@
     "@embroider/core": "^3.3.0",
     "@embroider/macros": "^1.13.2",
     "@embroider/webpack": "^3.2.2",
-    "@floating-ui/dom": "^1.4.3",
+    "@floating-ui/dom": "^1.6.3",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
     "@glint/core": "^1.4.0",
