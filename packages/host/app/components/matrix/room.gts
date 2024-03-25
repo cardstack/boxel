@@ -175,6 +175,7 @@ export default class Room extends Component<Signature> {
       this.room &&
       this.lastMessageSent &&
       !this.room.messages.find(
+        // @ts-ignore lastMessage must be not undefined
         (m) => m.externalId === this.lastMessageSent.externalId,
       )
     );
