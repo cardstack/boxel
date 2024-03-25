@@ -180,9 +180,10 @@ jobs:
   matrix-client-test-2:
     name: Matrix Client Tests - Group 2
     runs-on: ubuntu-latest
-    concurrency:
-      group: matrix-client-test-2-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
+    # FIXME restore
+    # concurrency:
+    #   group: matrix-client-test-2-${{ github.head_ref || github.run_id }}
+    #   cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
