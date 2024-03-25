@@ -16,7 +16,7 @@ import {
   registerRealmUsers,
   clearLocalStorage,
   sendMessage,
-  getRoomName,
+  getRoomId,
   createRoomWithMessage,
   deleteRoom,
   isInRoom,
@@ -43,7 +43,7 @@ test.describe('Room creation', () => {
   test('it can create a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
-    let room1 = await getRoomName(page); // Automatically created room
+    let room1 = await getRoomId(page); // Automatically created room
     await assertRooms(page, [room1]);
     await sendMessage(page, room1, 'Hello');
 
@@ -61,7 +61,7 @@ test.describe('Room creation', () => {
     await logout(page);
     await login(page, 'user2', 'pass');
 
-    let room1New = await getRoomName(page); // Automatically created room
+    let room1New = await getRoomId(page); // Automatically created room
     await assertRooms(page, [room1New]);
   });
 
@@ -70,7 +70,7 @@ test.describe('Room creation', () => {
   }) => {
     await login(page, 'user1', 'pass');
 
-    let room = await getRoomName(page); // Automatically created room
+    let room = await getRoomId(page); // Automatically created room
     await expect(page.locator(`[data-test-create-room-btn]`)).toBeDisabled();
     await expect(page.locator(`[data-test-new-session]`)).toHaveCount(1);
     await sendMessage(page, room, 'Hello');
@@ -83,7 +83,7 @@ test.describe('Room creation', () => {
 
     await openRoom(page, room);
     await page.locator('[data-test-create-room-btn]').click();
-    expect(await getRoomName(page)).toEqual(newRoom);
+    expect(await getRoomId(page)).toEqual(newRoom);
     await assertRooms(page, [room, newRoom]);
 
     await reloadAndOpenAiAssistant(page);
@@ -96,7 +96,7 @@ test.describe('Room creation', () => {
     // user2 should not be able to see user1's room
     await logout(page);
     await login(page, 'user2', 'pass');
-    let user2Room = await getRoomName(page);
+    let user2Room = await getRoomId(page);
     await assertRooms(page, [user2Room]);
     expect(user2Room).not.toEqual(room);
     expect(user2Room).not.toEqual(newRoom);
@@ -105,7 +105,7 @@ test.describe('Room creation', () => {
   test('it can rename a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await assertRooms(page, [room1]);
     await expect(page.locator(`[data-test-chat-title]`)).toHaveCount(0);
     await sendMessage(page, room1, 'Hello');
@@ -159,7 +159,7 @@ test.describe('Room creation', () => {
   test('it can cancel renaming a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await assertRooms(page, [room1]);
     await sendMessage(page, room1, 'Hello');
 
@@ -196,7 +196,7 @@ test.describe('Room creation', () => {
     await login(page, 'user1', 'pass');
     let roomsBeforeDeletion = await getRoomsFromSync();
 
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
     let room2 = await createRoomWithMessage(page, 'Room 2');
     let room3 = await createRoomWithMessage(page, 'Room 3');
@@ -227,7 +227,7 @@ test.describe('Room creation', () => {
     await expect(page.locator(`[data-test-past-sessions]`)).toHaveCount(0);
 
     await page.waitForTimeout(500); // wait for new room to be created
-    let newRoom = await getRoomName(page);
+    let newRoom = await getRoomId(page);
     expect(newRoom).not.toEqual(room1);
     expect(newRoom).not.toEqual(room2);
     expect(newRoom).not.toEqual(room3);
@@ -246,7 +246,7 @@ test.describe('Room creation', () => {
 
   test('it can cancel deleting a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    let room = await getRoomName(page);
+    let room = await getRoomId(page);
     await assertRooms(page, [room]);
 
     await page.locator(`[data-test-past-sessions-button]`).click();
@@ -274,7 +274,7 @@ test.describe('Room creation', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
     let room2 = await createRoomWithMessage(page, 'Room 2');
     let room3 = await createRoomWithMessage(page, 'Room 3'); // latest room
@@ -294,7 +294,7 @@ test.describe('Room creation', () => {
     await page.locator(`[data-test-close-past-sessions]`).click();
 
     await page.waitForTimeout(500); // wait for new room to be created
-    let newRoom = await getRoomName(page);
+    let newRoom = await getRoomId(page);
     await isInRoom(page, newRoom);
     await assertRooms(page, [newRoom]);
     await expect(page.locator(`[data-test-chat-title]`)).toHaveCount(0);
@@ -304,7 +304,7 @@ test.describe('Room creation', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
     let room2 = await createRoomWithMessage(page, 'Room 2');
     let room3 = await createRoomWithMessage(page, 'Room 3'); // latest room
