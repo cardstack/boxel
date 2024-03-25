@@ -93,7 +93,7 @@
   },
   "peerDependencies": {
     "@glint/environment-ember-loose": "^1.4.0",
-    "ember-source": "^4.0.0"
+    "ember-source": "^5.4.0"
   },
   "engines": {
     "node": ">= 18"
