@@ -24,7 +24,7 @@
     "test:ember": "ember test"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.0",
+    "@babel/core": "^7.24.3",
     "@babel/eslint-parser": "^7.23.10",
     "@babel/plugin-proposal-decorators": "^7.21.0",
     "@cardstack/boxel-motion": "workspace:*",
@@ -35,7 +35,7 @@
     "@embroider/core": "^3.3.0",
     "@embroider/macros": "^1.13.2",
     "@embroider/test-setup": "^3.0.2",
-    "@embroider/webpack": "^3.2.0",
+    "@embroider/webpack": "^3.2.2",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
     "@glint/core": "^1.2.1",
@@ -43,7 +43,7 @@
     "@glint/environment-ember-template-imports": "^1.2.1",
     "@glint/template": "^1.2.1",
     "@tsconfig/ember": "^3.0.4",
-    "@types/htmlbars-inline-precompile": "^3.0.0",
+    "@types/htmlbars-inline-precompile": "^3.0.3",
     "@types/qunit": "^2.19.10",
     "@types/rsvp": "^4.0.9",
     "@typescript-eslint/eslint-plugin": "^5.48.1",

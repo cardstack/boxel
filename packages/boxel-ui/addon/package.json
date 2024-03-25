@@ -60,7 +60,7 @@
     "typescript": "~5.1.6"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.0",
+    "@babel/core": "^7.24.3",
     "@babel/plugin-proposal-decorators": "^7.22.10",
     "@babel/plugin-transform-class-properties": "^7.22.5",
     "@babel/plugin-transform-class-static-block": "^7.22.11",
