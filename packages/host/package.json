@@ -96,7 +96,7 @@
     "ember-cli-deploy-s3": "^3.1.0",
     "ember-cli-deploy-smart-compress": "^2.0.0",
     "ember-cli-deprecation-workflow": "mixonic/ember-cli-deprecation-workflow#0b4cbe7",
-    "ember-cli-fastboot": "^4.1.0",
+    "ember-cli-fastboot": "^4.1.2",
     "ember-cli-htmlbars": "^6.3.0",
     "ember-cli-inject-live-reload": "^2.1.0",
     "ember-cli-sri": "^2.1.1",
