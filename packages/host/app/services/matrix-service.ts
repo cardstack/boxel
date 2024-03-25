@@ -365,6 +365,7 @@ export default class MatrixService extends Service {
     body: string | undefined,
     attachedCards: CardDef[] = [],
     context?: OperatorModeContext,
+    externalId?: string,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
     let functions = [];
@@ -437,6 +438,7 @@ export default class MatrixService extends Service {
       body: body || '',
       format: 'org.matrix.custom.html',
       formatted_body: html,
+      externalId,
       data: {
         attachedCardsEventIds,
         context: {

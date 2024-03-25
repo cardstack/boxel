@@ -171,7 +171,13 @@ export default class Room extends Component<Signature> {
   }
 
   private get isMessagePendingDisplayed() {
-    return (this.room?.messages.length ?? 0) === this.lastMessageSent?.index;
+    return (
+      this.room &&
+      this.lastMessageSent &&
+      !this.room.messages.find(
+        (m) => m.externalId === this.lastMessageSent.externalId,
+      )
+    );
   }
 
   @action sendPrompt(prompt: string) {
@@ -235,12 +241,13 @@ export default class Room extends Component<Signature> {
         userId: this.matrixService.userId,
         roomId: this.args.roomId,
       });
+      let externalId = String(this.room?.messages.length ?? 0);
       let lastMessageSent = new roomModule.MessageField({
         author: roomMember,
         message,
         formattedMessage: message ? sanitizeHtml(marked(message)) : '',
         created: new Date().getTime(),
-        index: this.room?.messages.length ?? 0,
+        externalId: externalId,
         transactionId: null,
         attachedCardIds: cards?.map((c) => c.id) || [],
       });
@@ -254,12 +261,12 @@ export default class Room extends Component<Signature> {
           .topMostStackItems()
           .map((stackItem) => stackItem.card.id),
       };
-
       await this.matrixService.sendMessage(
         this.args.roomId,
         message,
         cards,
         context,
+        externalId,
       );
     },
   );
