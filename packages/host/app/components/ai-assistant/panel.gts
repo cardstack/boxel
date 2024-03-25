@@ -8,7 +8,6 @@ import Component from '@glimmer/component';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
 
-import format from 'date-fns/format';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 import { TrackedMap } from 'tracked-built-ins';
