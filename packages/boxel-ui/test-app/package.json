@@ -51,7 +51,7 @@
     "broccoli-plugin": "^4.0.7",
     "broccoli-source": "^3.0.1",
     "concurrently": "^8.2.2",
-    "ember-a11y-testing": "^5.2.1",
+    "ember-a11y-testing": "^6.1.1",
     "ember-auto-import": "^2.7.2",
     "ember-cli": "^5.4.1",
     "ember-cli-babel": "^8.2.0",

@@ -437,8 +437,8 @@ importers:
         specifier: ^8.2.2
         version: 8.2.2
       ember-a11y-testing:
-        specifier: ^5.2.1
-        version: 5.2.1(@babel/core@7.24.3)(@ember/test-helpers@3.3.0)(@glint/template@1.4.0)(qunit@2.20.1)(webpack@5.89.0)
+        specifier: ^6.1.1
+        version: 6.1.1(@babel/core@7.24.3)(@ember/test-helpers@3.3.0)(@glint/template@1.4.0)(qunit@2.20.1)(webpack@5.89.0)
       ember-auto-import:
         specifier: ^2.7.2
         version: 2.7.2(@glint/template@1.4.0)(webpack@5.89.0)
@@ -826,8 +826,8 @@ importers:
         specifier: ^8.2.2
         version: 8.2.2
       ember-a11y-testing:
-        specifier: ^5.2.1
-        version: 5.2.1(@babel/core@7.24.3)(@ember/test-helpers@3.3.0)(@glint/template@1.4.0)(qunit@2.20.1)(webpack@5.89.0)
+        specifier: ^6.1.1
+        version: 6.1.1(@babel/core@7.24.3)(@ember/test-helpers@3.3.0)(@glint/template@1.4.0)(qunit@2.20.1)(webpack@5.89.0)
       ember-auto-import:
         specifier: ^2.7.2
         version: 2.7.2(@glint/template@1.4.0)(webpack@5.89.0)
@@ -10654,11 +10654,11 @@ packages:
       minimalistic-crypto-utils: 1.0.1
     dev: true
 
-  /ember-a11y-testing@5.2.1(@babel/core@7.24.3)(@ember/test-helpers@3.3.0)(@glint/template@1.4.0)(qunit@2.20.1)(webpack@5.89.0):
-    resolution: {integrity: sha512-gYIqSwCw43hRxQtwauln0hChRHyelkVTtmWVYgyvkX0+YKJXz2x+IGmC1MkO62SHOjz4A9wXyNSH13jwOIbJ9A==}
-    engines: {node: 12.* || 14.* || >= 16}
+  /ember-a11y-testing@6.1.1(@babel/core@7.24.3)(@ember/test-helpers@3.3.0)(@glint/template@1.4.0)(qunit@2.20.1)(webpack@5.89.0):
+    resolution: {integrity: sha512-bDpw5+B2q++xwz5DWcbYB6dXp6nNe4jBwDkT6CqMESiVWWsSKPHs3ygt1Y89ESucesRIiv/49gNKMftZNsCpkw==}
+    engines: {node: 16.* || >= 18}
     peerDependencies:
-      '@ember/test-helpers': ^2.0.0
+      '@ember/test-helpers': ^3.0.3
       qunit: '>= 2'
     peerDependenciesMeta:
       qunit:
