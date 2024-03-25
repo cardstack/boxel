@@ -3,13 +3,8 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { marked } from 'marked';
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
-const markdownOpts = {
-  mangle: false,
-  headerIds: false,
-};
-
 function toHtml(markdown: string | null) {
-  return markdown ? sanitizeHtml(marked(markdown, markdownOpts)) : '';
+  return markdown ? sanitizeHtml(marked(markdown) as string) : '';
 }
 
 class View extends Component<typeof MarkdownField> {

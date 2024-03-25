@@ -347,7 +347,7 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = body != null ? sanitizeHtml(marked(body)) : '';
+    let html = body != null ? sanitizeHtml(marked(body) as string) : '';
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
     let attachedOpenCards: CardDef[] = [];
