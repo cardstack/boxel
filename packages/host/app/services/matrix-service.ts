@@ -2,8 +2,9 @@ import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
 import format from 'date-fns/format';
+
+import { task } from 'ember-concurrency';
 import { marked } from 'marked';
 import {
   type LoginResponse,
