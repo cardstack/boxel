@@ -191,7 +191,7 @@ export class Batch {
               pristine_doc: entry.entry.resource,
               search_doc: entry.entry.searchData,
               isolated_html: entry.entry.html,
-              deps: entry.entry.deps,
+              deps: [...entry.entry.deps],
               types: entry.entry.types,
             }
           : {
@@ -236,26 +236,24 @@ export class Batch {
     ]);
   }
 
-  // TODO catch the primary key constraint violation exception and rethrow
-  // it with a clearer error around what went wrong: concurrent batch
-  // invalidation graph intersection
   async makeNewGeneration() {
     this.isNewGeneration = true;
-    let { nameExpressions, valueExpressions } = asExpressions({
-      card_url: 'card_url',
-      realm_url: 'realm_url',
-      realm_version: this.realmVersion,
-      is_deleted: true,
-    } as IndexedCardsTable);
-
-    // create tombstones for all card URLs
-    await this.client.query([
-      `INSERT INTO indexed_cards`,
-      ...addExplicitParens(separatedByCommas(nameExpressions)),
-      `SELECT`,
-      ...separatedByCommas(valueExpressions),
-      'FROM indexed_cards GROUP BY card_url',
-    ]);
+    let cols = ['card_url', 'realm_url', 'realm_version', 'is_deleted'].map(
+      (c) => [c],
+    );
+    await this.detectUniqueConstraintError(
+      () =>
+        // create tombstones for all card URLs
+        this.client.query([
+          `INSERT INTO indexed_cards`,
+          ...addExplicitParens(separatedByCommas(cols)),
+          `SELECT card_url, realm_url, 2 as realm_version, true as is_deleted`,
+          'FROM indexed_cards WHERE realm_url =',
+          { kind: 'param', param: this.realmURL.href },
+          'GROUP BY card_url',
+        ]),
+      { isMakingNewGeneration: true },
+    );
   }
 
   async done(): Promise<void> {
@@ -305,10 +303,6 @@ export class Batch {
     }
   }
 
-  // invalidate will throw if 2 batches try to insert intersecting invalidation
-  // graph. If this happens we should cancel the job that threw because of
-  // primary key constraint violation and re-add it to the job queue with the
-  // original notifier to try again
   async invalidate(
     url: URL /* this can be a card or module URL. This must include .json extension for cards */,
   ): Promise<string[]> {
@@ -334,36 +328,57 @@ export class Batch {
           ]),
         );
 
-      try {
-        await this.client.query([
-          `INSERT INTO indexed_cards`,
-          ...addExplicitParens(separatedByCommas(columns)),
-          'VALUES',
-          ...separatedByCommas(
-            rows.map((value) => addExplicitParens(separatedByCommas(value))),
-          ),
-        ]);
-      } catch (e: any) {
-        // TODO need to also catch the pg form of this error
-        // which would be great to bake into the adapter layer
-        if (e.result?.message?.includes('UNIQUE constraint failed')) {
-          throw new Error(
-            `Invalidation conflict error in realm ${
-              this.realmURL.href
-            } version ${this.realmVersion}: the invalidation ${
-              url.href
-            } resulted in invalidation graph: ${JSON.stringify(
-              invalidations,
-            )} that collides with unfinished indexing`,
-          );
-        }
-        throw e;
-      }
+      await this.detectUniqueConstraintError(
+        () =>
+          this.client.query([
+            `INSERT INTO indexed_cards`,
+            ...addExplicitParens(separatedByCommas(columns)),
+            'VALUES',
+            ...separatedByCommas(
+              rows.map((value) => addExplicitParens(separatedByCommas(value))),
+            ),
+          ]),
+        { url, invalidations },
+      );
     }
 
     // FYI: these invalidations may include modules...
     this.touched = new Set([...this.touched, ...invalidations]);
     return invalidations;
+  }
+
+  // invalidate will throw if 2 batches try to insert intersecting invalidation
+  // graph. If this happens we should cancel the job that threw because of
+  // primary key constraint violation and re-add it to the job queue with the
+  // original notifier to try again
+  private async detectUniqueConstraintError(
+    fn: () => Promise<unknown>,
+    opts?: {
+      url?: URL;
+      invalidations?: string[];
+      isMakingNewGeneration?: boolean;
+    },
+  ) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      // TODO need to also catch the pg form of this error
+      // which would be great to bake into the adapter layer
+      if (e.result?.message?.includes('UNIQUE constraint failed')) {
+        let message = `Invalidation conflict error in realm ${this.realmURL.href} version ${this.realmVersion}`;
+        if (opts?.url && opts?.invalidations) {
+          message = `${message}: the invalidation ${
+            opts.url.href
+          } resulted in invalidation graph: ${JSON.stringify(
+            opts.invalidations,
+          )} that collides with unfinished indexing`;
+        } else if (opts?.isMakingNewGeneration) {
+          message = `${message}. created a new generation while there was still unfinished indexing`;
+        }
+        throw new Error(message);
+      }
+      throw e;
+    }
   }
 
   private async calculateInvalidations(id: string): Promise<string[]> {
