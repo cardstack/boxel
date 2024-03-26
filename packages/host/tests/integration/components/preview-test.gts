@@ -12,7 +12,7 @@ import Preview from '@cardstack/host/components/preview';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import { testRealmURL, shimModule } from '../../helpers';
+import { testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -45,7 +45,7 @@ module('Integration | preview', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
+    loader.shimModule(`${testRealmURL}test-cards`, { TestCard });
     let card = new TestCard({ firstName: 'Mango ' });
     await renderComponent(
       class TestDriver extends GlimmerComponent {

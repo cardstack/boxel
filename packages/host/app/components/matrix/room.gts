@@ -13,9 +13,12 @@ import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import type { MessageField } from 'https://cardstack.com/base/room';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -27,6 +30,7 @@ import RoomMessage from './room-message';
 interface Signature {
   Args: {
     roomId: string;
+    monacoSDK: MonacoSDK;
   };
 }
 
@@ -36,14 +40,18 @@ export default class Room extends Component<Signature> {
       class='room'
       data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-      data-test-room={{this.room.name}}
-      data-test-room-id={{this.room.roomId}}
+      data-test-room-name={{this.room.name}}
+      data-test-room={{this.room.roomId}}
     >
       {{#if this.room.messages}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
               @message={{message}}
+              @monacoSDK={{@monacoSDK}}
+              @isStreaming={{this.isMessageStreaming message i}}
+              @currentEditor={{this.currentMonacoContainer}}
+              @setCurrentEditor={{this.setCurrentMonacoContainer}}
               data-test-message-idx={{i}}
               {{scrollIntoViewModifier (this.isLastMessage i)}}
             />
@@ -60,7 +68,7 @@ export default class Room extends Component<Signature> {
             @onInput={{this.setMessage}}
             @onSend={{this.sendMessage}}
             @canSend={{this.canSend}}
-            data-test-message-field={{this.room.name}}
+            data-test-message-field={{this.room.roomId}}
           />
           <AiAssistantCardPicker
             @autoAttachedCard={{this.autoAttachedCard}}
@@ -112,10 +120,19 @@ export default class Room extends Component<Signature> {
   private lastTopMostCard: CardDef | undefined;
 
   @tracked private isAutoAttachedCardDisplayed = true;
+  @tracked private currentMonacoContainer: number | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+  }
+
+  @action isMessageStreaming(message: MessageField, messageIndex: number) {
+    return (
+      !message.isStreamingFinished &&
+      this.isLastMessage(messageIndex) &&
+      (new Date().getTime() - message.created.getTime()) / 1000 < 60 // Older events do not come with isStreamingFinished property so we have no other way to determine if the message is done streaming other than checking if they are old messages (older than 60 seconds as an arbitrary threshold)
+    );
   }
 
   private doMatrixEventFlush = restartableTask(async () => {
@@ -266,6 +283,10 @@ export default class Room extends Component<Signature> {
     return (
       (this.room && messageIndex === this.room.messages.length - 1) ?? false
     );
+  }
+
+  @action private setCurrentMonacoContainer(index: number | undefined) {
+    this.currentMonacoContainer = index;
   }
 }
 

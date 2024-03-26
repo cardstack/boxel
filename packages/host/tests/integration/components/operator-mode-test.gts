@@ -40,6 +40,8 @@ import {
   showSearchResult,
   type TestContextWithSave,
   TestRealmAdapter,
+  getMonacoContent,
+  waitForCodeEditor,
 } from '../../helpers';
 import {
   setupMatrixServiceMock,
@@ -170,8 +172,9 @@ module('Integration | operator-mode', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
-          <@fields.preferredCarrier />
+          <span data-test-preferredCarrier={{@model.preferredCarrier}}>
+            <@fields.preferredCarrier />
+          </span>
         </template>
       };
     }
@@ -683,8 +686,8 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       await waitFor('[data-test-room-settled]');
       let roomId = document
-        .querySelector('[data-test-room-id]')
-        ?.getAttribute('data-test-room-id');
+        .querySelector('[data-test-room]')
+        ?.getAttribute('data-test-room');
       if (!roomId) {
         throw new Error('Expected a room ID');
       }
@@ -790,6 +793,59 @@ module('Integration | operator-mode', function (hooks) {
 
       await waitFor('[data-test-person="Fadhlan"]');
       assert.dom('[data-test-person]').hasText('Fadhlan');
+    });
+
+    test<TestContextWithSave>('it can preview code when a change is proposed', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person="Fadhlan"]');
+      assert.dom(`[data-test-preferredcarrier="DHL"]`).exists();
+
+      let roomId = await openAiAssistant();
+      let patchData = {
+        attributes: {
+          firstName: 'Joy',
+          address: { shippingInfo: { preferredCarrier: 'UPS' } },
+        },
+      };
+      addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          body: 'A patch',
+          msgtype: 'org.boxel.command',
+          formatted_body: 'A patch',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/fadhlan`,
+              patch: patchData,
+            },
+          }),
+        },
+      });
+
+      await waitFor('[data-test-view-code-button]');
+      await click('[data-test-view-code-button]');
+
+      await waitForCodeEditor();
+      assert.deepEqual(JSON.parse(getMonacoContent()), patchData);
+      assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
+
+      await click('[data-test-view-code-button]');
+      assert.dom('[data-test-code-editor]').doesNotExist();
     });
 
     test('it can handle an error in a card attached to a matrix message', async function (assert) {
@@ -907,28 +963,34 @@ module('Integration | operator-mode', function (hooks) {
       let tinyDelay = () => new Promise((resolve) => setTimeout(resolve, 1)); // Add a tiny artificial delay to ensure rooms are created in the correct order with increasing timestamps
       await matrixService.createAndJoinRoom('test1', 'test room 1');
       await tinyDelay();
-      await matrixService.createAndJoinRoom('test2', 'test room 2');
+      const room2Id = await matrixService.createAndJoinRoom(
+        'test2',
+        'test room 2',
+      );
       await tinyDelay();
-      await matrixService.createAndJoinRoom('test3', 'test room 3');
+      const room3Id = await matrixService.createAndJoinRoom(
+        'test3',
+        'test room 3',
+      );
 
       await waitFor(`[data-test-open-ai-assistant]`);
       await click('[data-test-open-ai-assistant]');
       await waitFor(`[data-room-settled]`);
 
       assert
-        .dom('[data-test-room="test room 3"]')
+        .dom(`[data-test-room="${room3Id}"]`)
         .exists(
           "test room 3 is the most recently created room and it's opened initially",
         );
 
       await click('[data-test-past-sessions-button]');
-      await click('[data-test-enter-room="test room 2"]');
+      await click(`[data-test-enter-room="${room2Id}"]`);
 
       await click('[data-test-close-ai-assistant]');
       await click('[data-test-open-ai-assistant]');
       await waitFor(`[data-room-settled]`);
       assert
-        .dom('[data-test-room="test room 2"]')
+        .dom(`[data-test-room="${room2Id}"]`)
         .exists(
           "test room 2 is the most recently selected room and it's opened initially",
         );
@@ -941,7 +1003,7 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       await waitFor(`[data-room-settled]`);
       assert
-        .dom('[data-test-room="test room 3"]')
+        .dom(`[data-test-room="${room3Id}"]`)
         .exists(
           "test room 3 is the most recently created room and it's opened initially",
         );
@@ -1012,6 +1074,195 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-message-idx="0"] p').exists({ count: 2 });
       assert.dom('[data-test-message-idx="0"] em').hasText('love');
       assert.dom('[data-test-message-idx="0"]').doesNotContainText('_love_');
+    });
+
+    test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event0',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@matic:boxel',
+        content: {
+          body: 'Say one word.',
+          msgtype: 'org.boxel.message',
+          formatted_body: 'Say one word.',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now() - 100,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'French.',
+          msgtype: 'm.text',
+          formatted_body: 'French.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: Date.now() - 99,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event2',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@matic:boxel',
+        content: {
+          body: 'What is a french bulldog?',
+          msgtype: 'org.boxel.message',
+          formatted_body: 'What is a french bulldog?',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now() - 98,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event3',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'French bulldog is a',
+          msgtype: 'm.text',
+          formatted_body: 'French bulldog is a',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now() - 97,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await waitFor('[data-test-message-idx="3"]');
+
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
+        .doesNotHaveClass(
+          'ai-avatar-animated',
+          'Answer to my previous question is not in progress',
+        );
+      assert
+        .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
+        .hasClass(
+          'ai-avatar-animated',
+          'Answer to my current question is in progress',
+        );
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event4',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'French bulldog is a French breed of companion dog or toy dog.',
+          msgtype: 'm.text',
+          formatted_body:
+            'French bulldog is a French breed of companion dog or toy dog',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true, // This is an indicator from the ai bot that the message is finalized and the openai is done streaming
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event3',
+          },
+        },
+        origin_server_ts: Date.now() - 96,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await waitFor('[data-test-message-idx="3"]');
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
+        .doesNotHaveClass(
+          'ai-avatar-animated',
+          'Answer to my previous question is not in progress',
+        );
+      assert
+        .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
+        .doesNotHaveClass(
+          'ai-avatar-animated',
+          'Answer to my last question is not in progress',
+        );
+    });
+
+    test('it does not display the streaming indicator when ai bot sends an option', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+
+      addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          body: 'i am the body',
+          msgtype: 'org.boxel.command',
+          formatted_body: 'A patch',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
+          }),
+        },
+      });
+
+      await waitFor('[data-test-message-idx="0"]');
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
+        .doesNotHaveClass(
+          'ai-avatar-animated',
+          'ai bot patch message does not have a spinner',
+        );
     });
   });
 
@@ -1132,9 +1383,8 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-card-catalog-go-button]');
-    assert
-      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
-      .isVisible();
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
   });
 
   test('displays cards on cards-grid and includes `catalog-entry` instances', async function (assert) {
@@ -1246,6 +1496,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
 
+    await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists(); // Opens card on the stack
     assert
       .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
@@ -1256,7 +1507,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('create new card editor opens in the stack at each nesting level', async function (assert) {
-    assert.expect(11);
+    assert.expect(9);
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1335,9 +1586,13 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-stack-card-index="3"] [data-test-close-button]');
     await waitFor('[data-test-stack-card-index="3"]', { count: 0 });
 
-    assert
-      .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
-      .containsText('Alice Enwunder');
+    await waitUntil(() =>
+      /Alice\s*Enwunder/.test(
+        document.querySelector(
+          '[data-test-stack-card-index="2"] [data-test-field="authorBio"]',
+        )!.textContent!,
+      ),
+    );
 
     await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
@@ -1364,11 +1619,14 @@ module('Integration | operator-mode', function (hooks) {
     });
 
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
-    assert
-      .dom(`[data-test-stack-card="${packetId}"]`)
-      .containsText(
-        'Everyone knows that Alice ran the show in the Brady household.',
-      );
+
+    await waitUntil(() =>
+      document
+        .querySelector(`[data-test-stack-card="${packetId}"]`)
+        ?.textContent?.includes(
+          'Everyone knows that Alice ran the show in the Brady household.',
+        ),
+    );
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {
@@ -1734,6 +1992,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     await waitFor('[data-test-person]');
 
@@ -1761,6 +2020,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     assert
       .dom(
@@ -1787,7 +2047,8 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
-    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor(`[data-test-stack-card-index="1"]`);
+
     assert
       .dom(
         `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-header-title]`,
@@ -2366,7 +2627,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-overlay-selected]').doesNotExist();
 
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
-    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor(`[data-test-stack-card-index="1"]`, { count: 1 });
   });
 
   test('displays realm name as header title when hovering realm icon', async function (assert) {
@@ -2904,17 +3165,17 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-    let savedCards = new Set<string>();
-    this.onSave((url) => savedCards.add(url.href));
+
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
     assert.dom('[data-test-add-new]').exists();
     await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
-    await waitFor('[data-test-edit-button]');
+    await waitFor('[data-test-stack-card-index="1"]');
+
     await click('[data-test-edit-button]');
-    await waitFor('[data-test-isolated-author');
+    await waitFor('[data-test-isolated-author]');
     assert.dom('[data-test-isolated-author]').exists();
   });
 });

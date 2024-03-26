@@ -28,8 +28,10 @@ module('Acceptance | basic tests', function (hooks) {
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    let loaderService = this.owner.lookup(
+      'service:loader-service',
+    ) as LoaderService;
+    let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')
     >(`${baseRealm.url}card-api`);

@@ -319,10 +319,19 @@ export default class OperatorModeStackItem extends Component<Signature> {
   });
 
   private calculateLastSavedMsg() {
-    this.lastSavedMsg =
-      this.lastSaved != null
-        ? `Saved ${formatDistanceToNow(this.lastSaved, { addSuffix: true })}`
-        : undefined;
+    // runs frequently, so only change a tracked property if the value has changed
+    if (this.lastSaved == null) {
+      if (this.lastSavedMsg) {
+        this.lastSavedMsg = undefined;
+      }
+    } else {
+      let savedMessage = `Saved ${formatDistanceToNow(this.lastSaved, {
+        addSuffix: true,
+      })}`;
+      if (this.lastSavedMsg != savedMessage) {
+        this.lastSavedMsg = savedMessage;
+      }
+    }
   }
 
   private doWithStableScroll = restartableTask(

@@ -24,6 +24,7 @@ interface Signature {
     formattedMessage: SafeString;
     datetime: Date;
     isFromAssistant: boolean;
+    isStreaming: boolean;
     profileAvatar?: ComponentLike;
     attachedCards?: CardDef[];
     errorMessage?: string;
@@ -50,7 +51,10 @@ export default class AiAssistantMessage extends Component<Signature> {
     >
       <div class='meta'>
         {{#if @isFromAssistant}}
-          <div class='ai-avatar'></div>
+          <div
+            class='ai-avatar {{if this.isAvatarAnimated "ai-avatar-animated"}}'
+            data-test-ai-avatar
+          ></div>
         {{else if @profileAvatar}}
           <@profileAvatar />
         {{/if}}
@@ -97,6 +101,7 @@ export default class AiAssistantMessage extends Component<Signature> {
 
     <style>
       .ai-assistant-message {
+        --ai-bot-message-background-color: #3b394b;
         --ai-assistant-message-avatar-size: 1.25rem; /* 20px. */
         --ai-assistant-message-meta-height: 1.25rem; /* 20px */
         --ai-assistant-message-gap: var(--boxel-sp-xs);
@@ -122,6 +127,11 @@ export default class AiAssistantMessage extends Component<Signature> {
         background-repeat: no-repeat;
         background-size: var(--ai-assistant-message-avatar-size);
       }
+
+      .ai-avatar-animated {
+        background-image: url('../ai-assist-icon-animated.webp');
+      }
+
       .avatar-img {
         width: var(--ai-assistant-message-avatar-size);
         height: var(--ai-assistant-message-avatar-size);
@@ -160,15 +170,20 @@ export default class AiAssistantMessage extends Component<Signature> {
         font-weight: 500;
         line-height: 1.25rem;
         letter-spacing: var(--boxel-lsp-xs);
-        padding: var(--boxel-sp);
+        padding: var(--ai-assistant-message-padding, var(--boxel-sp));
       }
       .is-from-assistant .content {
-        background: #3b394b;
+        background-color: var(--ai-bot-message-background-color);
         color: var(--boxel-light);
+        /* the below font-smoothing options are only recommended for light-colored
+          text on dark background (otherwise not good for accessibility) */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
 
       .content > :deep(.patch-message) {
         font-weight: 700;
+        letter-spacing: var(--boxel-lsp-sm);
       }
 
       .content > :deep(*) {
@@ -212,6 +227,10 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
     </style>
   </template>
+
+  private get isAvatarAnimated() {
+    return this.args.isStreaming && !this.args.errorMessage;
+  }
 }
 
 interface AiAssistantConversationSignature {
