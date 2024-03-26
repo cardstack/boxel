@@ -2,11 +2,18 @@ import Modifier, { type PositionalArgs } from 'ember-modifier';
 
 interface SetScopedCssSignature {
   Args: {
-    Positional: [boolean];
+    Positional: [boolean]; //We pass in an argument to toggle the scoped css via the opening and closing of dropdown
   };
   Element: HTMLElement;
 }
 
+// The point of this modifier is to set the data-scopedcss attribute on the
+// ember-basic-dropdown-wormhole which exists globally at the top of the DOM (where EmberBasicDropdown component exists)
+
+// For context, the ember-basic-dropdown component makes use of a pattern of placing a placeholder divs at the top of the DOM to enable floating dropdowns
+// If these placeholder divs are placed locally, it is likely that these floating dropdowns may be clipped by parent containers
+
+// This modifier dynamically scopes the css of your template to the global wormhole element, ie only when you open trigger a dropdown
 export default class SetScopedCss extends Modifier<SetScopedCssSignature> {
   modify(
     element: HTMLElement,
