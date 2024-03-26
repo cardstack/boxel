@@ -3,6 +3,7 @@ import PowerSelect, {
   type Select,
   type PowerSelectArgs,
 } from 'ember-power-select/components/power-select';
+import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 
 import cn from '../../helpers/cn.ts';
@@ -12,6 +13,7 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
 export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
+  multipleSelection: boolean;
   options: ItemT[];
 }
 
@@ -45,32 +47,61 @@ class BoxelSelect extends Component<Signature> {
   }
 
   <template>
-    <PowerSelect
-      class='boxel-select'
-      @options={{@options}}
-      @searchField={{@searchField}}
-      @selected={{@selected}}
-      @selectedItemComponent={{@selectedItemComponent}}
-      @placeholder={{@placeholder}}
-      @onChange={{@onChange}}
-      @onOpen={{this.onDropdownOpen}}
-      @onClose={{this.onDropdownClose}}
-      @onBlur={{@onBlur}}
-      @renderInPlace={{@renderInPlace}}
-      @verticalPosition={{@verticalPosition}}
-      @dropdownClass={{cn 'boxel-select__dropdown' @dropdownClass}}
-      @triggerComponent={{@triggerComponent}}
-      @disabled={{@disabled}}
-      @matchTriggerWidth={{false}}
-      @eventType='click'
-      @searchEnabled={{@searchEnabled}}
-      @beforeOptionsComponent={{component BeforeOptions autofocus=false}}
-      {{setScopedCss this.toggleScopedCss}}
-      ...attributes
-      as |item|
-    >
-      {{item}}
-    </PowerSelect>
+    {{#if @multipleSelection}}
+      <PowerSelectMultiple
+        class='boxel-select'
+        @options={{@options}}
+        @searchField={{@searchField}}
+        @selected={{@selected}}
+        @selectedItemComponent={{@selectedItemComponent}}
+        @placeholder={{@placeholder}}
+        @onChange={{@onChange}}
+        @onOpen={{this.onDropdownOpen}}
+        @onClose={{this.onDropdownClose}}
+        @onBlur={{@onBlur}}
+        @renderInPlace={{@renderInPlace}}
+        @verticalPosition={{@verticalPosition}}
+        @dropdownClass={{cn 'boxel-select__dropdown' @dropdownClass}}
+        @triggerComponent={{@triggerComponent}}
+        @disabled={{@disabled}}
+        @matchTriggerWidth={{false}}
+        @eventType='click'
+        @searchEnabled={{@searchEnabled}}
+        @beforeOptionsComponent={{component BeforeOptions autofocus=false}}
+        {{setScopedCss this.toggleScopedCss}}
+        ...attributes
+        as |item|
+      >
+        {{item}}
+      </PowerSelectMultiple>
+    {{else}}
+      <PowerSelect
+        class='boxel-select'
+        @options={{@options}}
+        @searchField={{@searchField}}
+        @selected={{@selected}}
+        @selectedItemComponent={{@selectedItemComponent}}
+        @placeholder={{@placeholder}}
+        @onChange={{@onChange}}
+        @onOpen={{this.onDropdownOpen}}
+        @onClose={{this.onDropdownClose}}
+        @onBlur={{@onBlur}}
+        @renderInPlace={{@renderInPlace}}
+        @verticalPosition={{@verticalPosition}}
+        @dropdownClass={{cn 'boxel-select__dropdown' @dropdownClass}}
+        @triggerComponent={{@triggerComponent}}
+        @disabled={{@disabled}}
+        @matchTriggerWidth={{false}}
+        @eventType='click'
+        @searchEnabled={{@searchEnabled}}
+        @beforeOptionsComponent={{component BeforeOptions autofocus=false}}
+        {{setScopedCss this.toggleScopedCss}}
+        ...attributes
+        as |item|
+      >
+        {{item}}
+      </PowerSelect>
+    {{/if}}
     <style>
       .boxel-select {
         border: 1px solid var(--boxel-form-control-border-color);
