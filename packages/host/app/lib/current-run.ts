@@ -36,6 +36,7 @@ import {
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
+import { reportError } from '@cardstack/runtime-common/realm';
 import {
   isIgnored,
   type Reader,
@@ -475,9 +476,9 @@ export class CurrentRun {
         deferred.reject(err);
         throw err;
       }
-      log.warn(
-        `encountered error indexing card instance ${path}: ${error.error.detail}`,
-      );
+      let warning = `encountered error indexing card instance ${path}: ${error.error.detail}`;
+      log.warn(warning);
+      reportError(new Error(warning));
       this.setInstance(instanceURL, error);
       deferred.fulfill();
     }
