@@ -117,6 +117,7 @@
       "types": "./declarations/*.d.ts",
       "default": "./dist/*.js"
     },
+    "./styles/*.css": "./dist/styles/*.css",
     "./addon-main.js": "./addon-main.cjs"
   },
   "files": [

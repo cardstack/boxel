@@ -75,7 +75,6 @@ export default function generateFrames(
 
     return resolveFrameGenerator(normalizedProperty, generator);
   }
-
   if (typeof options !== 'object') {
     if (!(timing.behavior instanceof StaticBehavior)) {
       throw new Error(
@@ -84,7 +83,7 @@ export default function generateFrames(
     }
 
     if (!timing.duration) {
-      throw new Error('Static behavior requires a duration');
+      timing.duration = 1;
     }
 
     // todo maybe throw error if options is not numeric or string

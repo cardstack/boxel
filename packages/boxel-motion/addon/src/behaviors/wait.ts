@@ -2,6 +2,7 @@ import type Behavior from './base.ts';
 import { type WaitToFramesArgument, timeToFrame } from './base.ts';
 
 export default class WaitBehavior implements Behavior {
+  fill = false;
   *getFrames(options: WaitToFramesArgument) {
     let frameCount = timeToFrame(options.duration) + 1;
 

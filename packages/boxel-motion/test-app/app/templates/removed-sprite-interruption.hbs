@@ -25,3 +25,50 @@
     </button>
   </div>
 </div>
+<style>
+  .container {
+    padding: 12px;
+  }
+
+  .double-render > div:first-child > * {
+    outline: 4px solid red !important;
+  }
+
+  .double-render {
+    width: 200px;
+    height: 220px;
+    border-radius: 8px;
+    border: 1px solid black;
+    position: relative;
+  }
+
+  .count {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+  }
+
+  .sprite {
+    background: #faa;
+    width: 180px;
+    height: 180px;
+    border-radius: 8px;
+    margin: 4px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .buttons {
+    padding: 12px 0px;
+    display: flex;
+    gap: 4px;
+  }
+
+  .button {
+    border: 1px solid black;
+    background: #eee;
+  }
+</style>

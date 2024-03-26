@@ -172,13 +172,6 @@ video {
 
 /* ======================== */
 
-.animation-context {
-  /* border: 1px dashed blue; */
-  position: relative;
-}
-.sprite {
-  /* border: 1px dotted green; */
-}
 .some-container.with-padded-animation-context .animation-context {
   padding: 20px;
 }
