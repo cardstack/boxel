@@ -40,8 +40,8 @@ export default class Room extends Component<Signature> {
       class='room'
       data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-      data-test-room={{this.room.name}}
-      data-test-room-id={{this.room.roomId}}
+      data-test-room-name={{this.room.name}}
+      data-test-room={{this.room.roomId}}
     >
       {{#if this.room.messages}}
         <AiAssistantConversation>
@@ -68,7 +68,7 @@ export default class Room extends Component<Signature> {
             @onInput={{this.setMessage}}
             @onSend={{this.sendMessage}}
             @canSend={{this.canSend}}
-            data-test-message-field={{this.room.name}}
+            data-test-message-field={{this.room.roomId}}
           />
           <AiAssistantCardPicker
             @autoAttachedCard={{this.autoAttachedCard}}

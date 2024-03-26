@@ -686,8 +686,8 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       await waitFor('[data-test-room-settled]');
       let roomId = document
-        .querySelector('[data-test-room-id]')
-        ?.getAttribute('data-test-room-id');
+        .querySelector('[data-test-room]')
+        ?.getAttribute('data-test-room');
       if (!roomId) {
         throw new Error('Expected a room ID');
       }
@@ -963,28 +963,34 @@ module('Integration | operator-mode', function (hooks) {
       let tinyDelay = () => new Promise((resolve) => setTimeout(resolve, 1)); // Add a tiny artificial delay to ensure rooms are created in the correct order with increasing timestamps
       await matrixService.createAndJoinRoom('test1', 'test room 1');
       await tinyDelay();
-      await matrixService.createAndJoinRoom('test2', 'test room 2');
+      const room2Id = await matrixService.createAndJoinRoom(
+        'test2',
+        'test room 2',
+      );
       await tinyDelay();
-      await matrixService.createAndJoinRoom('test3', 'test room 3');
+      const room3Id = await matrixService.createAndJoinRoom(
+        'test3',
+        'test room 3',
+      );
 
       await waitFor(`[data-test-open-ai-assistant]`);
       await click('[data-test-open-ai-assistant]');
       await waitFor(`[data-room-settled]`);
 
       assert
-        .dom('[data-test-room="test room 3"]')
+        .dom(`[data-test-room="${room3Id}"]`)
         .exists(
           "test room 3 is the most recently created room and it's opened initially",
         );
 
       await click('[data-test-past-sessions-button]');
-      await click('[data-test-enter-room="test room 2"]');
+      await click(`[data-test-enter-room="${room2Id}"]`);
 
       await click('[data-test-close-ai-assistant]');
       await click('[data-test-open-ai-assistant]');
       await waitFor(`[data-room-settled]`);
       assert
-        .dom('[data-test-room="test room 2"]')
+        .dom(`[data-test-room="${room2Id}"]`)
         .exists(
           "test room 2 is the most recently selected room and it's opened initially",
         );
@@ -997,7 +1003,7 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       await waitFor(`[data-room-settled]`);
       assert
-        .dom('[data-test-room="test room 3"]')
+        .dom(`[data-test-room="${room3Id}"]`)
         .exists(
           "test room 3 is the most recently created room and it's opened initially",
         );
