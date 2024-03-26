@@ -19,6 +19,7 @@ export default class SetScopedCss extends Modifier<SetScopedCssSignature> {
     element: HTMLElement,
     [toggleScopedCss]: PositionalArgs<SetScopedCssSignature>,
   ): () => void {
+    debugger;
     let globalWormholeElement = document.querySelector(
       '#ember-basic-dropdown-wormhole',
     );
