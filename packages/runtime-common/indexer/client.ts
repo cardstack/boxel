@@ -1,16 +1,34 @@
 import flatten from 'lodash/flatten';
-import { type LooseCardResource } from '../index';
+import {
+  type LooseCardResource,
+  type CodeRef,
+  Loader,
+  apiFor,
+  baseCardRef,
+  loadCard,
+} from '../index';
 import {
   type PgPrimitive,
   type Expression,
+  type CardExpression,
+  type FieldQuery,
+  type FieldValue,
+  type TableValuedFunction,
+  param,
   isParam,
+  tableValuedFunction,
   separatedByCommas,
   addExplicitParens,
   asExpressions,
+  every,
 } from './expression';
+import { type Query, type Filter } from '../query';
 import { type SerializedError } from '../error';
-import { type DBAdapter, type ExecuteOptions } from '../db';
+import { type DBAdapter } from '../db';
 import { type SearchEntryWithErrors } from '../search-index';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export interface IndexedCardsTable {
   card_url: string;
@@ -41,9 +59,21 @@ interface GetEntryOptions {
   useWorkInProgressIndex?: boolean;
 }
 
+interface QueryResultsMeta {
+  page: { total: number; cursor?: string };
+}
+
+const coerceTypes = Object.freeze({
+  deps: 'JSON',
+  types: 'JSON',
+  pristine_doc: 'JSON',
+  error_doc: 'JSON',
+  search_doc: 'JSON',
+  is_deleted: 'BOOLEAN',
+});
+
 export class IndexerDBClient {
   #ready: Promise<void>;
-
   constructor(private dbAdapter: DBAdapter) {
     this.#ready = this.dbAdapter.startClient();
   }
@@ -56,52 +86,46 @@ export class IndexerDBClient {
     await this.dbAdapter.close();
   }
 
-  async query(query: Expression, opts?: Omit<ExecuteOptions, 'bind'>) {
+  async query(query: Expression) {
     let sql = await this.expressionToSql(query);
     // set chrome console to "Verbose" to see these queries in the console
     console.debug(`sql: ${sql.text} bindings: ${sql.values}`);
     return await this.dbAdapter.execute(sql.text, {
-      ...opts,
+      coerceTypes,
       bind: sql.values,
     });
   }
 
+  async queryCards(query: CardExpression, loader: Loader) {
+    let sql = await this.cardQueryToSQL(query, loader);
+    // set chrome console to "Verbose" to see these queries in the console
+    console.debug(`sql: ${sql.text} bindings: ${sql.values}`);
+    return await this.dbAdapter.execute(sql.text, {
+      coerceTypes,
+      bind: sql.values,
+    });
+  }
+
+  // TODO handle getting error document
   async getIndexEntry(
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<IndexedCardsTable | undefined> {
-    let result = (await this.query(
-      [
-        `SELECT i.* 
+    let result = (await this.query([
+      `SELECT i.* 
          FROM indexed_cards as i
          JOIN realm_versions r ON i.realm_url = r.realm_url
          WHERE i.card_url =`,
-        {
-          kind: 'param',
-          param: `${
-            !url.href.endsWith('.json') ? url.href + '.json' : url.href
-          }`,
-        },
-        ...(!opts?.useWorkInProgressIndex
-          ? // if we are not using the work in progress index then we limit the max
-            // version permitted to the current version for the realm
-            ['AND i.realm_version <= r.current_version']
-          : // otherwise we choose the highest version in the system
-            []),
-        'ORDER BY i.realm_version DESC',
-        'LIMIT 1',
-      ],
-      {
-        coerceTypes: {
-          deps: 'JSON',
-          types: 'JSON',
-          pristine_doc: 'JSON',
-          error_doc: 'JSON',
-          search_doc: 'JSON',
-          is_deleted: 'BOOLEAN',
-        },
-      },
-    )) as unknown as IndexedCardsTable[];
+      param(`${!url.href.endsWith('.json') ? url.href + '.json' : url.href}`),
+      ...(!opts?.useWorkInProgressIndex
+        ? // if we are not using the work in progress index then we limit the max
+          // version permitted to the current version for the realm
+          ['AND i.realm_version <= r.current_version']
+        : // otherwise we choose the highest version in the system
+          []),
+      'ORDER BY i.realm_version DESC',
+      'LIMIT 1',
+    ])) as unknown as IndexedCardsTable[];
     let maybeResult: IndexedCardsTable | undefined = result[0];
     if (!maybeResult) {
       return undefined;
@@ -125,6 +149,7 @@ export class IndexerDBClient {
     // for large invalidations. But beware, cursor support for SQLite in worker
     // mode is very limited. This will likely require some custom work...
 
+    // TODO rewrite this using the TableValuedFunction expression
     let rows = (await this.query([
       `SELECT indexed_cards.card_url
          FROM
@@ -136,9 +161,214 @@ export class IndexerDBClient {
       // json_tree() functions that it does support are table-valued functions
       // meaning that we can only use them like tables. unsure if there is a
       // postgres equivalent. Need to research this.
-      { kind: 'param', param: cardId },
+      param(cardId),
     ])) as Pick<IndexedCardsTable, 'card_url'>[];
     return rows.map((r) => r.card_url);
+  }
+
+  // we pass the loader in so there is no ambiguity which loader to use as this
+  // client may be serving a live index or a WIP index that is being built up
+  // which could have conflicting loaders. It is up to the caller to provide the
+  // loader that we should be using.
+  async search(
+    { filter, sort, page }: Query,
+    loader: Loader,
+    // TODO this should be returning a CardCollectionDocument--handle that in
+    // subsequent PR where we start storing card documents in "pristine_doc"
+  ): Promise<{ cards: LooseCardResource[]; meta: QueryResultsMeta }> {
+    let conditions: CardExpression[] = [];
+    if (filter) {
+      conditions.push(this.filterCondition(filter, baseCardRef));
+    }
+
+    // need to pluck out the functions to add as tables from the
+    // tabledValuedFunctions
+    let tableValuedFunctions = conditions.reduce((tableValuedFunctions, i) => {
+      let fns = i.filter(
+        (i) => typeof i === 'object' && i.kind === 'table-valued',
+      ) as TableValuedFunction[];
+      for (let fn of fns) {
+        tableValuedFunctions.set(fn.as, fn);
+      }
+      return tableValuedFunctions;
+    }, new Map<string, TableValuedFunction>());
+
+    let query = [
+      'SELECT card_url, realm_url, pristine_doc',
+      'FROM indexed_cards',
+      ...separatedByCommas(
+        [...tableValuedFunctions.values()].map((t) => [`${t.fn} as ${t.as}`]),
+      ),
+      'WHERE',
+      ...every(conditions),
+    ];
+
+    let results = await this.queryCards(query, loader);
+  }
+
+  private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
+    if ('type' in filter) {
+      return this.typeCondition(filter.type);
+    }
+
+    let on = filter.on ?? onRef;
+
+    // TODO: any, every, not, eq, range
+
+    throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
+  }
+
+  private typeCondition(ref: CodeRef): CardExpression {
+    return [
+      tableValuedFunction('json(indexed_cards.types)', 'types_each', [
+        'types_each.value =',
+        param(JSON.stringify(ref)),
+      ]),
+    ];
+  }
+
+  private async cardQueryToSQL(query: CardExpression, loader: Loader) {
+    return this.expressionToSql(await this.makeExpression(query, loader));
+  }
+
+  private async makeExpression(
+    query: CardExpression,
+    loader: Loader,
+  ): Promise<Expression> {
+    return flatten(
+      await Promise.all(
+        query.map((element) => {
+          if (isParam(element) || typeof element === 'string') {
+            return Promise.resolve([element]);
+          } else if (element.kind === 'table-valued') {
+            return this.makeExpression(element.value, loader);
+          } else if (element.kind === 'field-query') {
+            return this.handleFieldQuery(element, loader);
+          } else if (element.kind === 'field-value') {
+            return this.handleFieldValue(element, loader);
+          } else {
+            throw assertNever(element);
+          }
+        }),
+      ),
+    );
+  }
+
+  // TODO need to handle plural fields
+  private async handleFieldQuery(
+    fieldQuery: FieldQuery,
+    loader: Loader,
+  ): Promise<Expression> {
+    let { path } = fieldQuery;
+
+    return await this.walkFilterFieldPath(
+      await loadCard(fieldQuery.cardType, { loader }),
+      path,
+      ['search_doc'],
+      // Leaf field handler
+      async (_api, _fieldCard, expression, fieldName) => {
+        // TODO we should probably add a new hook in our cards to support custom
+        // query expressions, like casting to a bigint for integers:
+        //     return ['(', ...source, '->>', { param: fieldName }, ')::bigint'];
+        return [...expression, '->>', param(fieldName)];
+      },
+      // interior field handler
+      {
+        enter: async (_api, _fieldCard, expression, fieldName) => {
+          return [...expression, '->', param(fieldName)];
+        },
+      },
+    );
+  }
+
+  // TODO need to handle plural fields
+  private async handleFieldValue(
+    fieldValue: FieldValue,
+    loader: Loader,
+  ): Promise<Expression> {
+    let { path, value } = fieldValue;
+    let exp = await this.makeExpression(value, loader);
+
+    return await this.walkFilterFieldPath(
+      await loadCard(fieldValue.cardType, { loader }),
+      path,
+      exp,
+      // Leaf field handler
+      async (api, fieldCard, expression) => {
+        return fieldCard[api.queryableValue](expression);
+      },
+    );
+  }
+
+  private async walkFilterFieldPath(
+    cardOrField: typeof BaseDef,
+    path: string,
+    expression: Expression,
+    handleLeafField: FilterFieldHandler<Expression>,
+    handleInteriorField?: FilterFieldHandlerWithEntryAndExit<Expression>,
+  ): Promise<Expression>;
+  private async walkFilterFieldPath(
+    cardOrField: typeof BaseDef,
+    path: string,
+    expression: CardExpression,
+    handleLeafField: FilterFieldHandler<CardExpression>,
+    handleInteriorField?: FilterFieldHandlerWithEntryAndExit<CardExpression>,
+  ): Promise<CardExpression>;
+  private async walkFilterFieldPath(
+    cardOrField: typeof BaseDef,
+    path: string,
+    expression: Expression,
+    handleLeafField: FilterFieldHandler<any[]>,
+    handleInteriorField?: FilterFieldHandlerWithEntryAndExit<any[]>,
+  ): Promise<any> {
+    let pathSegments = path.split('.');
+    let isLeaf = pathSegments.length === 1;
+    let currentSegment = pathSegments.shift()!;
+    let api = await apiFor(cardOrField);
+    let fields = api.getFields(cardOrField);
+    let fieldCard = fields[currentSegment].card;
+    if (isLeaf) {
+      expression = await handleLeafField(
+        api,
+        fieldCard,
+        expression,
+        currentSegment,
+      );
+    } else {
+      let passThru: FilterFieldHandler<any[]> = async (
+        _api,
+        _fc,
+        e: Expression,
+        _f,
+      ) => e;
+      // when dealing with an interior field that is not a leaf path segment,
+      // the entrance and exit hooks allow you to decorate the expression for
+      // the interior field before the interior's antecedant segment's
+      // expression is processed and after the interior field's antecedant
+      // segment's expression has been processed (i.e. recursing into the
+      // antecedant field and recursing out of the antecedant field).
+      let entranceHandler = handleInteriorField
+        ? handleInteriorField.enter || passThru
+        : passThru;
+      let exitHandler = handleInteriorField
+        ? handleInteriorField.exit || passThru
+        : passThru;
+
+      let interiorExpression = await this.walkFilterFieldPath(
+        fieldCard,
+        pathSegments.join('.'),
+        await entranceHandler(api, fieldCard, expression, currentSegment),
+        handleLeafField,
+        handleInteriorField,
+      );
+      expression = await exitHandler(
+        api,
+        fieldCard,
+        interiorExpression,
+        currentSegment,
+      );
+    }
+    return expression;
   }
 
   private expressionToSql(query: Expression) {
@@ -215,7 +445,7 @@ export class Batch {
       ...addExplicitParens(separatedByCommas(nameExpressions)),
       'VALUES',
       ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ]);
+    ] as Expression);
   }
 
   async deleteEntry(url: URL): Promise<void> {
@@ -233,7 +463,7 @@ export class Batch {
       ...addExplicitParens(separatedByCommas(nameExpressions)),
       'VALUES',
       ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ]);
+    ] as Expression);
   }
 
   async makeNewGeneration() {
@@ -249,9 +479,9 @@ export class Batch {
           ...addExplicitParens(separatedByCommas(cols)),
           `SELECT card_url, realm_url, 2 as realm_version, true as is_deleted`,
           'FROM indexed_cards WHERE realm_url =',
-          { kind: 'param', param: this.realmURL.href },
+          param(this.realmURL.href),
           'GROUP BY card_url',
-        ]),
+        ] as Expression),
       { isMakingNewGeneration: true },
     );
   }
@@ -267,34 +497,32 @@ export class Batch {
       ...addExplicitParens(separatedByCommas(nameExpressions)),
       'VALUES',
       ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ]);
+    ] as Expression);
 
     // prune obsolete index entries
     if (this.isNewGeneration) {
       await this.client.query([
         `DELETE FROM indexed_cards`,
         'WHERE realm_version <',
-        { kind: 'param', param: this.realmVersion },
+        param(this.realmVersion),
       ]);
     } else {
       await this.client.query([
         `DELETE FROM indexed_cards`,
         `WHERE card_url IN`,
         ...addExplicitParens(
-          separatedByCommas(
-            [...this.touched].map((i) => [{ kind: 'param', param: i }]),
-          ),
+          separatedByCommas([...this.touched].map((i) => [param(i)])),
         ),
         'AND realm_version <',
-        { kind: 'param', param: this.realmVersion },
-      ]);
+        param(this.realmVersion),
+      ] as Expression);
     }
   }
 
   private async setNextRealmVersion() {
     let [row] = (await this.client.query([
       'SELECT current_version FROM realm_versions WHERE realm_url =',
-      { kind: 'param', param: this.realmURL.href },
+      param(this.realmURL.href),
     ])) as Pick<RealmVersionsTable, 'current_version'>[];
     if (!row) {
       this.realmVersion = 1;
@@ -324,7 +552,7 @@ export class Batch {
         .filter((i) => i.endsWith('.json'))
         .map((id) =>
           [id, this.realmVersion, this.realmURL.href, true].map((v) => [
-            { kind: 'param' as const, param: v },
+            param(v),
           ]),
         );
 
@@ -337,7 +565,7 @@ export class Batch {
             ...separatedByCommas(
               rows.map((value) => addExplicitParens(separatedByCommas(value))),
             ),
-          ]),
+          ] as Expression),
         { url, invalidations },
       );
     }
@@ -394,4 +622,20 @@ export class Batch {
     ];
     return [...new Set(invalidations)];
   }
+}
+
+function assertNever(value: never) {
+  return new Error(`should never happen ${value}`);
+}
+
+type FilterFieldHandler<T> = (
+  api: typeof CardAPI,
+  fieldCard: typeof BaseDef,
+  expression: T,
+  fieldName: string,
+) => Promise<T>;
+
+interface FilterFieldHandlerWithEntryAndExit<T> {
+  enter?: FilterFieldHandler<T>;
+  exit?: FilterFieldHandler<T>;
 }
