@@ -28,7 +28,7 @@ import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import {
   percySnapshot,
   testRealmURL,
@@ -1109,7 +1109,7 @@ module('Integration | operator-mode', function (hooks) {
             created: new Date().getTime(),
             clientGeneratedId,
             transactionId: null,
-            attachedCardIds: attachedCards?.map((c) => c.id) || [],
+            attachedCardIds: attachedCards?.map((c: CardDef) => c.id) || [],
           }),
         );
         await sendMessageDeffered.promise;
