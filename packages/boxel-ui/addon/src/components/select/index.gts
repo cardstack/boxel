@@ -42,7 +42,7 @@ class BoxelSelect extends Component<Signature> {
     if (this.args.onClose && this.args.onClose(select, e) === false) {
       return false;
     }
-    this.toggleScopedCss = true;
+    this.toggleScopedCss = false;
     return true;
   }
 
