@@ -145,7 +145,11 @@ class BoxelSelect extends Component<Signature> {
       #ember-basic-dropdown-wormhole
         :deep(.ember-power-select-option[aria-selected='true']) {
         background-color: var(--boxel-select-selected-color);
-        color: white;
+      }
+
+      #ember-basic-dropdown-wormhole
+        :deep(.ember-power-select-option[aria-current='true']) {
+        background-color: var(--boxel-select-selected-color);
       }
 
       .boxel-select__dropdown.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-in {
