@@ -78,7 +78,7 @@ function generateMockMatrixService(
     // These will be empty in the tests, but we need to define them to satisfy the interface
     rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
 
-    messagePendingList: TrackedMap<string, MessageField> = new TrackedMap();
+    pendingMessages: TrackedMap<string, MessageField> = new TrackedMap();
 
     async start(_auth?: any) {}
 

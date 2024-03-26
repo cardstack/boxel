@@ -28,7 +28,9 @@ import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import {
   percySnapshot,
   testRealmURL,
@@ -1100,7 +1102,7 @@ module('Integration | operator-mode', function (hooks) {
           roomId: roomId,
         });
         let clientGeneratedId = 'client-generated-id';
-        this.messagePendingList.set(
+        this.pendingMessages.set(
           roomId,
           new room.MessageField({
             author: roomMember,

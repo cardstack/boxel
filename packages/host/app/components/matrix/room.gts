@@ -45,7 +45,7 @@ export default class Room extends Component<Signature> {
       data-test-room={{this.room.name}}
       data-test-room-id={{this.room.roomId}}
     >
-      {{#if (or (gt this.room.messages.length 0) (bool this.messagePending))}}
+      {{#if (or (gt this.room.messages.length 0) (bool this.pendingMessage))}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
@@ -58,9 +58,9 @@ export default class Room extends Component<Signature> {
               {{scrollIntoViewModifier (this.isLastMessage i)}}
             />
           {{/each}}
-          {{#if this.messagePending}}
+          {{#if this.pendingMessage}}
             <RoomMessage
-              @message={{this.messagePending}}
+              @message={{this.pendingMessage}}
               @monacoSDK={{@monacoSDK}}
               @isStreaming={{false}}
               @isPending={{true}}
@@ -171,8 +171,8 @@ export default class Room extends Component<Signature> {
     return this.cardsToSend.get(this.args.roomId);
   }
 
-  private get messagePending() {
-    return this.matrixService.messagePendingList.get(this.args.roomId);
+  private get pendingMessage() {
+    return this.matrixService.pendingMessages.get(this.args.roomId);
   }
 
   @action sendPrompt(prompt: string) {

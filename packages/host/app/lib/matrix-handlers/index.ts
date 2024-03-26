@@ -39,7 +39,7 @@ export type Event = Partial<IEvent>;
 
 export interface EventSendingContext {
   rooms: Map<string, Promise<RoomField>>;
-  messagePendingList: Map<string, MessageField | undefined>;
+  pendingMessages: Map<string, MessageField | undefined>;
   cardAPI: typeof CardAPI;
   loaderService: LoaderService;
 }
@@ -106,15 +106,15 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       event as unknown as DiscreteMatrixEvent,
     ];
 
-    let messagePending = context.messagePendingList.get(resolvedRoom.roomId);
+    let pendingMessage = context.pendingMessages.get(resolvedRoom.roomId);
     if (
-      messagePending &&
+      pendingMessage &&
       event.type === 'm.room.message' &&
       event.content?.msgtype === 'org.boxel.message' &&
       (event.content as CardMessageContent).clientGeneratedId ===
-        messagePending.clientGeneratedId
+        pendingMessage.clientGeneratedId
     ) {
-      context.messagePendingList.set(resolvedRoom.roomId, undefined);
+      context.pendingMessages.set(resolvedRoom.roomId, undefined);
     }
   }
 }

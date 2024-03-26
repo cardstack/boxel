@@ -83,7 +83,7 @@ export default class MatrixService extends Service {
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
-  messagePendingList: TrackedMap<string, MessageField | undefined> =
+  pendingMessages: TrackedMap<string, MessageField | undefined> =
     new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
@@ -371,7 +371,7 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     context?: OperatorModeContext,
   ): Promise<void> {
-    await this.setMessagePending(roomId, body, attachedCards);
+    await this.setpendingMessage(roomId, body, attachedCards);
     let html = body != null ? sanitizeHtml(marked(body)) : '';
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
@@ -444,7 +444,7 @@ export default class MatrixService extends Service {
       body: body || '',
       format: 'org.matrix.custom.html',
       formatted_body: html,
-      clientGeneratedId: this.messagePendingList.get(roomId)?.clientGeneratedId,
+      clientGeneratedId: this.pendingMessages.get(roomId)?.clientGeneratedId,
       data: {
         attachedCardsEventIds,
         context: {
@@ -456,7 +456,7 @@ export default class MatrixService extends Service {
     } as CardMessageContent);
   }
 
-  private async setMessagePending(
+  private async setpendingMessage(
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
@@ -468,7 +468,7 @@ export default class MatrixService extends Service {
       roomId: roomId,
     });
     let clientGeneratedId = uuidv4();
-    this.messagePendingList.set(
+    this.pendingMessages.set(
       roomId,
       new roomModule.MessageField({
         author: roomMember,
