@@ -242,7 +242,9 @@ export class MessageField extends FieldDef {
   @field transactionId = contains(StringField);
   @field command = contains(PatchField);
   @field isStreamingFinished = contains(BooleanField);
-  @field externalId = contains(StringField);
+  // ID from the client and can be used by client
+  // to verify whether the message is already sent or not.
+  @field clientGeneratedId = contains(StringField);
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -489,7 +491,8 @@ export class RoomField extends FieldDef {
           if (attachedCardIds.length < cardDocs.length) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
-          (cardArgs as any).externalId = event.content.externalId ?? null;
+          (cardArgs as any).clientGeneratedId =
+            event.content.clientGeneratedId ?? null;
           messageField = new MessageField({
             ...cardArgs,
             attachedCardIds,
@@ -739,7 +742,7 @@ export interface CardMessageContent {
   isStreamingFinished?: boolean;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
-  externalId?: string;
+  clientGeneratedId?: string;
   data: {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message

@@ -48,6 +48,7 @@ import {
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let room: typeof import('https://cardstack.com/base/room');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (
   cardURL?: string,
@@ -87,6 +88,7 @@ module('Integration | operator-mode', function (hooks) {
     localStorage.removeItem('aiPanelCurrentRoomId');
     localStorage.removeItem('aiPanelNewSessionId');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    room = await loader.import(`${baseRealm.url}room`);
     matrixService = this.owner.lookup(
       'service:matrixService',
     ) as MockMatrixService;
@@ -1033,9 +1035,27 @@ module('Integration | operator-mode', function (hooks) {
       matrixService.sendMessage = async function (
         roomId: string,
         body: string,
-        _attachedCards: [],
+        attachedCards: [],
         _context?: any,
       ) {
+        let roomMember = new room.RoomMemberField({
+          id: this.userId,
+          userId: this.userId,
+          roomId: roomId,
+        });
+        let clientGeneratedId = 'client-generated-id';
+        this.messagePendingList.set(
+          roomId,
+          new room.MessageField({
+            author: roomMember,
+            message: body,
+            formattedMessage: body ?? '',
+            created: new Date().getTime(),
+            clientGeneratedId,
+            transactionId: null,
+            attachedCardIds: attachedCards?.map((c) => c.id) || [],
+          }),
+        );
         await sendMessageDeffered.promise;
         addRoomEvent(matrixService, {
           event_id: 'event1',
@@ -1048,6 +1068,7 @@ module('Integration | operator-mode', function (hooks) {
             msgtype: 'org.boxel.message',
             formatted_body: body,
             format: 'org.matrix.custom.html',
+            clientGeneratedId,
           },
         });
       };

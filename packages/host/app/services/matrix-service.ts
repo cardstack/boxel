@@ -16,6 +16,8 @@ import {
 } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import {
   type LooseSingleCardDocument,
   sanitizeHtml,
@@ -45,6 +47,7 @@ import * as RoomModule from 'https://cardstack.com/base/room';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
+  MessageField,
   CardMessageContent,
   CardFragmentContent,
 } from 'https://cardstack.com/base/room';
@@ -80,6 +83,8 @@ export default class MatrixService extends Service {
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  messagePendingList: TrackedMap<string, MessageField | undefined> =
+    new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
@@ -365,8 +370,8 @@ export default class MatrixService extends Service {
     body: string | undefined,
     attachedCards: CardDef[] = [],
     context?: OperatorModeContext,
-    externalId?: string,
   ): Promise<void> {
+    await this.setMessagePending(roomId, body, attachedCards);
     let html = body != null ? sanitizeHtml(marked(body)) : '';
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
@@ -433,12 +438,13 @@ export default class MatrixService extends Service {
         attachedCardsEventIds.push(eventIds[0].event_id); // we only care about the first fragment
       }
     }
+
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: 'org.boxel.message',
       body: body || '',
       format: 'org.matrix.custom.html',
       formatted_body: html,
-      externalId,
+      clientGeneratedId: this.messagePendingList.get(roomId)?.clientGeneratedId,
       data: {
         attachedCardsEventIds,
         context: {
@@ -448,6 +454,32 @@ export default class MatrixService extends Service {
         },
       },
     } as CardMessageContent);
+  }
+
+  private async setMessagePending(
+    roomId: string,
+    body: string | undefined,
+    attachedCards: CardDef[] = [],
+  ) {
+    let roomModule = await this.getRoomModule();
+    let roomMember = new roomModule.RoomMemberField({
+      id: this.userId,
+      userId: this.userId,
+      roomId: roomId,
+    });
+    let clientGeneratedId = uuidv4();
+    this.messagePendingList.set(
+      roomId,
+      new roomModule.MessageField({
+        author: roomMember,
+        message: body,
+        formattedMessage: body ? sanitizeHtml(marked(body)) : '',
+        created: new Date().getTime(),
+        clientGeneratedId,
+        transactionId: null,
+        attachedCardIds: attachedCards?.map((c) => c.id) || [],
+      }),
+    );
   }
 
   private async sendCardFragments(

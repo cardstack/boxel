@@ -12,7 +12,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import type { RoomField } from 'https://cardstack.com/base/room';
+import type { RoomField, MessageField } from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
@@ -77,6 +77,8 @@ function generateMockMatrixService(
 
     // These will be empty in the tests, but we need to define them to satisfy the interface
     rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+
+    messagePendingList: TrackedMap<string, MessageField> = new TrackedMap();
 
     async start(_auth?: any) {}
 

@@ -9,8 +9,10 @@ import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
+  CardMessageContent,
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
+  MessageField,
 } from 'https://cardstack.com/base/room';
 
 import type LoaderService from '../../services/loader-service';
@@ -37,6 +39,7 @@ export type Event = Partial<IEvent>;
 
 export interface EventSendingContext {
   rooms: Map<string, Promise<RoomField>>;
+  messagePendingList: Map<string, MessageField | undefined>;
   cardAPI: typeof CardAPI;
   loaderService: LoaderService;
 }
@@ -102,5 +105,16 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       ...(resolvedRoom.events ?? []),
       event as unknown as DiscreteMatrixEvent,
     ];
+
+    let messagePending = context.messagePendingList.get(resolvedRoom.roomId);
+    if (
+      messagePending &&
+      event.type === 'm.room.message' &&
+      event.content?.msgtype === 'org.boxel.message' &&
+      (event.content as CardMessageContent).clientGeneratedId ===
+        messagePending.clientGeneratedId
+    ) {
+      context.messagePendingList.set(resolvedRoom.roomId, undefined);
+    }
   }
 }

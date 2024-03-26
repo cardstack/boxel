@@ -6,12 +6,9 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
-import { marked } from 'marked';
 import { TrackedMap } from 'tracked-built-ins';
 
 import { bool, gt, or } from '@cardstack/boxel-ui/helpers';
-
-import { sanitizeHtml } from '@cardstack/runtime-common';
 
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { getRoom } from '@cardstack/host/resources/room';
@@ -46,7 +43,7 @@ export default class Room extends Component<Signature> {
       data-test-room={{this.room.name}}
       data-test-room-id={{this.room.roomId}}
     >
-      {{#if (or (gt this.room.messages.length 0) (bool this.lastMessageSent))}}
+      {{#if (or (gt this.room.messages.length 0) (bool this.messagePending))}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
@@ -56,12 +53,13 @@ export default class Room extends Component<Signature> {
               {{scrollIntoViewModifier (this.isLastMessage i)}}
             />
           {{/each}}
-          {{#if this.isMessagePendingDisplayed}}
+          {{#if this.messagePending}}
             <RoomMessage
               @isSending={{true}}
-              {{! @glint-ignore messagePending must be not undefined here}}
-              @message={{this.lastMessageSent}}
+              @isStreaming={{false}}
+              @message={{this.messagePending}}
               data-test-message-idx={{this.room.messages.length}}
+              {{scrollIntoViewModifier true}}
             />
           {{/if}}
         </AiAssistantConversation>
@@ -123,8 +121,6 @@ export default class Room extends Component<Signature> {
   private roomResource = getRoom(this, () => this.args.roomId);
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
-  private lastMessagesSent: TrackedMap<string, MessageField | undefined> =
-    new TrackedMap();
   private cardsToSend: TrackedMap<string, CardDef[] | undefined> =
     new TrackedMap();
   private lastTopMostCard: CardDef | undefined;
@@ -166,19 +162,8 @@ export default class Room extends Component<Signature> {
     return this.cardsToSend.get(this.args.roomId);
   }
 
-  private get lastMessageSent() {
-    return this.lastMessagesSent.get(this.args.roomId);
-  }
-
-  private get isMessagePendingDisplayed() {
-    return (
-      this.room &&
-      this.lastMessageSent &&
-      !this.room.messages.find(
-        // @ts-ignore lastMessage must be not undefined
-        (m) => m.externalId === this.lastMessageSent.externalId,
-      )
-    );
+  private get messagePending() {
+    return this.matrixService.messagePendingList.get(this.args.roomId);
   }
 
   @action sendPrompt(prompt: string) {
@@ -236,24 +221,6 @@ export default class Room extends Component<Signature> {
 
   private doSendMessage = enqueueTask(
     async (message: string | undefined, cards?: CardDef[]) => {
-      let roomModule = await this.matrixService.getRoomModule();
-      let roomMember = new roomModule.RoomMemberField({
-        id: this.matrixService.userId,
-        userId: this.matrixService.userId,
-        roomId: this.args.roomId,
-      });
-      let externalId = String(this.room?.messages.length ?? 0);
-      let lastMessageSent = new roomModule.MessageField({
-        author: roomMember,
-        message,
-        formattedMessage: message ? sanitizeHtml(marked(message)) : '',
-        created: new Date().getTime(),
-        externalId: externalId,
-        transactionId: null,
-        attachedCardIds: cards?.map((c) => c.id) || [],
-      });
-      this.lastMessagesSent.set(this.args.roomId, lastMessageSent);
-
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
       let context = {
@@ -267,7 +234,6 @@ export default class Room extends Component<Signature> {
         message,
         cards,
         context,
-        externalId,
       );
     },
   );
