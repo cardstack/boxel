@@ -9,8 +9,8 @@ import cssVar from '../../helpers/css-var.ts';
 import CircleSpinner from './index.gts';
 
 export default class CircleSpinnerUsage extends Component {
-  cssClassName = 'icon-color';
-  @cssVariable declare iconColor: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'icon-color' })
+  declare iconColor: CSSVariableInfo;
 
   <template>
     <FreestyleUsage @name='CircleSpinner'>
@@ -23,6 +23,13 @@ export default class CircleSpinnerUsage extends Component {
           <CircleSpinner style={{cssVar icon-color=this.iconColor.value}} />
         </div>
       </:example>
+      <:api as |Args|>
+        <Args.String
+          @name='verticalPosition'
+          @description='The vertical positioning strategy of the content'
+          @onInput={{this.iconColor.update}}
+        />
+      </:api>
 
       <:cssVars as |Css|>
         <Css.Basic
