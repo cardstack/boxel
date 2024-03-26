@@ -18,7 +18,7 @@ export default class AccordionUsage extends Component {
             @onClick={{fn this.selectItem 'schema'}}
             @isOpen={{eq this.selectedItem 'schema'}}
           >
-            <:title>Schema Editor hello again!</:title>
+            <:title>Schema Editor</:title>
             <:content><p>Content</p></:content>
           </A.Item>
           <A.Item
