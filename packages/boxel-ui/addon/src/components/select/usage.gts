@@ -11,12 +11,22 @@ import {
 
 import BoxelSelect from './index.gts';
 
-export default class BoxelSelectUsage extends Component {
-  @tracked items = A(
-    [...new Array(10)].map((_, idx) => `Item - ${idx}`),
-  ) as Array<any>;
+interface Country {
+  name: string;
+}
 
-  @tracked selectedItem: string | null = null;
+export default class BoxelSelectUsage extends Component {
+  @tracked items = [
+    { name: 'United States' },
+    { name: 'Spain' },
+    { name: 'Portugal' },
+    { name: 'Russia' },
+    { name: 'Latvia' },
+    { name: 'Brazil' },
+    { name: 'United Kingdom' },
+  ] as Array<Country>;
+
+  @tracked selectedItem: Country | null = null;
   @tracked placeholder = 'Select Item';
   @tracked verticalPosition = 'auto' as const;
 
@@ -24,6 +34,10 @@ export default class BoxelSelectUsage extends Component {
   @tracked disabled = false;
   @tracked searchField = '';
   @tracked searchEnabled = false;
+
+  get itemNames() {
+    return this.items.map((item) => item.name);
+  }
 
   @cssVariable({ cssClassName: 'boxel-select__dropdown' })
   declare boxelSelectCurrentColor: CSSVariableInfo;
@@ -34,8 +48,17 @@ export default class BoxelSelectUsage extends Component {
   @cssVariable({ cssClassName: 'boxel-select__dropdown' })
   declare boxelSelectAboveTransitioningInAnimation: CSSVariableInfo;
 
-  @action onSelectItem(item: string | null): void {
+  @action onSelectItem(item: Country | null): void {
     this.selectedItem = item;
+  }
+
+  get transitionOptions() {
+    return [
+      'drop-fade-above var(--boxel-transition)',
+      'drop-fade-below var(--boxel-transition)',
+      'drop-fade-above var(--boxel-transition) reverse',
+      'drop-fade-below var(--boxel-transition) reverse',
+    ];
   }
 
   <template>
@@ -49,23 +72,24 @@ export default class BoxelSelectUsage extends Component {
             --boxel-select-selected-color: {{this.boxelSelectSelectedColor.value}};
             --boxel-select-below-transitioning-in-animation: {{this.boxelSelectBelowTransitioningInAnimation.value}};
             --boxel-select-above-transitioning-in-animation: {{this.boxelSelectAboveTransitioningInAnimation.value}};
-          }
+          };
         </style>
         <BoxelSelect
+          @multipleSelection={{false}}
           @placeholder={{this.placeholder}}
           @searchEnabled={{this.searchEnabled}}
           @searchField={{this.searchField}}
           @selected={{this.selectedItem}}
           @onChange={{this.onSelectItem}}
-          @options={{this.items}}
+          @options={{this.itemNames}}
           @verticalPosition={{this.verticalPosition}}
           @renderInPlace={{this.renderInPlace}}
           @disabled={{this.disabled}}
           @dropdownClass='boxel-select-usage-dropdown'
           aria-label='Select an item'
-          as |item itemCssClass|
+          as |item|
         >
-          <div class={{itemCssClass}}>{{item}}</div>
+          <div>{{item}}</div>
         </BoxelSelect>
       </:example>
       <:api as |Args|>
@@ -89,10 +113,6 @@ export default class BoxelSelectUsage extends Component {
         <Args.Yield
           @name='item'
           @description='Item to be presented on dropdown'
-        />
-        <Args.Yield
-          @name='itemCssClass'
-          @description='Class to be set on item wrapper to add default styles'
         />
         <Args.String
           @name='placeholder'
@@ -137,7 +157,7 @@ export default class BoxelSelectUsage extends Component {
         />
         <Args.Object
           @name='triggerComponent'
-          @description='The component to rended as content instead of the default trigger component'
+          @description='The component to rendered as content instead of the default trigger component'
         />
         <Args.Object
           @name='selectedItemComponent'
@@ -166,6 +186,7 @@ export default class BoxelSelectUsage extends Component {
           @defaultValue={{this.boxelSelectBelowTransitioningInAnimation.defaults}}
           @value={{this.boxelSelectBelowTransitioningInAnimation.value}}
           @onInput={{this.boxelSelectBelowTransitioningInAnimation.update}}
+          @options={{this.transitionOptions}}
         />
         <Css.Basic
           @name='boxel-select-above-transitioning-in-animation'
@@ -174,8 +195,151 @@ export default class BoxelSelectUsage extends Component {
           @defaultValue={{this.boxelSelectAboveTransitioningInAnimation.defaults}}
           @value={{this.boxelSelectAboveTransitioningInAnimation.value}}
           @onInput={{this.boxelSelectAboveTransitioningInAnimation.update}}
+          @options={{this.transitionOptions}}
         />
       </:cssVars>
+    </FreestyleUsage>
+    <FreestyleUsage @name='Example Styling Item '>
+
+      <:description>
+      </:description>
+      <:example>
+        <style
+          unscoped
+        >
+          .boxel-select-usage-dropdown {
+            --boxel-select-current-color: {{this.boxelSelectCurrentColor.value}};
+            --boxel-select-selected-color: {{this.boxelSelectSelectedColor.value}};
+            --boxel-select-below-transitioning-in-animation: {{this.boxelSelectBelowTransitioningInAnimation.value}};
+            --boxel-select-above-transitioning-in-animation: {{this.boxelSelectAboveTransitioningInAnimation.value}};
+          };
+        </style>
+        <BoxelSelect
+          @multipleSelection={{false}}
+          @placeholder={{this.placeholder}}
+          @searchEnabled={{this.searchEnabled}}
+          @searchField={{this.searchField}}
+          @selected={{this.selectedItem}}
+          @onChange={{this.onSelectItem}}
+          @options={{this.items}}
+          @verticalPosition={{this.verticalPosition}}
+          @renderInPlace={{this.renderInPlace}}
+          @disabled={{this.disabled}}
+          @dropdownClass='boxel-select-usage-dropdown'
+          aria-label='Select an item'
+          as |item|
+        >
+          {{item.name}}
+        </BoxelSelect>
+      </:example>
+
+    </FreestyleUsage>
+
+    <FreestyleUsage @name='Example Custom Trigger Component '>
+      <:description>
+      </:description>
+      <:example>
+        <BoxelSelect
+          @multipleSelection={{false}}
+          @placeholder={{this.placeholder}}
+          @searchEnabled={{this.searchEnabled}}
+          @searchField={{this.searchField}}
+          @selected={{this.selectedItem}}
+          @onChange={{this.onSelectItem}}
+          @options={{this.items}}
+          @verticalPosition={{this.verticalPosition}}
+          @renderInPlace={{this.renderInPlace}}
+          @disabled={{this.disabled}}
+          @dropdownClass='boxel-select-usage-dropdown'
+          aria-label='Select an item'
+          as |item|
+        >
+          {{item.name}}
+        </BoxelSelect>
+      </:example>
+
+    </FreestyleUsage>
+
+    <FreestyleUsage @name='Example Custom dropdown Component '>
+      <:description>
+      </:description>
+      <:example>
+        <BoxelSelect
+          @multipleSelection={{false}}
+          @placeholder={{this.placeholder}}
+          @searchEnabled={{this.searchEnabled}}
+          @searchField={{this.searchField}}
+          @selected={{this.selectedItem}}
+          @onChange={{this.onSelectItem}}
+          @options={{this.items}}
+          @verticalPosition={{this.verticalPosition}}
+          @renderInPlace={{this.renderInPlace}}
+          @disabled={{this.disabled}}
+          @dropdownClass='boxel-select-usage-dropdown'
+          aria-label='Select an item'
+          as |item|
+        >
+          {{item.name}}
+        </BoxelSelect>
+      </:example>
+
+    </FreestyleUsage>
+
+    <FreestyleUsage @name='Example with Modal'>
+      <:description>
+      </:description>
+      <:example>
+      </:example>
+
+    </FreestyleUsage>
+    <FreestyleUsage @name='Example with Search'>
+      <:description>
+      </:description>
+      <:example>
+        <BoxelSelect
+          @multipleSelection={{false}}
+          @placeholder={{this.placeholder}}
+          @searchEnabled={{true}}
+          @searchField={{this.searchField}}
+          @selected={{this.selectedItem}}
+          @onChange={{this.onSelectItem}}
+          @options={{this.items}}
+          @verticalPosition={{this.verticalPosition}}
+          @renderInPlace={{this.renderInPlace}}
+          @disabled={{this.disabled}}
+          @dropdownClass='boxel-select-usage-dropdown'
+          aria-label='Select an item'
+          as |item|
+        >
+          {{item.name}}
+        </BoxelSelect>
+      </:example>
+
+    </FreestyleUsage>
+
+    <FreestyleUsage @name='Example with Multiple Selection'>
+      <:description>
+      </:description>
+      <:example>
+        <BoxelSelect
+          @multipleSelection={{true}}
+          @placeholder={{this.placeholder}}
+          @searchEnabled={{this.searchEnabled}}
+          @searchField={{this.searchField}}
+          @selected={{this.selectedItem}}
+          @onChange={{this.onSelectItem}}
+          @options={{this.items}}
+          @verticalPosition={{this.verticalPosition}}
+          @renderInPlace={{this.renderInPlace}}
+          @disabled={{this.disabled}}
+          @dropdownClass='boxel-select-usage-dropdown'
+          aria-label='Select an item'
+          as |item|
+        >
+          {{item.name}}
+        </BoxelSelect>
+      </:example>
+
     </FreestyleUsage>
   </template>
 }
