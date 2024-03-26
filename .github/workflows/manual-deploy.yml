@@ -34,7 +34,7 @@ jobs:
     uses: ./.github/workflows/deploy-ui.yml
     secrets: inherit
     with:
-      environment: production
+      environment: staging
 
   build-realm-server:
     name: Build Docker image
