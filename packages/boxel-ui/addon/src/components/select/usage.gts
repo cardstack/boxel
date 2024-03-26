@@ -1,4 +1,3 @@
-import { A } from '@ember/array';
 import { array, fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -97,7 +96,7 @@ export default class BoxelSelectUsage extends Component {
           @name='options'
           @description='An array of items, to be listed on dropdown'
           @required={{true}}
-          @items={{this.items}}
+          @items={{this.itemNames}}
           @onChange={{fn (mut this.items)}}
         />
         <Args.Action
@@ -221,7 +220,7 @@ export default class BoxelSelectUsage extends Component {
           @searchField={{this.searchField}}
           @selected={{this.selectedItem}}
           @onChange={{this.onSelectItem}}
-          @options={{this.items}}
+          @options={{this.itemNames}}
           @verticalPosition={{this.verticalPosition}}
           @renderInPlace={{this.renderInPlace}}
           @disabled={{this.disabled}}
@@ -246,7 +245,7 @@ export default class BoxelSelectUsage extends Component {
           @searchField={{this.searchField}}
           @selected={{this.selectedItem}}
           @onChange={{this.onSelectItem}}
-          @options={{this.items}}
+          @options={{this.itemNames}}
           @verticalPosition={{this.verticalPosition}}
           @renderInPlace={{this.renderInPlace}}
           @disabled={{this.disabled}}
@@ -271,7 +270,7 @@ export default class BoxelSelectUsage extends Component {
           @searchField={{this.searchField}}
           @selected={{this.selectedItem}}
           @onChange={{this.onSelectItem}}
-          @options={{this.items}}
+          @options={{this.itemNames}}
           @verticalPosition={{this.verticalPosition}}
           @renderInPlace={{this.renderInPlace}}
           @disabled={{this.disabled}}
@@ -303,7 +302,7 @@ export default class BoxelSelectUsage extends Component {
           @searchField={{this.searchField}}
           @selected={{this.selectedItem}}
           @onChange={{this.onSelectItem}}
-          @options={{this.items}}
+          @options={{this.itemNames}}
           @verticalPosition={{this.verticalPosition}}
           @renderInPlace={{this.renderInPlace}}
           @disabled={{this.disabled}}
@@ -328,7 +327,7 @@ export default class BoxelSelectUsage extends Component {
           @searchField={{this.searchField}}
           @selected={{this.selectedItem}}
           @onChange={{this.onSelectItem}}
-          @options={{this.items}}
+          @options={{this.itemNames}}
           @verticalPosition={{this.verticalPosition}}
           @renderInPlace={{this.renderInPlace}}
           @disabled={{this.disabled}}
