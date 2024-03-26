@@ -40,7 +40,7 @@ interface Signature {
     isStreaming: boolean;
     currentEditor: number | undefined;
     setCurrentEditor: (editor: number | undefined) => void;
-    isSending?: boolean;
+    isPending?: boolean;
   };
 }
 
@@ -58,7 +58,7 @@ export default class Room extends Component<Signature> {
       @attachedCards={{this.resources.cards}}
       @errorMessage={{this.errorMessage}}
       @isStreaming={{@isStreaming}}
-      @isSending={{@isSending}}
+      @isPending={{@isPending}}
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
     >

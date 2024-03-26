@@ -28,7 +28,7 @@ interface Signature {
     profileAvatar?: ComponentLike;
     attachedCards?: CardDef[];
     errorMessage?: string;
-    isSending?: boolean;
+    isPending?: boolean;
     retryAction?: () => void;
   };
   Blocks: { default: [] };
@@ -48,7 +48,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       class={{cn
         'ai-assistant-message'
         is-from-assistant=@isFromAssistant
-        is-sending=@isSending
+        is-sending=@isPending
       }}
       {{ScrollIntoView}}
       data-test-ai-assistant-message

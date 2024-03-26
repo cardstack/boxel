@@ -63,7 +63,7 @@ export default class Room extends Component<Signature> {
               @message={{this.messagePending}}
               @monacoSDK={{@monacoSDK}}
               @isStreaming={{false}}
-              @isSending={{true}}
+              @isPending={{true}}
               @currentEditor={{this.currentMonacoContainer}}
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
               data-test-message-idx={{this.room.messages.length}}

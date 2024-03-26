@@ -1139,7 +1139,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-message-field]').hasValue('');
       assert.dom('[data-test-send-message-btn]').isDisabled();
       assert.dom('[data-test-ai-assistant-message]').exists();
-      assert.dom('[data-test-ai-assistant-message]').hasClass('is-sending');
+      assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
       await percySnapshot(assert);
 
       sendMessageDeffered.fulfill();
