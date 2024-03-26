@@ -6,8 +6,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
-import { TrackedMap } from 'tracked-built-ins';
-
 import { bool, gt, or } from '@cardstack/boxel-ui/helpers';
 
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
@@ -127,10 +125,6 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   private roomResource = getRoom(this, () => this.args.roomId);
-  private messagesToSend: TrackedMap<string, string | undefined> =
-    new TrackedMap();
-  private cardsToSend: TrackedMap<string, CardDef[] | undefined> =
-    new TrackedMap();
   private lastTopMostCard: CardDef | undefined;
 
   @tracked private isAutoAttachedCardDisplayed = true;
@@ -164,11 +158,11 @@ export default class Room extends Component<Signature> {
   });
 
   private get messageToSend() {
-    return this.messagesToSend.get(this.args.roomId) ?? '';
+    return this.matrixService.messagesToSend.get(this.args.roomId) ?? '';
   }
 
   private get cardsToAttach() {
-    return this.cardsToSend.get(this.args.roomId);
+    return this.matrixService.cardsToSend.get(this.args.roomId);
   }
 
   private get pendingMessage() {
@@ -181,7 +175,7 @@ export default class Room extends Component<Signature> {
 
   @action
   private setMessage(message: string) {
-    this.messagesToSend.set(this.args.roomId, message);
+    this.matrixService.messagesToSend.set(this.args.roomId, message);
   }
 
   @action
@@ -203,7 +197,7 @@ export default class Room extends Component<Signature> {
   private chooseCard(card: CardDef) {
     let cards = this.cardsToAttach ?? [];
     if (!cards?.find((c) => c.id === card.id)) {
-      this.cardsToSend.set(this.args.roomId, [...cards, card]);
+      this.matrixService.cardsToSend.set(this.args.roomId, [...cards, card]);
     }
   }
 
@@ -221,7 +215,7 @@ export default class Room extends Component<Signature> {
       if (cardIndex != undefined && cardIndex !== -1) {
         this.cardsToAttach?.splice(cardIndex, 1);
       }
-      this.cardsToSend.set(
+      this.matrixService.cardsToSend.set(
         this.args.roomId,
         this.cardsToAttach?.length ? this.cardsToAttach : undefined,
       );
@@ -230,8 +224,6 @@ export default class Room extends Component<Signature> {
 
   private doSendMessage = enqueueTask(
     async (message: string | undefined, cards?: CardDef[]) => {
-      this.messagesToSend.set(this.args.roomId, undefined);
-      this.cardsToSend.set(this.args.roomId, undefined);
       let context = {
         submode: this.operatorModeStateService.state.submode,
         openCardIds: this.operatorModeStateService

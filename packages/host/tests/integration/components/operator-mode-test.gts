@@ -1096,6 +1096,8 @@ module('Integration | operator-mode', function (hooks) {
         attachedCards: [],
         _context?: any,
       ) {
+        matrixService.messagesToSend.set(roomId, undefined);
+        matrixService.cardsToSend.set(roomId, undefined);
         let roomMember = new room.RoomMemberField({
           id: this.userId,
           userId: this.userId,

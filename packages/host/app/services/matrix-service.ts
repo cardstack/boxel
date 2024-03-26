@@ -83,6 +83,8 @@ export default class MatrixService extends Service {
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
+  cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   pendingMessages: TrackedMap<string, MessageField | undefined> =
     new TrackedMap();
   flushTimeline: Promise<void> | undefined;
@@ -371,7 +373,10 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     context?: OperatorModeContext,
   ): Promise<void> {
-    await this.setpendingMessage(roomId, body, attachedCards);
+    this.messagesToSend.set(roomId, undefined);
+    this.cardsToSend.set(roomId, undefined);
+    await this.setPendingMessage(roomId, body, attachedCards);
+
     let html = body != null ? sanitizeHtml(marked(body)) : '';
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
@@ -456,7 +461,7 @@ export default class MatrixService extends Service {
     } as CardMessageContent);
   }
 
-  private async setpendingMessage(
+  private async setPendingMessage(
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
