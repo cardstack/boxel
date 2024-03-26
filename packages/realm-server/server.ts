@@ -27,6 +27,7 @@ import './lib/externals';
 import { nodeStreamToText } from './stream';
 import mime from 'mime-types';
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
+import * as Sentry from '@sentry/node';
 
 interface Options {
   assetsURL?: URL;
@@ -96,6 +97,13 @@ export class RealmServer {
       .use(router.routes())
       .use(this.serveFromRealm);
 
+    app.on('error', (err, ctx) => {
+      Sentry.withScope((scope) => {
+        scope.setSDKProcessingMetadata({ request: ctx.request });
+        Sentry.captureException(err);
+      });
+    });
+
     return app;
   }
 
@@ -119,6 +127,10 @@ export class RealmServer {
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
+    if (ctxt.request.path === '/_boom') {
+      throw new Error('boom');
+    }
+
     let realm = this.realms.find((r) => {
       let reversedResolution = r.loader.reverseResolution(
         fullRequestURL(ctxt).href,

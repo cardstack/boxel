@@ -14,10 +14,10 @@
     "babel-plugin-dynamic-import-node": "^2.3.3"
   },
   "peerDependencies": {
-    "@babel/core": "^7.24.0"
+    "@babel/core": "^7.24.3"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.0",
+    "@babel/core": "^7.24.3",
     "@types/babel__traverse": "^7.14.2",
     "@types/babel__core": "^7.1.19"
   },

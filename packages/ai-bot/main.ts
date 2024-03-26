@@ -104,6 +104,7 @@ async function sendOption(
     msgtype: 'org.boxel.command',
     formatted_body: body,
     format: 'org.matrix.custom.html',
+    isStreamingFinished: true,
     data: {
       command: {
         type: 'patch',
@@ -159,6 +160,9 @@ async function sendError(
       room,
       'There was an error processing your request, please try again later',
       eventToUpdate,
+      {
+        isStreamingFinished: true,
+      },
     );
   } catch (e) {
     // We've had a problem sending the error message back to the user

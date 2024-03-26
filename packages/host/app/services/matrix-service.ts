@@ -1,7 +1,8 @@
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
-
 import { tracked } from '@glimmer/tracking';
+
+import format from 'date-fns/format';
 
 import { task } from 'ember-concurrency';
 import { marked } from 'marked';
@@ -296,7 +297,11 @@ export default class MatrixService extends Service {
       invite,
       name,
       topic,
-      room_alias_name: encodeURIComponent(name),
+      room_alias_name: encodeURIComponent(
+        `${name} - ${format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")} - ${
+          this.userId
+        }`,
+      ),
     });
     invites.map((i) => {
       let fullId = i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`;
