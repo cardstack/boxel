@@ -28,23 +28,19 @@ class BoxelSelect extends Component<Signature> {
 
   @action
   onDropdownOpen(select: Select, e: Event): boolean {
-    console.log('handle open');
-    debugger;
-    this.toggleScopedCss = true;
     if (this.args.onOpen && this.args.onOpen(select, e) === false) {
       return false;
     }
+    this.toggleScopedCss = true;
     return true;
   }
 
   @action
   onDropdownClose(select: Select, e: Event): boolean {
-    console.log('handle close');
-    debugger;
-    this.toggleScopedCss = false;
     if (this.args.onClose && this.args.onClose(select, e) === false) {
       return false;
     }
+    this.toggleScopedCss = true;
     return true;
   }
 
