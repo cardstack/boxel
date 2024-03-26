@@ -313,6 +313,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
 
       // The card appears on a new stack
+      await waitFor('[data-test-operator-mode-stack]');
+
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert
         .dom(
@@ -640,6 +642,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // There are now 2 stacks
+
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Mango'); // Mango goes on the left stack
       assert.dom('[data-test-operator-mode-stack="1"]').includesText('Fadhlan');
@@ -668,6 +671,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // There are now 2 stacks
+      await waitFor('[data-test-operator-mode-stack="0"]');
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
       assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Mango gets move onto the right stack
@@ -1357,6 +1361,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         );
       },
     });
+
     await waitUntil(() =>
       document
         .querySelector('[data-test-operator-mode-stack="0"] [data-test-person]')

@@ -15,18 +15,23 @@ interface Signature {
   Args: {
     Named: {
       content: string;
-      contentChanged: (text: string) => void;
+      contentChanged: ((text: string) => void) | undefined;
       initialCursorPosition?: MonacoSDK.Position;
       onCursorPositionChange?: (position: MonacoSDK.Position) => void;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
       language?: string;
       readOnly?: boolean;
       monacoSDK: typeof MonacoSDK;
+      darkTheme?: boolean;
+      editorDisplayOptions?: MonacoEditorOptions;
     };
   };
 }
 
 const { monacoDebounceMs, monacoCursorDebounceMs } = config;
+
+export type MonacoEditorOptions =
+  MonacoSDK.editor.IStandaloneEditorConstructionOptions;
 
 export default class Monaco extends Modifier<Signature> {
   private model: MonacoSDK.editor.ITextModel | undefined;
@@ -49,6 +54,8 @@ export default class Monaco extends Modifier<Signature> {
       onSetup,
       readOnly,
       monacoSDK,
+      darkTheme,
+      editorDisplayOptions,
     }: Signature['Args']['Named'],
   ) {
     if (this.editor && this.model) {
@@ -75,18 +82,27 @@ export default class Monaco extends Modifier<Signature> {
         },
       });
 
-      let editorOptions: MonacoSDK.editor.IStandaloneEditorConstructionOptions =
-        {
-          readOnly,
-          value: content,
-          language,
-          scrollBeyondLastLine: false,
-          automaticLayout: true,
-          minimap: {
-            enabled: false,
-          },
-          theme: 'boxel-theme',
-        };
+      monacoSDK.editor.defineTheme('boxel-dark-theme', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [],
+        colors: {
+          'editor.background': '#000000',
+        },
+      });
+
+      let editorOptions: MonacoEditorOptions = {
+        readOnly,
+        value: content,
+        language,
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        minimap: {
+          enabled: false,
+        },
+        theme: darkTheme ? 'boxel-dark-theme' : 'boxel-theme',
+        ...editorDisplayOptions,
+      };
 
       // Code rendering is inconsistently wrapped without this, producing spurious visual diffs
       if (isTesting()) {
@@ -102,7 +118,7 @@ export default class Monaco extends Modifier<Signature> {
       this.model = this.editor.getModel()!;
 
       this.model.onDidChangeContent(() =>
-        this.onContentChanged.perform(contentChanged),
+        contentChanged ? this.onContentChanged.perform(contentChanged) : null,
       );
       this.editor.onDidChangeCursorSelection((event) => {
         if (

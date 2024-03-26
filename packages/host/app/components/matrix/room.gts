@@ -15,6 +15,7 @@ import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -31,6 +32,7 @@ import RoomMessage from './room-message';
 interface Signature {
   Args: {
     roomId: string;
+    monacoSDK: MonacoSDK;
   };
 }
 
@@ -48,16 +50,22 @@ export default class Room extends Component<Signature> {
           {{#each this.room.messages as |message i|}}
             <RoomMessage
               @message={{message}}
+              @monacoSDK={{@monacoSDK}}
               @isStreaming={{this.isMessageStreaming message i}}
+              @currentEditor={{this.currentMonacoContainer}}
+              @setCurrentEditor={{this.setCurrentMonacoContainer}}
               data-test-message-idx={{i}}
               {{scrollIntoViewModifier (this.isLastMessage i)}}
             />
           {{/each}}
           {{#if this.messagePending}}
             <RoomMessage
-              @isSending={{true}}
-              @isStreaming={{false}}
               @message={{this.messagePending}}
+              @monacoSDK={{@monacoSDK}}
+              @isStreaming={{false}}
+              @isSending={{true}}
+              @currentEditor={{this.currentMonacoContainer}}
+              @setCurrentEditor={{this.setCurrentMonacoContainer}}
               data-test-message-idx={{this.room.messages.length}}
               {{scrollIntoViewModifier true}}
             />
@@ -126,6 +134,7 @@ export default class Room extends Component<Signature> {
   private lastTopMostCard: CardDef | undefined;
 
   @tracked private isAutoAttachedCardDisplayed = true;
+  @tracked private currentMonacoContainer: number | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -292,6 +301,10 @@ export default class Room extends Component<Signature> {
     return (
       (this.room && messageIndex === this.room.messages.length - 1) ?? false
     );
+  }
+
+  @action private setCurrentMonacoContainer(index: number | undefined) {
+    this.currentMonacoContainer = index;
   }
 }
 

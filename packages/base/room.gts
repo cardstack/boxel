@@ -21,6 +21,7 @@ import {
 } from '@cardstack/runtime-common';
 //@ts-expect-error cached type not available yet
 import { cached } from '@glimmer/tracking';
+import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
 
 // this is so we can have triple equals equivalent room member cards
@@ -280,14 +281,26 @@ interface RoomState {
 
 // in addition to acting as a cache, this also ensures we have
 // triple equal equivalence for the interior cards of RoomField
-const eventCache = new WeakMap<RoomField, Map<string, MatrixEvent>>();
-const messageCache = new WeakMap<RoomField, Map<string, MessageField>>();
-const roomMemberCache = new WeakMap<RoomField, Map<string, RoomMemberField>>();
-const roomStateCache = new WeakMap<RoomField, RoomState>();
-const fragmentCache = new WeakMap<
-  RoomField,
-  Map<string, CardFragmentContent>
->();
+const eventCache = initSharedState(
+  'eventCache',
+  () => new WeakMap<RoomField, Map<string, MatrixEvent>>(),
+);
+const messageCache = initSharedState(
+  'messageCache',
+  () => new WeakMap<RoomField, Map<string, MessageField>>(),
+);
+const roomMemberCache = initSharedState(
+  'roomMemberCache',
+  () => new WeakMap<RoomField, Map<string, RoomMemberField>>(),
+);
+const roomStateCache = initSharedState(
+  'roomStateCache',
+  () => new WeakMap<RoomField, RoomState>(),
+);
+const fragmentCache = initSharedState(
+  'fragmentCache',
+  () => new WeakMap<RoomField, Map<string, CardFragmentContent>>(),
+);
 
 export class RoomField extends FieldDef {
   static displayName = 'Room';
