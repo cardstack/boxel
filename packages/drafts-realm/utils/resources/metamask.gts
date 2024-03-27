@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { Resource } from 'ember-resources';
 // @ts-ignore
@@ -21,7 +22,7 @@ class MetamaskResource extends Resource {
   @tracked connected = false;
   @tracked chainId: number | undefined; // the chain id of the metamask connection (not the card)
 
-  constructor(owner: unknown) {
+  constructor(owner: Owner) {
     super(owner);
     this.promptMetamaskInstallation();
     this.setup();
