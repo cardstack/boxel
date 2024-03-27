@@ -19,7 +19,7 @@ let quickSpring = new SpringBehavior({
 });
 
 export default class List extends Controller {
-  @tracked list1 = ['Michael', 'Ed', 'Luke', 'Nick'].sort();
+  @tracked list1 = ['Michael!', 'Ed', 'Luke', 'Nick'].sort();
   @tracked list2 = ['Chris', 'Alex'].sort();
 
   @action
