@@ -40,10 +40,29 @@ interface Signature {
     isStreaming: boolean;
     currentEditor: number | undefined;
     setCurrentEditor: (editor: number | undefined) => void;
+    retryAction?: () => void;
   };
 }
 
-export default class Room extends Component<Signature> {
+export default class RoomMessage extends Component<Signature> {
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+
+    if (args.isStreaming) {
+      this.checkStreamingTimeout.perform();
+    }
+  }
+
+  @tracked streamingTimeout = false;
+
+  checkStreamingTimeout = task(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
+
+    if (this.args.isStreaming) {
+      this.streamingTimeout = true;
+    }
+  });
+
   <template>
     <AiAssistantMessage
       class='room-message'
@@ -54,9 +73,10 @@ export default class Room extends Component<Signature> {
         ProfileAvatarIcon
         userId=@message.author.userId
       }}
-      @attachedCards={{this.resources.cards}}
+      @resources={{this.resources}}
       @errorMessage={{this.errorMessage}}
       @isStreaming={{@isStreaming}}
+      @retryAction={{@retryAction}}
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
     >
@@ -220,14 +240,25 @@ export default class Room extends Component<Signature> {
   }
 
   private get errorMessage() {
+    if (this.args.message.errorMessage) {
+      return this.args.message.errorMessage;
+    }
+
+    if (this.streamingTimeout) {
+      return 'This message was processing for too long. Please try again.';
+    }
+
     if (!this.resources.errors) {
       return undefined;
     }
+
+    let hasResourceErrors = this.resources.errors.length > 0;
+    if (hasResourceErrors) {
+      return 'Error rendering attached cards.';
+    }
+
     return this.resources.errors
-      .map(
-        (e: { id: string; error: Error }) =>
-          `cannot render card ${e.id}: ${e.error.message}`,
-      )
+      .map((e: { id: string; error: Error }) => `${e.id}: ${e.error.message}`)
       .join(', ');
   }
 
