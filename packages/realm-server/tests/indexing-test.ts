@@ -36,7 +36,7 @@ module('indexing', function (hooks) {
   let virtualNetwork = new VirtualNetwork();
   let loader = virtualNetwork.createLoader();
 
-  loader.addURLMapping(
+  virtualNetwork.addURLMapping(
     new URL(baseRealm.url),
     new URL('http://localhost:4201/base/'),
   );
@@ -50,15 +50,10 @@ module('indexing', function (hooks) {
   let dir: string;
   let realm: Realm;
 
-  setupBaseRealmServer(hooks, loader);
+  setupBaseRealmServer(hooks, loader, virtualNetwork);
 
   hooks.beforeEach(async function () {
     let testRealmLoader = virtualNetwork.createLoader();
-    testRealmLoader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/'),
-    );
-    shimExternals(virtualNetwork);
 
     dir = dirSync().name;
     realm = await createRealm(testRealmLoader, dir, {

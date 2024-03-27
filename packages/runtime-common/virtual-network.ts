@@ -28,7 +28,6 @@ function getNativeFetch(): typeof fetch {
 export type Handler = (req: Request) => Promise<ResponseWithNodeStream | null>;
 
 export class VirtualNetwork {
-  private nativeFetch = getNativeFetch();
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
 
@@ -63,6 +62,10 @@ export class VirtualNetwork {
 
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
+  }
+
+  private nativeFetch(...args: Parameters<typeof fetch>) {
+    return getNativeFetch()(...args);
   }
 
   private resolveURLMapping(
@@ -146,7 +149,22 @@ export class VirtualNetwork {
       }
     }
 
-    return this.nativeFetch(request, init);
+    if (request.url === 'https://cardstack.com/base/card-api') {
+      debugger;
+    }
+
+    try {
+      let result = await this.nativeFetch(request, init);
+      if (!result.ok && isFastBoot) {
+        debugger;
+      }
+      return result;
+    } catch (err) {
+      if (isFastBoot) {
+        debugger;
+      }
+      throw err;
+    }
   }
 }
 
