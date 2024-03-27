@@ -8,13 +8,12 @@ import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-
+import { modifier } from 'ember-modifier';
 import { marked } from 'marked';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
-import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
@@ -46,6 +45,7 @@ interface Signature {
 export default class Room extends Component<Signature> {
   <template>
     <AiAssistantMessage
+      id='message-container-{{@message.index}}'
       class='room-message'
       @formattedMessage={{htmlSafe this.formattedMessage}}
       @datetime={{@message.created}}
@@ -108,7 +108,7 @@ export default class Room extends Component<Signature> {
             </Button>
             <div
               class='monaco-container'
-              {{setCssVar monaco-container-height=this.monacoContainerHeight}}
+              {{this.viewCodePanelModifier}}
               {{monacoModifier
                 content=this.previewPatchCode
                 contentChanged=undefined
@@ -249,13 +249,32 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  private get monacoContainerHeight() {
-    if (this.args.currentEditor === this.args.message.index) {
-      let height = this.monacoService.getContentHeight();
-      if (height && height > 0) {
-        return `${height}px`;
-      }
+  private viewCodePanelModifier = modifier((element: HTMLElement) => {
+    if (this.args.currentEditor !== this.args.message.index) {
+      return;
     }
-    return undefined;
+
+    let height = this.monacoService.getContentHeight();
+    if (!height || height < 0) {
+      return;
+    }
+    element.style.height = `${height}px`;
+
+    let outerContainer = document.getElementById(
+      `message-container-${this.args.message.index}`,
+    );
+    if (!outerContainer) {
+      return;
+    }
+    this.scrollIntoView(outerContainer);
+  });
+
+  private scrollIntoView(element: HTMLElement) {
+    let { top, bottom } = element.getBoundingClientRect();
+    let isVerticallyInView = top >= 0 && bottom <= window.innerHeight;
+
+    if (!isVerticallyInView) {
+      element.scrollIntoView({ block: 'end' });
+    }
   }
 }
