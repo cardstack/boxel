@@ -451,6 +451,24 @@ importers:
       ember-cli-dependency-checker:
         specifier: ^3.3.1
         version: 3.3.1(ember-cli@4.12.1)
+      ember-cli-deploy:
+        specifier: ^1.0.2
+        version: 1.0.2
+      ember-cli-deploy-build:
+        specifier: ^2.0.0
+        version: 2.0.0
+      ember-cli-deploy-cloudfront:
+        specifier: ^5.0.0
+        version: 5.0.0
+      ember-cli-deploy-revision-data:
+        specifier: ^2.0.0
+        version: 2.0.0
+      ember-cli-deploy-s3:
+        specifier: ^3.1.0
+        version: 3.1.0
+      ember-cli-deploy-smart-compress:
+        specifier: ^2.0.0
+        version: 2.0.0
       ember-cli-deprecation-workflow:
         specifier: mixonic/ember-cli-deprecation-workflow#0b4cbe7
         version: github.com/mixonic/ember-cli-deprecation-workflow/0b4cbe7(ember-source@4.12.0)

@@ -29,6 +29,13 @@ jobs:
     with:
       environment: ${{ inputs.environment }}
 
+  deploy-motion:
+    name: Deploy boxel-motion
+    uses: ./.github/workflows/deploy-motion.yml
+    secrets: inherit
+    with:
+      environment: staging
+
   deploy-ui:
     name: Deploy boxel-ui
     uses: ./.github/workflows/deploy-ui.yml
