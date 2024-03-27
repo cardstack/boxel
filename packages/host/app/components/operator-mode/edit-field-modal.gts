@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -77,7 +78,7 @@ export default class EditFieldModal extends Component<Signature> {
     },
   ];
 
-  constructor(owner: unknown, args: Signature['Args']) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
 
     // This component has 2 flows - adding a new field, and editing an existing field. When adding a new field, this.args.field will be undefined and when editing, it will be present

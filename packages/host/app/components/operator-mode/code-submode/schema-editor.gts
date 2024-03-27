@@ -1,7 +1,6 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-//@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';

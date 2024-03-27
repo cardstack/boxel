@@ -3,7 +3,6 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-//@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
 
 import { task, restartableTask, timeout, all } from 'ember-concurrency';

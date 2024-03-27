@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
@@ -87,8 +88,8 @@ export default class MatrixService extends Service {
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
 
-  constructor(properties: object) {
-    super(properties);
+  constructor(owner: Owner) {
+    super(owner);
     this.#ready = this.loadSDK.perform();
   }
 

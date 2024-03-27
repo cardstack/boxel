@@ -1,4 +1,3 @@
-import Resolver from 'ember-resolver';
 import {
   // prettier-ignore
   setupApplicationTest as upstreamSetupApplicationTest,
@@ -7,16 +6,10 @@ import {
   // prettier-ignore
   setupTest as upstreamSetupTest,
   // prettier-ignore
+  SetupTestOptions,
 } from 'ember-qunit';
 
-interface SetupTestOptions {
-  /**
-   * The resolver to use when instantiating container-managed entities in the test.
-   */
-  resolver?: Resolver | undefined;
-}
-
-// This file exists to provide wrappers around ember-qunit's / ember-mocha's
+// This file exists to provide wrappers around ember-qunit's
 // test setup functions. This way, you can easily extend the setup that is
 // needed per test type.
 

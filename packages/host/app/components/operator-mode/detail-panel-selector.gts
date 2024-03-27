@@ -1,5 +1,3 @@
-import { type EmptyObject } from '@ember/component/helper';
-
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -80,7 +78,7 @@ interface Signature {
     class?: string;
     items: Array<SelectorItem>;
   };
-  Blocks: EmptyObject;
+  Blocks: Record<string, never>;
 }
 
 function typeOfCardOrField(cardOrField: typeof BaseDef) {

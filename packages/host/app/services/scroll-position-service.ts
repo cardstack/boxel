@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
@@ -11,8 +12,8 @@ export default class ScrollPositionService extends Service {
     [string, number]
   >();
 
-  constructor(properties: object) {
-    super(properties);
+  constructor(owner: Owner) {
+    super(owner);
     this.extractFromStorage();
   }
 

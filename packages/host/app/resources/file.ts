@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
@@ -83,7 +84,7 @@ class _FileResource extends Resource<Args> {
   @service declare recentFilesService: RecentFilesService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  constructor(owner: unknown) {
+  constructor(owner: Owner) {
     super(owner);
     registerDestructor(this, () => {
       if (this.subscription) {

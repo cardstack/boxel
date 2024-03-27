@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -112,7 +113,7 @@ export default class RealmDropdown extends Component<Signature> {
   defaultRealmIcon = '/default-realm-icon.png';
   @service declare realmInfoService: RealmInfoService;
 
-  constructor(owner: unknown, args: Signature['Args']) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.realmInfoService.fetchAllKnownRealmInfos.perform();
   }
