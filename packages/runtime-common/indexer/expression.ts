@@ -1,5 +1,6 @@
 import * as JSONTypes from 'json-typescript';
 import isPlainObject from 'lodash/isPlainObject';
+import stringify from 'safe-stable-stringify';
 
 import { CodeRef } from '../index';
 
@@ -19,14 +20,14 @@ export interface Param {
 }
 
 export interface FieldQuery {
-  cardType: CodeRef;
+  type: CodeRef;
   path: string;
   errorHint: string;
   kind: 'field-query';
 }
 
 export interface FieldValue {
-  cardType: CodeRef;
+  type: CodeRef;
   path: string;
   value: CardExpression;
   errorHint: string;
@@ -145,7 +146,7 @@ export function asExpressions(
 
       // TODO probably we should insert using the json() or jsonb() function in
       // SQLite, need to check for compatibility in postgres for this function
-      param(opts?.jsonFields?.includes(col) ? JSON.stringify(val) : val),
+      param(opts?.jsonFields?.includes(col) ? stringify(val) : val),
     ]),
   );
   let nameExpressions = Object.keys(paramBucket).map((name) => [name]);

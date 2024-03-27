@@ -6,6 +6,7 @@ import {
   apiFor,
   baseCardRef,
   loadCard,
+  internalKeyFor,
 } from '../index';
 import {
   type PgPrimitive,
@@ -60,7 +61,17 @@ interface GetEntryOptions {
 }
 
 interface QueryResultsMeta {
-  page: { total: number; cursor?: string };
+  // TODO SQLite doesn't let us use cursors in the classic sense so we need to
+  // keep track of page size and index number--note it is possible for mutate
+  // between pages. Perhaps consider querying a specific realm version (and only
+  // cleanup realm versions when making generations) so we can see consistent
+  // paginated results...
+  page: {
+    total: number;
+    realmVersion?: number;
+    startIndex?: number;
+    pageSize?: number;
+  };
 }
 
 const coerceTypes = Object.freeze({
@@ -171,7 +182,7 @@ export class IndexerDBClient {
   // which could have conflicting loaders. It is up to the caller to provide the
   // loader that we should be using.
   async search(
-    { filter, sort, page }: Query,
+    { filter }: Query,
     loader: Loader,
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
@@ -183,27 +194,47 @@ export class IndexerDBClient {
 
     // need to pluck out the functions to add as tables from the
     // tabledValuedFunctions
-    let tableValuedFunctions = conditions.reduce((tableValuedFunctions, i) => {
-      let fns = i.filter(
-        (i) => typeof i === 'object' && i.kind === 'table-valued',
-      ) as TableValuedFunction[];
-      for (let fn of fns) {
-        tableValuedFunctions.set(fn.as, fn);
-      }
-      return tableValuedFunctions;
-    }, new Map<string, TableValuedFunction>());
+    let tableValuedFunctions = [
+      ...conditions
+        .reduce((tableValuedFunctions, i) => {
+          let fns = i.filter(
+            (i) => typeof i === 'object' && i.kind === 'table-valued',
+          ) as TableValuedFunction[];
+          for (let fn of fns) {
+            tableValuedFunctions.set(fn.as, fn);
+          }
+          return tableValuedFunctions;
+        }, new Map<string, TableValuedFunction>())
+        .values(),
+    ].map((t) => [`${t.fn} as ${t.as}`]);
 
     let query = [
-      'SELECT card_url, realm_url, pristine_doc',
-      'FROM indexed_cards',
-      ...separatedByCommas(
-        [...tableValuedFunctions.values()].map((t) => [`${t.fn} as ${t.as}`]),
-      ),
+      'SELECT pristine_doc',
+      'FROM',
+      ...separatedByCommas([['indexed_cards'], ...tableValuedFunctions]),
+      'WHERE',
+      ...every(conditions),
+    ];
+    let queryCount = [
+      'SELECT count(*) as total',
+      'FROM',
+      ...separatedByCommas([['indexed_cards'], ...tableValuedFunctions]),
       'WHERE',
       ...every(conditions),
     ];
 
-    let results = await this.queryCards(query, loader);
+    let [totalResults, results] = await Promise.all([
+      this.queryCards(queryCount, loader) as Promise<{ total: number }[]>,
+      this.queryCards(query, loader) as Promise<
+        Pick<IndexedCardsTable, 'pristine_doc'>[]
+      >,
+    ]);
+
+    let cards = results
+      .map((r) => r.pristine_doc)
+      .filter(Boolean) as LooseCardResource[];
+    let meta = { page: { total: totalResults[0].total } };
+    return { cards, meta };
   }
 
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
@@ -218,11 +249,12 @@ export class IndexerDBClient {
     throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
   }
 
+  // the type condition only consumes absolute URL card refs.
   private typeCondition(ref: CodeRef): CardExpression {
     return [
-      tableValuedFunction('json(indexed_cards.types)', 'types_each', [
+      tableValuedFunction('json_each(indexed_cards.types)', 'types_each', [
         'types_each.value =',
-        param(JSON.stringify(ref)),
+        param(internalKeyFor(ref, undefined)),
       ]),
     ];
   }
@@ -262,7 +294,7 @@ export class IndexerDBClient {
     let { path } = fieldQuery;
 
     return await this.walkFilterFieldPath(
-      await loadCard(fieldQuery.cardType, { loader }),
+      await loadCard(fieldQuery.type, { loader }),
       path,
       ['search_doc'],
       // Leaf field handler
@@ -290,7 +322,7 @@ export class IndexerDBClient {
     let exp = await this.makeExpression(value, loader);
 
     return await this.walkFilterFieldPath(
-      await loadCard(fieldValue.cardType, { loader }),
+      await loadCard(fieldValue.type, { loader }),
       path,
       exp,
       // Leaf field handler

@@ -17,7 +17,7 @@ const testRealmURL2 = `http://test-realm/test2/`;
 
 let { sqlSchema } = ENV;
 
-module('Unit | index-db', function (hooks) {
+module('Unit | indexer', function (hooks) {
   let adapter: SQLiteAdapter;
   let client: IndexerDBClient;
 

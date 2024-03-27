@@ -15,9 +15,9 @@ import {
   LooseSingleCardDocument,
   baseRealm,
   createResponse,
-  RealmInfo,
   RealmPermissions,
   Deferred,
+  type RealmInfo,
   type TokenClaims,
 } from '@cardstack/runtime-common';
 
@@ -46,14 +46,14 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
+import { testRealmInfo, testRealmURL } from './const';
 import percySnapshot from './percy-snapshot';
 
 import { renderComponent } from './render-component';
 import { WebMessageStream, messageCloseHandler } from './stream';
 import visitOperatorMode from './visit-operator-mode';
 
-export { percySnapshot };
-export { visitOperatorMode };
+export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from './indexer';
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
@@ -143,13 +143,6 @@ export async function showSearchResult(realmName: string, id: string) {
 export interface Dir {
   [name: string]: string | Dir;
 }
-
-export const testRealmURL = `http://test-realm/test/`;
-export const testRealmInfo: RealmInfo = {
-  name: 'Unnamed Workspace',
-  backgroundURL: null,
-  iconURL: null,
-};
 
 export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
