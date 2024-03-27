@@ -237,7 +237,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
   unregisterPanel(id: number) {
     this.listPanelContext.delete(id);
     this.calculatePanelRatio();
-    this.onContainerResize();
   }
 
   calculatePanelRatio() {
