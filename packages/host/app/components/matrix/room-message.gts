@@ -196,7 +196,7 @@ export default class Room extends Component<Signature> {
   });
 
   private get formattedMessage() {
-    return sanitizeHtml(marked(this.args.message.formattedMessage));
+    return sanitizeHtml(marked(this.args.message.formattedMessage) as string);
   }
 
   private get resources() {
