@@ -131,7 +131,28 @@ function generateMockMatrixService(
       cards?: CardDef[],
       context?: OperatorModeContext,
     ) {
-      this.lastMessageSent = { roomId, body, cards, context };
+      this.lastMessageSent = { roomId, body, cards, context }; // needed?
+
+      // called from private doSendMessage = enqueueTask(
+
+      let event = {
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '',
+        content: {
+          body,
+          msgtype: 'org.boxel.message',
+          formatted_body: body,
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now(),
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      };
+      await addRoomEvent(this, event);
     }
 
     async logout() {
@@ -232,4 +253,8 @@ export function setupMatrixServiceMock(
     // clear any session refresh timers that may bleed into other tests
     clearAllRealmSessions();
   });
+}
+
+function uuidv4() {
+  throw new Error('Function not implemented.');
 }

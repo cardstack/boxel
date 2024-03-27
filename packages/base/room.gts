@@ -243,6 +243,7 @@ export class MessageField extends FieldDef {
   @field transactionId = contains(StringField);
   @field command = contains(PatchField);
   @field isStreamingFinished = contains(BooleanField);
+  @field errorMessage = contains(StringField);
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -475,6 +476,11 @@ export class RoomField extends FieldDef {
           attachedCard: null,
           command: null,
         };
+
+        if ('errorMessage' in event.content) {
+          (cardArgs as any).errorMessage = event.content.errorMessage;
+        }
+
         let messageField = undefined;
         if (event.content.msgtype === 'org.boxel.cardFragment') {
           let fragments = fragmentCache.get(this);
@@ -696,6 +702,7 @@ interface MessageEvent extends BaseMatrixEvent {
     body: string;
     formatted_body: string;
     isStreamingFinished: boolean;
+    errorMessage?: string;
   };
   unsigned: {
     age: number;
@@ -749,6 +756,7 @@ export interface CardMessageContent {
   body: string;
   formatted_body: string;
   isStreamingFinished?: boolean;
+  errorMessage?: string;
   data: {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message
@@ -777,6 +785,7 @@ export interface CardFragmentContent {
   format: 'org.boxel.card';
   formatted_body: string;
   body: string;
+  errorMessage?: string;
   data: {
     nextFragment?: string;
     cardFragment: string;
