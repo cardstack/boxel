@@ -43,7 +43,7 @@ export default class LoaderService extends Service {
     }
 
     let loader = this.virtualNetwork.createLoader();
-    loader.addURLMapping(
+    this.virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),
     );
