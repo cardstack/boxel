@@ -19,11 +19,11 @@ module.exports = function (deployTarget) {
     },
   };
 
-  if (deployTarget === 'production') {
+  if (deployTarget === 'staging') {
     ENV.build.environment = 'production';
   }
 
-  if (deployTarget === 's3-preview-production') {
+  if (deployTarget === 's3-preview-staging') {
     ENV.s3.prefix = process.env.PR_BRANCH_NAME;
   }
 

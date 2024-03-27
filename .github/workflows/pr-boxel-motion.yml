@@ -31,28 +31,28 @@ jobs:
           files: |
             packages/boxel-motion/**
 
-  deploy-motion-preview-production:
-    name: Deploy a boxel-motion production preview to S3
+  deploy-motion-preview-staging:
+    name: Deploy a boxel-motion staging preview to S3
     runs-on: ubuntu-latest
     # github.event.pull_request.head.repo.full_name == github.repository: true if pr is from the original repo, false if it's from a fork
     # github.head_ref: the branch that the pull request is from. only appears on pull_request events
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-motion-files-changed == 'true'
     needs: check-if-requires-preview
-    concurrency: deploy-motion-preview-production
+    concurrency: deploy-motion-preview-staging-${{ github.head_ref || github.run_id }}
     steps:
       - uses: actions/checkout@v3
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
-          role-to-assume: arn:aws:iam::120317779495:role/boxel-motion
+          role-to-assume: arn:aws:iam::680542703984:role/boxel-motion
           aws-region: us-east-1
       - name: Deploy boxel-motion preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          S3_PREVIEW_BUCKET_NAME: boxel-motion-preview.cardstack.com
-          AWS_S3_BUCKET: boxel-motion-preview.cardstack.com
+          S3_PREVIEW_BUCKET_NAME: boxel-motion-preview.stack.cards
+          AWS_S3_BUCKET: boxel-motion-preview.stack.cards
           AWS_REGION: us-east-1
-          AWS_CLOUDFRONT_DISTRIBUTION: E1LZQB073YSRH
+          AWS_CLOUDFRONT_DISTRIBUTION: E25VU6BCHNF7AR
         with:
           package: boxel-motion
-          environment: production
+          environment: staging
