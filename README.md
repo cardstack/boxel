@@ -19,13 +19,11 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/boxel-ui/addon` is the UI components Ember addon
 
-`packages/boxel-ui/test-app` is the test suite and component explorer for boxel-ui
+`packages/boxel-ui/test-app` is the test suite and component explorer for boxel-ui, deployed at [boxel-ui.stack.cards](https://boxel-ui.stack.cards)
 
-`packages/boxel-motion` is the animation primitives ember addon.
+`packages/boxel-motion/addon` is the animation primitives ember addon.
 
-`packages/boxel-motion-test-app` is the test suite for boxel-motion
-
-`packages/boxel-motion/test-app` is the demo app for boxel-motion
+`packages/boxel-motion/test-app` is the demo app for boxel-motion, deployed at [boxel-motion.stack.cards](https://boxel-motion.stack.cards)
 
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
