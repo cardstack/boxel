@@ -37,8 +37,8 @@
     "@ember/string": "^3.1.1",
     "@embroider/addon-shim": "^1.8.6",
     "@glimmer/component": "^1.1.2",
-    "@glint/template": "^1.2.1",
-    "ember-auto-import": "^2.6.3",
+    "@glint/template": "^1.4.0",
+    "ember-auto-import": "^2.7.2",
     "ember-cli-babel": "^7.26.11",
     "ember-cli-htmlbars": "^6.3.0",
     "ember-cli-typescript": "^5.2.1",
@@ -51,7 +51,7 @@
     "typescript": "~5.1.6"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.0",
+    "@babel/core": "^7.24.3",
     "@babel/plugin-proposal-decorators": "^7.22.10",
     "@babel/plugin-transform-class-properties": "^7.22.5",
     "@babel/plugin-transform-class-static-block": "^7.22.11",
@@ -61,11 +61,11 @@
     "@embroider/macros": "^1.13.2",
     "@rollup/plugin-babel": "^6.0.3",
     "@tsconfig/ember": "3.0.1",
-    "@glint/core": "^1.2.1",
-    "@glint/environment-ember-template-imports": "^1.2.1",
-    "@types/htmlbars-inline-precompile": "^3.0.0",
+    "@glint/core": "^1.4.0",
+    "@glint/environment-ember-template-imports": "^1.4.0",
+    "@types/htmlbars-inline-precompile": "^3.0.3",
     "@types/qunit": "^2.11.3",
-    "@types/rsvp": "^4.0.4",
+    "@types/rsvp": "^4.0.9",
     "@typescript-eslint/eslint-plugin": "^5.48.1",
     "@typescript-eslint/parser": "^5.48.1",
     "babel-plugin-ember-template-compilation": "^2.2.1",
@@ -88,7 +88,7 @@
     "rollup-plugin-copy": "^3.4.0"
   },
   "peerDependencies": {
-    "@glint/environment-ember-loose": "^1.0.0",
+    "@glint/environment-ember-loose": "^1.4.0",
     "ember-source": "^4.0.0",
     "typescript": "^5.1.6"
   },

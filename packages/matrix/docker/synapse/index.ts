@@ -100,7 +100,17 @@ interface StartOptions {
 }
 export async function synapseStart(
   opts?: StartOptions,
+  stopExisting = true,
 ): Promise<SynapseInstance> {
+  if (stopExisting) {
+    // Stop the main server if it's running
+    let stopPromises = [dockerStop({ containerId: 'boxel-synapse' })];
+    for (const [id, _synapse] of synapses) {
+      // Stop any other synapses that are running
+      stopPromises.push(synapseStop(id));
+    }
+    await Promise.allSettled(stopPromises);
+  }
   const synCfg = await cfgDirFromTemplate(
     opts?.template ?? 'test',
     opts?.dataDir,

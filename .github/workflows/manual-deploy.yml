@@ -36,6 +36,13 @@ jobs:
     with:
       environment: production
 
+  deploy-ui:
+    name: Deploy boxel-ui
+    uses: ./.github/workflows/deploy-ui.yml
+    secrets: inherit
+    with:
+      environment: staging
+
   build-realm-server:
     name: Build Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main

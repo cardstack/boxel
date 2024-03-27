@@ -38,11 +38,11 @@ interface Signature {
 
 export default class PastSessionItem extends Component<Signature> {
   <template>
-    <li class='session' data-test-joined-room={{@room.name}}>
+    <li class='session' data-test-joined-room={{@room.roomId}}>
       <button
         class='view-session-button'
         {{on 'click' (fn @actions.open @room.roomId)}}
-        data-test-enter-room={{@room.name}}
+        data-test-enter-room={{@room.roomId}}
       >
         <div class='name'>{{@room.name}}</div>
         <div class='date' data-test-last-active={{this.lastActive}}>
@@ -59,7 +59,7 @@ export default class PastSessionItem extends Component<Signature> {
                 @height='20px'
                 class='menu-button'
                 aria-label='Options'
-                data-test-past-session-options-button={{@room.name}}
+                data-test-past-session-options-button={{@room.roomId}}
                 {{bindings}}
               />
             </:trigger>
