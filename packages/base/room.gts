@@ -19,7 +19,6 @@ import {
   getCard,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-//@ts-expect-error cached type not available yet
 import { cached } from '@glimmer/tracking';
 import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
