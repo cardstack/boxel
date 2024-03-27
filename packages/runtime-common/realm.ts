@@ -1676,6 +1676,22 @@ function lastModifiedHeader(
   ) as {} | { 'last-modified': string };
 }
 
+export type ErrorReporter = (error: Error) => void;
+
+let globalWithErrorReporter = global as typeof globalThis & {
+  __boxelErrorReporter: ErrorReporter;
+};
+
+export function setErrorReporter(reporter: ErrorReporter) {
+  globalWithErrorReporter.__boxelErrorReporter = reporter;
+}
+
+export function reportError(error: Error) {
+  if (globalWithErrorReporter.__boxelErrorReporter) {
+    globalWithErrorReporter.__boxelErrorReporter(error);
+  }
+}
+
 export interface CardDefinitionResource {
   id: string;
   type: 'card-definition';

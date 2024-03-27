@@ -7,6 +7,7 @@ import {
   type RunnerOpts,
 } from '@cardstack/runtime-common/search-index';
 import { JSDOM } from 'jsdom';
+import { type ErrorReporter } from '@cardstack/runtime-common/realm';
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
@@ -15,6 +16,11 @@ export async function makeFastBootIndexRunner(
 ): Promise<{ getRunner: IndexRunner; distPath: string }> {
   let fastboot: FastBootInstance;
   let distPath: string;
+
+  let globalWithErrorReporter = global as typeof globalThis & {
+    __boxelErrorReporter: ErrorReporter;
+  };
+
   if (typeof dist === 'string') {
     distPath = dist;
     fastboot = new FastBoot({
@@ -22,6 +28,7 @@ export async function makeFastBootIndexRunner(
       resilient: false,
       buildSandboxGlobals(defaultGlobals: any) {
         return Object.assign({}, defaultGlobals, {
+          __boxelErrorReporter: globalWithErrorReporter.__boxelErrorReporter,
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,
@@ -38,6 +45,7 @@ export async function makeFastBootIndexRunner(
       dist,
       (defaultGlobals: any) => {
         return Object.assign({}, defaultGlobals, {
+          __boxelErrorReporter: globalWithErrorReporter.__boxelErrorReporter,
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,
