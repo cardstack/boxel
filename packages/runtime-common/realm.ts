@@ -72,7 +72,6 @@ import {
   lookupRouteTable,
 } from './router';
 import { parseQueryString } from './query';
-//@ts-ignore service worker can't handle this
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -85,6 +84,7 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
+import type { ResponseWithNodeStream } from './virtual-network';
 
 export type RealmInfo = {
   name: string;
@@ -96,10 +96,6 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
-}
-
-export interface ResponseWithNodeStream extends Response {
-  nodeStream?: Readable;
 }
 
 export interface TokenClaims {
@@ -587,12 +583,14 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async maybeHandle(request: Request): Promise<Response | null> {
+  maybeHandle = async (
+    request: Request,
+  ): Promise<ResponseWithNodeStream | null> => {
     if (!this.paths.inRealm(new URL(request.url))) {
       return null;
     }
     return await this.internalHandle(request, true);
-  }
+  };
 
   async handle(request: Request): Promise<ResponseWithNodeStream> {
     return this.internalHandle(request, false);
@@ -747,7 +745,10 @@ export class Realm {
     hash.update(this.#realmSecretSeed);
     let hashedResponse = uint8ArrayToHex(await hash.digest());
     if (hashedResponse === challenge) {
-      let permissions = await (new RealmPermissionChecker(this.#permissions, this.#matrixClient)).for(user);
+      let permissions = await new RealmPermissionChecker(
+        this.#permissions,
+        this.#matrixClient,
+      ).for(user);
       let jwt = this.#adapter.createJWT(
         {
           user,
@@ -968,30 +969,24 @@ export class Realm {
     request: Request,
     neededPermission: 'read' | 'write',
   ) {
-      let endpontsWithoutAuthNeeded: RouteTable<true> = new Map([
-        // authentication endpoint
-        [
-          SupportedMimeType.Session,
-          new Map([
-            ['POST' as Method, new Map([['/_session', true]])],
-          ]),
-        ],
-        // SSE endpoint
-        [
-          SupportedMimeType.EventStream,
-          new Map([
-            ['GET' as Method, new Map([['/_message', true]])],
-          ]),
-        ],
-        // serve a text/html endpoint
-        [
-          SupportedMimeType.HTML,
-          new Map([
-            ['GET' as Method, new Map([['/.*', true]])],
-          ]),
-        ],
-      ]);
-    
+    let endpontsWithoutAuthNeeded: RouteTable<true> = new Map([
+      // authentication endpoint
+      [
+        SupportedMimeType.Session,
+        new Map([['POST' as Method, new Map([['/_session', true]])]]),
+      ],
+      // SSE endpoint
+      [
+        SupportedMimeType.EventStream,
+        new Map([['GET' as Method, new Map([['/_message', true]])]]),
+      ],
+      // serve a text/html endpoint
+      [
+        SupportedMimeType.HTML,
+        new Map([['GET' as Method, new Map([['/.*', true]])]]),
+      ],
+    ]);
+
     if (
       lookupRouteTable(endpontsWithoutAuthNeeded, this.paths, request) ||
       request.method === 'HEAD' ||
@@ -1016,11 +1011,14 @@ export class Realm {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
       let realmPermissionChecker = new RealmPermissionChecker(
         this.#permissions,
-        this.#matrixClient
+        this.#matrixClient,
       );
-      
+
       let permissions = await realmPermissionChecker.for(token.user);
-      if (JSON.stringify(token.permissions.sort()) !== JSON.stringify(permissions.sort())) {
+      if (
+        JSON.stringify(token.permissions.sort()) !==
+        JSON.stringify(permissions.sort())
+      ) {
         throw new AuthenticationError(
           'User permissions have been updated. Please refresh the token',
         );

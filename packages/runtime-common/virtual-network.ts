@@ -1,6 +1,11 @@
 import { RealmPaths } from './paths';
 import { Loader } from './loader';
 import type { RunnerOpts } from './search-index';
+import type { Readable } from 'stream';
+
+export interface ResponseWithNodeStream extends Response {
+  nodeStream?: Readable;
+}
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 const PACKAGES_FAKE_ORIGIN = 'https://packages/';
@@ -20,7 +25,7 @@ function getNativeFetch(): typeof fetch {
   }
 }
 
-export type Handler = (req: Request) => Promise<Response | null>;
+export type Handler = (req: Request) => Promise<ResponseWithNodeStream | null>;
 
 export class VirtualNetwork {
   private nativeFetch = getNativeFetch();
@@ -60,12 +65,19 @@ export class VirtualNetwork {
     this.urlMappings.push([from.href, to.href]);
   }
 
-  private resolveURLMapping(url: string): string | undefined {
+  private resolveURLMapping(
+    url: string,
+    direction: 'virtual-to-real' | 'real-to-virtual',
+  ): string | undefined {
     let absoluteURL = new URL(url);
-    for (let [sourceURL, to] of this.urlMappings) {
-      let sourcePath = new RealmPaths(new URL(sourceURL));
+    for (let [virtual, real] of this.urlMappings) {
+      let sourcePath = new RealmPaths(
+        new URL(direction === 'virtual-to-real' ? virtual : real),
+      );
       if (sourcePath.inRealm(absoluteURL)) {
-        let toPath = new RealmPaths(new URL(to));
+        let toPath = new RealmPaths(
+          new URL(direction === 'virtual-to-real' ? real : virtual),
+        );
         if (absoluteURL.href.endsWith('/')) {
           return toPath.directoryURL(sourcePath.local(absoluteURL)).href;
         } else {
@@ -91,16 +103,34 @@ export class VirtualNetwork {
         ? urlOrRequest
         : new Request(urlOrRequest, init);
 
-    let internalRequest = this.mapRequest(request);
+    let internalRequest = this.mapRequest(request, 'virtual-to-real');
     let response = await this.runFetch(internalRequest, init);
     if (internalRequest !== request) {
-      Object.defineProperty(response, 'url', { value: request.url });
+      Object.defineProperty(response, 'url', {
+        value:
+          this.resolveURLMapping(response.url, 'real-to-virtual') ??
+          response.url,
+      });
     }
     return response;
   };
 
-  private mapRequest(request: Request) {
-    let remapped = this.resolveURLMapping(request.url);
+  async handle(request: Request): Promise<ResponseWithNodeStream> {
+    let internalRequest = this.mapRequest(request, 'real-to-virtual');
+    for (let handler of this.handlers) {
+      let response = await handler(internalRequest);
+      if (response) {
+        return response;
+      }
+    }
+    return new Response(undefined, { status: 404 });
+  }
+
+  private mapRequest(
+    request: Request,
+    direction: 'virtual-to-real' | 'real-to-virtual',
+  ) {
+    let remapped = this.resolveURLMapping(request.url, direction);
     if (remapped) {
       return new Request(remapped, request);
     } else {

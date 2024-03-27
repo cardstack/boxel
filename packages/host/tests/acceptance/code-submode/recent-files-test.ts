@@ -498,7 +498,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         ],
       ],
       submode: 'code',
-      codePath: `http://localhost:4201/base/code-ref.gts`,
+      codePath: `https://cardstack.com/base/date.gts`,
       fileView: 'browser',
       openDirs: {},
     });
@@ -527,9 +527,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     await waitFor('[data-test-file="field-component.gts"]');
     await click('[data-test-file="field-component.gts"]');
     await waitFor('[data-test-file="field-component.gts"].selected');
-    assert
-      .dom('[data-test-recent-file]:nth-child(1)')
-      .containsText('field-component.gts');
+
+    assert.dom('[data-test-recent-file]:nth-child(1)').containsText('date.gts');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('code-ref.gts');
@@ -541,6 +540,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
         ['https://cardstack.com/base/', 'field-component.gts'],
+        ['https://cardstack.com/base/', 'date.gts'],
         ['https://cardstack.com/base/', 'code-ref.gts'],
         ['https://cardstack.com/base/', 'catalog-entry.gts'],
       ],

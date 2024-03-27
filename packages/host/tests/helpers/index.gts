@@ -51,6 +51,7 @@ import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import { WebMessageStream, messageCloseHandler } from './stream';
 import visitOperatorMode from './visit-operator-mode';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 export { percySnapshot };
 export { visitOperatorMode };
@@ -454,7 +455,6 @@ export async function setupIntegrationTestRealm({
 
 export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
-  loader,
   contents,
   realmURL,
   onFetch,
@@ -472,6 +472,9 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
 }) {
   let owner = (getContext() as TestContext).owner;
+  let { loader, virtualNetwork } = owner.lookup(
+    'service:loader-service',
+  ) as LoaderService;
 
   realmURL = realmURL ?? testRealmURL;
 
@@ -554,6 +557,7 @@ async function setupTestRealm({
     realmSecretSeed: testRealmSecretSeed,
   });
 
+  virtualNetwork.mount(realm.maybeHandle);
   await realm.ready;
   return { realm, adapter };
 }

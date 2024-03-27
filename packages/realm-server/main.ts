@@ -121,7 +121,7 @@ let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(toUrls[i]), `http://localhost:${port}`),
 ]);
 for (let [from, to] of urlMappings) {
-  loader.addURLMapping(from, to);
+  virtualNetwork.addURLMapping(from, to);
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: string | URL;
@@ -158,33 +158,33 @@ if (distURL) {
 
     let realmPermissions = getRealmPermissions(url);
 
-    realms.push(
-      new Realm(
-        {
-          url,
-          adapter: new NodeAdapter(resolve(String(path))),
-          loader,
-          indexRunner: getRunner,
-          runnerOptsMgr: manager,
-          getIndexHTML: async () =>
-            readFileSync(join(distPath, 'index.html')).toString(),
-          matrix: { url: new URL(matrixURL), username, password },
-          realmSecretSeed: REALM_SECRET_SEED,
-          permissions: realmPermissions.users,
-        },
-        {
-          deferStartUp: true,
-          ...(useTestingDomain
-            ? {
-                useTestingDomain,
-              }
-            : {}),
-        },
-      ),
+    let realm = new Realm(
+      {
+        url,
+        adapter: new NodeAdapter(resolve(String(path))),
+        loader,
+        indexRunner: getRunner,
+        runnerOptsMgr: manager,
+        getIndexHTML: async () =>
+          readFileSync(join(distPath, 'index.html')).toString(),
+        matrix: { url: new URL(matrixURL), username, password },
+        realmSecretSeed: REALM_SECRET_SEED,
+        permissions: realmPermissions.users,
+      },
+      {
+        deferStartUp: true,
+        ...(useTestingDomain
+          ? {
+              useTestingDomain,
+            }
+          : {}),
+      },
     );
+    realms.push(realm);
+    virtualNetwork.mount(realm.maybeHandle);
   }
 
-  let server = new RealmServer(realms, {
+  let server = new RealmServer(realms, virtualNetwork, {
     ...(distURL ? { assetsURL: new URL(distURL) } : {}),
   });
 

@@ -8,6 +8,7 @@ import {
   assetsDir,
   logger,
   SupportedMimeType,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { setupCloseHandler } from './node-realm';
@@ -38,6 +39,7 @@ export class RealmServer {
 
   constructor(
     private realms: Realm[],
+    private virtualNetwork: VirtualNetwork,
     opts?: Options,
   ) {
     detectRealmCollision(realms);
@@ -119,48 +121,20 @@ export class RealmServer {
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
-    let realm = this.realms.find((r) => {
-      let reversedResolution = r.loader.reverseResolution(
-        fullRequestURL(ctxt).href,
-      );
-      this.log.debug(
-        `Looking for realm to handle request with full URL: ${
-          fullRequestURL(ctxt).href
-        } (reversed: ${reversedResolution.href})`,
-      );
-
-      let inRealm = r.paths.inRealm(reversedResolution);
-      this.log.debug(
-        `${reversedResolution} in realm ${JSON.stringify({
-          url: r.url,
-          paths: r.paths,
-        })}: ${inRealm}`,
-      );
-      return inRealm;
-    });
-
-    if (!realm) {
-      ctxt.status = 404;
-      return;
-    }
-
     let reqBody: string | undefined;
     if (['POST', 'PATCH'].includes(ctxt.method)) {
       reqBody = await nodeStreamToText(ctxt.req);
     }
 
-    let reversedResolution = realm.loader.reverseResolution(
-      fullRequestURL(ctxt).href,
-    );
-
-    let request = new Request(reversedResolution.href, {
+    let url = fullRequestURL(ctxt).href;
+    let request = new Request(url, {
       method: ctxt.method,
       headers: ctxt.req.headers as { [name: string]: string },
       ...(reqBody ? { body: reqBody } : {}),
     });
 
     setupCloseHandler(ctxt.res, request);
-    let realmResponse = await realm.handle(request);
+    let realmResponse = await this.virtualNetwork.handle(request);
     let { status, statusText, headers, body, nodeStream } = realmResponse;
     ctxt.status = status;
     ctxt.message = statusText;
@@ -168,7 +142,7 @@ export class RealmServer {
       ctxt.set(header, value);
     }
     if (!headers.get('content-type')) {
-      let fileName = reversedResolution.href.split('/').pop()!;
+      let fileName = url.split('/').pop()!;
       ctxt.type = mime.lookup(fileName) || 'application/octet-stream';
     }
 
