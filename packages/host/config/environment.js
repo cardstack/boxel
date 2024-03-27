@@ -1,5 +1,10 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
+let sqlSchema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+
 module.exports = function (environment) {
   const ENV = {
     modulePrefix: '@cardstack/host',
@@ -51,6 +56,7 @@ module.exports = function (environment) {
       environment === 'test'
         ? 'http://test-realm/test/'
         : process.env.OWN_REALM_URL || 'http://localhost:4200/',
+    sqlSchema,
   };
 
   if (environment === 'development') {

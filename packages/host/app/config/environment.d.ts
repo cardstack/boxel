@@ -27,4 +27,5 @@ declare const config: {
   serverEchoDebounceMs: number;
   loginMessageTimeoutMs: number;
   minSaveTaskDurationMs: number;
+  sqlSchema: string;
 };
