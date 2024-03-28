@@ -4,7 +4,7 @@ import {
   login,
   logout,
   createRoom,
-  getRoomName,
+  getRoomId,
   openRoom,
   assertMessages,
   writeMessage,
@@ -35,7 +35,7 @@ test.describe('Room messages', () => {
 
   test(`it can send a message in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
 
@@ -77,7 +77,7 @@ test.describe('Room messages', () => {
     const totalMessageCount = 20;
 
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
 
     for (let i = 1; i <= totalMessageCount; i++) {
       await sendMessage(page, room1, `message ${i}`);
@@ -94,7 +94,7 @@ test.describe('Room messages', () => {
 
   test(`it can send a markdown message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'message with _style_');
     await assertMessages(page, [
       {
@@ -109,7 +109,7 @@ test.describe('Room messages', () => {
 
   test(`it can create a room specific pending message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Hello');
     let room2 = await createRoom(page);
     await openRoom(page, room1);
@@ -255,7 +255,7 @@ test.describe('Room messages', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -314,7 +314,7 @@ test.describe('Room messages', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -340,7 +340,7 @@ test.describe('Room messages', () => {
   }) => {
     // the base realm is a read-only realm
     await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await page
       .locator(
         '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
@@ -361,7 +361,7 @@ test.describe('Room messages', () => {
   test('can send only a card as a message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
     await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
       {
@@ -374,7 +374,7 @@ test.describe('Room messages', () => {
   test('can send cards with types unsupported by matrix', async ({ page }) => {
     const testCard = `${testHost}/type-examples`;
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
 
     // Send a card that contains a type that matrix doesn't support
     await sendMessage(page, room1, undefined, [testCard]);
@@ -459,7 +459,7 @@ test.describe('Room messages', () => {
     };
 
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
 
     await sendMessage(page, room1, 'message 1', [testCard1]);
     await assertMessages(page, [message1]);
@@ -490,7 +490,7 @@ test.describe('Room messages', () => {
     };
 
     await login(page, 'user1', 'pass');
-    let room1 = await getRoomName(page);
+    let room1 = await getRoomId(page);
 
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
@@ -576,7 +576,7 @@ test.describe('Room messages', () => {
       )
       .click();
     // Make sure we've got an open room
-    await getRoomName(page);
+    await getRoomId(page);
 
     await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
     await page.locator(`[data-test-attached-card]`).hover();
@@ -625,7 +625,7 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     // Make sure we've got an open room
-    await getRoomName(page);
+    await getRoomId(page);
 
     // assert nothing attached
 
@@ -678,7 +678,7 @@ test.describe('Room messages', () => {
       )
       .click();
     // Make sure we've got an open room
-    await getRoomName(page);
+    await getRoomId(page);
 
     // If user removes the auto-attached card,
     // and then opens another card in the stack,

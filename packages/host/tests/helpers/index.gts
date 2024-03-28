@@ -55,6 +55,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 export { percySnapshot };
 export { visitOperatorMode };
+export * from './indexer';
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 

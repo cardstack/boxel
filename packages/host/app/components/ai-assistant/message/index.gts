@@ -28,6 +28,7 @@ interface Signature {
     profileAvatar?: ComponentLike;
     attachedCards?: CardDef[];
     errorMessage?: string;
+    isPending?: boolean;
     retryAction?: () => void;
   };
   Blocks: { default: [] };
@@ -44,7 +45,11 @@ export default class AiAssistantMessage extends Component<Signature> {
 
   <template>
     <div
-      class={{cn 'ai-assistant-message' is-from-assistant=@isFromAssistant}}
+      class={{cn
+        'ai-assistant-message'
+        is-from-assistant=@isFromAssistant
+        is-pending=@isPending
+      }}
       {{ScrollIntoView}}
       data-test-ai-assistant-message
       ...attributes
@@ -101,6 +106,7 @@ export default class AiAssistantMessage extends Component<Signature> {
 
     <style>
       .ai-assistant-message {
+        --ai-bot-message-background-color: #3b394b;
         --ai-assistant-message-avatar-size: 1.25rem; /* 20px. */
         --ai-assistant-message-meta-height: 1.25rem; /* 20px */
         --ai-assistant-message-gap: var(--boxel-sp-xs);
@@ -169,15 +175,27 @@ export default class AiAssistantMessage extends Component<Signature> {
         font-weight: 500;
         line-height: 1.25rem;
         letter-spacing: var(--boxel-lsp-xs);
-        padding: var(--boxel-sp);
+        padding: var(--ai-assistant-message-padding, var(--boxel-sp));
       }
       .is-from-assistant .content {
-        background: #3b394b;
+        background-color: var(--ai-bot-message-background-color);
         color: var(--boxel-light);
+        /* the below font-smoothing options are only recommended for light-colored
+          text on dark background (otherwise not good for accessibility) */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      .is-pending .content,
+      .is-pending .content .cards > :deep(.card-pill),
+      .is-pending .content .cards > :deep(.card-pill .boxel-card-container) {
+        background: var(--boxel-200);
+        color: var(--boxel-500);
       }
 
       .content > :deep(.patch-message) {
         font-weight: 700;
+        letter-spacing: var(--boxel-lsp-sm);
       }
 
       .content > :deep(*) {
