@@ -4,7 +4,6 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import { marked } from 'marked';
 import {
   type LoginResponse,
   type MatrixEvent,
@@ -18,7 +17,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   type LooseSingleCardDocument,
-  sanitizeHtml,
+  markdownToHtml,
   aiBotUsername,
   splitStringIntoChunks,
   baseRealm,
@@ -347,7 +346,7 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = body != null ? sanitizeHtml(marked(body) as string) : '';
+    let html = markdownToHtml(body);
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
     let attachedOpenCards: CardDef[] = [];
