@@ -149,22 +149,7 @@ export class VirtualNetwork {
       }
     }
 
-    if (request.url === 'https://cardstack.com/base/card-api') {
-      debugger;
-    }
-
-    try {
-      let result = await this.nativeFetch(request, init);
-      if (!result.ok && isFastBoot) {
-        debugger;
-      }
-      return result;
-    } catch (err) {
-      if (isFastBoot) {
-        debugger;
-      }
-      throw err;
-    }
+    return this.nativeFetch(request, init);
   }
 }
 

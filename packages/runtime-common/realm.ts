@@ -260,6 +260,10 @@ export class Realm {
     return [...executableExtensions, '.json'];
   }
 
+  get p() {
+    return this.#permissions;
+  }
+
   constructor(
     {
       url,
@@ -590,6 +594,17 @@ export class Realm {
       return null;
     }
     return await this.internalHandle(request, true);
+  };
+
+  // This is scaffolding that should be deleted once we can finish the isolated
+  // loader refactor
+  maybeExternalHandle = async (
+    request: Request,
+  ): Promise<ResponseWithNodeStream | null> => {
+    if (!this.paths.inRealm(new URL(request.url))) {
+      return null;
+    }
+    return await this.internalHandle(request, false);
   };
 
   async handle(request: Request): Promise<ResponseWithNodeStream> {

@@ -33,6 +33,7 @@ import {
   setupCardLogs,
   setupBaseRealmServer,
   runTestRealmServer,
+  localBaseRealm,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -139,7 +140,6 @@ module('Realm Server', function (hooks) {
     module('public readable realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             '*': ['read'],
           },
@@ -197,7 +197,6 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             john: ['read'],
           },
@@ -272,7 +271,7 @@ module('Realm Server', function (hooks) {
     module('public writable realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm(virtualNetwork, {
+          await setupPermissionedRealm({
             '*': ['read', 'write'],
           }));
       });
@@ -373,7 +372,6 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             john: ['read', 'write'],
           },
@@ -458,7 +456,7 @@ module('Realm Server', function (hooks) {
     module('public writable realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm(virtualNetwork, {
+          await setupPermissionedRealm({
             '*': ['read', 'write'],
           }));
       });
@@ -569,7 +567,7 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm(virtualNetwork, {
+          await setupPermissionedRealm({
             john: ['read', 'write'],
           }));
       });
@@ -645,7 +643,7 @@ module('Realm Server', function (hooks) {
     module('public writable realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm(virtualNetwork, {
+          await setupPermissionedRealm({
             '*': ['read', 'write'],
           }));
       });
@@ -721,7 +719,7 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm(virtualNetwork, {
+          await setupPermissionedRealm({
             john: ['read', 'write'],
           }));
       });
@@ -769,7 +767,6 @@ module('Realm Server', function (hooks) {
     module('public readable realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             '*': ['read'],
           },
@@ -890,7 +887,6 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             john: ['read'],
           },
@@ -944,7 +940,7 @@ module('Realm Server', function (hooks) {
     module('public writable realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm(virtualNetwork, {
+          await setupPermissionedRealm({
             '*': ['read', 'write'],
           }));
       });
@@ -1019,7 +1015,7 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm(virtualNetwork, {
+          await setupPermissionedRealm({
             john: ['read', 'write'],
           }));
       });
@@ -1066,7 +1062,7 @@ module('Realm Server', function (hooks) {
     module('public writable realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm(virtualNetwork, {
+          await setupPermissionedRealm({
             '*': ['read', 'write'],
           }));
       });
@@ -1336,7 +1332,6 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             john: ['read', 'write'],
           },
@@ -1397,7 +1392,6 @@ module('Realm Server', function (hooks) {
     module('public readable realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             '*': ['read'],
           },
@@ -1463,7 +1457,6 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             john: ['read'],
           },
@@ -1529,7 +1522,6 @@ module('Realm Server', function (hooks) {
     module('public readable realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             '*': ['read'],
           },
@@ -1569,7 +1561,6 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             john: ['read'],
           },
@@ -1622,7 +1613,6 @@ module('Realm Server', function (hooks) {
     module('public readable realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             '*': ['read'],
           },
@@ -1667,7 +1657,6 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       hooks.beforeEach(async function () {
         ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          virtualNetwork,
           {
             john: ['read'],
           },
@@ -1721,7 +1710,7 @@ module('Realm Server', function (hooks) {
 
     hooks.beforeEach(async function () {
       ({ testRealm, testRealmServer, request, dir } =
-        await setupPermissionedRealm(virtualNetwork, {
+        await setupPermissionedRealm({
           '*': ['read', 'write'],
         }));
 
@@ -2292,16 +2281,16 @@ module('Realm Server serving from a subdirectory', function (hooks) {
   });
 });
 
-async function setupPermissionedRealm(
-  virtualNetwork: VirtualNetwork,
-  permissions: RealmPermissions,
-) {
+async function setupPermissionedRealm(permissions: RealmPermissions) {
   let testRealm: Realm;
   let testRealmServer: Server;
   let request: SuperTest<Test>;
 
   let dir = dirSync();
   copySync(join(__dirname, 'cards'), dir.name);
+  let virtualNetwork = new VirtualNetwork();
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+
   let testRealmServerLoader = virtualNetwork.createLoader();
 
   ({ testRealm, testRealmServer } = await runTestRealmServer(

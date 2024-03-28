@@ -4,11 +4,9 @@ import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
 import {
   createRealm,
   setupBaseRealmServer,
-  localBaseRealm,
   runTestRealmServer,
 } from './helpers';
 import { copySync } from 'fs-extra';
-import { baseRealm } from '@cardstack/runtime-common';
 import { shimExternals } from '../lib/externals';
 import { Server } from 'http';
 import { join } from 'path';

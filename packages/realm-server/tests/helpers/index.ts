@@ -91,7 +91,7 @@ export async function runBaseRealmServer(
     undefined,
     baseRealm.url,
   );
-  virtualNetwork.mount(testBaseRealm.maybeHandle);
+  virtualNetwork.mount(testBaseRealm.maybeExternalHandle);
   await testBaseRealm.ready;
   let testBaseRealmServer = new RealmServer([testBaseRealm], virtualNetwork);
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
@@ -112,7 +112,7 @@ export async function runTestRealmServer(
     testRealmURL.href,
     permissions,
   );
-  virtualNetwork.mount(testRealm.maybeHandle);
+  virtualNetwork.mount(testRealm.maybeExternalHandle);
   await testRealm.ready;
   let testRealmServer = await new RealmServer(
     [testRealm],

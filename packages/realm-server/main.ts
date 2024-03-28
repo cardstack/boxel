@@ -198,7 +198,7 @@ if (distURL) {
       },
     );
     realms.push(realm);
-    virtualNetwork.mount(realm.maybeHandle);
+    virtualNetwork.mount(realm.maybeExternalHandle);
   }
 
   let server = new RealmServer(realms, virtualNetwork, {
