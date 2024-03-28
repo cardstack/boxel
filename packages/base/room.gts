@@ -135,6 +135,19 @@ class RoomMembershipField extends FieldDef {
   };
 }
 
+type CardArgs = {
+  author: RoomMemberField;
+  created: Date;
+  message: string;
+  formattedMessage: string;
+  index: number;
+  transactionId: string | null;
+  attachedCard: string[] | null;
+  command: string | null;
+  isStreamingFinished?: boolean;
+  clientGeneratedId?: string | null;
+};
+
 type AttachedCardResource = {
   card: CardDef | undefined;
   loaded?: Promise<void>;
@@ -467,7 +480,7 @@ export class RoomField extends FieldDef {
         }
 
         let author = upsertRoomMember({ room: this, userId: event.sender });
-        let cardArgs = {
+        let cardArgs: CardArgs = {
           author,
           created: new Date(event.origin_server_ts),
           message: event.content.body,
@@ -504,8 +517,8 @@ export class RoomField extends FieldDef {
           if (attachedCardIds.length < cardDocs.length) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
-          (cardArgs as any).clientGeneratedId =
-            event.content.clientGeneratedId ?? null;
+
+          cardArgs.clientGeneratedId = event.content.clientGeneratedId ?? null;
           messageField = new MessageField({
             ...cardArgs,
             attachedCardIds,
@@ -529,8 +542,7 @@ export class RoomField extends FieldDef {
         } else {
           // Text from the AI bot
           if (event.content.msgtype === 'm.text') {
-            (cardArgs as any).isStreamingFinished =
-              !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+            cardArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
           }
           messageField = new MessageField(cardArgs);
         }
