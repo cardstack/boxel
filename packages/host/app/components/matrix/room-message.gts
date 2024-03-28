@@ -110,7 +110,7 @@ export default class Room extends Component<Signature> {
             </Button>
             <div
               class='monaco-container'
-              {{this.viewCodePanelModifier}}
+              {{this.scrollBottomIntoView}}
               {{monacoModifier
                 content=this.previewPatchCode
                 contentChanged=undefined
@@ -251,7 +251,7 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  private viewCodePanelModifier = modifier((element: HTMLElement) => {
+  private scrollBottomIntoView = modifier((element: HTMLElement) => {
     if (this.args.currentEditor !== this.args.message.index) {
       return;
     }
