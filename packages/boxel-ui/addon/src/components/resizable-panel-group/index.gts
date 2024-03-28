@@ -196,7 +196,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
     nextPanelEl?: HTMLElement | null;
     prevPanelEl?: HTMLElement | null;
   } | null = null;
-  panelRatios: number[] = [];
 
   @action
   registerPanel(context: {
@@ -238,30 +237,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
         context.collapsible == undefined ? true : context.collapsible,
     });
 
-    this.calculatePanelRatio();
-
     return id;
   }
 
   @action
   unregisterPanel(id: number) {
     this.listPanelContext.delete(id);
-    this.calculatePanelRatio();
-  }
-
-  calculatePanelRatio() {
-    let panelLengths = Array.from(this.listPanelContext.values()).map(
-      (panelContext) => panelContext.lengthPx,
-    );
-
-    this.panelRatios = [];
-    for (let index = 0; index < panelLengths.length; index++) {
-      let panelLength = panelLengths[index];
-      if (panelLength == undefined) {
-        break;
-      }
-      this.panelRatios[index] = panelLength / sumArray(panelLengths);
-    }
+    this.onContainerResize();
   }
 
   @action
@@ -402,8 +384,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     this.currentResizeHandle.initialPosition =
       event[this.clientPositionProperty];
-
-    this.calculatePanelRatio();
   }
 
   // This event only applies to the first and last resize handler.
@@ -500,8 +480,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
         nextPanelElContext.initialMinLengthPx,
       );
     }
-
-    this.calculatePanelRatio();
   }
 
   @action
@@ -534,6 +512,22 @@ export default class ResizablePanelGroup extends Component<Signature> {
     this.args.onListPanelContextChange?.(
       Array.from(this.listPanelContext, ([_name, value]) => value),
     );
+  }
+
+  get panelRatios() {
+    let panelLengths = Array.from(this.listPanelContext.values()).map(
+      (panelContext) => panelContext.lengthPx,
+    );
+
+    let panelRatios = [];
+    for (let index = 0; index < panelLengths.length; index++) {
+      let panelLength = panelLengths[index];
+      if (panelLength == undefined) {
+        break;
+      }
+      panelRatios[index] = panelLength / sumArray(panelLengths);
+    }
+    return panelRatios;
   }
 
   @action
