@@ -1088,7 +1088,7 @@ module('Integration | operator-mode', function (hooks) {
         },
       );
 
-      let sendMessageDeffered = new Deferred<void>();
+      let sendMessageDeferred = new Deferred<void>();
       let originalSendMessage = matrixService.sendMessage;
       matrixService.sendMessage = async function (
         roomId: string,
@@ -1116,7 +1116,7 @@ module('Integration | operator-mode', function (hooks) {
             attachedCardIds: attachedCards?.map((c: CardDef) => c.id) || [],
           }),
         );
-        await sendMessageDeffered.promise;
+        await sendMessageDeferred.promise;
         addRoomEvent(matrixService, {
           event_id: 'event1',
           room_id: roomId,
@@ -1146,7 +1146,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
       await percySnapshot(assert);
 
-      sendMessageDeffered.fulfill();
+      sendMessageDeferred.fulfill();
       await waitUntil(
         () =>
           !(
