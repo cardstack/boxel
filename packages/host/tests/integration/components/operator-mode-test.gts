@@ -1110,7 +1110,7 @@ module('Integration | operator-mode', function (hooks) {
             author: roomMember,
             message: body,
             formattedMessage: body ?? '',
-            created: new Date().getTime(),
+            created: new Date(1709652566421).getTime(),
             clientGeneratedId,
             transactionId: null,
             attachedCardIds: attachedCards?.map((c: CardDef) => c.id) || [],
