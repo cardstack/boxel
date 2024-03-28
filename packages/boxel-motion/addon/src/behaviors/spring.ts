@@ -36,6 +36,7 @@ type SpringValues = {
 };
 
 export default class SpringBehavior implements Behavior {
+  fill = true;
   private options: SpringOptions;
 
   constructor(options?: SpringOptionsArgument) {

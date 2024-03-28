@@ -1,6 +1,7 @@
 import { assert } from '@ember/debug';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -19,6 +20,7 @@ const { VOLATILE_TAG, consumeTag } =
   Ember.__loader.require('@glimmer/validator');
 
 interface AnimationContextArgs {
+  debugging?: boolean;
   id?: string;
   use: ((changeset: Changeset) => AnimationDefinition) | undefined;
 }
@@ -37,7 +39,7 @@ export default class AnimationContextComponent
 {
   <template>
     {{this.renderDetector}}
-    <div class='animation-context' {{registerContext this}} ...attributes>
+    <div class={{this.cssClasses}} {{registerContext this}} ...attributes>
       <div
         {{registerContextOrphansEl this}}
         data-animation-context-orphan-element='true'
@@ -52,6 +54,13 @@ export default class AnimationContextComponent
   get id(): string | undefined {
     return this.args.id;
   }
+  get cssClasses() {
+    let result = 'animation-context';
+    if (this.args.debugging) {
+      result += ' debugging';
+    }
+    return htmlSafe(result);
+  }
 
   element!: HTMLElement; //set by template
   orphansElement: HTMLElement | null = null; //set by template
@@ -65,6 +74,17 @@ export default class AnimationContextComponent
     return (
       this.isInitialRenderCompleted && !this.isDestroying && !this.isDestroyed
     );
+  }
+
+  constructor(owner: unknown, args: AnimationContextArgs) {
+    super(owner, args);
+    if (!this.animations) {
+      throw new Error(
+        `Expected to find "animations" service in app.
+         Add 'app/services/animations.ts' with
+           \`export { AnimationsService as default } from '@cardstack/boxel-motion';\``,
+      );
+    }
   }
 
   willDestroy(): void {

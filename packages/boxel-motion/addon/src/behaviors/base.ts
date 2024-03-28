@@ -36,6 +36,8 @@ export type Frame = {
 export type FrameGenerator = Generator<Frame | void, void, never>;
 
 export default interface Behavior {
+  fill: boolean;
+
   /**
    * Calculates the frames for the given parameters.
    *
