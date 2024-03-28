@@ -1,0 +1,58 @@
+name: CI [boxel-ui]
+
+on:
+  pull_request:
+    paths:
+      - "packages/boxel-ui/**"
+      - ".github/workflows/pr-boxel-ui.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+  issues: read
+  checks: write
+  pull-requests: write
+  id-token: write
+  statuses: write
+
+jobs:
+  check-if-requires-preview:
+    name: Check if a preview deploy is required
+    runs-on: ubuntu-latest
+    outputs:
+      boxel-ui-files-changed: ${{ steps.boxel-ui-files-that-changed.outputs.any_changed }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get boxel-ui files that changed
+        id: boxel-ui-files-that-changed
+        uses: tj-actions/changed-files@v39
+        with:
+          files: |
+            packages/boxel-ui/**
+
+  deploy-ui-preview-staging:
+    name: Deploy a boxel-ui staging preview to S3
+    runs-on: ubuntu-latest
+    # github.event.pull_request.head.repo.full_name == github.repository: true if pr is from the original repo, false if it's from a fork
+    # github.head_ref: the branch that the pull request is from. only appears on pull_request events
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-ui-files-changed == 'true'
+    needs: check-if-requires-preview
+    concurrency: deploy-ui-preview-staging-${{ github.head_ref || github.run_id }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::680542703984:role/boxel-ui
+          aws-region: us-east-1
+      - name: Deploy boxel-ui preview
+        uses: ./.github/actions/deploy-ember-preview
+        env:
+          S3_PREVIEW_BUCKET_NAME: boxel-ui-preview.stack.cards
+          AWS_S3_BUCKET: boxel-ui-preview.stack.cards
+          AWS_REGION: us-east-1
+          AWS_CLOUDFRONT_DISTRIBUTION: E14K8X1FKQ6Y6Z
+        with:
+          package: boxel-ui
+          environment: staging

@@ -15,6 +15,7 @@ export interface TweenBehaviorOptions {
 }
 
 export default class TweenBehavior implements Behavior {
+  fill = true;
   easing: Easing;
 
   constructor(options?: TweenBehaviorOptions) {
