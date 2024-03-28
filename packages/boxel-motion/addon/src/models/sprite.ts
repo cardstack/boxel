@@ -163,9 +163,14 @@ export default class Sprite {
 
   get initial(): { [k in string]: Value } {
     let initialBounds = {};
+    let boundsRect: DOMRect;
     if (this.initialBounds) {
-      let { x, y, width, height, top, right, bottom, left } =
-        this.initialBounds.relativeToParent;
+      if (this.type == SpriteType.Removed) {
+        // because removed sprites are moved to the orphans container under the AnimationContext
+        boundsRect = this.initialBounds.relativeToContext;
+      } else {
+        boundsRect = this.initialBounds.relativeToParent;
+      }
 
       initialBounds = {
         // TODO: maybe also for top/left?
@@ -173,14 +178,14 @@ export default class Sprite {
         'translate-x': `${-(this.boundsDelta?.x ?? 0)}px`,
         'translate-y': `${-(this.boundsDelta?.y ?? 0)}px`,
 
-        x: `${x}px`,
-        y: `${y}px`,
-        width: `${width}px`,
-        height: `${height}px`,
-        top: `${top}px`,
-        right: `${right}px`,
-        bottom: `${bottom}px`,
-        left: `${left}px`,
+        x: `${boundsRect.x}px`,
+        y: `${boundsRect.y}px`,
+        width: `${boundsRect.width}px`,
+        height: `${boundsRect.height}px`,
+        top: `${boundsRect.top}px`,
+        right: `${boundsRect.right}px`,
+        bottom: `${boundsRect.bottom}px`,
+        left: `${boundsRect.left}px`,
       };
     }
 

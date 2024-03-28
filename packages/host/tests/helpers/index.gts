@@ -54,6 +54,7 @@ import visitOperatorMode from './visit-operator-mode';
 
 export { percySnapshot };
 export { visitOperatorMode };
+export * from './indexer';
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 

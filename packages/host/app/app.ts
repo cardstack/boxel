@@ -1,5 +1,6 @@
 import './lib/public-path'; // this should be first
 import './lib/setup-globals'; // This should be second
+import './deprecation-workflow';
 import Application from '@ember/application';
 import Resolver from 'ember-resolver';
 import loadInitializers from 'ember-load-initializers';

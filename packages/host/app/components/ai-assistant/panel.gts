@@ -8,7 +8,6 @@ import Component from '@glimmer/component';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
 
-import format from 'date-fns/format';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 import { TrackedMap } from 'tracked-built-ins';
@@ -330,10 +329,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       this.enterRoom(this.newSessionId!);
       return;
     }
-    let newRoomName = `${format(
-      new Date(),
-      "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
-    )} - ${this.matrixService.userId}`;
+    let newRoomName = 'New AI Assistant Chat';
     this.doCreateRoom.perform(newRoomName, [aiBotUsername]);
   }
 
