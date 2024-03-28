@@ -138,6 +138,7 @@ class RoomMembershipField extends FieldDef {
 type CardArgs = {
   author: RoomMemberField;
   created: Date;
+  updated: Date;
   message: string;
   formattedMessage: string;
   index: number;
