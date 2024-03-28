@@ -75,3 +75,5 @@ const ProfileAvatarIconVisual: TemplateOnlyComponent<ProfileAvatarIconVisualSign
       </span>
     </div>
   </template>;
+
+export { ProfileAvatarIconVisual };
