@@ -21,12 +21,12 @@
     "@types/babel__generator": "^7.6.4",
     "@types/babel__traverse": "^7.14.2",
     "@types/diff": "^5.0.2",
-    "@types/flat": "^5.0.2",
+    "@types/flat": "^5.0.5",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/lodash": "^4.14.182",
     "@types/pluralize": "^0.0.30",
-    "@types/qs": "^6.9.7",
-    "@types/uuid": "^9.0.4",
+    "@types/qs": "^6.9.14",
+    "@types/uuid": "^9.0.8",
     "babel-import-util": "^1.2.2",
     "babel-plugin-ember-template-compilation": "^2.2.1",
     "date-fns": "^2.28.0",
@@ -52,7 +52,7 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.0",
+    "@babel/core": "^7.24.3",
     "@types/dompurify": "^3.0.2",
     "@types/js-string-escape": "^1.0.1",
     "@types/qunit": "^2.11.3",
@@ -60,7 +60,7 @@
     "ember-cli-htmlbars": "^6.3.0"
   },
   "peerDependencies": {
-    "@babel/core": "^7.24.0",
+    "@babel/core": "^7.24.3",
     "ember-cli-htmlbars": "^6.3.0"
   }
 }

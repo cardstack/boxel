@@ -135,6 +135,19 @@ class RoomMembershipField extends FieldDef {
   };
 }
 
+type CardArgs = {
+  author: RoomMemberField;
+  created: Date;
+  message: string;
+  formattedMessage: string;
+  index: number;
+  transactionId: string | null;
+  attachedCard: string[] | null;
+  command: string | null;
+  isStreamingFinished?: boolean;
+  clientGeneratedId?: string | null;
+};
+
 type AttachedCardResource = {
   card: CardDef | undefined;
   loaded?: Promise<void>;
@@ -243,6 +256,9 @@ export class MessageField extends FieldDef {
   @field transactionId = contains(StringField);
   @field command = contains(PatchField);
   @field isStreamingFinished = contains(BooleanField);
+  // ID from the client and can be used by client
+  // to verify whether the message is already sent or not.
+  @field clientGeneratedId = contains(StringField);
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -464,7 +480,7 @@ export class RoomField extends FieldDef {
         }
 
         let author = upsertRoomMember({ room: this, userId: event.sender });
-        let cardArgs = {
+        let cardArgs: CardArgs = {
           author,
           created: new Date(event.origin_server_ts),
           message: event.content.body,
@@ -501,6 +517,8 @@ export class RoomField extends FieldDef {
           if (attachedCardIds.length < cardDocs.length) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
+
+          cardArgs.clientGeneratedId = event.content.clientGeneratedId ?? null;
           messageField = new MessageField({
             ...cardArgs,
             attachedCardIds,
@@ -520,12 +538,12 @@ export class RoomField extends FieldDef {
               commandType: command.type,
               payload: command,
             }),
+            isStreamingFinished: true,
           });
         } else {
           // Text from the AI bot
           if (event.content.msgtype === 'm.text') {
-            (cardArgs as any).isStreamingFinished =
-              !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+            cardArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
           }
           messageField = new MessageField(cardArgs);
         }
@@ -748,6 +766,9 @@ export interface CardMessageContent {
   body: string;
   formatted_body: string;
   isStreamingFinished?: boolean;
+  // ID from the client and can be used by client
+  // to verify whether the message is already sent or not.
+  clientGeneratedId?: string;
   data: {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message

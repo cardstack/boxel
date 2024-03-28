@@ -29,6 +29,8 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import {
   percySnapshot,
   testRealmURL,
@@ -50,6 +52,7 @@ import {
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let room: typeof import('https://cardstack.com/base/room');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (
   cardURL?: string,
@@ -89,10 +92,14 @@ module('Integration | operator-mode', function (hooks) {
     localStorage.removeItem('aiPanelCurrentRoomId');
     localStorage.removeItem('aiPanelNewSessionId');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    room = await loader.import(`${baseRealm.url}room`);
     matrixService = this.owner.lookup(
       'service:matrixService',
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
+    matrixService.getRoomModule = async function () {
+      return await loader.import(`${baseRealm.url}room`);
+    };
 
     //Generate 11 person card to test recent card menu in card sheet
     let personCards: Map<String, any> = new Map<String, any>();
@@ -686,8 +693,8 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       await waitFor('[data-test-room-settled]');
       let roomId = document
-        .querySelector('[data-test-room-id]')
-        ?.getAttribute('data-test-room-id');
+        .querySelector('[data-test-room]')
+        ?.getAttribute('data-test-room');
       if (!roomId) {
         throw new Error('Expected a room ID');
       }
@@ -963,28 +970,34 @@ module('Integration | operator-mode', function (hooks) {
       let tinyDelay = () => new Promise((resolve) => setTimeout(resolve, 1)); // Add a tiny artificial delay to ensure rooms are created in the correct order with increasing timestamps
       await matrixService.createAndJoinRoom('test1', 'test room 1');
       await tinyDelay();
-      await matrixService.createAndJoinRoom('test2', 'test room 2');
+      const room2Id = await matrixService.createAndJoinRoom(
+        'test2',
+        'test room 2',
+      );
       await tinyDelay();
-      await matrixService.createAndJoinRoom('test3', 'test room 3');
+      const room3Id = await matrixService.createAndJoinRoom(
+        'test3',
+        'test room 3',
+      );
 
       await waitFor(`[data-test-open-ai-assistant]`);
       await click('[data-test-open-ai-assistant]');
       await waitFor(`[data-room-settled]`);
 
       assert
-        .dom('[data-test-room="test room 3"]')
+        .dom(`[data-test-room="${room3Id}"]`)
         .exists(
           "test room 3 is the most recently created room and it's opened initially",
         );
 
       await click('[data-test-past-sessions-button]');
-      await click('[data-test-enter-room="test room 2"]');
+      await click(`[data-test-enter-room="${room2Id}"]`);
 
       await click('[data-test-close-ai-assistant]');
       await click('[data-test-open-ai-assistant]');
       await waitFor(`[data-room-settled]`);
       assert
-        .dom('[data-test-room="test room 2"]')
+        .dom(`[data-test-room="${room2Id}"]`)
         .exists(
           "test room 2 is the most recently selected room and it's opened initially",
         );
@@ -997,7 +1010,7 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       await waitFor(`[data-room-settled]`);
       assert
-        .dom('[data-test-room="test room 3"]')
+        .dom(`[data-test-room="${room3Id}"]`)
         .exists(
           "test room 3 is the most recently created room and it's opened initially",
         );
@@ -1068,6 +1081,88 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-message-idx="0"] p').exists({ count: 2 });
       assert.dom('[data-test-message-idx="0"] em').hasText('love');
       assert.dom('[data-test-message-idx="0"]').doesNotContainText('_love_');
+    });
+
+    test('displays message slightly muted when it is being sent', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      let sendMessageDeferred = new Deferred<void>();
+      let originalSendMessage = matrixService.sendMessage;
+      matrixService.sendMessage = async function (
+        roomId: string,
+        body: string,
+        attachedCards: [],
+        _context?: any,
+      ) {
+        matrixService.messagesToSend.set(roomId, undefined);
+        matrixService.cardsToSend.set(roomId, undefined);
+        let roomMember = new room.RoomMemberField({
+          id: this.userId,
+          userId: this.userId,
+          roomId: roomId,
+        });
+        let clientGeneratedId = 'client-generated-id';
+        this.pendingMessages.set(
+          roomId,
+          new room.MessageField({
+            author: roomMember,
+            message: body,
+            formattedMessage: body ?? '',
+            created: new Date(1709652566421).getTime(),
+            clientGeneratedId,
+            transactionId: null,
+            attachedCardIds: attachedCards?.map((c: CardDef) => c.id) || [],
+          }),
+        );
+        await sendMessageDeferred.promise;
+        addRoomEvent(matrixService, {
+          event_id: 'event1',
+          room_id: roomId,
+          state_key: 'state',
+          type: 'm.room.message',
+          origin_server_ts: 1709652566421,
+          content: {
+            body,
+            msgtype: 'org.boxel.message',
+            formatted_body: body,
+            format: 'org.matrix.custom.html',
+            clientGeneratedId,
+          },
+        });
+      };
+      await openAiAssistant();
+
+      await fillIn('[data-test-message-field]', 'Test Message');
+      assert.dom('[data-test-message-field]').hasValue('Test Message');
+      assert.dom('[data-test-send-message-btn]').isEnabled();
+      assert.dom('[data-test-ai-assistant-message]').doesNotExist();
+      await click('[data-test-send-message-btn]');
+
+      assert.dom('[data-test-message-field]').hasValue('');
+      assert.dom('[data-test-send-message-btn]').isDisabled();
+      assert.dom('[data-test-ai-assistant-message]').exists();
+      assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
+      await percySnapshot(assert);
+
+      sendMessageDeferred.fulfill();
+      await waitUntil(
+        () =>
+          !(
+            document.querySelector(
+              '[data-test-send-message-btn]',
+            ) as HTMLButtonElement
+          ).disabled,
+      );
+      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-sending');
+      matrixService.sendMessage = originalSendMessage;
     });
 
     test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {
@@ -1211,6 +1306,51 @@ module('Integration | operator-mode', function (hooks) {
         .doesNotHaveClass(
           'ai-avatar-animated',
           'Answer to my last question is not in progress',
+        );
+    });
+
+    test('it does not display the streaming indicator when ai bot sends an option', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+
+      addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          body: 'i am the body',
+          msgtype: 'org.boxel.command',
+          formatted_body: 'A patch',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
+          }),
+        },
+      });
+
+      await waitFor('[data-test-message-idx="0"]');
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
+        .doesNotHaveClass(
+          'ai-avatar-animated',
+          'ai bot patch message does not have a spinner',
         );
     });
   });
