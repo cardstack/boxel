@@ -216,6 +216,16 @@ export default class ResizablePanelGroup extends Component<Signature> {
       } else {
         context.lengthPx =
           context.defaultLengthFraction * this.panelGroupLengthPx;
+        //Update previous lengthPx
+        let previousId = id - 1;
+        let previousContextEl = this.listPanelContext.get(previousId);
+        if (
+          previousContextEl !== undefined &&
+          previousContextEl.defaultLengthFraction
+        ) {
+          previousContextEl.lengthPx =
+            previousContextEl.defaultLengthFraction * this.panelGroupLengthPx;
+        }
       }
     }
     this.listPanelContext.set(id, {
