@@ -209,11 +209,14 @@ export class IndexerDBClient {
     ].map((t) => [`${t.fn} as ${t.as}`]);
 
     let query = [
-      'SELECT pristine_doc',
+      'SELECT card_url, pristine_doc',
       'FROM',
       ...separatedByCommas([['indexed_cards'], ...tableValuedFunctions]),
       'WHERE',
       ...every(conditions),
+      // use a default sort for deterministic ordering, refactor this after
+      // adding sort support to the query
+      'ORDER BY card_url',
     ];
     let queryCount = [
       'SELECT count(*) as total',
@@ -226,7 +229,7 @@ export class IndexerDBClient {
     let [totalResults, results] = await Promise.all([
       this.queryCards(queryCount, loader) as Promise<{ total: number }[]>,
       this.queryCards(query, loader) as Promise<
-        Pick<IndexedCardsTable, 'pristine_doc'>[]
+        Pick<IndexedCardsTable, 'pristine_doc' | 'card_url'>[]
       >,
     ]);
 
@@ -244,7 +247,7 @@ export class IndexerDBClient {
 
     let on = filter.on ?? onRef;
 
-    // TODO: any, every, not, eq, range
+    // TODO: any, every, not, eq, contains, range
 
     throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
   }
