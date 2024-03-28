@@ -89,7 +89,7 @@ type TestIndexRow =
 // 2. provide a card instance for each row in the indexed_cards table
 // 3. provide an object { card, data } where the card instance is used for each
 //    row in the indexed_cards table, as well as any additional fields that you
-//    will to set from the `data` object.
+//    wish to set from the `data` object.
 //
 // the realm version table will default to version 1 of the testRealmURL if no
 // value is supplied

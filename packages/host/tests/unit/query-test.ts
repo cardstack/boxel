@@ -17,11 +17,6 @@ import { testRealmURL, setupIndex, serializeCard } from '../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
-// let number: typeof import('https://cardstack.com/base/number');
-// let date: typeof import('https://cardstack.com/base/date');
-// let datetime: typeof import('https://cardstack.com/base/datetime');
-// let boolean: typeof import('https://cardstack.com/base/boolean');
-// let queryableValue: typeof queryableValueType;
 let { sqlSchema, resolvedBaseRealmURL } = ENV;
 
 module('Unit | query', function (hooks) {
@@ -38,11 +33,6 @@ module('Unit | query', function (hooks) {
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
-    // number = await loader.import(`${baseRealm.url}number`);
-    // date = await loader.import(`${baseRealm.url}date`);
-    // datetime = await loader.import(`${baseRealm.url}datetime`);
-    // boolean = await loader.import(`${baseRealm.url}boolean`);
-    // queryableValue = cardApi.queryableValue;
 
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;
@@ -148,4 +138,5 @@ module('Unit | query', function (hooks) {
   });
 
   skip(`can filter using 'eq' thru nested fields`);
+  skip(`can leverage queryableValue hook in card definition`);
 });

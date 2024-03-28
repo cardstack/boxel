@@ -250,11 +250,13 @@ export class IndexerDBClient {
 
     let on = filter.on ?? onRef;
 
-    // TODO: any, every, not, eq, contains, range
-
     if ('eq' in filter) {
       return this.eqCondition(filter, on);
     }
+
+    // TODO handle filters for: any, every, not, contains, and range
+    // refer to hub v2 for a good reference:
+    // https://github.dev/cardstack/cardstack/blob/d36e6d114272a9107a7315d95d2f0f415e06bf5c/packages/hub/pgsearch/pgclient.ts
 
     throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
   }
