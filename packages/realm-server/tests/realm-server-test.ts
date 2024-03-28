@@ -203,7 +203,6 @@ module('Realm Server', function (hooks) {
         ));
       });
 
-      // NEXT TODO: this is failing becaues it now bypasses authentication
       test('401 with invalid JWT', async function (assert) {
         let response = await request
           .get('/person-1')
@@ -2289,6 +2288,7 @@ async function setupPermissionedRealm(permissions: RealmPermissions) {
   let dir = dirSync();
   copySync(join(__dirname, 'cards'), dir.name);
   let virtualNetwork = new VirtualNetwork();
+  shimExternals(virtualNetwork);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
 
   let testRealmServerLoader = virtualNetwork.createLoader();
