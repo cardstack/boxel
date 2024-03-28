@@ -215,17 +215,18 @@ export default class ResizablePanelGroup extends Component<Signature> {
       } else {
         context.lengthPx =
           context.defaultLengthFraction * this.panelGroupLengthPx;
-        //Update previous lengthPx
-        let previousId = id - 1;
-        let previousContextEl = this.listPanelContext.get(previousId);
-        if (
-          previousContextEl !== undefined &&
-          previousContextEl.defaultLengthFraction
-        ) {
-          previousContextEl.lengthPx =
-            previousContextEl.defaultLengthFraction * this.panelGroupLengthPx;
-        }
       }
+    }
+    //Update previous lengthPx
+    let previousId = id - 1;
+    let previousContextEl = this.listPanelContext.get(previousId);
+    if (
+      previousContextEl !== undefined &&
+      previousContextEl.defaultLengthFraction &&
+      this.panelGroupLengthPx
+    ) {
+      previousContextEl.lengthPx =
+        previousContextEl.defaultLengthFraction * this.panelGroupLengthPx;
     }
     this.listPanelContext.set(id, {
       id,
@@ -237,6 +238,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         context.collapsible == undefined ? true : context.collapsible,
     });
 
+    this.onContainerResize();
     return id;
   }
 
