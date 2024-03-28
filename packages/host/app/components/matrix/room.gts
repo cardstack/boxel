@@ -6,8 +6,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
-import { bool, gt, or } from '@cardstack/boxel-ui/helpers';
-
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { getRoom } from '@cardstack/host/resources/room';
 
@@ -43,7 +41,7 @@ export default class Room extends Component<Signature> {
       data-test-room={{this.room.name}}
       data-test-room-id={{this.room.roomId}}
     >
-      {{#if (or (gt this.room.messages.length 0) (bool this.pendingMessage))}}
+      {{#if this.hasMessagesOrPending}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
@@ -148,6 +146,10 @@ export default class Room extends Component<Signature> {
     await this.matrixService.flushTimeline;
     await this.roomResource.loading;
   });
+
+  private get hasMessagesOrPending() {
+    return (this.room && this.room.messages.length > 0) || this.pendingMessage;
+  }
 
   private get room() {
     return this.roomResource.room;
