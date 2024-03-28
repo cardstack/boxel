@@ -29,51 +29,49 @@ const FileDefinitionContainer: TemplateOnlyComponent<FileSignature> = <template>
 
 interface ModuleArgs extends BaseArgs, ActiveArgs {}
 
-interface ModuleSignature {
+interface ModSig {
   Element: HTMLElement;
   Args: ModuleArgs;
 }
 
-const ModuleDefinitionContainer: TemplateOnlyComponent<ModuleSignature> =
-  <template>
-    <BaseDefinitionContainer
-      @title={{@title}}
-      @name={{@name}}
-      @fileExtension={{@fileExtension}}
-      @isActive={{@isActive}}
-      @fileURL={{@fileURL}}
-      data-test-card-module-definition
-    >
-      <:activeContent>
-        <Active @actions={{@actions}} @infoText={{@infoText}} />
-      </:activeContent>
-    </BaseDefinitionContainer>
-  </template>;
+const ModuleDefinitionContainer: TemplateOnlyComponent<ModSig> = <template>
+  <BaseDefinitionContainer
+    @title={{@title}}
+    @name={{@name}}
+    @fileExtension={{@fileExtension}}
+    @isActive={{@isActive}}
+    @fileURL={{@fileURL}}
+    data-test-card-module-definition
+  >
+    <:activeContent>
+      <Active @actions={{@actions}} @infoText={{@infoText}} />
+    </:activeContent>
+  </BaseDefinitionContainer>
+</template>;
 
 interface InstanceArgs
   extends Omit<BaseArgs, 'title' | 'isActive'>,
     ActiveArgs {}
 
-interface InstanceSignature {
+interface InstSig {
   Element: HTMLElement;
   Args: InstanceArgs;
 }
 
-const InstanceDefinitionContainer: TemplateOnlyComponent<InstanceSignature> =
-  <template>
-    <BaseDefinitionContainer
-      @title='Card Instance'
-      @fileExtension={{@fileExtension}}
-      @name={{@name}}
-      @isActive={{true}}
-      @fileURL={{@fileURL}}
-      data-test-card-instance-definition
-    >
-      <:activeContent>
-        <Active @actions={{@actions}} @infoText={{@infoText}} />
-      </:activeContent>
-    </BaseDefinitionContainer>
-  </template>;
+const InstanceDefinitionContainer: TemplateOnlyComponent<InstSig> = <template>
+  <BaseDefinitionContainer
+    @title='Card Instance'
+    @fileExtension={{@fileExtension}}
+    @name={{@name}}
+    @isActive={{true}}
+    @fileURL={{@fileURL}}
+    data-test-card-instance-definition
+  >
+    <:activeContent>
+      <Active @actions={{@actions}} @infoText={{@infoText}} />
+    </:activeContent>
+  </BaseDefinitionContainer>
+</template>;
 
 interface ClickableModuleArgs
   extends Omit<BaseArgs, 'infoText' | 'isActive'>,
