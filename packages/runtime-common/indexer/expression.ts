@@ -93,6 +93,33 @@ export function tableValuedFunction(
   };
 }
 
+export function fieldQuery(
+  path: string,
+  type: CodeRef,
+  errorHint: string,
+): FieldQuery {
+  return {
+    type,
+    path,
+    errorHint,
+    kind: 'field-query',
+  };
+}
+
+export function fieldValue(
+  path: string,
+  value: CardExpression,
+  type: CodeRef,
+  errorHint: string,
+): FieldValue {
+  return {
+    type,
+    path,
+    value,
+    errorHint,
+    kind: 'field-value',
+  };
+}
 export function every(expressions: CardExpression[]): CardExpression;
 export function every(expressions: Expression[]): Expression;
 export function every(expressions: unknown[][]): unknown {

@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import {
   Loader,
@@ -118,4 +118,34 @@ module('Unit | query', function (hooks) {
       'results are correct',
     );
   });
+
+  test(`can filter using 'eq'`, async function (assert) {
+    let { mango, vangogh, paper } = testCards;
+    await setupIndex(client, [
+      { card: mango, data: { search_doc: { name: 'Mango' } } },
+      { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
+      // this card's "name" field doesn't match our filter since our filter
+      // specified "name" fields of Person cards
+      { card: paper, data: { search_doc: { name: 'Mango' } } },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          eq: { name: 'Mango' },
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(
+      cards,
+      [await serializeCard(mango)],
+      'results are correct',
+    );
+  });
+
+  skip(`can filter using 'eq' thru nested fields`);
 });

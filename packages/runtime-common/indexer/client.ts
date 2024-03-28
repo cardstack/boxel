@@ -1,3 +1,4 @@
+import * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
 import {
   type LooseCardResource,
@@ -22,8 +23,10 @@ import {
   addExplicitParens,
   asExpressions,
   every,
+  fieldQuery,
+  fieldValue,
 } from './expression';
-import { type Query, type Filter } from '../query';
+import { type Query, type Filter, type EqFilter } from '../query';
 import { type SerializedError } from '../error';
 import { type DBAdapter } from '../db';
 import { type SearchEntryWithErrors } from '../search-index';
@@ -249,6 +252,10 @@ export class IndexerDBClient {
 
     // TODO: any, every, not, eq, contains, range
 
+    if ('eq' in filter) {
+      return this.eqCondition(filter, on);
+    }
+
     throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
   }
 
@@ -260,6 +267,32 @@ export class IndexerDBClient {
         param(internalKeyFor(ref, undefined)),
       ]),
     ];
+  }
+
+  private eqCondition(filter: EqFilter, on: CodeRef): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      this.typeCondition(on),
+      ...Object.entries(filter.eq).map(([key, value]) => {
+        return this.fieldFilter(key, value, on);
+      }),
+    ]);
+  }
+
+  // TODO handle containsMany fields. Take a look at how FieldArity works in hub
+  // v2 for an example which let's us use a different card expression for
+  // singular fields vs plural fields. Also plural fields will really push
+  // SQLite to the extreme in terms of the query that we need--this is
+  // challenging because the original hub v2 implementation leveraged array
+  // operators for this query which SQLite does not have.
+  private fieldFilter(
+    key: string,
+    value: JSONTypes.Value,
+    onRef: CodeRef,
+  ): CardExpression {
+    let query = fieldQuery(key, onRef, 'filter');
+    let v = fieldValue(key, [param(value)], onRef, 'filter');
+    return [query, '=', v];
   }
 
   private async cardQueryToSQL(query: CardExpression, loader: Loader) {
