@@ -40,23 +40,54 @@ interface Signature {
     isStreaming: boolean;
     currentEditor: number | undefined;
     setCurrentEditor: (editor: number | undefined) => void;
+    retryAction?: () => void;
   };
 }
 
-export default class Room extends Component<Signature> {
+export default class RoomMessage extends Component<Signature> {
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+
+    this.checkStreamingTimeout.perform();
+  }
+
+  @tracked streamingTimeout = false;
+
+  checkStreamingTimeout = task(async () => {
+    if (!this.isFromAssistant || !this.args.isStreaming) {
+      return;
+    }
+
+    // If message is streaming and hasn't been updated in the last minute, show a timeout message
+    if (Date.now() - Number(this.args.message.updated) > 60000) {
+      this.streamingTimeout = true;
+      return;
+    }
+
+    // Do this check every second
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    this.checkStreamingTimeout.perform();
+  });
+
+  get isFromAssistant() {
+    return this.args.message.author.userId === aiBotUserId;
+  }
+
   <template>
     <AiAssistantMessage
       class='room-message'
       @formattedMessage={{htmlSafe this.formattedMessage}}
       @datetime={{@message.created}}
-      @isFromAssistant={{eq @message.author.userId aiBotUserId}}
+      @isFromAssistant={{this.isFromAssistant}}
       @profileAvatar={{component
         ProfileAvatarIcon
         userId=@message.author.userId
       }}
-      @attachedCards={{this.resources.cards}}
+      @resources={{this.resources}}
       @errorMessage={{this.errorMessage}}
       @isStreaming={{@isStreaming}}
+      @retryAction={{@retryAction}}
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
     >
@@ -220,14 +251,25 @@ export default class Room extends Component<Signature> {
   }
 
   private get errorMessage() {
+    if (this.args.message.errorMessage) {
+      return this.args.message.errorMessage;
+    }
+
+    if (this.streamingTimeout) {
+      return 'This message was processing for too long. Please try again.';
+    }
+
     if (!this.resources.errors) {
       return undefined;
     }
+
+    let hasResourceErrors = this.resources.errors.length > 0;
+    if (hasResourceErrors) {
+      return 'Error rendering attached cards.';
+    }
+
     return this.resources.errors
-      .map(
-        (e: { id: string; error: Error }) =>
-          `cannot render card ${e.id}: ${e.error.message}`,
-      )
+      .map((e: { id: string; error: Error }) => `${e.id}: ${e.error.message}`)
       .join(', ');
   }
 

@@ -52,6 +52,7 @@ export default class Room extends Component<Signature> {
               @isStreaming={{this.isMessageStreaming message i}}
               @currentEditor={{this.currentMonacoContainer}}
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
+              @retryAction={{this.maybeRetryAction i}}
               data-test-message-idx={{i}}
               {{scrollIntoViewModifier (this.isLastMessage i)}}
             />
@@ -127,6 +128,13 @@ export default class Room extends Component<Signature> {
     this.doMatrixEventFlush.perform();
   }
 
+  maybeRetryAction = (messageIndex: number) => {
+    if (this.isLastMessage(messageIndex)) {
+      return this.resendLastMessage;
+    }
+    return undefined;
+  };
+
   @action isMessageStreaming(message: MessageField, messageIndex: number) {
     return (
       !message.isStreamingFinished &&
@@ -155,6 +163,30 @@ export default class Room extends Component<Signature> {
 
   private get cardsToAttach() {
     return this.cardsToSend.get(this.args.roomId);
+  }
+
+  @action resendLastMessage() {
+    if (!this.room) {
+      throw new Error(
+        'Bug: should not be able to resend a message without a room.',
+      );
+    }
+
+    let myMessages = this.room.messages.filter(
+      (message) => message.author.userId === this.matrixService.userId,
+    );
+    if (myMessages.length === 0) {
+      throw new Error(
+        'Bug: should not be able to resend a message that does not exist.',
+      );
+    }
+    let myLastMessage = myMessages[myMessages.length - 1];
+
+    let attachedCards = (myLastMessage!.attachedResources || [])
+      .map((resource) => resource.card)
+      .filter((card) => card !== undefined) as CardDef[];
+
+    this.doSendMessage.perform(myLastMessage.message, attachedCards);
   }
 
   @action sendPrompt(prompt: string) {
@@ -210,8 +242,17 @@ export default class Room extends Component<Signature> {
     }
   }
 
+  private lastSentMessageParams: {
+    message: string | undefined;
+    cards: CardDef[] | undefined;
+  } = {
+    message: undefined,
+    cards: undefined,
+  };
+
   private doSendMessage = enqueueTask(
     async (message: string | undefined, cards?: CardDef[]) => {
+      this.lastSentMessageParams = { message, cards }; // For retries
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
       let context = {
