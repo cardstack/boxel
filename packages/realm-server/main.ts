@@ -9,8 +9,26 @@ import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
 import { type RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common/realm';
+import * as Sentry from '@sentry/node';
+import { setErrorReporter } from '@cardstack/runtime-common/realm';
 
 import fs from 'fs';
+
+let log = logger('main');
+
+if (process.env.REALM_SENTRY_DSN) {
+  log.info('Setting up Sentry.');
+  Sentry.init({
+    dsn: process.env.REALM_SENTRY_DSN,
+    environment: process.env.REALM_SENTRY_ENVIRONMENT || 'development',
+  });
+
+  setErrorReporter(Sentry.captureException);
+} else {
+  log.warn(
+    `No REALM_SENTRY_DSN environment variable found, skipping Sentry setup.`,
+  );
+}
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
@@ -111,7 +129,6 @@ if (
   process.exit(-1);
 }
 
-let log = logger('main');
 let virtualNetwork = new VirtualNetwork();
 let loader = virtualNetwork.createLoader();
 shimExternals(virtualNetwork);

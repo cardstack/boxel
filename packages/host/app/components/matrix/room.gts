@@ -6,9 +6,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
-import { TrackedMap } from 'tracked-built-ins';
-
-import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -40,10 +37,10 @@ export default class Room extends Component<Signature> {
       class='room'
       data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-      data-test-room={{this.room.name}}
-      data-test-room-id={{this.room.roomId}}
+      data-test-room-name={{this.room.name}}
+      data-test-room={{this.room.roomId}}
     >
-      {{#if this.room.messages}}
+      {{#if this.hasMessagesOrPending}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
@@ -54,9 +51,19 @@ export default class Room extends Component<Signature> {
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
               @retryAction={{this.maybeRetryAction i}}
               data-test-message-idx={{i}}
-              {{scrollIntoViewModifier (this.isLastMessage i)}}
             />
           {{/each}}
+          {{#if this.pendingMessage}}
+            <RoomMessage
+              @message={{this.pendingMessage}}
+              @monacoSDK={{@monacoSDK}}
+              @isStreaming={{false}}
+              @isPending={{true}}
+              @currentEditor={{this.currentMonacoContainer}}
+              @setCurrentEditor={{this.setCurrentMonacoContainer}}
+              data-test-message-idx={{this.room.messages.length}}
+            />
+          {{/if}}
         </AiAssistantConversation>
       {{else}}
         <NewSession @sendPrompt={{this.sendPrompt}} />
@@ -69,7 +76,7 @@ export default class Room extends Component<Signature> {
             @onInput={{this.setMessage}}
             @onSend={{this.sendMessage}}
             @canSend={{this.canSend}}
-            data-test-message-field={{this.room.name}}
+            data-test-message-field={{this.room.roomId}}
           />
           <AiAssistantCardPicker
             @autoAttachedCard={{this.autoAttachedCard}}
@@ -114,10 +121,6 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   private roomResource = getRoom(this, () => this.args.roomId);
-  private messagesToSend: TrackedMap<string, string | undefined> =
-    new TrackedMap();
-  private cardsToSend: TrackedMap<string, CardDef[] | undefined> =
-    new TrackedMap();
   private lastTopMostCard: CardDef | undefined;
 
   @tracked private isAutoAttachedCardDisplayed = true;
@@ -149,6 +152,10 @@ export default class Room extends Component<Signature> {
     await this.roomResource.loading;
   });
 
+  private get hasMessagesOrPending() {
+    return (this.room && this.room.messages.length > 0) || this.pendingMessage;
+  }
+
   private get room() {
     return this.roomResource.room;
   }
@@ -158,11 +165,15 @@ export default class Room extends Component<Signature> {
   });
 
   private get messageToSend() {
-    return this.messagesToSend.get(this.args.roomId) ?? '';
+    return this.matrixService.messagesToSend.get(this.args.roomId) ?? '';
   }
 
   private get cardsToAttach() {
-    return this.cardsToSend.get(this.args.roomId);
+    return this.matrixService.cardsToSend.get(this.args.roomId);
+  }
+
+  private get pendingMessage() {
+    return this.matrixService.pendingMessages.get(this.args.roomId);
   }
 
   @action resendLastMessage() {
@@ -195,7 +206,7 @@ export default class Room extends Component<Signature> {
 
   @action
   private setMessage(message: string) {
-    this.messagesToSend.set(this.args.roomId, message);
+    this.matrixService.messagesToSend.set(this.args.roomId, message);
   }
 
   @action
@@ -217,7 +228,7 @@ export default class Room extends Component<Signature> {
   private chooseCard(card: CardDef) {
     let cards = this.cardsToAttach ?? [];
     if (!cards?.find((c) => c.id === card.id)) {
-      this.cardsToSend.set(this.args.roomId, [...cards, card]);
+      this.matrixService.cardsToSend.set(this.args.roomId, [...cards, card]);
     }
   }
 
@@ -235,26 +246,17 @@ export default class Room extends Component<Signature> {
       if (cardIndex != undefined && cardIndex !== -1) {
         this.cardsToAttach?.splice(cardIndex, 1);
       }
-      this.cardsToSend.set(
+      this.matrixService.cardsToSend.set(
         this.args.roomId,
         this.cardsToAttach?.length ? this.cardsToAttach : undefined,
       );
     }
   }
 
-  private lastSentMessageParams: {
-    message: string | undefined;
-    cards: CardDef[] | undefined;
-  } = {
-    message: undefined,
-    cards: undefined,
-  };
-
   private doSendMessage = enqueueTask(
     async (message: string | undefined, cards?: CardDef[]) => {
-      this.lastSentMessageParams = { message, cards }; // For retries
-      this.messagesToSend.set(this.args.roomId, undefined);
-      this.cardsToSend.set(this.args.roomId, undefined);
+      this.matrixService.messagesToSend.set(this.args.roomId, undefined);
+      this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       let context = {
         submode: this.operatorModeStateService.state.submode,
         openCardIds: this.operatorModeStateService

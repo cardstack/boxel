@@ -41,6 +41,7 @@ interface Signature {
     currentEditor: number | undefined;
     setCurrentEditor: (editor: number | undefined) => void;
     retryAction?: () => void;
+    isPending?: boolean;
   };
 }
 
@@ -88,6 +89,7 @@ export default class RoomMessage extends Component<Signature> {
       @errorMessage={{this.errorMessage}}
       @isStreaming={{@isStreaming}}
       @retryAction={{@retryAction}}
+      @isPending={{@isPending}}
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
     >
