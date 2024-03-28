@@ -1,3 +1,5 @@
+import { waitUntil } from '@ember/test-helpers';
+
 import { render } from '@ember/test-helpers';
 
 import { setupRenderingTest } from 'ember-qunit';
@@ -58,6 +60,13 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
       .doesNotHaveClass('ai-avatar-animated');
+
+    await waitUntil(
+      () =>
+        !document
+          .querySelector('[data-test-message-idx="1"] [data-test-ai-avatar]')
+          ?.classList.contains('ai-avatar-animated'),
+    );
     assert
       .dom('[data-test-card-error]')
       .includesText(
