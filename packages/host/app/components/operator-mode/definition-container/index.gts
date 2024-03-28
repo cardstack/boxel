@@ -1,4 +1,4 @@
-import Component from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { BaseDefinitionContainer, BaseArgs, Active, ActiveArgs } from './base';
 import { Clickable, ClickableArgs } from './clickable';
@@ -12,22 +12,21 @@ interface FileSignature {
   Args: FileArgs;
 }
 
-export class FileDefinitionContainer extends Component<FileSignature> {
-  <template>
-    <BaseDefinitionContainer
-      @title='File'
-      @name={{undefined}}
-      @fileExtension={{@fileExtension}}
-      @isActive={{true}}
-      @fileURL={{@fileURL}}
-      data-test-file-definition
-    >
-      <:activeContent>
-        <Active @actions={{@actions}} @infoText={{@infoText}} />
-      </:activeContent>
-    </BaseDefinitionContainer>
-  </template>
-}
+const FileDefinitionContainer: TemplateOnlyComponent<FileSignature> = <template>
+  <BaseDefinitionContainer
+    @title='File'
+    @name={{undefined}}
+    @fileExtension={{@fileExtension}}
+    @isActive={{true}}
+    @fileURL={{@fileURL}}
+    data-test-file-definition
+  >
+    <:activeContent>
+      <Active @actions={{@actions}} @infoText={{@infoText}} />
+    </:activeContent>
+  </BaseDefinitionContainer>
+</template>;
+
 interface ModuleArgs extends BaseArgs, ActiveArgs {}
 
 interface ModuleSignature {
@@ -35,7 +34,7 @@ interface ModuleSignature {
   Args: ModuleArgs;
 }
 
-export class ModuleDefinitionContainer extends Component<ModuleSignature> {
+const ModuleDefinitionContainer: TemplateOnlyComponent<ModuleSignature> =
   <template>
     <BaseDefinitionContainer
       @title={{@title}}
@@ -49,8 +48,7 @@ export class ModuleDefinitionContainer extends Component<ModuleSignature> {
         <Active @actions={{@actions}} @infoText={{@infoText}} />
       </:activeContent>
     </BaseDefinitionContainer>
-  </template>
-}
+  </template>;
 
 interface InstanceArgs
   extends Omit<BaseArgs, 'title' | 'isActive'>,
@@ -61,7 +59,7 @@ interface InstanceSignature {
   Args: InstanceArgs;
 }
 
-export class InstanceDefinitionContainer extends Component<InstanceSignature> {
+const InstanceDefinitionContainer: TemplateOnlyComponent<InstanceSignature> =
   <template>
     <BaseDefinitionContainer
       @title='Card Instance'
@@ -75,8 +73,7 @@ export class InstanceDefinitionContainer extends Component<InstanceSignature> {
         <Active @actions={{@actions}} @infoText={{@infoText}} />
       </:activeContent>
     </BaseDefinitionContainer>
-  </template>
-}
+  </template>;
 
 interface ClickableModuleArgs
   extends Omit<BaseArgs, 'infoText' | 'isActive'>,
@@ -87,7 +84,7 @@ interface ClickableModuleSignature {
   Args: ClickableModuleArgs;
 }
 
-export class ClickableModuleDefinitionContainer extends Component<ClickableModuleSignature> {
+const ClickableModuleDefinitionContainer: TemplateOnlyComponent<ClickableModuleSignature> =
   <template>
     <Clickable
       @goToDefinition={{@goToDefinition}}
@@ -104,5 +101,11 @@ export class ClickableModuleDefinitionContainer extends Component<ClickableModul
         data-test-card-module-definition
       />
     </Clickable>
-  </template>
-}
+  </template>;
+
+export {
+  FileDefinitionContainer,
+  ModuleDefinitionContainer,
+  InstanceDefinitionContainer,
+  ClickableModuleDefinitionContainer,
+};

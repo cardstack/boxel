@@ -1,4 +1,4 @@
-import Component from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -10,32 +10,32 @@ interface Signature {
   };
 }
 
-export default class CardError extends Component<Signature> {
-  <template>
-    <div data-card-error class='container'>
-      {{#if (eq @type 'index')}}
-        <b>Cannot load index card.</b>
-      {{else if (eq @type 'stack')}}
-        <b>Cannot load stack.</b>
-      {{else}}
-        <b>Cannot load card.</b>
-      {{/if}}
-      <pre class='error'>{{@message}}</pre>
+const CardError: TemplateOnlyComponent<Signature> = <template>
+  <div data-card-error class='container'>
+    {{#if (eq @type 'index')}}
+      <b>Cannot load index card.</b>
+    {{else if (eq @type 'stack')}}
+      <b>Cannot load stack.</b>
+    {{else}}
+      <b>Cannot load card.</b>
+    {{/if}}
+    <pre class='error'>{{@message}}</pre>
 
-      {{#if @operatorModeState}}
-        <pre class='error'>Operator mode state: {{@operatorModeState}}</pre>
-      {{/if}}
-    </div>
-    <style>
-      .container {
-        margin: 5em;
-      }
+    {{#if @operatorModeState}}
+      <pre class='error'>Operator mode state: {{@operatorModeState}}</pre>
+    {{/if}}
+  </div>
+  <style>
+    .container {
+      margin: 5em;
+    }
 
-      .error {
-        overflow-x: auto;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-      }
-    </style>
-  </template>
-}
+    .error {
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+  </style>
+</template>;
+
+export default CardError;
