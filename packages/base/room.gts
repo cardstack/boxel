@@ -257,13 +257,10 @@ export class MessageField extends FieldDef {
   @field transactionId = contains(StringField);
   @field command = contains(PatchField);
   @field isStreamingFinished = contains(BooleanField);
-<<<<<<< HEAD
   @field errorMessage = contains(StringField);
-=======
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
   @field clientGeneratedId = contains(StringField);
->>>>>>> main
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -778,13 +775,10 @@ export interface CardMessageContent {
   body: string;
   formatted_body: string;
   isStreamingFinished?: boolean;
-<<<<<<< HEAD
   errorMessage?: string;
-=======
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
   clientGeneratedId?: string;
->>>>>>> main
   data: {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message
