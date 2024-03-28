@@ -281,12 +281,13 @@ export class IndexerDBClient {
     ]);
   }
 
-  // TODO handle containsMany fields. Take a look at how FieldArity works in hub
-  // v2 for an example which let's us use a different card expression for
-  // singular fields vs plural fields. Also plural fields will really push
-  // SQLite to the extreme in terms of the query that we need--this is
-  // challenging because the original hub v2 implementation leveraged array
-  // operators for this query which SQLite does not have.
+  // TODO handle containsMany fields. We should load the field for the `onRef`
+  // and see if it's a containsMany or not. based on that we'd return a
+  // different CardExpression (take a look at hub v2 for an example). Also
+  // plural fields will really push SQLite to the extreme in terms of the query
+  // that we need--this is challenging because the original hub v2
+  // implementation leveraged array operators for this query which SQLite does
+  // not have.
   private fieldFilter(
     key: string,
     value: JSONTypes.Value,
