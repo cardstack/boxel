@@ -6,7 +6,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
-import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -51,7 +50,6 @@ export default class Room extends Component<Signature> {
               @currentEditor={{this.currentMonacoContainer}}
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
               data-test-message-idx={{i}}
-              {{scrollIntoViewModifier (this.isLastMessage i)}}
             />
           {{/each}}
           {{#if this.pendingMessage}}
@@ -63,7 +61,6 @@ export default class Room extends Component<Signature> {
               @currentEditor={{this.currentMonacoContainer}}
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
               data-test-message-idx={{this.room.messages.length}}
-              {{scrollIntoViewModifier true}}
             />
           {{/if}}
         </AiAssistantConversation>
