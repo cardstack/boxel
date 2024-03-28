@@ -669,19 +669,6 @@ export default class CodeSubmode extends Component<Signature> {
         ></div>
       </:ready>
     </RealmInfoProvider>
-    <div class='code-mode-top-bar'>
-      <CardURLBar
-        @loadFileError={{this.loadFileError}}
-        @resetLoadFileError={{this.resetLoadFileError}}
-        @userHasDismissedError={{this.userHasDismissedURLError}}
-        @dismissURLError={{this.dismissURLError}}
-        @realmURL={{this.realmURL}}
-      />
-      <NewFileButton
-        @onSelectNewFileType={{this.onSelectNewFileType}}
-        @isCreateModalShown={{bool this.isCreateModalOpen}}
-      />
-    </div>
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @hideAiAssistant={{true}}
@@ -694,6 +681,19 @@ export default class CodeSubmode extends Component<Signature> {
           this.initiateAutoSaveTask.isIdle
         }}
       >
+        <div class='code-mode-top-bar'>
+          <CardURLBar
+            @loadFileError={{this.loadFileError}}
+            @resetLoadFileError={{this.resetLoadFileError}}
+            @userHasDismissedError={{this.userHasDismissedURLError}}
+            @dismissURLError={{this.dismissURLError}}
+            @realmURL={{this.realmURL}}
+          />
+          <NewFileButton
+            @onSelectNewFileType={{this.onSelectNewFileType}}
+            @isCreateModalShown={{bool this.isCreateModalOpen}}
+          />
+        </div>
         <ResizablePanelGroup
           @orientation='horizontal'
           @onListPanelContextChange={{this.onListPanelContextChange}}
@@ -975,16 +975,17 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .code-mode-top-bar {
-        --code-mode-top-bar-padding-left: calc(
-          var(--submode-switcher-width) + (var(--boxel-sp) * 2)
+        --code-mode-top-bar-left-offset: calc(
+          var(--submode-switcher-width) + var(--boxel-sp)
         );
 
         position: absolute;
         top: 0;
         right: 0;
-        padding: var(--boxel-sp) var(--boxel-sp) 0
-          var(--code-mode-top-bar-padding-left);
+        left: var(--code-mode-top-bar-left-offset);
+        padding: var(--boxel-sp);
         display: flex;
+        z-index: 1;
       }
 
       .loading {
