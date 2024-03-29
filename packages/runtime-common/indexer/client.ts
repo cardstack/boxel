@@ -4,10 +4,10 @@ import {
   type LooseCardResource,
   type CodeRef,
   Loader,
-  apiFor,
   baseCardRef,
   loadCard,
   internalKeyFor,
+  identifyCard,
 } from '../index';
 import {
   type PgPrimitive,
@@ -65,10 +65,10 @@ interface GetEntryOptions {
 
 interface QueryResultsMeta {
   // TODO SQLite doesn't let us use cursors in the classic sense so we need to
-  // keep track of page size and index number--note it is possible for mutate
-  // between pages. Perhaps consider querying a specific realm version (and only
-  // cleanup realm versions when making generations) so we can see consistent
-  // paginated results...
+  // keep track of page size and index number--note it is possible for the index
+  // to mutate between pages. Perhaps consider querying a specific realm version
+  // (and only cleanup realm versions when making generations) so we can see
+  // consistent paginated results...
   page: {
     total: number;
     realmVersion?: number;
@@ -163,7 +163,6 @@ export class IndexerDBClient {
     // for large invalidations. But beware, cursor support for SQLite in worker
     // mode is very limited. This will likely require some custom work...
 
-    // TODO rewrite this using the TableValuedFunction expression
     let rows = (await this.query([
       `SELECT indexed_cards.card_url
          FROM
@@ -190,7 +189,9 @@ export class IndexerDBClient {
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: LooseCardResource[]; meta: QueryResultsMeta }> {
-    let conditions: CardExpression[] = [];
+    let conditions: CardExpression[] = [
+      addExplicitParens(['is_deleted = FALSE OR is_deleted IS NULL']),
+    ];
     if (filter) {
       conditions.push(this.filterCondition(filter, baseCardRef));
     }
@@ -294,6 +295,9 @@ export class IndexerDBClient {
     onRef: CodeRef,
   ): CardExpression {
     let query = fieldQuery(key, onRef, 'filter');
+    if (value === null) {
+      return [query, 'IS NULL'];
+    }
     let v = fieldValue(key, [param(value)], onRef, 'filter');
     return [query, '=', v];
   }
@@ -333,7 +337,8 @@ export class IndexerDBClient {
     let { path } = fieldQuery;
 
     return await this.walkFilterFieldPath(
-      await loadCard(fieldQuery.type, { loader }),
+      loader,
+      await loadFieldOrCard(fieldQuery.type, loader),
       path,
       ['search_doc'],
       // Leaf field handler
@@ -361,17 +366,29 @@ export class IndexerDBClient {
     let exp = await this.makeExpression(value, loader);
 
     return await this.walkFilterFieldPath(
-      await loadCard(fieldValue.type, { loader }),
+      loader,
+      await loadFieldOrCard(fieldValue.type, loader),
       path,
       exp,
       // Leaf field handler
-      async (api, fieldCard, expression) => {
-        return fieldCard[api.queryableValue](expression);
+      async (_api, _fieldCard, expression) => {
+        // right now there is no need to run code from the Card/FieldDef to
+        // transform this query expression's value into a format that matches
+        // the search doc. the assumption is that when the search doc was
+        // created the `[queryableValue]` hook was run on the deserialized card
+        // data which forms the search doc value. the query expression should be
+        // serialized already in a manner that matches the serialization of the
+        // search doc value so we can compare apples to apples, e.g. dates
+        // strings in YYYY-MM-DD format. If that assumption changes then we can
+        // use the api and fieldCard callback params to run Card/FieldDef code
+        // as necessary here
+        return expression;
       },
     );
   }
 
   private async walkFilterFieldPath(
+    loader: Loader,
     cardOrField: typeof BaseDef,
     path: string,
     expression: Expression,
@@ -379,6 +396,7 @@ export class IndexerDBClient {
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<Expression>,
   ): Promise<Expression>;
   private async walkFilterFieldPath(
+    loader: Loader,
     cardOrField: typeof BaseDef,
     path: string,
     expression: CardExpression,
@@ -386,6 +404,7 @@ export class IndexerDBClient {
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<CardExpression>,
   ): Promise<CardExpression>;
   private async walkFilterFieldPath(
+    loader: Loader,
     cardOrField: typeof BaseDef,
     path: string,
     expression: Expression,
@@ -395,9 +414,22 @@ export class IndexerDBClient {
     let pathSegments = path.split('.');
     let isLeaf = pathSegments.length === 1;
     let currentSegment = pathSegments.shift()!;
-    let api = await apiFor(cardOrField);
+    let api = await loader.import<typeof CardAPI>(
+      'https://cardstack.com/base/card-api',
+    );
+    if (!api) {
+      throw new Error(`could not load card API`);
+    }
     let fields = api.getFields(cardOrField);
-    let fieldCard = fields[currentSegment].card;
+    let field = fields[currentSegment];
+    if (!field) {
+      throw new Error(
+        `Your filter refers to nonexistent field "${currentSegment}" on type ${JSON.stringify(
+          identifyCard(cardOrField),
+        )}`,
+      );
+    }
+    let fieldCard = field.card;
     if (isLeaf) {
       expression = await handleLeafField(
         api,
@@ -426,6 +458,7 @@ export class IndexerDBClient {
         : passThru;
 
       let interiorExpression = await this.walkFilterFieldPath(
+        loader,
         fieldCard,
         pathSegments.join('.'),
         await entranceHandler(api, fieldCard, expression, currentSegment),
@@ -692,6 +725,31 @@ export class Batch {
       ),
     ];
     return [...new Set(invalidations)];
+  }
+}
+
+async function loadFieldOrCard(
+  ref: CodeRef,
+  loader: Loader,
+): Promise<typeof BaseDef> {
+  try {
+    return await loadCard(ref, { loader });
+  } catch (e: any) {
+    if (!('type' in ref)) {
+      throw new Error(
+        `Your filter refers to nonexistent type: import ${
+          ref.name === 'default' ? 'default' : `{ ${ref.name} }`
+        } from "${ref.module}"`,
+      );
+    } else {
+      throw new Error(
+        `Your filter refers to nonexistent type: ${JSON.stringify(
+          ref,
+          null,
+          2,
+        )}`,
+      );
+    }
   }
 }
 
