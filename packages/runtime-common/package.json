@@ -46,6 +46,7 @@
     "qs": "^6.10.5",
     "qunit": "^2.18.0",
     "recast": "^0.23.4",
+    "safe-stable-stringify": "^2.4.3",
     "super-fast-md5": "^1.0.1",
     "transform-modules-amd-plugin": "workspace:*",
     "uuid": "^9.0.1"

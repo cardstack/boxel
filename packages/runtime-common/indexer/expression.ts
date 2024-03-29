@@ -1,5 +1,8 @@
 import * as JSONTypes from 'json-typescript';
 import isPlainObject from 'lodash/isPlainObject';
+import stringify from 'safe-stable-stringify';
+
+import { CodeRef } from '../index';
 
 export type Expression = (string | Param)[];
 
@@ -16,6 +19,37 @@ export interface Param {
   kind: 'param';
 }
 
+export interface FieldQuery {
+  type: CodeRef;
+  path: string;
+  errorHint: string;
+  kind: 'field-query';
+}
+
+export interface FieldValue {
+  type: CodeRef;
+  path: string;
+  value: CardExpression;
+  errorHint: string;
+  kind: 'field-value';
+}
+
+export interface TableValuedFunction {
+  kind: 'table-valued';
+  fn: string;
+  as: string;
+  value: CardExpression;
+}
+
+export type CardExpression = (
+  | string
+  | Param
+  | TableValuedFunction
+  | FieldQuery
+  | FieldValue
+)[];
+
+export function addExplicitParens(expression: CardExpression): CardExpression;
 export function addExplicitParens(expression: Expression): Expression;
 export function addExplicitParens(expression: unknown[]): unknown[] {
   if (expression.length === 0) {
@@ -25,6 +59,9 @@ export function addExplicitParens(expression: unknown[]): unknown[] {
   }
 }
 
+export function separatedByCommas(
+  expressions: CardExpression[],
+): CardExpression;
 export function separatedByCommas(expressions: Expression[]): Expression;
 export function separatedByCommas(expressions: unknown[][]): unknown {
   return expressions.reduce((accum, expression) => {
@@ -43,28 +80,78 @@ export function isParam(expression: any): expression is Param {
   return isPlainObject(expression) && 'param' in expression;
 }
 
+export function tableValuedFunction(
+  fn: string,
+  as: string,
+  value: CardExpression,
+): TableValuedFunction {
+  return {
+    kind: 'table-valued',
+    fn,
+    as,
+    value,
+  };
+}
+
+export function fieldQuery(
+  path: string,
+  type: CodeRef,
+  errorHint: string,
+): FieldQuery {
+  return {
+    type,
+    path,
+    errorHint,
+    kind: 'field-query',
+  };
+}
+
+export function fieldValue(
+  path: string,
+  value: CardExpression,
+  type: CodeRef,
+  errorHint: string,
+): FieldValue {
+  return {
+    type,
+    path,
+    value,
+    errorHint,
+    kind: 'field-value',
+  };
+}
+export function every(expressions: CardExpression[]): CardExpression;
 export function every(expressions: Expression[]): Expression;
 export function every(expressions: unknown[][]): unknown {
   if (expressions.length === 0) {
     return ['true']; // this is "SQL true", not javascript true
   }
   return expressions
-    .map((expression) => addExplicitParens(expression as Expression))
-    .reduce((accum, expression: Expression) => [
+    .map((expression) =>
+      addExplicitParens(expression as Expression | CardExpression),
+    )
+    .reduce((accum, expression: Expression | CardExpression) => [
       ...accum,
       'AND',
       ...expression,
     ]);
 }
 
+export function any(expressions: CardExpression[]): CardExpression;
 export function any(expressions: Expression[]): Expression;
 export function any(expressions: unknown[][]): unknown {
   if (expressions.length === 0) {
     return ['false']; // this is "SQL false", not javascript false
   }
   return expressions
-    .map((expression) => addExplicitParens(expression as Expression))
-    .reduce((accum, expression: Expression) => [...accum, 'OR', ...expression]);
+    .map((expression) =>
+      addExplicitParens(expression as Expression | CardExpression),
+    )
+    .reduce((accum, expression: Expression | CardExpression) => [
+      ...accum,
+      'OR',
+      ...expression,
+    ]);
 }
 
 interface Options {
@@ -81,12 +168,12 @@ export function asExpressions(
   let paramBucket = Object.fromEntries(
     Object.entries(values).map(([col, val]) => [
       col,
-      {
-        kind: 'param' as const,
-        // TODO: SQLite requires JSON be referenced in a stringified
-        // manner--need to confirm if postgres is ok with this
-        param: opts?.jsonFields?.includes(col) ? JSON.stringify(val) : val,
-      },
+      // TODO: SQLite requires JSON be referenced in a stringified
+      // manner--need to confirm if postgres is ok with this
+
+      // TODO probably we should insert using the json() or jsonb() function in
+      // SQLite, need to check for compatibility in postgres for this function
+      param(opts?.jsonFields?.includes(col) ? stringify(val) : val),
     ]),
   );
   let nameExpressions = Object.keys(paramBucket).map((name) => [name]);
