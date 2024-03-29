@@ -227,6 +227,7 @@ export default class Room extends Component<Signature> {
         submode: this.operatorModeStateService.state.submode,
         openCardIds: this.operatorModeStateService
           .topMostStackItems()
+          .filter((stackItem) => stackItem)
           .map((stackItem) => stackItem.card.id),
       };
       await this.matrixService.sendMessage(

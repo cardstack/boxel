@@ -733,4 +733,21 @@ test.describe('Room messages', () => {
     await expect(page.locator(`[data-test-new-session]`)).toHaveCount(0);
     await assertMessages(page, [prompt]);
   });
+
+  test('sends message when no card open in the stack', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    await page.locator('[data-test-stack-card] [data-test-close-button]').click();
+    await page.locator('[data-test-message-field]').fill('Sending message with no card open');
+    await page.locator('[data-test-send-message-btn]').click();
+
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'Sending message with no card open',
+        cards: [],
+      },
+    ]);
+  });
 });
