@@ -1,11 +1,9 @@
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
 
-import type LoaderService from './loader-service';
+import { tracked } from '@glimmer/tracking';
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
-  @service declare loaderService: LoaderService;
 
   register() {
     (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
