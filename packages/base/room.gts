@@ -246,6 +246,14 @@ class PatchField extends FieldDef {
   @field payload = contains(PatchObjectField);
 }
 
+// This map can be used to avoid sending the same version of the card more than once in a conversation.
+// We can reuse exisiting eventId (we only care for the first card fragments event of the card)
+// if user attached the same version of the card.
+const cardDocToEventId: Map<string, string> = new Map();
+export function retrieveEventId(cardDoc: LooseSingleCardDocument) {
+  return cardDocToEventId.get(JSON.stringify(cardDoc));
+}
+
 export class MessageField extends FieldDef {
   @field author = contains(RoomMemberField);
   @field message = contains(MarkdownField);
@@ -606,9 +614,12 @@ export class RoomField extends FieldDef {
         `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
       );
     }
-    return JSON.parse(
+    let cardDoc = JSON.parse(
       fragments.map((f) => f.data.cardFragment).join(''),
     ) as LooseSingleCardDocument;
+
+    cardDocToEventId.set(JSON.stringify(cardDoc), eventId);
+    return cardDoc;
   }
 
   // The edit template is meant to be read-only, this field card is not mutable

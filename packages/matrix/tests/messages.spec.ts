@@ -733,4 +733,105 @@ test.describe('Room messages', () => {
     await expect(page.locator(`[data-test-new-session]`)).toHaveCount(0);
     await assertMessages(page, [prompt]);
   });
+
+  test('attaches a card in a coversation multiple times', async ({ page }) => {
+    const testCard = `${testHost}/hassan`;
+
+    await login(page, 'user1', 'pass');
+    await page.locator(`[data-test-room-settled]`).waitFor();
+
+    for (let i = 1; i <= 3; i++) {
+      await page.locator('[data-test-message-field]').fill(`Message - ${i}`);
+      await selectCardFromCatalog(page, testCard);
+      await page.locator('[data-test-send-message-btn]').click();
+    }
+    
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'Message - 1',
+        cards: [
+          { id: testCard, title: 'Hassan' },
+        ],
+      },
+      {
+        from: 'user1',
+        message: 'Message - 2',
+        cards: [
+          { id: testCard, title: 'Hassan' },
+        ],
+      },
+      {
+        from: 'user1',
+        message: 'Message - 3',
+        cards: [
+          { id: testCard, title: 'Hassan' },
+        ],
+      },
+    ]);
+
+    // There should only be one card fragments event for multiple message events 
+    // if the card remains unchanged and is attached multiple times.
+    let events = await getRoomEvents();
+    let messageEvents = events.filter(e => e.type === 'm.room.message' && e.content.msgtype === 'org.boxel.message');
+    let cardFragmentEvents = events.filter(e => e.type === 'm.room.message' && e.content.msgtype === 'org.boxel.cardFragment' && !e.content.data.nextFragment);
+    expect(messageEvents.length).toEqual(3);
+    expect(cardFragmentEvents.length).toEqual(1);
+
+    //Test the scenario where there is an update to the card
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testCard}"]`,
+      )
+      .click();
+    await page.locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`).click();
+    await page.locator('[data-test-field="firstName"] [data-test-boxel-input]').fill('Updated Name');
+    await page.locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`).click();
+
+    await page.locator('[data-test-message-field]').fill(`Message with updated card`);
+    await page.locator('[data-test-send-message-btn]').click();
+
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'Message - 1',
+        cards: [
+          { id: testCard, title: 'Hassan' },
+        ],
+      },
+      {
+        from: 'user1',
+        message: 'Message - 2',
+        cards: [
+          { id: testCard, title: 'Hassan' },
+        ],
+      },
+      {
+        from: 'user1',
+        message: 'Message - 3',
+        cards: [
+          { id: testCard, title: 'Hassan' },
+        ],
+      },
+      {
+        from: 'user1',
+        message: 'Message with updated card',
+        cards: [
+          { id: testCard, title: 'Hassan' },
+        ],
+      },
+    ]);
+
+    // There must be a new card fragments event because the card has been updated.
+    events = await getRoomEvents();
+    messageEvents = events.filter(e => e.type === 'm.room.message' && e.content.msgtype === 'org.boxel.message');
+    cardFragmentEvents = events.filter(e => e.type === 'm.room.message' && e.content.msgtype === 'org.boxel.cardFragment' && !e.content.data.nextFragment);
+    expect(messageEvents.length).toEqual(4);
+    expect(cardFragmentEvents.length).toEqual(2);
+
+    // Revert updates
+    await page.locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`).click();
+    await page.locator('[data-test-field="firstName"] [data-test-boxel-input]').fill('Hassan');
+    await page.locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`).click();
+  });
 });
