@@ -130,11 +130,7 @@ export function rootRealmRedirect(
     let realmUrlWithoutQueryParams = url.href.split('?')[0];
     if (
       !realmUrlWithoutQueryParams.endsWith('/') &&
-      realms.find(
-        (r) =>
-          r.loader.reverseResolution(`${realmUrlWithoutQueryParams}/`).href ===
-          r.url,
-      )
+      realms.find((r) => `${realmUrlWithoutQueryParams}/` === r.url)
     ) {
       url.pathname = `${url.pathname}/`;
       ctxt.redirect(`${url.href}`); // Adding a trailing slash to the URL one line above will update the href

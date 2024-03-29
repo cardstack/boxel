@@ -2,27 +2,11 @@ import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
 import { trimExecutableExtension, logger } from './index';
-import { RealmPaths } from './paths';
+
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
-
-// this represents a URL that has already been resolved to aid in documenting
-// when resolution has already been performed
-export interface ResolvedURL extends URL {
-  _isResolved: undefined;
-}
-
-function isResolvedURL(url: URL | ResolvedURL): url is ResolvedURL {
-  return '_isResolved' in url;
-}
-
-export function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
-  let resolvedURL = new URL(unresolvedURL) as ResolvedURL;
-  resolvedURL._isResolved = undefined;
-  return resolvedURL;
-}
 
 type FetchingModule = {
   state: 'fetching';
@@ -88,18 +72,18 @@ type EvaluatableModule =
   | BrokenModule;
 
 type UnregisteredDep =
-  | { type: 'dep'; moduleURL: ResolvedURL }
+  | { type: 'dep'; moduleURL: URL }
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
 type EvaluatableDep =
   | {
       type: 'dep';
-      moduleURL: ResolvedURL;
+      moduleURL: URL;
     }
   | {
       type: 'completing-dep';
-      moduleURL: ResolvedURL;
+      moduleURL: URL;
     }
   | { type: '__import_meta__' }
   | { type: 'exports' };
@@ -152,10 +136,6 @@ export class Loader {
     return clone;
   }
 
-  addURLMapping(from: URL, to: URL) {
-    this.urlMappings.push([from.href, to.href]);
-  }
-
   registerURLHandler(handler: RequestHandler) {
     this.urlHandlers.push(handler);
   }
@@ -193,7 +173,7 @@ export class Loader {
     }
     consumed.add(moduleIdentifier);
 
-    let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
+    let resolvedModuleIdentifier = new URL(moduleIdentifier);
     let module = this.getModule(resolvedModuleIdentifier.href);
 
     if (!module || module.state === 'fetching') {
@@ -258,7 +238,7 @@ export class Loader {
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
 
-    let resolvedModule = this.resolve(moduleIdentifier);
+    let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
 
     await this.advanceToState(resolvedModule, 'evaluated');
@@ -277,7 +257,7 @@ export class Loader {
   }
 
   private async advanceToState(
-    resolvedURL: ResolvedURL,
+    resolvedURL: URL,
     targetState:
       | 'registered-completing-deps'
       | 'registered-with-deps'
@@ -448,39 +428,14 @@ export class Loader {
     }
   }
 
-  private asUnresolvedRequest(
+  private asRequest(
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Request {
     if (urlOrRequest instanceof Request) {
       return urlOrRequest;
     } else {
-      let unresolvedURL =
-        typeof urlOrRequest === 'string'
-          ? new URL(urlOrRequest)
-          : isResolvedURL(urlOrRequest)
-          ? this.reverseResolution(urlOrRequest)
-          : urlOrRequest;
-      return new Request(unresolvedURL.href, init);
-    }
-  }
-
-  private asResolvedRequest(
-    urlOrRequest: string | URL | Request,
-    init?: RequestInit,
-  ): Request {
-    if (urlOrRequest instanceof Request) {
-      return new Request(this.resolve(urlOrRequest.url).href, {
-        method: urlOrRequest.method,
-        headers: urlOrRequest.headers,
-        body: urlOrRequest.body,
-      });
-    } else if (typeof urlOrRequest === 'string') {
-      return new Request(this.resolve(urlOrRequest), init);
-    } else if (isResolvedURL(urlOrRequest)) {
       return new Request(urlOrRequest, init);
-    } else {
-      return new Request(this.resolve(urlOrRequest), init);
     }
   }
 
@@ -526,7 +481,7 @@ export class Loader {
   ): Promise<Response> {
     try {
       for (let handler of this.urlHandlers) {
-        let request = this.asUnresolvedRequest(urlOrRequest, init);
+        let request = this.asRequest(urlOrRequest, init);
 
         let result = await handler(request);
         if (result) {
@@ -535,7 +490,7 @@ export class Loader {
       }
 
       let shimmedModule = this.moduleShims.get(
-        this.asUnresolvedRequest(urlOrRequest, init).url,
+        this.asRequest(urlOrRequest, init).url,
       );
       if (shimmedModule) {
         let response = new Response();
@@ -543,9 +498,7 @@ export class Loader {
         return response;
       }
 
-      return await this.fetchImplementation(
-        this.asResolvedRequest(urlOrRequest, init),
-      );
+      return await this.fetchImplementation(this.asRequest(urlOrRequest, init));
     } catch (err: any) {
       let url =
         urlOrRequest instanceof Request
@@ -559,49 +512,6 @@ export class Loader {
     }
   }
 
-  resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
-    let absoluteURL = new URL(moduleIdentifier, relativeTo);
-    for (let [sourceURL, to] of this.urlMappings) {
-      let sourcePath = new RealmPaths(new URL(sourceURL));
-      if (sourcePath.inRealm(absoluteURL)) {
-        let toPath = new RealmPaths(new URL(to));
-        if (absoluteURL.href.endsWith('/')) {
-          return makeResolvedURL(
-            toPath.directoryURL(sourcePath.local(absoluteURL)),
-          );
-        } else {
-          return makeResolvedURL(
-            toPath.fileURL(
-              sourcePath.local(absoluteURL, { preserveQuerystring: true }),
-            ),
-          );
-        }
-      }
-    }
-    return makeResolvedURL(absoluteURL);
-  }
-
-  reverseResolution(
-    moduleIdentifier: string | ResolvedURL,
-    relativeTo?: URL,
-  ): URL {
-    let absoluteURL = new URL(moduleIdentifier, relativeTo);
-    for (let [sourceURL, to] of this.urlMappings) {
-      let sourcePath = new RealmPaths(new URL(sourceURL));
-      let destinationPath = new RealmPaths(to);
-      if (destinationPath.inRealm(absoluteURL)) {
-        if (absoluteURL.href.endsWith('/')) {
-          return sourcePath.directoryURL(destinationPath.local(absoluteURL));
-        } else {
-          return sourcePath.fileURL(
-            destinationPath.local(absoluteURL, { preserveQuerystring: true }),
-          );
-        }
-      }
-    }
-    return absoluteURL;
-  }
-
   private getModule(moduleIdentifier: string): Module | undefined {
     return this.modules.get(trimModuleIdentifier(moduleIdentifier));
   }
@@ -611,9 +521,7 @@ export class Loader {
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
-    let moduleId = trimExecutableExtension(
-      this.reverseResolution(moduleIdentifier),
-    ).href;
+    let moduleId = trimExecutableExtension(new URL(moduleIdentifier)).href;
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
@@ -634,7 +542,7 @@ export class Loader {
     });
   }
 
-  private async fetchModule(moduleURL: ResolvedURL): Promise<void> {
+  private async fetchModule(moduleURL: URL): Promise<void> {
     let moduleIdentifier =
       typeof moduleURL === 'string' ? moduleURL : moduleURL.href;
 
@@ -703,7 +611,7 @@ export class Loader {
         } else {
           return {
             type: 'dep',
-            moduleURL: this.resolve(
+            moduleURL: new URL(
               this.resolveImport(depId),
               new URL(moduleIdentifier),
             ),
@@ -800,7 +708,7 @@ export class Loader {
   }
 
   private async load(
-    moduleURL: ResolvedURL,
+    moduleURL: URL,
   ): Promise<
     | { type: 'source'; source: string }
     | { type: 'shimmed'; module: Record<string, unknown> }

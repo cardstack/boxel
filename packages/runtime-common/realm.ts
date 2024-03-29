@@ -865,9 +865,7 @@ export class Realm {
   }
 
   async getIndexHTML(opts?: IndexHTMLOptions): Promise<string> {
-    let resolvedBaseRealmURL = this.#searchIndex.loader.resolve(
-      baseRealm.url,
-    ).href;
+    let resolvedBaseRealmURL = baseRealm.url;
     let indexHTML = (await this.#getIndexHTML()).replace(
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
@@ -875,7 +873,7 @@ export class Realm {
         config = merge({}, config, {
           ownRealmURL: this.url, // unresolved url
           resolvedBaseRealmURL,
-          resolvedOwnRealmURL: this.#searchIndex.loader.resolve(this.url).href,
+          resolvedOwnRealmURL: this.url,
           hostsOwnAssets: !isNode,
           realmsServed: opts?.realmsServed,
         });

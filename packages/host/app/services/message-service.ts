@@ -12,13 +12,12 @@ export default class MessageService extends Service {
   }
 
   subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
-    let resolvedRealmURL = this.loaderService.loader.resolve(realmURL);
-    let maybeEventSource = this.subscriptions.get(resolvedRealmURL.href);
+    let maybeEventSource = this.subscriptions.get(realmURL);
 
     if (!maybeEventSource) {
-      maybeEventSource = new EventSource(resolvedRealmURL);
+      maybeEventSource = new EventSource(realmURL);
       maybeEventSource.onerror = () => eventSource.close();
-      this.subscriptions.set(resolvedRealmURL.href, maybeEventSource);
+      this.subscriptions.set(realmURL, maybeEventSource);
     }
 
     let eventSource = maybeEventSource;
