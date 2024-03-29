@@ -39,6 +39,7 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 
 import {
@@ -51,7 +52,6 @@ import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import { WebMessageStream, messageCloseHandler } from './stream';
 import visitOperatorMode from './visit-operator-mode';
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 export { percySnapshot };
 export { visitOperatorMode };
