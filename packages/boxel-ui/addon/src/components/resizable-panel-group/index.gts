@@ -261,7 +261,11 @@ export default class ResizablePanelGroup extends Component<Signature> {
       if (panelLength == undefined) {
         break;
       }
-      this.panelRatios[index] = panelLength / sumArray(panelLengths);
+      let panelLengthSum = sumArray(panelLengths);
+      if (panelLengthSum === 0) {
+        break;
+      }
+      this.panelRatios[index] = panelLength / panelLengthSum;
     }
   }
 
