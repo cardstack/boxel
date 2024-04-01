@@ -159,7 +159,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       ? resizeHandleContainer[this.offsetLengthProperty]
       : 0;
     let panelGroupElement = this.panelGroupElement;
-    debugger;
     if (panelGroupElement === undefined) {
       console.warn('Expected panelGroupElement to be defined');
       return undefined;
@@ -202,56 +201,18 @@ export default class ResizablePanelGroup extends Component<Signature> {
   @action
   registerPanel(context: {
     collapsible: boolean | undefined;
-    defaultLengthFraction: number;
+    defaultLengthFraction: number | undefined;
+    lengthPx: number | undefined;
     minLengthPx: number | undefined;
   }) {
     let id = Number(this.listPanelContext.size);
 
-    // if (context.lengthPx === undefined) {
-    //   if (
-    //     this.panelGroupLengthPx === undefined ||
-    //     context.defaultLengthFraction === undefined
-    //   ) {
-    //     context.lengthPx = -1;
-    //   } else {
-    //     context.lengthPx =
-    //       context.defaultLengthFraction * this.panelGroupLengthPx;
-    //   }
-    // }
-    // context.lengthPx = context.defaultLengthFraction * this.panelGroupLengthPx;
-    if (this.args.orientation === 'horizontal') {
-      // console.log('===========');
-      // console.log('==compare sum====');
-      // console.log(this.listPanelContext.lengths);
-      // console.log(`sum ${this.listPanelContext.sum}`);
-      // console.log(`panel group length: ${this.panelGroupLengthPx}`);
-      // console.log(`is ratio stale? ${this.listPanelContext.isRatioStale}`);
-    }
-    //Update previous lengthPx
-    // let previousId = id - 1;
-    // let previousContextEl = this.listPanelContext.get(previousId);
-    // if (
-    //   previousContextEl !== undefined &&
-    //   previousContextEl.defaultLengthFraction &&
-    //   this.panelGroupLengthPx
-    // ) {
-    //   debugger;
-    //   previousContextEl.lengthPx =
-    //     previousContextEl.defaultLengthFraction * this.panelGroupLengthPx;
-    // }
-    if (this.args.orientation === 'horizontal') {
-      // console.log('==compare sum====');
-      // console.log(this.listPanelContext.lengths);
-      // console.log(`sum ${this.listPanelContext.sum}`);
-      // console.log(`panel group length: ${this.panelGroupLengthPx}`);
-      // console.log(`is ratio stale? ${this.listPanelContext.isRatioStale}`);
-    }
     this.listPanelContext.set(
       id,
       {
         id,
         defaultLengthFraction: context.defaultLengthFraction,
-        lengthPx: context.defaultLengthFraction * this.panelGroupLengthPx!,
+        lengthPx: context.lengthPx,
         initialMinLengthPx: context.minLengthPx,
         minLengthPx: context.minLengthPx,
         collapsible:
@@ -260,57 +221,14 @@ export default class ResizablePanelGroup extends Component<Signature> {
       },
       true,
     );
-    // if (this.args.orientation === 'horizontal') {
-    //   console.log(`is ratio stale ${this.listPanelContext.isRatioStale}`);
-    // }
-    // this.onContainerResize();
-    if (this.args.orientation === 'horizontal') {
-      console.log(
-        this.listPanelContext.isLengthsStale(this.panelGroupLengthPx!),
-      );
-    }
+
     return id;
   }
 
   @action
   unregisterPanel(id: number) {
     this.listPanelContext.delete(id);
-    if (this.args.orientation === 'horizontal') {
-      console.log(`is ratio stale ${this.listPanelContext.isRatioStale}`);
-    }
-    // this.onContainerResize();
   }
-
-  // calculateRatio(panelLength: number) {
-  //   let panelLengths = Array.from(this.listPanelContext.values()).map(
-  //     (panelContext) => panelContext.lengthPx,
-  //   );
-  //   let panelLengthSum = sumArray(panelLengths);
-  //   if (panelLengthSum === 0) {
-  //     return 0;
-  //   }
-
-  //   return panelLength / panelLengthSum;
-  // }
-
-  // calculatePanelRatio() {
-  //   let panelLengths = Array.from(this.listPanelContext.values()).map(
-  //     (panelContext) => panelContext.lengthPx,
-  //   );
-
-  //   this.panelRatios = [];
-  //   for (let index = 0; index < panelLengths.length; index++) {
-  //     let panelLength = panelLengths[index];
-  //     if (panelLength == undefined) {
-  //       break;
-  //     }
-  //     let panelLengthSum = sumArray(panelLengths);
-  //     if (panelLengthSum === 0) {
-  //       break;
-  //     }
-  //     this.panelRatios[index] = panelLength / panelLengthSum;
-  //   }
-  // }
 
   @action
   panelContext(panelId: number) {
@@ -450,8 +368,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     this.currentResizeHandle.initialPosition =
       event[this.clientPositionProperty];
-
-    // this.calculatePanelRatio();
   }
 
   // This event only applies to the first and last resize handler.
@@ -605,10 +521,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       this.minimumLengthToShowHandles;
 
     let newContainerSize = this.panelGroupLengthWithoutResizeHandlePx;
-    if (this.args.orientation === 'horizontal') {
-      // console.log('container resizing');
-      // console.log(newContainerSize);
-    }
     if (newContainerSize == undefined) {
       console.warn('Expected newContainerSize to be defined');
       return;
@@ -678,15 +590,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       }
     };
     calculateLengthsOfPanelWithoutMinLength();
-    if (this.args.orientation === 'horizontal') {
-      console.log('on container resize executed finish');
-      debugger;
-      console.log(this.listPanelContext.lengths);
-      console.log(`sum ${this.listPanelContext.sum}`);
-      console.log(`panel group length: ${this.panelGroupLengthPx}`);
-      console.log(`ratios ${this.listPanelContext.ratios}`);
-      console.log(`is ratio stale? ${this.listPanelContext.isRatioStale}`);
-    }
   }
 
   private findPanelsByResizeHandle(ResizeHandleId: string) {
