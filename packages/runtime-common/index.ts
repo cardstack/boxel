@@ -96,6 +96,7 @@ export {
   isCardDocumentString,
 } from './card-document';
 export { sanitizeHtml } from './dompurify';
+export { markedSync, markdownToHtml } from './marked-sync';
 export { getPlural } from './pluralize';
 
 import type {

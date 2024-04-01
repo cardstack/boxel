@@ -177,9 +177,6 @@ importers:
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.182
-      '@types/marked':
-        specifier: ^4.3.0
-        version: 4.3.0
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0
@@ -1089,9 +1086,6 @@ importers:
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.182
-      '@types/marked':
-        specifier: ^4.3.0
-        version: 4.3.0
       '@types/matrix-js-sdk':
         specifier: ^11.0.1
         version: 11.0.1
@@ -1323,9 +1317,6 @@ importers:
       loglevel:
         specifier: ^1.8.1
         version: 1.8.1
-      marked:
-        specifier: ^5.0.2
-        version: 5.0.2
       matrix-js-sdk:
         specifier: ^31.0.0
         version: 31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm)
@@ -1725,6 +1716,9 @@ importers:
       loglevel:
         specifier: ^1.8.1
         version: 1.8.1
+      marked:
+        specifier: ^12.0.1
+        version: 12.0.1
       pluralize:
         specifier: ^8.0.0
         version: 8.0.0
@@ -5408,10 +5402,6 @@ packages:
 
   /@types/lodash@4.14.182:
     resolution: {integrity: sha512-/THyiqyQAP9AfARo4pF+aCGcyiQ94tX/Is2I7HofNRqoYLgN1PBoOWu2/zTA5zMxzP5EFutMtWtGAFRKUe961Q==}
-
-  /@types/marked@4.3.0:
-    resolution: {integrity: sha512-zK4gSFMjgslsv5Lyvr3O1yCjgmnE4pr8jbG8qVn4QglMwtpvPCf4YT2Wma7Nk95OxUUJI8Z+kzdXohbM7mVpGw==}
-    dev: true
 
   /@types/matrix-js-sdk@11.0.1:
     resolution: {integrity: sha512-0cI+IlIf96mxsTgtS9x7Cw2tZKhhkqwAmodKXGW+rf7THmbiM7rvOsRmp3eDik16mRlWrluq2egVFtQ8NGjgPw==}
@@ -17040,11 +17030,11 @@ packages:
       uc.micro: 1.0.6
     dev: true
 
-  /marked@5.0.2:
-    resolution: {integrity: sha512-TXksm9GwqXCRNbFUZmMtqNLvy3K2cQHuWmyBDLOrY1e6i9UvZpOTJXoz7fBjYkJkaUFzV9hBFxMuZSyQt8R6KQ==}
+  /marked@12.0.1:
+    resolution: {integrity: sha512-Y1/V2yafOcOdWQCX0XpAKXzDakPOpn6U0YLxTJs3cww6VxOzZV1BTOOYWLvH3gX38cq+iLwljHHTnMtlDfg01Q==}
     engines: {node: '>= 18'}
     hasBin: true
-    dev: true
+    dev: false
 
   /matcher-collection@1.1.2:
     resolution: {integrity: sha512-YQ/teqaOIIfUHedRam08PB3NK7Mjct6BvzRnJmpGDm8uFXpNr1sbY4yuflI5JcEs6COpYA0FpRQhSDBf1tT95g==}

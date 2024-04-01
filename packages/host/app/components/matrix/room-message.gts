@@ -9,13 +9,12 @@ import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { modifier } from 'ember-modifier';
-import { marked } from 'marked';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import { sanitizeHtml } from '@cardstack/runtime-common';
+import { markdownToHtml } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
@@ -48,7 +47,7 @@ export default class Room extends Component<Signature> {
     <AiAssistantMessage
       id='message-container-{{@message.index}}'
       class='room-message'
-      @formattedMessage={{htmlSafe this.formattedMessage}}
+      @formattedMessage={{htmlSafe (markdownToHtml @message.formattedMessage)}}
       @datetime={{@message.created}}
       @isFromAssistant={{eq @message.author.userId aiBotUserId}}
       @profileAvatar={{component
@@ -196,10 +195,6 @@ export default class Room extends Component<Signature> {
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
   });
-
-  private get formattedMessage() {
-    return sanitizeHtml(marked(this.args.message.formattedMessage));
-  }
 
   private get resources() {
     let cards: CardDef[] = [];
