@@ -238,7 +238,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       collapsible:
         context.collapsible == undefined ? true : context.collapsible,
     });
-
+    this.calculatePanelRatio();
     this.onContainerResize();
     return id;
   }
@@ -246,6 +246,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
   @action
   unregisterPanel(id: number) {
     this.listPanelContext.delete(id);
+    this.calculatePanelRatio();
     this.onContainerResize();
   }
 
@@ -538,7 +539,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
   @action
   onContainerResize(entry?: ResizeObserverEntry, _observer?: ResizeObserver) {
-    this.calculatePanelRatio();
     if (!this.panelGroupElement) {
       if (entry) {
         this.panelGroupElement = entry.target as HTMLDivElement;
