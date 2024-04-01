@@ -218,17 +218,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
           context.defaultLengthFraction * this.panelGroupLengthPx;
       }
     }
-    //Update previous lengthPx
-    let previousId = id - 1;
-    let previousContextEl = this.listPanelContext.get(previousId);
-    if (
-      previousContextEl !== undefined &&
-      previousContextEl.defaultLengthFraction &&
-      this.panelGroupLengthPx
-    ) {
-      previousContextEl.lengthPx =
-        previousContextEl.defaultLengthFraction * this.panelGroupLengthPx;
-    }
     this.listPanelContext.set(id, {
       id,
       defaultLengthFraction: context.defaultLengthFraction,
@@ -625,10 +614,25 @@ export default class ResizablePanelGroup extends Component<Signature> {
     for (let index = 0; index <= this.listPanelContext.size; index++) {
       let panelContext = this.listPanelContext.get(index);
       if (panelContext) {
-        this.listPanelContext.set(index, {
-          ...panelContext,
-          lengthPx: panelLengths[index] || 0,
-        });
+        if (
+          index === 0 &&
+          this.listPanelContext.size === 1 &&
+          this.panelRatios[index] === 1
+        ) {
+          let panelLength = panelLengths[index];
+          this.listPanelContext.set(index, {
+            ...panelContext,
+            lengthPx:
+              panelLength && panelContext.defaultLengthFraction
+                ? panelLength * panelContext.defaultLengthFraction
+                : 0,
+          });
+        } else {
+          this.listPanelContext.set(index, {
+            ...panelContext,
+            lengthPx: panelLengths[index] || 0,
+          });
+        }
       }
     }
   }
