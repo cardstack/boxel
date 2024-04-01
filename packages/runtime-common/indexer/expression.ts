@@ -4,7 +4,7 @@ import stringify from 'safe-stable-stringify';
 
 import { CodeRef } from '../index';
 
-export type Expression = (string | Param | TableValuedEach)[];
+export type Expression = (string | Param | TableValuedEach | TableValuedTree)[];
 
 export type PgPrimitive =
   | number
@@ -38,15 +38,31 @@ export interface TableValuedEach {
   kind: 'table-valued-each';
   column: string;
   path: string;
-  field: string;
+}
+
+export interface TableValuedTree {
+  kind: 'table-valued-tree';
+  column: string;
+  path: string;
+  treeColumn: string;
+}
+
+export interface FieldArity {
+  type: CodeRef;
+  path: string;
+  value: CardExpression;
+  errorHint: string;
+  kind: 'field-arity';
 }
 
 export type CardExpression = (
   | string
   | Param
   | TableValuedEach
+  | TableValuedTree
   | FieldQuery
   | FieldValue
+  | FieldArity
 )[];
 
 export function addExplicitParens(expression: CardExpression): CardExpression;
@@ -80,16 +96,24 @@ export function isParam(expression: any): expression is Param {
   return isPlainObject(expression) && 'param' in expression;
 }
 
-export function tableValuedEach(
-  column: string,
-  path: string,
-  field: string,
-): TableValuedEach {
+export function tableValuedEach(column: string, path: string): TableValuedEach {
   return {
     kind: 'table-valued-each',
     column,
     path,
-    field,
+  };
+}
+
+export function tableValuedTree(
+  column: string,
+  path: string,
+  treeColumn: string,
+): TableValuedTree {
+  return {
+    kind: 'table-valued-tree',
+    column,
+    path,
+    treeColumn,
   };
 }
 
@@ -118,6 +142,21 @@ export function fieldValue(
     value,
     errorHint,
     kind: 'field-value',
+  };
+}
+
+export function fieldArity(
+  type: CodeRef,
+  path: string,
+  value: CardExpression,
+  errorHint: string,
+): FieldArity {
+  return {
+    type,
+    path,
+    value,
+    errorHint,
+    kind: 'field-arity',
   };
 }
 

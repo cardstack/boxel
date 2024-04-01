@@ -15,15 +15,18 @@ import {
   type CardExpression,
   type FieldQuery,
   type FieldValue,
+  type FieldArity,
   param,
   isParam,
   tableValuedEach,
+  tableValuedTree,
   separatedByCommas,
   addExplicitParens,
   asExpressions,
   every,
   fieldQuery,
   fieldValue,
+  fieldArity,
 } from './expression';
 import { type Query, type Filter, type EqFilter } from '../query';
 import { type SerializedError } from '../error';
@@ -248,7 +251,7 @@ export class IndexerDBClient {
   // the type condition only consumes absolute URL card refs.
   private typeCondition(ref: CodeRef): CardExpression {
     return [
-      tableValuedEach('types', '$', 'types'),
+      tableValuedEach('types', '$'),
       '=',
       param(internalKeyFor(ref, undefined)),
     ];
@@ -274,7 +277,7 @@ export class IndexerDBClient {
       return [query, 'IS NULL'];
     }
     let v = fieldValue(key, [param(value)], onRef, 'filter');
-    return [query, '=', v];
+    return [fieldArity(onRef, key, [query, '=', v], 'filter')];
   }
 
   private async cardQueryToSQL(query: CardExpression, loader: Loader) {
@@ -291,13 +294,16 @@ export class IndexerDBClient {
           if (
             isParam(element) ||
             typeof element === 'string' ||
-            element.kind === 'table-valued-each'
+            element.kind === 'table-valued-each' ||
+            element.kind === 'table-valued-tree'
           ) {
             return Promise.resolve([element]);
           } else if (element.kind === 'field-query') {
             return this.handleFieldQuery(element, loader);
           } else if (element.kind === 'field-value') {
             return this.handleFieldValue(element, loader);
+          } else if (element.kind === 'field-arity') {
+            return this.handleFieldArity(element, loader);
           } else {
             throw assertNever(element);
           }
@@ -306,52 +312,136 @@ export class IndexerDBClient {
     );
   }
 
+  private async handleFieldArity(
+    fieldArity: FieldArity,
+    loader: Loader,
+  ): Promise<Expression> {
+    let { path, value, type } = fieldArity;
+    let firstPluralPath: string | undefined;
+    let deepestPluralPath: string | undefined;
+
+    let exp: CardExpression = await this.walkFilterFieldPath(
+      loader,
+      await loadFieldOrCard(type, loader),
+      path,
+      value,
+      // Leaf field handler
+      async (_api, field, expression, _fieldName, pathTraveled) => {
+        if (isFieldPlural(field) && !deepestPluralPath) {
+          firstPluralPath =
+            firstPluralPath ?? pathTraveled.replace(/\[\]/g, '');
+          deepestPluralPath = pathTraveled
+            .replace(/\[\]$/, '')
+            .replace(/\[\]/g, '[%]');
+          return [
+            ...every([
+              expression,
+              [
+                tableValuedTree('search_doc', firstPluralPath, 'path'),
+                `LIKE '$.${deepestPluralPath}'`,
+              ],
+            ]),
+          ];
+        }
+        return expression;
+      },
+      // interior field handler
+      {
+        enter: async (_api, field, expression, _fieldName, pathTraveled) => {
+          if (isFieldPlural(field) && !firstPluralPath) {
+            firstPluralPath = pathTraveled.replace(/\[\]/g, '');
+          }
+          return expression;
+        },
+        exit: async (_api, field, expression, _fieldName, pathTraveled) => {
+          if (isFieldPlural(field) && firstPluralPath && !deepestPluralPath) {
+            deepestPluralPath = pathTraveled.replace(/\[\]/g, '[%]');
+            return [
+              ...every([
+                expression,
+                [
+                  tableValuedTree('search_doc', firstPluralPath, 'path'),
+                  `LIKE '$.${deepestPluralPath}'`,
+                ],
+              ]),
+            ];
+          }
+          return expression;
+        },
+      },
+    );
+    return await this.makeExpression(exp, loader);
+  }
+
   private async handleFieldQuery(
     fieldQuery: FieldQuery,
     loader: Loader,
   ): Promise<Expression> {
-    let { path } = fieldQuery;
+    let { path, type } = fieldQuery;
+    let firstPluralPath: string | undefined;
 
-    return await this.walkFilterFieldPath(
+    let exp = await this.walkFilterFieldPath(
       loader,
-      await loadFieldOrCard(fieldQuery.type, loader),
+      await loadFieldOrCard(type, loader),
       path,
-      ['search_doc'],
+      [],
       // Leaf field handler
-      async (_api, _field, expression, fieldName) => {
+      async (_api, field, expression, fieldName, pathTraveled) => {
         // TODO we should probably add a new hook in our cards to support custom
         // query expressions, like casting to a bigint for integers:
         //     return ['(', ...source, '->>', { param: fieldName }, ')::bigint'];
-        return [...expression, '->>', param(fieldName)];
-
-        // TODO need to support plural leaf fields--this is akin to a containsMany of primitive fields...
+        if (isFieldPlural(field)) {
+          firstPluralPath = pathTraveled.substring(
+            0,
+            pathTraveled.indexOf('['),
+          );
+          return [tableValuedTree('search_doc', firstPluralPath, 'value')];
+        } else if (!firstPluralPath) {
+          return [...expression, '->>', param(fieldName)];
+        }
+        return expression;
       },
       // interior field handler
       {
-        enter: async (_api, field, expression, fieldName, pathTraveled) => {
-          if (
-            field.fieldType === 'containsMany' ||
-            field.fieldType === 'linksToMany'
-          ) {
-            return [tableValuedEach('search_doc', pathTraveled, fieldName)];
-          } else {
-            return [...expression, '->', param(fieldName)];
+        enter: async (_api, field, expression, _fieldName, pathTraveled) => {
+          // we work forwards determining if any interior fields are plural
+          // since that requires a different style predicate
+          if (isFieldPlural(field)) {
+            firstPluralPath = pathTraveled.substring(
+              0,
+              pathTraveled.indexOf('['),
+            );
+            return [tableValuedTree('search_doc', firstPluralPath, 'value')];
           }
+          return expression;
+        },
+        exit: async (_api, field, expression, fieldName, _pathTraveled) => {
+          // we populate the singular fields backwards as we can only do that
+          // after we are assured that we are not leveraging the plural style
+          // predicate
+          if (!isFieldPlural(field) && !firstPluralPath) {
+            return ['->', param(fieldName), ...expression];
+          }
+          return expression;
         },
       },
     );
+    if (!firstPluralPath) {
+      exp = ['search_doc', ...exp];
+    }
+    return exp;
   }
 
   private async handleFieldValue(
     fieldValue: FieldValue,
     loader: Loader,
   ): Promise<Expression> {
-    let { path, value } = fieldValue;
+    let { path, value, type } = fieldValue;
     let exp = await this.makeExpression(value, loader);
 
     return await this.walkFilterFieldPath(
       loader,
-      await loadFieldOrCard(fieldValue.type, loader),
+      await loadFieldOrCard(type, loader),
       path,
       exp,
       // Leaf field handler
@@ -401,7 +491,6 @@ export class IndexerDBClient {
     let pathSegments = path.split('.');
     let isLeaf = pathSegments.length === 1;
     let currentSegment = pathSegments.shift()!;
-    let traveled = [...(pathTraveled ?? []), currentSegment].join('.');
     let api = await loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api',
     );
@@ -417,6 +506,10 @@ export class IndexerDBClient {
         )}`,
       );
     }
+    let traveled = [
+      ...(pathTraveled ?? []),
+      `${currentSegment}${isFieldPlural(field) ? '[]' : ''}`,
+    ].join('.');
     if (isLeaf) {
       expression = await handleLeafField(
         api,
@@ -451,7 +544,7 @@ export class IndexerDBClient {
         await entranceHandler(api, field, expression, currentSegment, traveled),
         handleLeafField,
         handleInteriorField,
-        [...traveled],
+        traveled.split('.'),
       );
       expression = await exitHandler(
         api,
@@ -481,20 +574,30 @@ export class IndexerDBClient {
           return `$${values.length}`;
         } else if (typeof element === 'string') {
           return element;
-        } else if (element.kind === 'table-valued-each') {
-          let { column, path, field } = element;
+        } else if (
+          element.kind === 'table-valued-each' ||
+          element.kind === 'table-valued-tree'
+        ) {
+          let { column, path } = element;
+          let virtualColumn =
+            element.kind === 'table-valued-tree' ? element.treeColumn : 'value';
+          let type = element.kind === 'table-valued-tree' ? 'tree' : 'each';
+          let field = (path === '$' ? column : path.split('.').pop()!).replace(
+            /\[\]/g,
+            '',
+          );
           let key = `${column}_${path}_${field}`;
           let { name } = tableValuedFunctions.get(key) ?? {};
           if (!name) {
-            name = `${field}${nonce++}_each`;
+            name = `${field}${nonce++}_${type}`;
             let absolutePath = path === '$' ? '$' : `$.${path}`;
 
             tableValuedFunctions.set(key, {
               name,
-              fn: `json_each(${column}, '${absolutePath}') as ${name}`,
+              fn: `json_${type}(${column}, '${absolutePath}') as ${name}`,
             });
           }
-          return `${name}.value`;
+          return `${name}.${virtualColumn}`;
         } else {
           throw new Error(`should never happen ${element}`);
         }
@@ -778,6 +881,12 @@ async function loadFieldOrCard(
       );
     }
   }
+}
+
+function isFieldPlural(field: Field): boolean {
+  return (
+    field.fieldType === 'containsMany' || field.fieldType === 'linksToMany'
+  );
 }
 
 function assertNever(value: never) {

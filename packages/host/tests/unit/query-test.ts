@@ -375,10 +375,49 @@ module('Unit | query', function (hooks) {
     }
   });
 
-  skip(`it can filter on a plural primitive field using 'eq'`, async function (_assert) {});
+  test(`it can filter on a plural primitive field using 'eq'`, async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            nickNames: ['Mang Mang', 'Baby'],
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            nickNames: ['Big boy', 'Farty'],
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          eq: { nickNames: 'Farty' },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(
+      cards,
+      [await serializeCard(vangogh)],
+      'results are correct',
+    );
+  });
 
   test(`it can filter on a nested field within a plural composite field using 'eq'`, async function (assert) {
-    let { mango, vangogh, ringo } = testCards;
+    let { mango, vangogh } = testCards;
     await setupIndex(client, [
       {
         card: mango,
@@ -403,16 +442,31 @@ module('Unit | query', function (hooks) {
           },
         },
       },
-      {
-        card: ringo,
-        data: {
-          search_doc: {
-            name: 'Ringo',
-            friends: null,
-          },
-        },
-      },
     ]);
+
+    // let results = await adapter.execute(
+    //   `
+    //   SELECT card_url, friends1_tree.path, friends1_tree.key, friends1_tree.value
+    //   FROM
+    //     indexed_cards ,
+    //     json_each(types, '$') as types0_each,
+    //     json_tree(search_doc, '$.friends') as friends1_tree
+    //   WHERE
+    //     ( ( is_deleted = FALSE OR is_deleted IS NULL ) )
+    //     AND
+    //     (
+    //       ( types0_each.value = $1 )
+    //       AND
+    //       ( friends1_tree.path LIKE '$.friends[%]' )
+    //       AND
+    //       ( friends1_tree.value = $2 )
+    //     )
+    //   ORDER BY card_url
+    //   `,
+    //   {
+    //     bind: ['http://test-realm/test/person/Person', 'Van Gogh'],
+    //   },
+    // );
 
     {
       let { cards, meta } = await client.search(
@@ -460,6 +514,93 @@ module('Unit | query', function (hooks) {
     }
   });
 
-  // test nested field where plural is sandwiched by singular fields
-  // test filter on a nested plural within a plural composite?
+  test('it can match a null in a plural field', async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            nickNames: ['Mang Mang', 'Baby'],
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            nickNames: null,
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          eq: { nickNames: null },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(
+      cards,
+      [await serializeCard(vangogh)],
+      'results are correct',
+    );
+  });
+
+  test('it can match a leaf plural field nested in a plural composite field', async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            friends: [
+              {
+                name: 'Van Gogh',
+                nickNames: ['Big Baby', 'Farty'],
+              },
+              { name: 'Ringo', nickNames: ['Mang Mang', 'Baby'] },
+            ],
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            friends: [{ name: 'Ringo', nickNames: ['Ring Ring'] }],
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          eq: { 'friends.nickNames': 'Baby' },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(
+      cards,
+      [await serializeCard(mango)],
+      'results are correct',
+    );
+  });
+
+  skip('it can match thru a plural nested composite field that is field of a singular composite field', async function (_assert) {});
 });
