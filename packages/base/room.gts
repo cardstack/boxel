@@ -23,6 +23,7 @@ import {
 import { cached } from '@glimmer/tracking';
 import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
+import ethers from 'ethers';
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -246,12 +247,12 @@ class PatchField extends FieldDef {
   @field payload = contains(PatchObjectField);
 }
 
+// A map from card document hash to the first card fragment event id.
 // This map can be used to avoid sending the same version of the card more than once in a conversation.
-// We can reuse exisiting eventId (we only care for the first card fragments event of the card)
-// if user attached the same version of the card.
+// We can reuse exisiting eventId if user attached the same version of the card.
 const cardDocToEventId: Map<string, string> = new Map();
 export function retrieveEventId(cardDoc: LooseSingleCardDocument) {
-  return cardDocToEventId.get(JSON.stringify(cardDoc));
+  return cardDocToEventId.get(ethers.keccak256(JSON.stringify(cardDoc)));
 }
 
 export class MessageField extends FieldDef {
@@ -618,7 +619,7 @@ export class RoomField extends FieldDef {
       fragments.map((f) => f.data.cardFragment).join(''),
     ) as LooseSingleCardDocument;
 
-    cardDocToEventId.set(JSON.stringify(cardDoc), eventId);
+    cardDocToEventId.set(ethers.keccak256(JSON.stringify(cardDoc)), eventId);
     return cardDoc;
   }
 
