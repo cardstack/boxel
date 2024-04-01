@@ -236,7 +236,8 @@ export default class Room extends Component<Signature> {
   }
 
   private get previewPatchCode() {
-    return JSON.stringify(this.args.message.command.payload.patch, null, 2);
+    let { commandType, payload } = this.args.message.command;
+    return JSON.stringify({ commandType, payload }, null, 2);
   }
 
   @action private viewCodeToggle() {
