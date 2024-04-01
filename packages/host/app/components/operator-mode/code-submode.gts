@@ -98,6 +98,8 @@ const defaultPanelWidths: PanelWidths = {
   rightPanel: 0.4,
   emptyCodeModePanel: 0.8,
 };
+console.log('default panel widths');
+console.log(defaultPanelWidths);
 
 const CodeModePanelHeights = 'code-mode-panel-heights';
 const ApproximateRecentPanelDefaultFraction =
@@ -495,10 +497,14 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.leftPanel = listPanelContext[0]?.lengthPx;
-    this.panelWidths.codeEditorPanel = listPanelContext[1]?.lengthPx;
-    this.panelWidths.rightPanel = listPanelContext[2]?.lengthPx;
+    // this.panelWidths.leftPanel = listPanelContext[0]?.lengthPx;
+    // this.panelWidths.codeEditorPanel = listPanelContext[1]?.lengthPx;
+    // this.panelWidths.rightPanel = listPanelContext[2]?.lengthPx;
+    this.panelWidths.leftPanel = listPanelContext[0]?.ratio;
+    this.panelWidths.codeEditorPanel = listPanelContext[1]?.ratio;
+    this.panelWidths.rightPanel = listPanelContext[2]?.ratio;
 
+    localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
@@ -744,7 +750,7 @@ export default class CodeSubmode extends Component<Signature> {
                 <VerticallyResizeHandle />
                 <VerticallyResizablePanel
                   @defaultLengthFraction={{defaultPanelHeights.recentPanel}}
-                  @lengthPx={{this.panelHeights.recentPanel}}
+                  {{!-- @lengthPx={{this.panelHeights.recentPanel}} --}}
                   @minLengthPx={{100}}
                 >
                   <InnerContainer
@@ -766,7 +772,7 @@ export default class CodeSubmode extends Component<Signature> {
           {{#if this.codePath}}
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.codeEditorPanel}}
-              @lengthPx={{this.panelWidths.codeEditorPanel}}
+              {{!-- @lengthPx={{this.panelWidths.codeEditorPanel}} --}}
               @minLengthPx={{300}}
             >
               <InnerContainer>
@@ -792,7 +798,7 @@ export default class CodeSubmode extends Component<Signature> {
             <ResizeHandle />
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.rightPanel}}
-              @lengthPx={{this.panelWidths.rightPanel}}
+              {{!-- @lengthPx={{this.panelWidths.rightPanel}} --}}
             >
               <InnerContainer>
                 {{#if this.isReady}}

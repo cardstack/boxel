@@ -18,6 +18,7 @@ export type PanelContext = {
   initialMinLengthPx?: number;
   lengthPx: number;
   minLengthPx?: number;
+  ratio: number;
 };
 
 interface Signature {
