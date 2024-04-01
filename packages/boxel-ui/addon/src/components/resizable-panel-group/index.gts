@@ -614,12 +614,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
     for (let index = 0; index <= this.listPanelContext.size; index++) {
       let panelContext = this.listPanelContext.get(index);
       if (panelContext) {
+        let panelLength = panelLengths[index];
         if (
           index === 0 &&
           this.listPanelContext.size === 1 &&
-          this.panelRatios[index] === 1
+          this.panelRatios[index] === 1 &&
+          panelLength === this.panelGroupLengthWithoutResizeHandlePx
         ) {
-          let panelLength = panelLengths[index];
           this.listPanelContext.set(index, {
             ...panelContext,
             lengthPx:
