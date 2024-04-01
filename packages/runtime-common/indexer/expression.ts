@@ -4,7 +4,7 @@ import stringify from 'safe-stable-stringify';
 
 import { CodeRef } from '../index';
 
-export type Expression = (string | Param)[];
+export type Expression = (string | Param | TableValuedEach)[];
 
 export type PgPrimitive =
   | number
@@ -34,17 +34,17 @@ export interface FieldValue {
   kind: 'field-value';
 }
 
-export interface TableValuedFunction {
-  kind: 'table-valued';
-  fn: string;
-  as: string;
-  value: CardExpression;
+export interface TableValuedEach {
+  kind: 'table-valued-each';
+  column: string;
+  path: string;
+  field: string;
 }
 
 export type CardExpression = (
   | string
   | Param
-  | TableValuedFunction
+  | TableValuedEach
   | FieldQuery
   | FieldValue
 )[];
@@ -80,16 +80,16 @@ export function isParam(expression: any): expression is Param {
   return isPlainObject(expression) && 'param' in expression;
 }
 
-export function tableValuedFunction(
-  fn: string,
-  as: string,
-  value: CardExpression,
-): TableValuedFunction {
+export function tableValuedEach(
+  column: string,
+  path: string,
+  field: string,
+): TableValuedEach {
   return {
-    kind: 'table-valued',
-    fn,
-    as,
-    value,
+    kind: 'table-valued-each',
+    column,
+    path,
+    field,
   };
 }
 
@@ -120,6 +120,7 @@ export function fieldValue(
     kind: 'field-value',
   };
 }
+
 export function every(expressions: CardExpression[]): CardExpression;
 export function every(expressions: Expression[]): Expression;
 export function every(expressions: unknown[][]): unknown {
