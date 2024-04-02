@@ -310,6 +310,36 @@ export class IndexerDBClient {
     );
   }
 
+  // The goal of this handler is to ensure that the use of table valued
+  // json_tree() function that we use for querying thru fields that are plural
+  // is confined to the specific JSON path that our query should run. This means
+  // that we need to determine the root path for the json_tree() function, as
+  // well as the "query path" for the json_tree() function. The query path
+  // predicate is AND'ed to the expression contained in the FieldArity
+  // expression. Queries that do not go thru a plural field can use the normal
+  // '->' and '->>' JSON operators.
+  // The result is a query that looks like this:
+  //
+  //   SELECT card_url, pristine_doc
+  //   FROM
+  //     indexed_cards,
+  //     json_each(types, '$') as types0_each,
+  //     -- This json_tree was derived by this handler:
+  //     json_tree(search_doc, '$.friends') as friends1_tree
+  //   WHERE
+  //     ( ( is_deleted = FALSE OR is_deleted IS NULL ) )
+  //     AND (
+  //       ( types0_each.value = $1 )
+  //       AND (
+  //         ( friends1_tree.value = $2 )
+  //         AND
+  //         -- This predicate was derived by this handler:
+  //         ( friends1_tree.fullkey LIKE '$.friends[%].bestFriend.name' )
+  //       )
+  //     )
+  //   GROUP BY card_url
+  //   ORDER BY card_url
+
   private async handleFieldArity(
     fieldArity: FieldArity,
     loader: Loader,
@@ -398,10 +428,7 @@ export class IndexerDBClient {
         // query expressions, like casting to a bigint for integers:
         //     return ['(', ...source, '->>', { param: fieldName }, ')::bigint'];
         if (isFieldPlural(field)) {
-          outermostPluralPath = pathTraveled.substring(
-            0,
-            pathTraveled.indexOf('['),
-          );
+          outermostPluralPath = trimPathAtFirstPluralField(pathTraveled);
           return [tableValuedTree('search_doc', outermostPluralPath, 'value')];
         } else if (!outermostPluralPath) {
           return [...expression, '->>', param(fieldName)];
@@ -414,7 +441,7 @@ export class IndexerDBClient {
           // we work forwards determining if any interior fields are plural
           // since that requires a different style predicate
           if (isFieldPlural(field)) {
-            outermostPluralPath = trimBrackets(pathTraveled);
+            outermostPluralPath = trimPathAtFirstPluralField(pathTraveled);
             return [
               tableValuedTree('search_doc', outermostPluralPath, 'value'),
             ];
@@ -607,7 +634,7 @@ export class IndexerDBClient {
           }
           return `${name}.${virtualColumn}`;
         } else {
-          throw new Error(`should never happen ${element}`);
+          throw assertNever(element);
         }
       })
       .join(' ');
@@ -897,6 +924,10 @@ function traveledThruPlural(pathTraveled: string) {
 
 function trimBrackets(pathTraveled: string) {
   return pathTraveled.replace(/\[\]/g, '');
+}
+
+function trimPathAtFirstPluralField(pathTraveled: string) {
+  return pathTraveled.substring(0, pathTraveled.indexOf('['));
 }
 
 function convertBracketsToWildCards(pathTraveled: string) {
