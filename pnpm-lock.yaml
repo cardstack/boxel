@@ -1571,8 +1571,8 @@ importers:
         specifier: ^6.10.5
         version: 6.10.5
       qunit:
-        specifier: ^2.18.0
-        version: 2.19.4
+        specifier: ^2.20.0
+        version: 2.20.1
       sane:
         specifier: ^5.0.1
         version: 5.0.1
@@ -1733,8 +1733,8 @@ importers:
         specifier: ^6.10.5
         version: 6.10.5
       qunit:
-        specifier: ^2.18.0
-        version: 2.19.4
+        specifier: ^2.20.0
+        version: 2.20.1
       recast:
         specifier: ^0.23.4
         version: 0.23.4
@@ -19474,7 +19474,6 @@ packages:
       commander: 7.2.0
       node-watch: 0.7.3
       tiny-glob: 0.2.9
-    dev: true
 
   /randombytes@2.1.0:
     resolution: {integrity: sha512-vYl3iOX+4CKUWuxGi9Ukhie6fsqXqS9FE2Zaic4tNFD2N2QQaXOMFbuKK4QmDHC0JO6B1Zp41J0LpT0oR68amQ==}

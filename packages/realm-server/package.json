@@ -50,7 +50,7 @@
     "prettier": "^2.8.4",
     "prettier-plugin-ember-template-tag": "^1.1.0",
     "qs": "^6.10.5",
-    "qunit": "^2.18.0",
+    "qunit": "^2.20.0",
     "sane": "^5.0.1",
     "start-server-and-test": "^1.14.0",
     "supertest": "^6.2.4",
