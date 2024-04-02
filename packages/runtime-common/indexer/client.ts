@@ -621,7 +621,7 @@ export class IndexerDBClient {
           let field = trimBrackets(
             path === '$' ? column : path.split('.').pop()!,
           );
-          let key = `${column}_${path}`;
+          let key = `${type}_${column}_${path}`;
           let { name } = tableValuedFunctions.get(key) ?? {};
           if (!name) {
             name = `${field}${nonce++}_${type}`;
