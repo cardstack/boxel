@@ -3,6 +3,7 @@ import {
   assetsDir,
   boxelUIAssetsDir,
   logger as getLogger,
+  VirtualNetwork,
   type Realm,
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
@@ -123,14 +124,22 @@ export function assetRedirect(
 // So issue a redirect in those scenarios.
 export function rootRealmRedirect(
   realms: Realm[],
+  virtualNetwork: VirtualNetwork,
 ): (ctxt: Koa.Context, next: Koa.Next) => void {
   return (ctxt: Koa.Context, next: Koa.Next) => {
     let url = fullRequestURL(ctxt);
 
     let realmUrlWithoutQueryParams = url.href.split('?')[0];
+
     if (
       !realmUrlWithoutQueryParams.endsWith('/') &&
-      realms.find((r) => `${realmUrlWithoutQueryParams}/` === r.url)
+      realms.find((realm) => {
+        let mappedRealmUrl =
+          virtualNetwork.resolveURLMapping(realm.url, 'virtual-to-real') ||
+          realm.url;
+
+        return `${realmUrlWithoutQueryParams}/` === mappedRealmUrl;
+      })
     ) {
       url.pathname = `${url.pathname}/`;
       ctxt.redirect(`${url.href}`); // Adding a trailing slash to the URL one line above will update the href

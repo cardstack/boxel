@@ -45,9 +45,20 @@ export class RealmServer {
   ) {
     detectRealmCollision(realms);
     this.realms = realms;
-    // defaults to using the base realm to host assets (this is the dev env default)
-    // All realms should have URL mapping for the base realm
-    this.assetsURL = opts?.assetsURL ?? new URL(`${baseRealm.url}${assetsDir}`);
+
+    // Defaults to using the base realm to host assets (this is the dev env default)
+    let mappedUrl = virtualNetwork.resolveURLMapping(
+      `${baseRealm.url}${assetsDir}`,
+      'virtual-to-real',
+    );
+
+    if (!mappedUrl) {
+      throw new Error(
+        `No mapping found for ${baseRealm.url}${assetsDir} in virtual network`,
+      );
+    }
+
+    this.assetsURL = opts?.assetsURL ?? new URL(mappedUrl);
   }
 
   @Memoize()
@@ -58,7 +69,7 @@ export class RealmServer {
       '/',
       healthCheck,
       this.serveIndex(),
-      rootRealmRedirect(this.realms),
+      rootRealmRedirect(this.realms, this.virtualNetwork),
       this.serveFromRealm,
     );
 
@@ -93,7 +104,7 @@ export class RealmServer {
       .use(assetRedirect(this.assetsURL))
       .use(convertAcceptHeaderQueryParam)
       .use(httpBasicAuth)
-      .use(rootRealmRedirect(this.realms))
+      .use(rootRealmRedirect(this.realms, this.virtualNetwork))
       .use(router.routes())
       .use(this.serveFromRealm);
 

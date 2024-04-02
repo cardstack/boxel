@@ -68,7 +68,7 @@ export class VirtualNetwork {
     return getNativeFetch()(...args);
   }
 
-  private resolveURLMapping(
+  resolveURLMapping(
     url: string,
     direction: 'virtual-to-real' | 'real-to-virtual',
   ): string | undefined {
