@@ -1378,6 +1378,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-stack-card]').exists({ count: 1 });
     await waitFor('[data-test-pet="Mango"]');
     await click('[data-test-pet="Mango"]');
+    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
     assert.dom('[data-test-stack-card]').exists({ count: 2 });
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
