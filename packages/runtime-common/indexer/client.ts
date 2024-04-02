@@ -168,17 +168,14 @@ export class IndexerDBClient {
     // mode is very limited. This will likely require some custom work...
 
     let rows = (await this.query([
-      `SELECT indexed_cards.card_url
-         FROM
-           indexed_cards,
-           json_each(indexed_cards.deps) as deps_each
-         WHERE 
-           deps_each.value =`,
-      // WARNING!!! SQLite doesn't support arrays, and the json_each() and
-      // json_tree() functions that it does support are table-valued functions
-      // meaning that we can only use them like tables. unsure if there is a
-      // postgres equivalent. Need to research this.
+      `SELECT card_url
+       FROM
+         indexed_cards,
+         json_each(indexed_cards.deps) as deps_each
+       WHERE 
+         deps_each.value =`,
       param(cardId),
+      'ORDER BY card_url',
     ])) as Pick<IndexedCardsTable, 'card_url'>[];
     return rows.map((r) => r.card_url);
   }
@@ -207,10 +204,11 @@ export class IndexerDBClient {
       ...every(conditions),
       // use a default sort for deterministic ordering, refactor this after
       // adding sort support to the query
+      'GROUP BY card_url',
       'ORDER BY card_url',
     ];
     let queryCount = [
-      'SELECT count(*) as total',
+      'SELECT count(DISTINCT card_url) as total',
       `FROM indexed_cards ${tableValuedFunctionsPlaceholder}`,
       'WHERE',
       ...every(conditions),
@@ -317,7 +315,11 @@ export class IndexerDBClient {
     loader: Loader,
   ): Promise<Expression> {
     let { path, value, type } = fieldArity;
-    let firstPluralPath: string | undefined;
+    // the outermostPluralPath is used to construct the path param that is
+    // passed into the json_tree() function
+    let outermostPluralPath: string | undefined;
+    // the deepestPluralPath is used to construct the predicate that matches at
+    // the correct depth in the search_doc JSON structure to perform the field query
     let deepestPluralPath: string | undefined;
 
     let exp: CardExpression = await this.walkFilterFieldPath(
@@ -326,18 +328,16 @@ export class IndexerDBClient {
       path,
       value,
       // Leaf field handler
-      async (_api, field, expression, _fieldName, pathTraveled) => {
-        if (isFieldPlural(field) && !deepestPluralPath) {
-          firstPluralPath =
-            firstPluralPath ?? pathTraveled.replace(/\[\]/g, '');
-          deepestPluralPath = pathTraveled
-            .replace(/\[\]$/, '')
-            .replace(/\[\]/g, '[%]');
+      async (_api, _field, expression, _fieldName, pathTraveled) => {
+        if (traveledThruPlural(pathTraveled) && !deepestPluralPath) {
+          outermostPluralPath =
+            outermostPluralPath ?? trimBrackets(pathTraveled);
+          deepestPluralPath = convertBracketsToWildCards(pathTraveled);
           return [
             ...every([
               expression,
               [
-                tableValuedTree('search_doc', firstPluralPath, 'path'),
+                tableValuedTree('search_doc', outermostPluralPath, 'fullkey'),
                 `LIKE '$.${deepestPluralPath}'`,
               ],
             ]),
@@ -348,19 +348,23 @@ export class IndexerDBClient {
       // interior field handler
       {
         enter: async (_api, field, expression, _fieldName, pathTraveled) => {
-          if (isFieldPlural(field) && !firstPluralPath) {
-            firstPluralPath = pathTraveled.replace(/\[\]/g, '');
+          if (isFieldPlural(field) && !outermostPluralPath) {
+            outermostPluralPath = trimBrackets(pathTraveled);
           }
           return expression;
         },
         exit: async (_api, field, expression, _fieldName, pathTraveled) => {
-          if (isFieldPlural(field) && firstPluralPath && !deepestPluralPath) {
-            deepestPluralPath = pathTraveled.replace(/\[\]/g, '[%]');
+          if (
+            isFieldPlural(field) &&
+            outermostPluralPath &&
+            !deepestPluralPath
+          ) {
+            deepestPluralPath = convertBracketsToWildCards(pathTraveled);
             return [
               ...every([
                 expression,
                 [
-                  tableValuedTree('search_doc', firstPluralPath, 'path'),
+                  tableValuedTree('search_doc', outermostPluralPath, 'fullkey'),
                   `LIKE '$.${deepestPluralPath}'`,
                 ],
               ]),
@@ -378,7 +382,10 @@ export class IndexerDBClient {
     loader: Loader,
   ): Promise<Expression> {
     let { path, type } = fieldQuery;
-    let firstPluralPath: string | undefined;
+    // The outermostPluralPath should line up with the tableValuedTree that was
+    // used in the handleFieldArity (the multiple tableValuedTree expressions will
+    // collapse into a single function)
+    let outermostPluralPath: string | undefined;
 
     let exp = await this.walkFilterFieldPath(
       loader,
@@ -391,12 +398,12 @@ export class IndexerDBClient {
         // query expressions, like casting to a bigint for integers:
         //     return ['(', ...source, '->>', { param: fieldName }, ')::bigint'];
         if (isFieldPlural(field)) {
-          firstPluralPath = pathTraveled.substring(
+          outermostPluralPath = pathTraveled.substring(
             0,
             pathTraveled.indexOf('['),
           );
-          return [tableValuedTree('search_doc', firstPluralPath, 'value')];
-        } else if (!firstPluralPath) {
+          return [tableValuedTree('search_doc', outermostPluralPath, 'value')];
+        } else if (!outermostPluralPath) {
           return [...expression, '->>', param(fieldName)];
         }
         return expression;
@@ -407,11 +414,10 @@ export class IndexerDBClient {
           // we work forwards determining if any interior fields are plural
           // since that requires a different style predicate
           if (isFieldPlural(field)) {
-            firstPluralPath = pathTraveled.substring(
-              0,
-              pathTraveled.indexOf('['),
-            );
-            return [tableValuedTree('search_doc', firstPluralPath, 'value')];
+            outermostPluralPath = trimBrackets(pathTraveled);
+            return [
+              tableValuedTree('search_doc', outermostPluralPath, 'value'),
+            ];
           }
           return expression;
         },
@@ -419,14 +425,14 @@ export class IndexerDBClient {
           // we populate the singular fields backwards as we can only do that
           // after we are assured that we are not leveraging the plural style
           // predicate
-          if (!isFieldPlural(field) && !firstPluralPath) {
+          if (!isFieldPlural(field) && !outermostPluralPath) {
             return ['->', param(fieldName), ...expression];
           }
           return expression;
         },
       },
     );
-    if (!firstPluralPath) {
+    if (!outermostPluralPath) {
       exp = ['search_doc', ...exp];
     }
     return exp;
@@ -506,6 +512,9 @@ export class IndexerDBClient {
         )}`,
       );
     }
+    // we use '[]' to denote plural fields as that has important ramifications
+    // to how we compose our queries in the various handlers and ultimately in
+    // SQL construction
     let traveled = [
       ...(pathTraveled ?? []),
       `${currentSegment}${isFieldPlural(field) ? '[]' : ''}`,
@@ -582,9 +591,8 @@ export class IndexerDBClient {
           let virtualColumn =
             element.kind === 'table-valued-tree' ? element.treeColumn : 'value';
           let type = element.kind === 'table-valued-tree' ? 'tree' : 'each';
-          let field = (path === '$' ? column : path.split('.').pop()!).replace(
-            /\[\]/g,
-            '',
+          let field = trimBrackets(
+            path === '$' ? column : path.split('.').pop()!,
           );
           let key = `${column}_${path}_${field}`;
           let { name } = tableValuedFunctions.get(key) ?? {};
@@ -881,6 +889,18 @@ async function loadFieldOrCard(
       );
     }
   }
+}
+
+function traveledThruPlural(pathTraveled: string) {
+  return pathTraveled.includes('[');
+}
+
+function trimBrackets(pathTraveled: string) {
+  return pathTraveled.replace(/\[\]/g, '');
+}
+
+function convertBracketsToWildCards(pathTraveled: string) {
+  return pathTraveled.replace(/\[\]/g, '[%]');
 }
 
 function isFieldPlural(field: Field): boolean {
