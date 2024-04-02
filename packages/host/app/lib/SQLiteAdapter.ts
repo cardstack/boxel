@@ -14,6 +14,10 @@ export default class SQLiteAdapter implements DBAdapter {
   private _sqlite: typeof SQLiteWorker | undefined;
   private _dbId: string | undefined;
 
+  // TODO: one difference that I'm seeing is that it looks like "json_each" is
+  // actually similar to "json_each_text" in postgres. i think we might need to
+  // transform the SQL we run to deal with this difference.-
+
   constructor(private schemaSQL?: string) {}
 
   async startClient() {
