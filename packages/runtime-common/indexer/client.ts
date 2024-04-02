@@ -345,12 +345,7 @@ export class IndexerDBClient {
     loader: Loader,
   ): Promise<Expression> {
     let { path, value, type } = fieldArity;
-    // the outermostPluralPath is used to construct the path param that is
-    // passed into the json_tree() function
-    let outermostPluralPath: string | undefined;
-    // the deepestPluralPath is used to construct the predicate that matches at
-    // the correct depth in the search_doc JSON structure to perform the field query
-    let deepestPluralPath: string | undefined;
+    let rootPluralPath: string | undefined;
 
     let exp: CardExpression = await this.walkFilterFieldPath(
       loader,
@@ -360,15 +355,13 @@ export class IndexerDBClient {
       // Leaf field handler
       async (_api, _field, expression, _fieldName, pathTraveled) => {
         if (traveledThruPlural(pathTraveled)) {
-          outermostPluralPath =
-            outermostPluralPath ?? trimBrackets(pathTraveled);
-          deepestPluralPath = convertBracketsToWildCards(pathTraveled);
+          rootPluralPath = rootPluralPath ?? trimBrackets(pathTraveled);
           return [
             ...every([
               expression,
               [
-                tableValuedTree('search_doc', outermostPluralPath, 'fullkey'),
-                `LIKE '$.${deepestPluralPath}'`,
+                tableValuedTree('search_doc', rootPluralPath, 'fullkey'),
+                `LIKE '$.${convertBracketsToWildCards(pathTraveled)}'`,
               ],
             ]),
           ];
@@ -378,8 +371,8 @@ export class IndexerDBClient {
       // interior field handler
       {
         enter: async (_api, field, expression, _fieldName, pathTraveled) => {
-          if (isFieldPlural(field) && !outermostPluralPath) {
-            outermostPluralPath = trimBrackets(pathTraveled);
+          if (isFieldPlural(field) && !rootPluralPath) {
+            rootPluralPath = trimBrackets(pathTraveled);
           }
           return expression;
         },
@@ -393,10 +386,10 @@ export class IndexerDBClient {
     loader: Loader,
   ): Promise<Expression> {
     let { path, type } = fieldQuery;
-    // The outermostPluralPath should line up with the tableValuedTree that was
+    // The rootPluralPath should line up with the tableValuedTree that was
     // used in the handleFieldArity (the multiple tableValuedTree expressions will
     // collapse into a single function)
-    let outermostPluralPath: string | undefined;
+    let rootPluralPath: string | undefined;
 
     let exp = await this.walkFilterFieldPath(
       loader,
@@ -409,9 +402,9 @@ export class IndexerDBClient {
         // query expressions, like casting to a bigint for integers:
         //     return ['(', ...source, '->>', { param: fieldName }, ')::bigint'];
         if (isFieldPlural(field)) {
-          outermostPluralPath = trimPathAtFirstPluralField(pathTraveled);
-          return [tableValuedTree('search_doc', outermostPluralPath, 'value')];
-        } else if (!outermostPluralPath) {
+          rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
+          return [tableValuedTree('search_doc', rootPluralPath, 'value')];
+        } else if (!rootPluralPath) {
           return [...expression, '->>', param(fieldName)];
         }
         return expression;
@@ -422,10 +415,8 @@ export class IndexerDBClient {
           // we work forwards determining if any interior fields are plural
           // since that requires a different style predicate
           if (isFieldPlural(field)) {
-            outermostPluralPath = trimPathAtFirstPluralField(pathTraveled);
-            return [
-              tableValuedTree('search_doc', outermostPluralPath, 'value'),
-            ];
+            rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
+            return [tableValuedTree('search_doc', rootPluralPath, 'value')];
           }
           return expression;
         },
@@ -433,14 +424,14 @@ export class IndexerDBClient {
           // we populate the singular fields backwards as we can only do that
           // after we are assured that we are not leveraging the plural style
           // predicate
-          if (!isFieldPlural(field) && !outermostPluralPath) {
+          if (!isFieldPlural(field) && !rootPluralPath) {
             return ['->', param(fieldName), ...expression];
           }
           return expression;
         },
       },
     );
-    if (!outermostPluralPath) {
+    if (!rootPluralPath) {
       exp = ['search_doc', ...exp];
     }
     return exp;
