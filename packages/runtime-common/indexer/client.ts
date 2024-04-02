@@ -345,7 +345,6 @@ export class IndexerDBClient {
     loader: Loader,
   ): Promise<Expression> {
     let { path, value, type } = fieldArity;
-    let rootPluralPath: string | undefined;
 
     let exp: CardExpression = await this.walkFilterFieldPath(
       loader,
@@ -355,27 +354,21 @@ export class IndexerDBClient {
       // Leaf field handler
       async (_api, _field, expression, _fieldName, pathTraveled) => {
         if (traveledThruPlural(pathTraveled)) {
-          rootPluralPath = rootPluralPath ?? trimBrackets(pathTraveled);
           return [
             ...every([
               expression,
               [
-                tableValuedTree('search_doc', rootPluralPath, 'fullkey'),
+                tableValuedTree(
+                  'search_doc',
+                  trimPathAtFirstPluralField(pathTraveled),
+                  'fullkey',
+                ),
                 `LIKE '$.${convertBracketsToWildCards(pathTraveled)}'`,
               ],
             ]),
           ];
         }
         return expression;
-      },
-      // interior field handler
-      {
-        enter: async (_api, field, expression, _fieldName, pathTraveled) => {
-          if (isFieldPlural(field) && !rootPluralPath) {
-            rootPluralPath = trimBrackets(pathTraveled);
-          }
-          return expression;
-        },
       },
     );
     return await this.makeExpression(exp, loader);
