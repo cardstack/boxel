@@ -260,10 +260,6 @@ export class Realm {
     return [...executableExtensions, '.json'];
   }
 
-  get p() {
-    return this.#permissions;
-  }
-
   constructor(
     {
       url,
