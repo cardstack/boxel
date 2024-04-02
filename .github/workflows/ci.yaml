@@ -52,6 +52,19 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/boxel-ui/test-app
+      - name: Lint Boxel Motion
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/boxel-motion/addon
+      - name: Build Boxel Motion
+        # To faciliate linting of projects that depend on Boxel Motion
+        if: always()
+        run: pnpm run build
+        working-directory: packages/boxel-motion/addon
+      - name: Lint Boxel Motion Test App
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/boxel-motion/test-app
       - name: Lint Host
         if: always()
         run: pnpm run lint
@@ -159,6 +172,9 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
+      - name: Build boxel-motion
+        run: pnpm build
+        working-directory: packages/boxel-motion/addon
       - name: Build host dist/ for fastboot
         run: pnpm build
         env:
@@ -192,6 +208,9 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
+      - name: Build boxel-motion
+        run: pnpm build
+        working-directory: packages/boxel-motion/addon
       - name: Build host dist/ for fastboot
         run: pnpm build
         env:

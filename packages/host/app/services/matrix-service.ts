@@ -6,7 +6,6 @@ import { tracked } from '@glimmer/tracking';
 import format from 'date-fns/format';
 
 import { task } from 'ember-concurrency';
-import { marked } from 'marked';
 import {
   type LoginResponse,
   type MatrixEvent,
@@ -18,12 +17,15 @@ import {
 } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import {
   type LooseSingleCardDocument,
-  sanitizeHtml,
+  markdownToHtml,
   aiBotUsername,
   splitStringIntoChunks,
   baseRealm,
+  Loader,
   loaderFor,
 } from '@cardstack/runtime-common';
 import {
@@ -42,9 +44,11 @@ import { getRealmSession } from '@cardstack/host/resources/realm-session';
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import * as RoomModule from 'https://cardstack.com/base/room';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
+  MessageField,
   CardMessageContent,
   CardFragmentContent,
 } from 'https://cardstack.com/base/room';
@@ -80,6 +84,10 @@ export default class MatrixService extends Service {
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
+  cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
+  pendingMessages: TrackedMap<string, MessageField | undefined> =
+    new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
@@ -106,6 +114,11 @@ export default class MatrixService extends Service {
     () => 'https://cardstack.com/base/card-api',
   );
 
+  loaderToRoomModuleLoadingCache = new WeakMap<
+    Loader,
+    Promise<typeof RoomModule>
+  >();
+
   private loadSDK = task(async () => {
     await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
@@ -122,6 +135,18 @@ export default class MatrixService extends Service {
       [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
     ];
   });
+
+  async getRoomModule(loader?: Loader): Promise<typeof RoomModule> {
+    loader = loader ?? this.loaderService.loader;
+    if (!this.loaderToRoomModuleLoadingCache.has(loader)) {
+      let apiPromise = loader.import<typeof RoomModule>(
+        'https://cardstack.com/base/room',
+      );
+      this.loaderToRoomModuleLoadingCache.set(loader, apiPromise);
+      return apiPromise;
+    }
+    return this.loaderToRoomModuleLoadingCache.get(loader)!;
+  }
 
   get isLoggedIn() {
     return this.client.isLoggedIn();
@@ -353,7 +378,11 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = body != null ? sanitizeHtml(marked(body)) : '';
+    this.messagesToSend.set(roomId, undefined);
+    this.cardsToSend.set(roomId, undefined);
+    await this.setPendingMessage(roomId, body, attachedCards);
+
+    let html = markdownToHtml(body);
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
     let attachedOpenCards: CardDef[] = [];
@@ -419,11 +448,13 @@ export default class MatrixService extends Service {
         attachedCardsEventIds.push(eventIds[0].event_id); // we only care about the first fragment
       }
     }
+
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: 'org.boxel.message',
       body: body || '',
       format: 'org.matrix.custom.html',
       formatted_body: html,
+      clientGeneratedId: this.pendingMessages.get(roomId)?.clientGeneratedId,
       data: {
         attachedCardsEventIds,
         context: {
@@ -433,6 +464,32 @@ export default class MatrixService extends Service {
         },
       },
     } as CardMessageContent);
+  }
+
+  private async setPendingMessage(
+    roomId: string,
+    body: string | undefined,
+    attachedCards: CardDef[] = [],
+  ) {
+    let roomModule = await this.getRoomModule();
+    let roomMember = new roomModule.RoomMemberField({
+      id: this.userId,
+      userId: this.userId,
+      roomId: roomId,
+    });
+    let clientGeneratedId = uuidv4();
+    this.pendingMessages.set(
+      roomId,
+      new roomModule.MessageField({
+        author: roomMember,
+        message: body,
+        formattedMessage: markdownToHtml(body),
+        created: new Date().getTime(),
+        clientGeneratedId,
+        transactionId: null,
+        attachedCardIds: attachedCards?.map((c) => c.id) || [],
+      }),
+    );
   }
 
   private async sendCardFragments(

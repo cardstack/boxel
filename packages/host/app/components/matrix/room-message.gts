@@ -8,15 +8,13 @@ import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-
-import { marked } from 'marked';
+import { modifier } from 'ember-modifier';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
-import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
-import { sanitizeHtml } from '@cardstack/runtime-common';
+import { markdownToHtml } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
@@ -40,14 +38,16 @@ interface Signature {
     isStreaming: boolean;
     currentEditor: number | undefined;
     setCurrentEditor: (editor: number | undefined) => void;
+    isPending?: boolean;
   };
 }
 
 export default class Room extends Component<Signature> {
   <template>
     <AiAssistantMessage
+      id='message-container-{{@message.index}}'
       class='room-message'
-      @formattedMessage={{htmlSafe this.formattedMessage}}
+      @formattedMessage={{htmlSafe (markdownToHtml @message.formattedMessage)}}
       @datetime={{@message.created}}
       @isFromAssistant={{eq @message.author.userId aiBotUserId}}
       @profileAvatar={{component
@@ -57,6 +57,7 @@ export default class Room extends Component<Signature> {
       @attachedCards={{this.resources.cards}}
       @errorMessage={{this.errorMessage}}
       @isStreaming={{@isStreaming}}
+      @isPending={{@isPending}}
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
     >
@@ -108,7 +109,7 @@ export default class Room extends Component<Signature> {
             </Button>
             <div
               class='monaco-container'
-              {{setCssVar monaco-container-height=this.monacoContainerHeight}}
+              {{this.scrollBottomIntoView}}
               {{monacoModifier
                 content=this.previewPatchCode
                 contentChanged=undefined
@@ -195,10 +196,6 @@ export default class Room extends Component<Signature> {
     await navigator.clipboard.writeText(this.previewPatchCode);
   });
 
-  private get formattedMessage() {
-    return sanitizeHtml(marked(this.args.message.formattedMessage));
-  }
-
   private get resources() {
     let cards: CardDef[] = [];
     let errors: { id: string; error: Error }[] = [];
@@ -239,7 +236,8 @@ export default class Room extends Component<Signature> {
   }
 
   private get previewPatchCode() {
-    return JSON.stringify(this.args.message.command.payload.patch, null, 2);
+    let { commandType, payload } = this.args.message.command;
+    return JSON.stringify({ commandType, payload }, null, 2);
   }
 
   @action private viewCodeToggle() {
@@ -249,13 +247,32 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  private get monacoContainerHeight() {
-    if (this.args.currentEditor === this.args.message.index) {
-      let height = this.monacoService.getContentHeight();
-      if (height && height > 0) {
-        return `${height}px`;
-      }
+  private scrollBottomIntoView = modifier((element: HTMLElement) => {
+    if (this.args.currentEditor !== this.args.message.index) {
+      return;
     }
-    return undefined;
+
+    let height = this.monacoService.getContentHeight();
+    if (!height || height < 0) {
+      return;
+    }
+    element.style.height = `${height}px`;
+
+    let outerContainer = document.getElementById(
+      `message-container-${this.args.message.index}`,
+    );
+    if (!outerContainer) {
+      return;
+    }
+    this.scrollIntoView(outerContainer);
+  });
+
+  private scrollIntoView(element: HTMLElement) {
+    let { top, bottom } = element.getBoundingClientRect();
+    let isVerticallyInView = top >= 0 && bottom <= window.innerHeight;
+
+    if (!isVerticallyInView) {
+      element.scrollIntoView({ block: 'end' });
+    }
   }
 }

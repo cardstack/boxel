@@ -29,6 +29,8 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import {
   percySnapshot,
   testRealmURL,
@@ -50,6 +52,7 @@ import {
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let room: typeof import('https://cardstack.com/base/room');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (
   cardURL?: string,
@@ -89,10 +92,14 @@ module('Integration | operator-mode', function (hooks) {
     localStorage.removeItem('aiPanelCurrentRoomId');
     localStorage.removeItem('aiPanelNewSessionId');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    room = await loader.import(`${baseRealm.url}room`);
     matrixService = this.owner.lookup(
       'service:matrixService',
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
+    matrixService.getRoomModule = async function () {
+      return await loader.import(`${baseRealm.url}room`);
+    };
 
     //Generate 11 person card to test recent card menu in card sheet
     let personCards: Map<String, any> = new Map<String, any>();
@@ -809,10 +816,14 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom(`[data-test-preferredcarrier="DHL"]`).exists();
 
       let roomId = await openAiAssistant();
-      let patchData = {
-        attributes: {
-          firstName: 'Joy',
-          address: { shippingInfo: { preferredCarrier: 'UPS' } },
+      let payload = {
+        type: 'patch',
+        id: `${testRealmURL}Person/fadhlan`,
+        patch: {
+          attributes: {
+            firstName: 'Joy',
+            address: { shippingInfo: { preferredCarrier: 'UPS' } },
+          },
         },
       };
       addRoomEvent(matrixService, {
@@ -827,13 +838,7 @@ module('Integration | operator-mode', function (hooks) {
           msgtype: 'org.boxel.command',
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
-          data: JSON.stringify({
-            command: {
-              type: 'patch',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: patchData,
-            },
-          }),
+          data: JSON.stringify({ command: payload }),
         },
       });
 
@@ -841,7 +846,10 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-view-code-button]');
 
       await waitForCodeEditor();
-      assert.deepEqual(JSON.parse(getMonacoContent()), patchData);
+      assert.deepEqual(JSON.parse(getMonacoContent()), {
+        commandType: 'patch',
+        payload,
+      });
       assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
 
       await click('[data-test-view-code-button]');
@@ -1074,6 +1082,88 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-message-idx="0"] p').exists({ count: 2 });
       assert.dom('[data-test-message-idx="0"] em').hasText('love');
       assert.dom('[data-test-message-idx="0"]').doesNotContainText('_love_');
+    });
+
+    test('displays message slightly muted when it is being sent', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      let sendMessageDeferred = new Deferred<void>();
+      let originalSendMessage = matrixService.sendMessage;
+      matrixService.sendMessage = async function (
+        roomId: string,
+        body: string,
+        attachedCards: [],
+        _context?: any,
+      ) {
+        matrixService.messagesToSend.set(roomId, undefined);
+        matrixService.cardsToSend.set(roomId, undefined);
+        let roomMember = new room.RoomMemberField({
+          id: this.userId,
+          userId: this.userId,
+          roomId: roomId,
+        });
+        let clientGeneratedId = 'client-generated-id';
+        this.pendingMessages.set(
+          roomId,
+          new room.MessageField({
+            author: roomMember,
+            message: body,
+            formattedMessage: body ?? '',
+            created: new Date(1709652566421).getTime(),
+            clientGeneratedId,
+            transactionId: null,
+            attachedCardIds: attachedCards?.map((c: CardDef) => c.id) || [],
+          }),
+        );
+        await sendMessageDeferred.promise;
+        addRoomEvent(matrixService, {
+          event_id: 'event1',
+          room_id: roomId,
+          state_key: 'state',
+          type: 'm.room.message',
+          origin_server_ts: 1709652566421,
+          content: {
+            body,
+            msgtype: 'org.boxel.message',
+            formatted_body: body,
+            format: 'org.matrix.custom.html',
+            clientGeneratedId,
+          },
+        });
+      };
+      await openAiAssistant();
+
+      await fillIn('[data-test-message-field]', 'Test Message');
+      assert.dom('[data-test-message-field]').hasValue('Test Message');
+      assert.dom('[data-test-send-message-btn]').isEnabled();
+      assert.dom('[data-test-ai-assistant-message]').doesNotExist();
+      await click('[data-test-send-message-btn]');
+
+      assert.dom('[data-test-message-field]').hasValue('');
+      assert.dom('[data-test-send-message-btn]').isDisabled();
+      assert.dom('[data-test-ai-assistant-message]').exists();
+      assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
+      await percySnapshot(assert);
+
+      sendMessageDeferred.fulfill();
+      await waitUntil(
+        () =>
+          !(
+            document.querySelector(
+              '[data-test-send-message-btn]',
+            ) as HTMLButtonElement
+          ).disabled,
+      );
+      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-sending');
+      matrixService.sendMessage = originalSendMessage;
     });
 
     test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {

@@ -38,7 +38,9 @@ import { Query } from './query';
 import { Loader } from './loader';
 export * from './constants';
 export * from './queue';
-export * from './expression';
+export * from './indexer/expression';
+export * from './indexer/client';
+export * from './db';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
@@ -94,6 +96,7 @@ export {
   isCardDocumentString,
 } from './card-document';
 export { sanitizeHtml } from './dompurify';
+export { markedSync, markdownToHtml } from './marked-sync';
 export { getPlural } from './pluralize';
 
 import type {
@@ -355,8 +358,24 @@ export function loaderFor(cardOrField: CardDef | FieldDef) {
   return loader;
 }
 
-export async function apiFor(cardOrField: CardDef | FieldDef) {
-  let loader = loaderFor(cardOrField);
+export async function apiFor(
+  cardOrFieldType: typeof CardDef | typeof FieldDef | typeof BaseDef,
+): Promise<typeof CardAPI>;
+export async function apiFor(
+  cardOrField: CardDef | FieldDef | BaseDef,
+): Promise<typeof CardAPI>;
+export async function apiFor(
+  cardOrFieldOrClass:
+    | CardDef
+    | FieldDef
+    | BaseDef
+    | typeof CardDef
+    | typeof FieldDef
+    | typeof BaseDef,
+) {
+  let loader =
+    Loader.getLoaderFor(cardOrFieldOrClass) ??
+    loaderFor(cardOrFieldOrClass as CardDef | FieldDef | BaseDef);
   let api = await loader.import<typeof CardAPI>(
     'https://cardstack.com/base/card-api',
   );

@@ -29,6 +29,7 @@ interface Signature {
     profileAvatar?: ComponentLike;
     attachedCards?: CardDef[];
     errorMessage?: string;
+    isPending?: boolean;
     retryAction?: () => void;
   };
   Blocks: { default: [] };
@@ -45,7 +46,11 @@ export default class AiAssistantMessage extends Component<Signature> {
 
   <template>
     <div
-      class={{cn 'ai-assistant-message' is-from-assistant=@isFromAssistant}}
+      class={{cn
+        'ai-assistant-message'
+        is-from-assistant=@isFromAssistant
+        is-pending=@isPending
+      }}
       {{ScrollIntoView}}
       data-test-ai-assistant-message
       ...attributes
@@ -180,6 +185,13 @@ export default class AiAssistantMessage extends Component<Signature> {
           text on dark background (otherwise not good for accessibility) */
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+      }
+
+      .is-pending .content,
+      .is-pending .content .cards > :deep(.card-pill),
+      .is-pending .content .cards > :deep(.card-pill .boxel-card-container) {
+        background: var(--boxel-200);
+        color: var(--boxel-500);
       }
 
       .content > :deep(.patch-message) {
