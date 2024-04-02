@@ -6,7 +6,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task, timeout } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { marked } from 'marked';
@@ -66,7 +66,7 @@ export default class RoomMessage extends Component<Signature> {
     }
 
     // Do this check every second
-    await timeout(1000);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     this.checkStreamingTimeout.perform();
   });
