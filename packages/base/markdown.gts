@@ -1,21 +1,11 @@
 import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { marked } from 'marked';
-import { sanitizeHtml } from '@cardstack/runtime-common';
-
-const markdownOpts = {
-  mangle: false,
-  headerIds: false,
-};
-
-function toHtml(markdown: string | null) {
-  return markdown ? sanitizeHtml(marked(markdown, markdownOpts)) : '';
-}
+import { markdownToHtml } from '@cardstack/runtime-common';
 
 class View extends Component<typeof MarkdownField> {
   <template>
     <div>
-      {{{toHtml @model}}}
+      {{{markdownToHtml @model}}}
     </div>
   </template>
 }

@@ -42,6 +42,7 @@
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "loglevel": "^1.8.1",
+    "marked": "^12.0.1",
     "pluralize": "^8.0.0",
     "qs": "^6.10.5",
     "qunit": "^2.18.0",

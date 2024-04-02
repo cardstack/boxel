@@ -5,7 +5,6 @@ import { tracked } from '@glimmer/tracking';
 import format from 'date-fns/format';
 
 import { task } from 'ember-concurrency';
-import { marked } from 'marked';
 import {
   type LoginResponse,
   type MatrixEvent,
@@ -21,7 +20,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   type LooseSingleCardDocument,
-  sanitizeHtml,
+  markdownToHtml,
   aiBotUsername,
   splitStringIntoChunks,
   baseRealm,
@@ -382,7 +381,7 @@ export default class MatrixService extends Service {
     this.cardsToSend.set(roomId, undefined);
     await this.setPendingMessage(roomId, body, attachedCards);
 
-    let html = body != null ? sanitizeHtml(marked(body)) : '';
+    let html = markdownToHtml(body);
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
     let attachedOpenCards: CardDef[] = [];
@@ -483,7 +482,7 @@ export default class MatrixService extends Service {
       new roomModule.MessageField({
         author: roomMember,
         message: body,
-        formattedMessage: body ? sanitizeHtml(marked(body)) : '',
+        formattedMessage: markdownToHtml(body),
         created: new Date().getTime(),
         clientGeneratedId,
         transactionId: null,
