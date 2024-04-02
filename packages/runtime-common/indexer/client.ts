@@ -88,7 +88,7 @@ const coerceTypes = Object.freeze({
   is_deleted: 'BOOLEAN',
 });
 
-const tableValuedFunctionsPlaceholder = '__TABLE_VALUED_FUNCTIONS__';
+const placeholder = '__TABLE_VALUED_FUNCTIONS__';
 
 export class IndexerDBClient {
   #ready: Promise<void>;
@@ -171,7 +171,7 @@ export class IndexerDBClient {
       `SELECT card_url
        FROM
          indexed_cards,
-         json_each(indexed_cards.deps) as deps_each
+         json_each(deps) as deps_each
        WHERE 
          deps_each.value =`,
       param(cardId),
@@ -199,7 +199,7 @@ export class IndexerDBClient {
 
     let query = [
       'SELECT card_url, pristine_doc',
-      `FROM indexed_cards ${tableValuedFunctionsPlaceholder}`,
+      `FROM indexed_cards ${placeholder}`,
       'WHERE',
       ...every(conditions),
       // use a default sort for deterministic ordering, refactor this after
@@ -209,7 +209,7 @@ export class IndexerDBClient {
     ];
     let queryCount = [
       'SELECT count(DISTINCT card_url) as total',
-      `FROM indexed_cards ${tableValuedFunctionsPlaceholder}`,
+      `FROM indexed_cards ${placeholder}`,
       'WHERE',
       ...every(conditions),
     ];
@@ -359,7 +359,7 @@ export class IndexerDBClient {
       value,
       // Leaf field handler
       async (_api, _field, expression, _fieldName, pathTraveled) => {
-        if (traveledThruPlural(pathTraveled) && !deepestPluralPath) {
+        if (traveledThruPlural(pathTraveled)) {
           outermostPluralPath =
             outermostPluralPath ?? trimBrackets(pathTraveled);
           deepestPluralPath = convertBracketsToWildCards(pathTraveled);
@@ -380,25 +380,6 @@ export class IndexerDBClient {
         enter: async (_api, field, expression, _fieldName, pathTraveled) => {
           if (isFieldPlural(field) && !outermostPluralPath) {
             outermostPluralPath = trimBrackets(pathTraveled);
-          }
-          return expression;
-        },
-        exit: async (_api, field, expression, _fieldName, pathTraveled) => {
-          if (
-            isFieldPlural(field) &&
-            outermostPluralPath &&
-            !deepestPluralPath
-          ) {
-            deepestPluralPath = convertBracketsToWildCards(pathTraveled);
-            return [
-              ...every([
-                expression,
-                [
-                  tableValuedTree('search_doc', outermostPluralPath, 'fullkey'),
-                  `LIKE '$.${deepestPluralPath}'`,
-                ],
-              ]),
-            ];
           }
           return expression;
         },
@@ -642,15 +623,10 @@ export class IndexerDBClient {
       // i'm slicing up the text as opposed to using a 'String.replace()' since
       // the ()'s in the SQL query are treated like regex matches when using
       // String.replace()
-      text = `${text.substring(
-        0,
-        text.indexOf(tableValuedFunctionsPlaceholder),
-      )}, ${[...tableValuedFunctions.values()]
+      let index = text.indexOf(placeholder);
+      text = `${text.substring(0, index)}, ${[...tableValuedFunctions.values()]
         .map((fn) => fn.fn)
-        .join(', ')}${text.substring(
-        text.indexOf(tableValuedFunctionsPlaceholder) +
-          tableValuedFunctionsPlaceholder.length,
-      )}`;
+        .join(', ')}${text.substring(index + placeholder.length)}`;
     } else {
       text = text.replace('TABLE_VALUED_FUNCTIONS_PLACEHOLDER', '');
     }
