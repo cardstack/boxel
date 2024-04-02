@@ -188,7 +188,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         display: none;
       }
       .operator-mode {
-        height: 100%;
         min-width: var(--operator-mode-min-width);
       }
       .operator-mode > div {
