@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
@@ -253,7 +254,7 @@ interface AiAssistantConversationSignature {
   };
 }
 
-export class AiAssistantConversation extends Component<AiAssistantConversationSignature> {
+const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSignature> =
   <template>
     <div class='ai-assistant-conversation'>
       {{yield}}
@@ -266,5 +267,6 @@ export class AiAssistantConversation extends Component<AiAssistantConversationSi
         overflow-y: auto;
       }
     </style>
-  </template>
-}
+  </template>;
+
+export { AiAssistantConversation };
