@@ -252,8 +252,6 @@ class PatchField extends FieldDef {
 // We can reuse exisiting eventId if user attached the same version of the card.
 const cardHashes: Map<string, string> = new Map();
 export function getEventIdForCard(cardDoc: LooseSingleCardDocument) {
-  console.log(cardDoc);
-  console.log(md5(md5(JSON.stringify(cardDoc))));
   return cardHashes.get(md5(JSON.stringify(cardDoc)));
 }
 
