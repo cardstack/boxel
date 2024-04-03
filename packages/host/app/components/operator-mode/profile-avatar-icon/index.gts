@@ -67,7 +67,7 @@ const ProfileAvatarIconVisual: TemplateOnlyComponent<ProfileAvatarIconVisualSign
       }
     </style>
 
-    <div class='profile-icon' data-test-profile-icon ...attributes>
+    <div class='profile-icon' data-test-profile-icon={{@isReady}} ...attributes>
       <span>
         {{#if @isReady}}
           {{@profileInitials}}

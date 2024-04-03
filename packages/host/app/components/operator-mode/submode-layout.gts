@@ -9,7 +9,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { and, cn, not } from '@cardstack/boxel-ui/helpers';
+import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
@@ -151,12 +151,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   <template>
-    <div
-      class={{cn
-        'operator-mode-with-ai-assistant'
-        this.aiAssistantVisibilityClass
-      }}
-    >
+    <div class='submode-layout {{this.aiAssistantVisibilityClass}}'>
       <ResizablePanelGroup
         @orientation='horizontal'
         @onListPanelContextChange={{this.onListPanelContextChange}}
@@ -175,6 +170,24 @@ export default class SubmodeLayout extends Component<Signature> {
             class='submode-switcher'
           />
           {{yield this.openSearchSheetToPrompt}}
+          <div class='profile-icon-container'>
+            <button
+              class='profile-icon-button'
+              {{on 'click' this.toggleProfileSummary}}
+              data-test-profile-icon-button
+            >
+              <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
+            </button>
+          </div>
+          <SearchSheet
+            @mode={{this.searchSheetMode}}
+            @onBlur={{this.closeSearchSheet}}
+            @onCancel={{this.closeSearchSheet}}
+            @onFocus={{this.openSearchSheetToPrompt}}
+            @onSearch={{this.expandSearchToShowResults}}
+            @onCardSelect={{this.handleCardSelectFromSearch}}
+            @onInputInsertion={{this.storeSearchElement}}
+          />
           {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
             <AiAssistantButton
               class='chat-btn'
@@ -202,16 +215,6 @@ export default class SubmodeLayout extends Component<Signature> {
       </ResizablePanelGroup>
     </div>
 
-    <div class='profile-icon-container'>
-      <button
-        class='profile-icon-button'
-        {{on 'click' this.toggleProfileSummary}}
-        data-test-profile-icon-button
-      >
-        <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
-      </button>
-    </div>
-
     {{#if this.profileSummaryOpened}}
       <ProfileInfoPopover
         {{onClickOutside
@@ -228,23 +231,13 @@ export default class SubmodeLayout extends Component<Signature> {
       />
     {{/if}}
 
-    <SearchSheet
-      @mode={{this.searchSheetMode}}
-      @onBlur={{this.closeSearchSheet}}
-      @onCancel={{this.closeSearchSheet}}
-      @onFocus={{this.openSearchSheetToPrompt}}
-      @onSearch={{this.expandSearchToShowResults}}
-      @onCardSelect={{this.handleCardSelectFromSearch}}
-      @onInputInsertion={{this.storeSearchElement}}
-    />
-
     <style>
-      .operator-mode-with-ai-assistant {
+      .submode-layout {
         display: flex;
         height: 100%;
       }
 
-      .operator-mode-with-ai-assistant > .boxel-panel-group {
+      .submode-layout > .boxel-panel-group {
         width: 100%;
       }
 
