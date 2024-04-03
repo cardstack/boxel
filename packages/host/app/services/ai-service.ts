@@ -2,6 +2,8 @@ import Service, { service } from '@ember/service';
 import OperatorModeStateService from './operator-mode-state-service';
 import { getRealmSession } from '@cardstack/host/resources/realm-session';
 import LoaderService from './loader-service';
+import { tracked } from '@glimmer/tracking';
+
 import {
   Schema,
   basicMappings,
@@ -22,6 +24,7 @@ export default class AiService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @tracked declare aiCard: CardDef | null;
 
   public async aiContext(attachedCards: CardDef[] = []) {
     let functions: FunctionDef[] = [];
@@ -33,7 +36,11 @@ export default class AiService extends Service {
       .filter((stackItem) => attachedCardIds.includes(stackItem.card.id)) // Filter out any open cards that are not attached
       .map((stackItem) => stackItem.card.id);
 
-    if (this.operatorModeStateService.state.submode == 'interact') {
+    if (this.aiCard) {
+      //try and get the system prompt and functions from it
+      functions = this.aiCard.aiContext?.aiFunctions || [];
+      systemPrompt = this.aiCard.aiContext?.systemPrompt || '';
+    } else if (this.operatorModeStateService.state.submode == 'interact') {
       let attachedOpenCards = attachedCards.filter((c) =>
         attachedOpenCardIds.includes(c.id),
       );
@@ -50,6 +57,18 @@ export default class AiService extends Service {
       systemPrompt: systemPrompt,
       functions,
     };
+  }
+
+  callFunction(functionName: string, args: any) {
+    console.log(
+      'ai-service.ts: callFunction',
+      functionName,
+      args,
+      this.aiCard[functionName],
+    );
+    if (this.aiCard && this.aiCard[functionName]) {
+      return this.aiCard[functionName](args);
+    }
   }
 
   private async getPatchFunctions(attachedOpenCards: CardDef[] = []) {

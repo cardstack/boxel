@@ -12,6 +12,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type AiService from '@cardstack/host/services/ai-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type MessageField } from 'https://cardstack.com/base/room';
@@ -65,6 +66,23 @@ export default class Room extends Component<Signature> {
             />
           {{/let}}
         </div>
+      {{else}}
+        <div
+          class='patch-button-bar'
+          data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
+        >
+          {{#let @message.command as |command|}}
+            <ApplyButton
+              @state={{if
+                this.operatorModeStateService.patchCard.isRunning
+                'applying'
+                'ready'
+              }}
+              data-test-command-apply
+              {{on 'click' (fn this.callFunction command)}}
+            />
+          {{/let}}
+        </div>
       {{/if}}
     </AiAssistantMessage>
 
@@ -78,6 +96,7 @@ export default class Room extends Component<Signature> {
   </template>
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare aiService: AiService;
 
   private get formattedMessage() {
     return sanitizeHtml(marked(this.args.message.formattedMessage));
@@ -120,5 +139,27 @@ export default class Room extends Component<Signature> {
       return;
     }
     this.operatorModeStateService.patchCard.perform(cardId, attributes);
+  }
+  // Pass in entire stack?
+  // = give it a loader? If we have a loader can we load a card and update it?
+  // With a loader we can totally ignore whether it's in the stack or not
+  // If we just do the stack we can simplify the UI for this demo... or can we?
+  // Stacks are shit.
+  // How do we get the id in?
+  // Auto calls  - where is this specified?
+  // Where can we do auto calls? Would need to process a call, but *once* - not every time the card is rendered
+  // Hack this in. It doesn't need to be perfect, just to show the concept
+  // Add to a list in a field of processed things. Only run iif it's new
+  @action callFunction(command: any) {
+    console.log('callFunction', command);
+    let result = this.aiService.callFunction(
+      command.commandType,
+      command.payload.patch,
+    );
+    // get return, do something with it
+    console.log('Result was ', result);
+    if (result) {
+      // return the message
+    }
   }
 }

@@ -223,6 +223,10 @@ class PatchObjectField extends FieldDef {
   static [primitive]: PatchObject;
 }
 
+class JSONObjectField extends FieldDef {
+  static [primitive]: JSONObject;
+}
+
 class CommandType extends FieldDef {
   static [primitive]: 'patch';
 }
@@ -231,6 +235,7 @@ class CommandType extends FieldDef {
 class PatchField extends FieldDef {
   @field commandType = contains(CommandType);
   @field payload = contains(PatchObjectField);
+  @field functionCall = contains(JSONObjectField);
 }
 
 export class MessageField extends FieldDef {
@@ -507,18 +512,16 @@ export class RoomField extends FieldDef {
           });
         } else if (event.content.msgtype === 'org.boxel.command') {
           // We only handle patches for now
+          // HACK - allowing more right now
           let command = event.content.data.command;
-          if (command.type !== 'patch') {
-            throw new Error(
-              `cannot handle commands in room with type ${command.type}`,
-            );
-          }
+
           messageField = new MessageField({
             ...cardArgs,
             formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
             command: new PatchField({
               commandType: command.type,
               payload: command,
+              functionCall: event.content.data.functionCall,
             }),
           });
         } else {
@@ -757,6 +760,7 @@ export interface CardMessageContent {
     attachedCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
+      systemPrompt?: string;
       functions: {
         name: string;
         description: string;

@@ -100,7 +100,8 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
+  patchCard = task({ enqueue: true }, async (id: string, payload: any) => {
+    console.log(payload);
     let stackItems = this.state?.stacks.flat() ?? [];
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {

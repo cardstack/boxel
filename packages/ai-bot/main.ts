@@ -126,15 +126,15 @@ async function sendOption(
 
 function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
   let functions = getFunctions(history, aiBotUsername);
-  let messages = getModifyPrompt(history, aiBotUsername, functions);
+  let messages = getModifyPrompt(history, aiBotUsername);
   if (functions.length === 0) {
     return openai.beta.chat.completions.stream({
-      model: 'gpt-4-1106-preview',
+      model: 'gpt-4-turbo-preview',
       messages: messages,
     });
   } else {
     return openai.beta.chat.completions.stream({
-      model: 'gpt-4-1106-preview',
+      model: 'gpt-4-turbo-preview',
       messages: messages,
       functions: functions,
       function_call: 'auto',
@@ -390,6 +390,32 @@ Common issues are:
               client,
               room,
               args,
+              initialMessage.event_id,
+            );
+          } else {
+            log.info('sending option', functionCall);
+            const body =
+              args['description'] ||
+              `Calling ${functionCall.name}(${functionCall.arguments})`;
+            let messageObject = {
+              body: body,
+              msgtype: 'org.boxel.command',
+              formatted_body: body,
+              format: 'org.matrix.custom.html',
+              data: {
+                functionCall: functionCall,
+                command: {
+                  type: functionCall.name,
+                  patch: args,
+                },
+              },
+            };
+            log.info(JSON.stringify(messageObject, null, 2));
+            return await sendEvent(
+              client,
+              room,
+              'm.room.message',
+              messageObject,
               initialMessage.event_id,
             );
           }

@@ -31,6 +31,7 @@ import {
   IconButton,
   Tooltip,
   LoadingIndicator,
+  Button,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { cn, eq, optional } from '@cardstack/boxel-ui/helpers';
@@ -60,6 +61,7 @@ import {
   getRealmSession,
 } from '@cardstack/host/resources/realm-session';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
+import type AiService from '@cardstack/host/services/ai-service';
 
 import type {
   CardDef,
@@ -104,6 +106,7 @@ export interface RenderedCardForOverlayActions {
 export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
+  @service private declare aiService: AiService;
   @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private isHoverOnRealmIcon = false;
   @tracked private isSaving = false;
@@ -174,6 +177,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.index + 1 < this.args.stackItems.length;
   }
 
+  private get isConnected() {
+    return this.aiService.aiCard === this.card;
+  }
+
   private get context() {
     return {
       renderedIn: this as Component<any>,
@@ -226,6 +233,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get cardIdentifier() {
     return this.args.item.url?.href;
+  }
+
+  @action
+  private setAiCard(card: CardDef) {
+    this.aiService.aiCard = card;
   }
 
   @action
@@ -430,6 +442,24 @@ export default class OperatorModeStackItem extends Component<Signature> {
               {{/if}}
             </:icon>
             <:actions>
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <Button
+                    @width='24px'
+                    @height='24px'
+                    class='icon-button'
+                    aria-label='Connect'
+                    {{on 'click' (fn this.setAiCard this.card)}}
+                  >{{#if this.isConnected}}
+                      Connected
+                    {{else}}
+                      Connect
+                    {{/if}}</Button>
+                </:trigger>
+                <:content>
+                  Edit
+                </:content>
+              </Tooltip>
               {{#if this.canWrite}}
                 {{#if (eq @item.format 'isolated')}}
                   <Tooltip @placement='top'>
