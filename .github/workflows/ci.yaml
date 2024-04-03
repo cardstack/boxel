@@ -126,9 +126,6 @@ jobs:
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
     runs-on: ubuntu-latest
-    needs:
-      - change-check
-    if: ${{ needs.change-check.outputs.boxel-ui == 'true' }}
     concurrency:
       group: boxel-ui-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -279,10 +276,10 @@ jobs:
 
   change-check:
     name: Check which packages changed
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
-      boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
     steps:
       - uses: actions/checkout@v3
@@ -300,10 +297,6 @@ jobs:
               - 'packages/host/**'
               - 'packages/realm-server/**'
               - 'packages/runtime-common/**'
-              - 'pnpm-lock.yaml'
-            boxel-ui:
-              - '.github/workflows/ci.yaml'
-              - 'packages/boxel-ui/**'
               - 'pnpm-lock.yaml'
             ai-bot:
               - '.github/workflows/manual-ai-bot.yml'
