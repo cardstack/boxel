@@ -135,7 +135,12 @@ export class VirtualNetwork {
   ) {
     let remapped = this.resolveURLMapping(request.url, direction);
     if (remapped) {
-      return new Request(remapped, request);
+      let requestInit: RequestInit & { duplex?: 'half' | 'none' } = request; // duplex is in the fetch standard (https://fetch.spec.whatwg.org/#dom-requestinit-duplex) but currently is not being pickued up here, thus the type addition
+      if (request.body) {
+        requestInit.duplex = 'half'; //  The `duplex` member must be specified for a request with a streaming body. Otherwise the browser will throw an error (with the same message) when a request has a (streaming) body.
+      }
+
+      return new Request(remapped, requestInit);
     } else {
       return request;
     }
