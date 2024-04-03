@@ -123,6 +123,21 @@ jobs:
         run: pnpm test
         working-directory: packages/boxel-ui/test-app
 
+  boxel-ui-raw-icon-changes-only:
+    name: Boxel UI ensure raw icon changes only
+    runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-ui-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
+      - name: Rebuild boxel-ui icons
+        run: pnpm rebuild:icons
+        working-directory: packages/boxel-ui/addon
+      - name: Check for diffs
+        run: git diff --exit-code
+
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
