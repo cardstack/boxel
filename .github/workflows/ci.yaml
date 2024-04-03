@@ -138,7 +138,7 @@ jobs:
       - name: Rebuild boxel-ui icons
         run: pnpm rebuild:icons
         working-directory: packages/boxel-ui/addon
-      - name: Check for diffs
+      - name: Fail if generated icons have been changed without underlying raw icon changing
         run: git diff --exit-code
 
   host-test:
