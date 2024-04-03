@@ -8,7 +8,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     xmlns='http://www.w3.org/2000/svg'
     width='24'
     height='24'
-    viewBox='2.5 2.5 18.75 18.75'
+    viewBox='0 0 24 24'
     ...attributes
   ><path fill='none' d='M0 0h24v24H0z' /><path
       fill='var(--icon-color, #000)'
@@ -19,5 +19,5 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
 </template>;
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently
-IconComponent.name = 'IconPencil';
+IconComponent.name = 'IconPencilNotCrossedOut';
 export default IconComponent;
