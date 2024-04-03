@@ -127,7 +127,7 @@ jobs:
     name: Boxel UI ensure raw icon changes only
     runs-on: ubuntu-latest
     concurrency:
-      group: boxel-ui-test-${{ github.head_ref || github.run_id }}
+      group: boxel-ui-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
