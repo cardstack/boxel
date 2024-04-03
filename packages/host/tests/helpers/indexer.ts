@@ -134,6 +134,9 @@ export async function setupIndex(
           types: await getTypes(r),
         };
       }
+      row.card_url = !row.card_url.endsWith('.json')
+        ? `${row.card_url}.json`
+        : row.card_url;
       return asExpressions(
         { ...defaultIndexEntry, ...row },
         {
