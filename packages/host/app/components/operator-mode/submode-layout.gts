@@ -9,7 +9,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
-import { and, cn, not } from '@cardstack/boxel-ui/helpers';
+import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
@@ -151,7 +151,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   <template>
-    <div class={{cn 'submode-layout' this.aiAssistantVisibilityClass}}>
+    <div class='submode-layout {{this.aiAssistantVisibilityClass}}'>
       <ResizablePanelGroup
         @orientation='horizontal'
         @onListPanelContextChange={{this.onListPanelContextChange}}
