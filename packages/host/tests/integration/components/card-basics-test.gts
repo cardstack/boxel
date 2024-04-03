@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import {
   waitUntil,
   waitFor,
@@ -1907,7 +1908,7 @@ module('Integration | card-basics', function (hooks) {
       static edit = class Edit extends Component<typeof this> {
         private counter: number;
         constructor(
-          owner: unknown,
+          owner: Owner,
           args: SignatureFor<typeof TestString>['Args'],
         ) {
           super(owner, args);

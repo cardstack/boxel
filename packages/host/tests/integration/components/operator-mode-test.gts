@@ -816,10 +816,14 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom(`[data-test-preferredcarrier="DHL"]`).exists();
 
       let roomId = await openAiAssistant();
-      let patchData = {
-        attributes: {
-          firstName: 'Joy',
-          address: { shippingInfo: { preferredCarrier: 'UPS' } },
+      let payload = {
+        type: 'patch',
+        id: `${testRealmURL}Person/fadhlan`,
+        patch: {
+          attributes: {
+            firstName: 'Joy',
+            address: { shippingInfo: { preferredCarrier: 'UPS' } },
+          },
         },
       };
       addRoomEvent(matrixService, {
@@ -834,13 +838,7 @@ module('Integration | operator-mode', function (hooks) {
           msgtype: 'org.boxel.command',
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
-          data: JSON.stringify({
-            command: {
-              type: 'patch',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: patchData,
-            },
-          }),
+          data: JSON.stringify({ command: payload }),
         },
       });
 
@@ -848,7 +846,10 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-view-code-button]');
 
       await waitForCodeEditor();
-      assert.deepEqual(JSON.parse(getMonacoContent()), patchData);
+      assert.deepEqual(JSON.parse(getMonacoContent()), {
+        commandType: 'patch',
+        payload,
+      });
       assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
 
       await click('[data-test-view-code-button]');

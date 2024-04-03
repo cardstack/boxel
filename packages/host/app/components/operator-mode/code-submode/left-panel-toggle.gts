@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { inject as service } from '@ember/service';
@@ -21,37 +22,35 @@ interface ToggleButtonSignature {
   Blocks: typeof Button.Blocks;
 }
 
-class ToggleButton extends Component<ToggleButtonSignature> {
-  <template>
-    <Button
-      @disabled={{@disabled}}
-      @kind={{if @isActive 'primary-dark' 'secondary'}}
-      @size='extra-small'
-      class={{cn 'toggle-button' active=@isActive}}
-      ...attributes
-    >
-      {{yield}}
-    </Button>
-    <style>
-      .toggle-button {
-        --boxel-button-border: 1px solid var(--boxel-400);
-        --boxel-button-font: 700 var(--boxel-font-xs);
-        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
-        --boxel-button-min-width: 6rem;
-        --boxel-button-padding: 0;
-        border-radius: var(--boxel-border-radius);
-        flex: 1;
-      }
-      .toggle-button:hover:not(:disabled) {
-        border-color: var(--boxel-dark);
-      }
-      .toggle-button.active {
-        border-color: var(--boxel-dark);
-        --boxel-button-text-color: var(--boxel-highlight);
-      }
-    </style>
-  </template>
-}
+const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
+  <Button
+    @disabled={{@disabled}}
+    @kind={{if @isActive 'primary-dark' 'secondary'}}
+    @size='extra-small'
+    class={{cn 'toggle-button' active=@isActive}}
+    ...attributes
+  >
+    {{yield}}
+  </Button>
+  <style>
+    .toggle-button {
+      --boxel-button-border: 1px solid var(--boxel-400);
+      --boxel-button-font: 700 var(--boxel-font-xs);
+      --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+      --boxel-button-min-width: 6rem;
+      --boxel-button-padding: 0;
+      border-radius: var(--boxel-border-radius);
+      flex: 1;
+    }
+    .toggle-button:hover:not(:disabled) {
+      border-color: var(--boxel-dark);
+    }
+    .toggle-button.active {
+      border-color: var(--boxel-dark);
+      --boxel-button-text-color: var(--boxel-highlight);
+    }
+  </style>
+</template>;
 
 interface Signature {
   Element: HTMLDivElement;

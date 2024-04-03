@@ -5,7 +5,6 @@ import type Owner from '@ember/owner';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-//@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
