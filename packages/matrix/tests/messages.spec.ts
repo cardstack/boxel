@@ -796,28 +796,28 @@ test.describe('Room messages', () => {
         from: 'user1',
         message: 'Message - 1',
         cards: [
-          { id: testCard, title: 'Hassan' },
+          { id: testCard, title: 'Updated Name Abdel-Rahman' },
         ],
       },
       {
         from: 'user1',
         message: 'Message - 2',
         cards: [
-          { id: testCard, title: 'Hassan' },
+          { id: testCard, title: 'Updated Name Abdel-Rahman' },
         ],
       },
       {
         from: 'user1',
         message: 'Message - 3',
         cards: [
-          { id: testCard, title: 'Hassan' },
+          { id: testCard, title: 'Updated Name Abdel-Rahman' },
         ],
       },
       {
         from: 'user1',
         message: 'Message with updated card',
         cards: [
-          { id: testCard, title: 'Hassan' },
+          { id: testCard, title: 'Updated Name Abdel-Rahman' },
         ],
       },
     ]);
