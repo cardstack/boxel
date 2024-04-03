@@ -4,7 +4,7 @@ import stringify from 'safe-stable-stringify';
 
 import { CodeRef } from '../index';
 
-export type Expression = (string | Param)[];
+export type Expression = (string | Param | TableValuedEach | TableValuedTree)[];
 
 export type PgPrimitive =
   | number
@@ -34,19 +34,35 @@ export interface FieldValue {
   kind: 'field-value';
 }
 
-export interface TableValuedFunction {
-  kind: 'table-valued';
-  fn: string;
-  as: string;
+export interface TableValuedEach {
+  kind: 'table-valued-each';
+  column: string;
+  path: string;
+}
+
+export interface TableValuedTree {
+  kind: 'table-valued-tree';
+  column: string;
+  path: string;
+  treeColumn: string;
+}
+
+export interface FieldArity {
+  type: CodeRef;
+  path: string;
   value: CardExpression;
+  errorHint: string;
+  kind: 'field-arity';
 }
 
 export type CardExpression = (
   | string
   | Param
-  | TableValuedFunction
+  | TableValuedEach
+  | TableValuedTree
   | FieldQuery
   | FieldValue
+  | FieldArity
 )[];
 
 export function addExplicitParens(expression: CardExpression): CardExpression;
@@ -80,16 +96,24 @@ export function isParam(expression: any): expression is Param {
   return isPlainObject(expression) && 'param' in expression;
 }
 
-export function tableValuedFunction(
-  fn: string,
-  as: string,
-  value: CardExpression,
-): TableValuedFunction {
+export function tableValuedEach(column: string, path: string): TableValuedEach {
   return {
-    kind: 'table-valued',
-    fn,
-    as,
-    value,
+    kind: 'table-valued-each',
+    column,
+    path,
+  };
+}
+
+export function tableValuedTree(
+  column: string,
+  path: string,
+  treeColumn: string,
+): TableValuedTree {
+  return {
+    kind: 'table-valued-tree',
+    column,
+    path,
+    treeColumn,
   };
 }
 
@@ -120,6 +144,22 @@ export function fieldValue(
     kind: 'field-value',
   };
 }
+
+export function fieldArity(
+  type: CodeRef,
+  path: string,
+  value: CardExpression,
+  errorHint: string,
+): FieldArity {
+  return {
+    type,
+    path,
+    value,
+    errorHint,
+    kind: 'field-arity',
+  };
+}
+
 export function every(expressions: CardExpression[]): CardExpression;
 export function every(expressions: Expression[]): Expression;
 export function every(expressions: unknown[][]): unknown {
