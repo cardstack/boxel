@@ -196,8 +196,12 @@ export default class ResizablePanelGroup extends Component<Signature> {
     nextPanelEl?: HTMLElement | null;
     prevPanelEl?: HTMLElement | null;
   } | null = null;
-  panelRatios: number[] = [];
 
+  // regardless of what lengthPx is provided
+  // ratios should definitely sum to 1 after setting all of this
+  // if the lengths dont fit the screen, the lengths should be adapted
+  // lengths may not adapt when length in the application storage is stale
+  // the default fractions dont
   @action
   registerPanel(context: {
     collapsible: boolean | undefined;
@@ -219,6 +223,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       }
     }
 
+    let screenSize = this.panelGroupLengthPx;
     this.listPanelContext.set(
       id,
       {
@@ -229,14 +234,31 @@ export default class ResizablePanelGroup extends Component<Signature> {
         minLengthPx: context.minLengthPx,
         collapsible:
           context.collapsible == undefined ? true : context.collapsible,
-        ratio: context.defaultLengthFraction ?? 0,
       },
       true,
+      screenSize, //fill up the screen
     );
 
+    if (this.args.orientation === 'horizontal' && context.minLengthPx !== 371) {
+      debugger;
+      // if (
+      //   this.listPanelContext.size === 3 &&
+      //   this.listPanelContext.isLengthsStale(this.panelGroupLengthPx)
+      // ) {
+      //   console.log('length is stale');
+      //   console.log(this.listPanelContext.sum);
+      //   console.log(this.panelGroupLengthPx);
+      // }
+      // console.log('panel group length');
+      // console.log(this.panelGroupLengthPx);
+      // console.log('lengthPx');
+      // console.log(context.lengthPx);
+      // debugger;
+    }
     return id;
   }
 
+  // ratios should be recalculated here
   @action
   unregisterPanel(id: number) {
     this.listPanelContext.delete(id);
@@ -289,6 +311,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
     this.currentResizeHandle = null;
   }
 
+  //onResize the ratios are changing
+  // the size should remain the same
   @action
   onResizeHandleMouseMove(event: MouseEvent) {
     if (
@@ -476,6 +500,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         nextPanelElContext.initialMinLengthPx,
       );
     }
+    this.listPanelContext.recalculateRatios();
   }
 
   @action
@@ -496,7 +521,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
           lengthPx: newPrevPanelElLength,
           minLengthPx: newPrevPanelElMinLength,
         },
-        true,
+        true, // we realculate the ratios whenever the distribution of panels change
       );
     }
 
@@ -509,17 +534,26 @@ export default class ResizablePanelGroup extends Component<Signature> {
           lengthPx: newNextPanelElLength,
           minLengthPx: newNextPanelElMinLength,
         },
-        true,
+        true, // we realculate the ratios whenever the distribution of panels change
       );
     }
 
     this.args.onListPanelContextChange?.(
-      Array.from(this.listPanelContext, ([_name, value]) => value),
+      Array.from(
+        this.listPanelContext.listPanelContext,
+        ([_name, value]) => value,
+      ),
     );
   }
 
+  // when u resize the container
+  // ratios should never change. one should never recalculate ratios
+  // lengths may change
   @action
   onContainerResize(entry?: ResizeObserverEntry, _observer?: ResizeObserver) {
+    // if (this.args.orientation === 'horizontal') {
+    //   debugger;
+    // }
     if (!this.panelGroupElement) {
       if (entry) {
         this.panelGroupElement = entry.target as HTMLDivElement;
@@ -527,81 +561,18 @@ export default class ResizablePanelGroup extends Component<Signature> {
       }
       return;
     }
-
     this.hideHandles =
       this.panelGroupElement[this.perpendicularLengthProperty] <
       this.minimumLengthToShowHandles;
-
     let newContainerSize = this.panelGroupLengthWithoutResizeHandlePx;
     if (newContainerSize == undefined) {
       console.warn('Expected newContainerSize to be defined');
       return;
     }
 
-    let remainingContainerSize = newContainerSize;
-    let calculateLengthsOfPanelWithMinLegth = () => {
-      for (const [k, v] of this.listPanelContext.entries()) {
-        if (v.initialMinLengthPx) {
-          if (v.lengthPx === undefined) {
-            throw new Error('h');
-          }
-          let panelRatio = v.ratio;
-          // if (panelRatio === 0) {
-          //   debugger;
-          // }
-          // if (newContainerSize === 0) {
-          //   debugger;
-          // }
-          if (panelRatio === undefined || newContainerSize === undefined) {
-            console.warn(
-              'Expected panelRatio and newContainerSize to be defined',
-            );
-            return;
-          }
-          let proportionalSize = panelRatio * newContainerSize;
-          let actualSize = Math.round(
-            v?.initialMinLengthPx
-              ? Math.max(proportionalSize, v.initialMinLengthPx)
-              : proportionalSize,
-          );
-          this.listPanelContext.set(k, {
-            ...v,
-            lengthPx: actualSize,
-          });
-          remainingContainerSize = remainingContainerSize - actualSize;
-        }
-      }
-    };
-    calculateLengthsOfPanelWithMinLegth();
+    // console.log(`newContainerSize ${newContainerSize}`);
 
-    let calculateLengthsOfPanelWithoutMinLength = () => {
-      let totalNewPanelRatio = Array.from(this.listPanelContext.values())
-        .filter((c) => !c.initialMinLengthPx && c.ratio)
-        .map((c) => c.ratio!)
-        .reduce((accum, currentValue) => {
-          if (currentValue) {
-            return accum + currentValue;
-          } else {
-            return accum;
-          }
-        }, 0);
-
-      for (const [k, v] of this.listPanelContext.entries()) {
-        if (!v.initialMinLengthPx && v.ratio) {
-          if (totalNewPanelRatio) {
-            let newPanelRatio = v.ratio / totalNewPanelRatio;
-            let proportionalSize = newPanelRatio * remainingContainerSize;
-            let actualSize = Math.round(proportionalSize);
-            this.listPanelContext.set(k, {
-              ...v,
-              ratio: newPanelRatio ?? v.defaultLengthFraction,
-              lengthPx: actualSize,
-            });
-          }
-        }
-      }
-    };
-    calculateLengthsOfPanelWithoutMinLength();
+    // this.listPanelContext.recomputeLengthsOnResize(newContainerSize);
   }
 
   private findPanelsByResizeHandle(ResizeHandleId: string) {
@@ -643,23 +614,74 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 }
 
-class PanelContextMap extends TrackedMap<number, PanelContext> {
-  set(key: number, value: PanelContext, recompute = false) {
-    super.set(key, value);
+type PanelContext1 = PanelContext & { ratio: number | undefined };
+
+class PanelContextMap {
+  #panelContextMap: TrackedMap<number, PanelContext> = new TrackedMap<
+    number,
+    PanelContext
+  >();
+  #ratios: Map<number, number> = new Map();
+
+  get listPanelContext() {
+    return this.#panelContextMap;
+  }
+
+  get size() {
+    return this.#panelContextMap.size;
+  }
+  // we are safe to always recalculate ratio
+  set(
+    key: number,
+    value: PanelContext,
+    recompute = false,
+    screenSize?: number,
+  ) {
+    this.#panelContextMap.set(key, value);
     if (recompute === true) {
       this.recalculateRatios();
+      if (screenSize !== undefined) {
+        // if (this.isLengthsStale(screenSize)) {
+        // this.recalculateLengths(screenSize);
+        // }
+        // }
+      }
     }
+    // if (screenSize !== undefined) {
+    //   // this.recalculateLengths(screenSize);
+    // }
     return this;
   }
 
+  //returns ratio also
+  get(key: number): PanelContext1 {
+    let val = this.#panelContextMap.get(key);
+    return { ...val, ratio: this.#ratios.get(key) } as PanelContext1;
+  }
+
   delete(key: number) {
-    let o = super.delete(key);
-    this.recalculateRatios();
-    return o;
+    this.#panelContextMap.delete(key);
+    this.#ratios.delete(key);
+    //we intentionally do not recompute ratios at the end bcos if we did that then the ratios will be morphed
+    //this keeps the memory of the last ratio
+    // this.recalculateRatios();
+  }
+
+  remainingContainerSize(screenSize: number) {
+    return screenSize - this.totalLengthInitialhMinLengthPx;
+  }
+
+  get totalLengthInitialhMinLengthPx() {
+    let initialMinLengthPxs: number[] = Array.from(
+      this.#panelContextMap.values(),
+    )
+      .filter((o) => o.initialMinLengthPx)
+      .map((o) => o.initialMinLengthPx!);
+    return sumArray(initialMinLengthPxs);
   }
 
   get lengths() {
-    let panelLengths: number[] = Array.from(this.values()).map(
+    let panelLengths: number[] = Array.from(this.#panelContextMap.values()).map(
       (panelContext) => panelContext.lengthPx,
     );
     return panelLengths;
@@ -670,7 +692,9 @@ class PanelContextMap extends TrackedMap<number, PanelContext> {
   }
 
   get ratios() {
-    return Array.from(this.values()).map((o) => o.ratio);
+    // let ratios = Array.from(this.values()).map((o) => o.ratio);
+    // return ratios.filter((r) => r !== undefined);
+    return Array.from(this.#ratios.values());
   }
 
   get isRatioStale() {
@@ -682,31 +706,111 @@ class PanelContextMap extends TrackedMap<number, PanelContext> {
   }
 
   isLengthsStale(fullWidth: number) {
-    console.log('is lengths stale');
-    console.log(this.sum);
-    console.log(fullWidth);
-    return fullWidth !== this.sum;
+    let tolerance = 0.2; //%//px
+
+    console.log(`sum vs fullWidth: ${this.sum} vs ${fullWidth}`);
+    return Math.abs(fullWidth - this.sum) > tolerance * fullWidth;
   }
 
+  //from lengths
+  //when adding your ratios will be stale
   recalculateRatios() {
     if (this.sum === 0) {
       console.warn('sum = 0 ');
       return;
     }
-    for (const [k, v] of this.entries()) {
+    for (const [k, v] of this.#panelContextMap.entries()) {
       if (v.lengthPx === undefined) {
         throw new Error('h');
       }
       let ratio = v.lengthPx / this.sum;
+      this.#ratios.set(k, ratio);
+    }
+    console.log('Ratios recalculated');
+  }
+
+  recalculateLengths(screenSize: number) {
+    for (const [k, v] of this.#panelContextMap.entries()) {
+      let ratio = this.#ratios.get(k);
+      console.log('recalc');
+      console.log(k);
+      console.log(ratio);
+      if (!ratio) {
+        throw new Error('ratio unattainable');
+      }
       this.set(
         k,
         {
           ...v,
-          ratio,
+          lengthPx: screenSize * ratio,
         },
         false,
       );
     }
-    console.log('Ratios recalculated');
   }
+
+  //   recomputeLengthsOnResize(newSize: number) {
+  //     //keep ratios stale
+  //     let remainingContainerSize = newSize;
+  //     let totalNewPanelRatio = Array.from(this.values())
+  //       .filter((c) => !c.initialMinLengthPx && c.ratio)
+  //       .map((c) => c.ratio!)
+  //       .reduce((accum, currentValue) => {
+  //         if (currentValue) {
+  //           return accum + currentValue;
+  //         } else {
+  //           return accum;
+  //         }
+  //       }, 0);
+  //     if (totalNewPanelRatio === 0) {
+  //       if (this.size === 3) {
+  //         debugger;
+  //       }
+  //       throw new Error('new ratio 0');
+  //     }
+  //     // for (const [k, v] of this.entries()) {
+  //     //   if (v.initialMinLengthPx) {
+  //     //     let proportionalSize = v.ratio * newSize;
+  //     //     let actualSize = proportionalSize; //v.initialMinLengthPx;
+  //     //     // Math.round(Math.max(proportionalSize, v.initialMinLengthPx)); //tricky
+  //     //     this.set(k, { ...v, lengthPx: actualSize }, false);
+  //     //   }
+  //     // }
+  //     // remainingContainerSize =
+  //     //   remainingContainerSize - this.totalLengthInitialhMinLengthPx;
+  //     // let totalNewPanelRatio = Array.from(this.values())
+  //     //   .filter((c) => !c.initialMinLengthPx && c.ratio)
+  //     //   .map((c) => c.ratio!)
+  //     //   .reduce((accum, currentValue) => {
+  //     //     if (currentValue) {
+  //     //       return accum + currentValue;
+  //     //     } else {
+  //     //       return accum;
+  //     //    4
+  //     //   }, 0);
+  //     // if (totalNewPanelRatio === 0) {
+  //     //   return;
+  //     // }
+  //     for (const [k, v] of this.entries()) {
+  //       if (!v.initialMinLengthPx) {
+  //         if (v.ratio === undefined) {
+  //           debugger;
+  //           throw new Error('ratio undefined');
+  //         }
+  //         let newPanelRatio = v.ratio / totalNewPanelRatio;
+  //         let proportionalSize = newPanelRatio * remainingContainerSize;
+  //         let actualSize = Math.round(proportionalSize);
+  //         this.set(
+  //           k,
+  //           {
+  //             ...v,
+  //             ratio: newPanelRatio, //newPanelRatio ?? v.defaultLengthFraction,
+  //             lengthPx: actualSize,
+  //           },
+  //           false,
+  //         );
+  //       }
+  //     }
+  //   }
+  // }
 }

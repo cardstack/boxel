@@ -89,6 +89,10 @@ type PanelHeights = {
 type SelectedAccordionItem = 'schema-editor' | null;
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
+// These are defaults that it takes up in the screen
+// This will let defaults sum to 1
+// This will make the lengths accurate when you provide it.
+// If the lengths are not accurate, it is safe to say that
 const defaultPanelWidths: PanelWidths = {
   // 14rem as a fraction of the layout width
   leftPanel:
@@ -96,7 +100,7 @@ const defaultPanelWidths: PanelWidths = {
     (document.documentElement.clientWidth - 40 - 36),
   codeEditorPanel: 0.4,
   rightPanel: 0.4,
-  emptyCodeModePanel: 0.8,
+  emptyCodeModePanel: 0.2,
 };
 
 const CodeModePanelHeights = 'code-mode-panel-heights';
@@ -767,7 +771,7 @@ export default class CodeSubmode extends Component<Signature> {
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.codeEditorPanel}}
               @lengthPx={{this.panelWidths.codeEditorPanel}}
-              @minLengthPx={{300}}
+              {{!-- @minLengthPx={{300}} --}}
             >
               <InnerContainer>
                 {{#if this.isReady}}
