@@ -21,7 +21,6 @@ import * as emberResources from 'ember-resources';
 import * as ethers from 'ethers';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
-import * as marked from 'marked';
 import * as superFastMD5 from 'super-fast-md5';
 import * as tracked from 'tracked-built-ins';
 
@@ -66,7 +65,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('tracked-built-ins', tracked);
   virtualNetwork.shimModule('date-fns', dateFns);
   virtualNetwork.shimModule('@ember/destroyable', emberDestroyable);
-  virtualNetwork.shimModule('marked', marked);
   virtualNetwork.shimModule('ethers', ethers);
   virtualNetwork.shimModule('ember-source/types', { default: class {} });
   virtualNetwork.shimModule('ember-source/types/preview', {

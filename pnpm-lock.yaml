@@ -173,9 +173,6 @@ importers:
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.182
-      '@types/marked':
-        specifier: ^4.3.0
-        version: 4.3.0
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0
@@ -1088,9 +1085,6 @@ importers:
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.182
-      '@types/marked':
-        specifier: ^4.3.0
-        version: 4.3.0
       '@types/matrix-js-sdk':
         specifier: ^11.0.1
         version: 11.0.1
@@ -1322,9 +1316,6 @@ importers:
       loglevel:
         specifier: ^1.8.1
         version: 1.8.1
-      marked:
-        specifier: ^5.0.2
-        version: 5.0.2
       matrix-js-sdk:
         specifier: ^31.0.0
         version: 31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm)
@@ -1727,6 +1718,9 @@ importers:
       loglevel:
         specifier: ^1.8.1
         version: 1.8.1
+      marked:
+        specifier: ^12.0.1
+        version: 12.0.1
       pluralize:
         specifier: ^8.0.0
         version: 8.0.0
@@ -1739,6 +1733,9 @@ importers:
       recast:
         specifier: ^0.23.4
         version: 0.23.4
+      safe-stable-stringify:
+        specifier: ^2.4.3
+        version: 2.4.3
       super-fast-md5:
         specifier: ^1.0.1
         version: 1.0.1
@@ -5376,10 +5373,6 @@ packages:
 
   /@types/lodash@4.14.182:
     resolution: {integrity: sha512-/THyiqyQAP9AfARo4pF+aCGcyiQ94tX/Is2I7HofNRqoYLgN1PBoOWu2/zTA5zMxzP5EFutMtWtGAFRKUe961Q==}
-
-  /@types/marked@4.3.0:
-    resolution: {integrity: sha512-zK4gSFMjgslsv5Lyvr3O1yCjgmnE4pr8jbG8qVn4QglMwtpvPCf4YT2Wma7Nk95OxUUJI8Z+kzdXohbM7mVpGw==}
-    dev: true
 
   /@types/matrix-js-sdk@11.0.1:
     resolution: {integrity: sha512-0cI+IlIf96mxsTgtS9x7Cw2tZKhhkqwAmodKXGW+rf7THmbiM7rvOsRmp3eDik16mRlWrluq2egVFtQ8NGjgPw==}
@@ -12573,6 +12566,10 @@ packages:
       unbox-primitive: 1.0.2
       which-typed-array: 1.1.11
 
+  /es-errors@1.3.0:
+    resolution: {integrity: sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==}
+    engines: {node: '>= 0.4'}
+
   /es-module-lexer@1.3.1:
     resolution: {integrity: sha512-JUFAyicQV9mXc3YRxPnDlrfBKpqt6hUYzz9/boprUJHs4e4KVr3XwOF70doO6gwXUor6EWZJAyWAfKki84t20Q==}
 
@@ -14344,6 +14341,16 @@ packages:
       has-proto: 1.0.1
       has-symbols: 1.0.3
 
+  /get-intrinsic@1.2.4:
+    resolution: {integrity: sha512-5uYhsJH8VJBTv7oslg4BznJYhDoRI6waYCxMmCdnTrcCrHA/fCFKoTFz2JKKE0HdDFUF7/oQuhzumXJK7paBRQ==}
+    engines: {node: '>= 0.4'}
+    dependencies:
+      es-errors: 1.3.0
+      function-bind: 1.1.2
+      has-proto: 1.0.1
+      has-symbols: 1.0.3
+      hasown: 2.0.2
+
   /get-stdin@4.0.1:
     resolution: {integrity: sha512-F5aQMywwJ2n85s4hJPTT9RPxGmubonuB10MNYo17/xph174n2MIR33HRguhzVag10O/npM7SPk73LMZNP+FaWw==}
     engines: {node: '>=0.10.0'}
@@ -14679,7 +14686,7 @@ packages:
   /gopd@1.0.1:
     resolution: {integrity: sha512-d65bNlIadxvpb/A2abVdlqKqV563juRnZ1Wtk6s1sIR8uNsXR70xqIzVqxVf1eTqDunwT2MkczEeaezCKTZhwA==}
     dependencies:
-      get-intrinsic: 1.2.1
+      get-intrinsic: 1.2.4
 
   /got@11.8.0:
     resolution: {integrity: sha512-k9noyoIIY9EejuhaBNLyZ31D5328LeqnyPNXJQb2XlJZcKakLqN5m6O/ikhq/0lw56kUYS54fVm+D1x57YC9oQ==}
@@ -14917,6 +14924,12 @@ packages:
       inherits: 2.0.4
       minimalistic-assert: 1.0.1
     dev: true
+
+  /hasown@2.0.2:
+    resolution: {integrity: sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==}
+    engines: {node: '>= 0.4'}
+    dependencies:
+      function-bind: 1.1.2
 
   /hcl2-parser@1.0.3:
     resolution: {integrity: sha512-NQUm/BFF+2nrBfeqDhhsy4DxxiLHgkeE3FywtjFiXnjSUaio3w4Tz1MQ3vGJBUhyArzOXJ24pO7JwE5LAn7Ncg==}
@@ -16988,11 +17001,11 @@ packages:
       uc.micro: 1.0.6
     dev: true
 
-  /marked@5.0.2:
-    resolution: {integrity: sha512-TXksm9GwqXCRNbFUZmMtqNLvy3K2cQHuWmyBDLOrY1e6i9UvZpOTJXoz7fBjYkJkaUFzV9hBFxMuZSyQt8R6KQ==}
+  /marked@12.0.1:
+    resolution: {integrity: sha512-Y1/V2yafOcOdWQCX0XpAKXzDakPOpn6U0YLxTJs3cww6VxOzZV1BTOOYWLvH3gX38cq+iLwljHHTnMtlDfg01Q==}
     engines: {node: '>= 18'}
     hasBin: true
-    dev: true
+    dev: false
 
   /matcher-collection@1.1.2:
     resolution: {integrity: sha512-YQ/teqaOIIfUHedRam08PB3NK7Mjct6BvzRnJmpGDm8uFXpNr1sbY4yuflI5JcEs6COpYA0FpRQhSDBf1tT95g==}
@@ -19715,7 +19728,6 @@ packages:
   /safe-stable-stringify@2.4.3:
     resolution: {integrity: sha512-e2bDA2WJT0wxseVd4lsDP4+3ONX6HpMXQa1ZhFQ7SU+GjvORCmShbCMltrtIDfkYhVHrOcPtj+KhmDBdPdZD1g==}
     engines: {node: '>=10'}
-    dev: true
 
   /safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
