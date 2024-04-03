@@ -29,6 +29,9 @@ jobs:
         uses: tj-actions/changed-files@v39
         with:
           files: |
+            .github/workflows/build-host.yml
+            .github/workflows/deploy-host.yml
+            .github/workflows/pr-boxel-host.yml
             packages/host/**
             packages/boxel-ui/**
 
