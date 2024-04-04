@@ -2957,7 +2957,7 @@ posts/ignore-me.json
         data: {
           type: 'card',
           attributes: {
-            title: "Mango's Birdthday",
+            title: "Mango's Birthday",
             venue: 'Dog Park',
             date: '2024-10-30',
           },
@@ -2973,7 +2973,7 @@ posts/ignore-me.json
         data: {
           type: 'card',
           attributes: {
-            title: "Van Gogh's Birdthday",
+            title: "Van Gogh's Birthday",
             venue: 'Backyard',
             date: '2024-11-19',
           },

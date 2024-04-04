@@ -450,18 +450,19 @@ export class IndexerDBClient {
       path,
       exp,
       // Leaf field handler
-      async (_api, _field, expression) => {
-        // right now there is no need to run code from the Card/FieldDef to
-        // transform this query expression's value into a format that matches
-        // the search doc. the assumption is that when the search doc was
-        // created the `[queryableValue]` hook was run on the deserialized card
-        // data which forms the search doc value. the query expression should be
-        // serialized already in a manner that matches the serialization of the
-        // search doc value so we can compare apples to apples, e.g. dates
-        // strings in YYYY-MM-DD format. If that assumption changes then we can
-        // use the api and fieldCard callback params to run Card/FieldDef code
-        // as necessary here
-        return expression;
+      async (api, field, expression) => {
+        let queryValue: any;
+        let [value] = expression;
+        if (isParam(value)) {
+          queryValue = api.formatQueryValue(field, value.param);
+        } else if (typeof value === 'string') {
+          queryValue = api.formatQueryValue(field, value);
+        } else {
+          throw new Error(
+            `Do not know how to handle field value: ${JSON.stringify(value)}`,
+          );
+        }
+        return [param(queryValue)];
       },
     );
   }
