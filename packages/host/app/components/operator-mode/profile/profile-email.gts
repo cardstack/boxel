@@ -1,6 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -408,7 +409,7 @@ export default class ProfileEmail extends Component<Signature> {
         password: string;
       } = { type: 'initial' };
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.initialize.perform();
     this.args.onSetup(

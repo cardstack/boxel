@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -222,7 +223,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
   private onSaveEmail: (() => void) | undefined;
   private resetChangeEmail: (() => void) | undefined;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.setInitialValues.perform();
   }

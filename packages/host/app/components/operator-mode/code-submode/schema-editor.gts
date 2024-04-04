@@ -1,7 +1,7 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-//@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -58,52 +58,49 @@ interface TitleSignature {
   };
 }
 
-export class SchemaEditorTitle extends Component<TitleSignature> {
-  <template>
-    Schema Editor
+const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
+  Schema Editor
 
-    {{#if @hasModuleError}}
-      <span class='syntax-error'>Fail to parse</span>
-    {{else}}
-      <div class='total-fields' data-test-total-fields>
-        <span class='total-fields-value'>{{@totalFields}}</span>
-        <span class='total-fields-label'>{{getPlural
-            'Field'
-            @totalFields
-          }}</span>
-      </div>
-    {{/if}}
+  {{#if @hasModuleError}}
+    <span class='syntax-error'>Fail to parse</span>
+  {{else}}
+    <div class='total-fields' data-test-total-fields>
+      <span class='total-fields-value'>{{@totalFields}}</span>
+      <span class='total-fields-label'>{{getPlural 'Field' @totalFields}}</span>
+    </div>
+  {{/if}}
 
-    <style>
-      .syntax-error {
-        margin-left: auto;
-        color: var(--boxel-400);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 500;
-        margin-right: var(--boxel-sp-sm);
-        margin-top: 3px;
-      }
-      .total-fields {
-        display: flex;
-        align-items: baseline;
-        gap: var(--boxel-sp-xxxs);
-        margin-left: auto;
-      }
+  <style>
+    .syntax-error {
+      margin-left: auto;
+      color: var(--boxel-400);
+      font-size: var(--boxel-font-size-sm);
+      font-weight: 500;
+      margin-right: var(--boxel-sp-sm);
+      margin-top: 3px;
+    }
+    .total-fields {
+      display: flex;
+      align-items: baseline;
+      gap: var(--boxel-sp-xxxs);
+      margin-left: auto;
+    }
 
-      .total-fields > * {
-        margin: 0;
-      }
+    .total-fields > * {
+      margin: 0;
+    }
 
-      .total-fields-value {
-        font: 600 var(--boxel-font);
-      }
+    .total-fields-value {
+      font: 600 var(--boxel-font);
+    }
 
-      .total-fields-label {
-        font: var(--boxel-font-sm);
-      }
-    </style>
-  </template>
-}
+    .total-fields-label {
+      font: var(--boxel-font-sm);
+    }
+  </style>
+</template>;
+
+export { SchemaEditorTitle };
 
 export default class SchemaEditor extends Component<Signature> {
   @service declare loaderService: LoaderService;

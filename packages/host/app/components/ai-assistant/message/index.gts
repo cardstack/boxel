@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
@@ -26,7 +27,10 @@ interface Signature {
     isFromAssistant: boolean;
     isStreaming: boolean;
     profileAvatar?: ComponentLike;
-    attachedCards?: CardDef[];
+    resources?: {
+      cards: CardDef[] | undefined;
+      errors: { id: string; error: Error }[] | undefined;
+    };
     errorMessage?: string;
     isPending?: boolean;
     retryAction?: () => void;
@@ -72,15 +76,16 @@ export default class AiAssistantMessage extends Component<Signature> {
           <div class='error-container'>
             <FailureBordered class='error-icon' />
             <div class='error-message' data-test-card-error>
-              Error:
               {{@errorMessage}}
             </div>
+
             {{#if @retryAction}}
               <Button
                 {{on 'click' @retryAction}}
                 class='retry-button'
                 @size='small'
                 @kind='secondary-dark'
+                data-test-ai-bot-retry-button
               >
                 Retry
               </Button>
@@ -88,15 +93,26 @@ export default class AiAssistantMessage extends Component<Signature> {
           </div>
         {{/if}}
 
-        <div class='content'>
+        <div class='content' data-test-ai-message-content>
           {{@formattedMessage}}
 
           {{yield}}
 
-          {{#if @attachedCards.length}}
+          {{#if @resources.cards.length}}
             <div class='cards' data-test-message-cards>
-              {{#each @attachedCards as |card|}}
+              {{#each @resources.cards as |card|}}
                 <CardPill @card={{card}} />
+              {{/each}}
+            </div>
+          {{/if}}
+
+          {{#if @resources.errors.length}}
+            <div class='error-container'>
+              {{#each @resources.errors as |resourceError|}}
+                <FailureBordered class='error-icon' />
+                <div class='error-message' data-test-card-error>
+                  <div>Cannot render {{resourceError.id}}</div>
+                </div>
               {{/each}}
             </div>
           {{/if}}
@@ -253,7 +269,7 @@ interface AiAssistantConversationSignature {
   };
 }
 
-export class AiAssistantConversation extends Component<AiAssistantConversationSignature> {
+const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSignature> =
   <template>
     <div class='ai-assistant-conversation'>
       {{yield}}
@@ -266,5 +282,6 @@ export class AiAssistantConversation extends Component<AiAssistantConversationSi
         overflow-y: auto;
       }
     </style>
-  </template>
-}
+  </template>;
+
+export { AiAssistantConversation };

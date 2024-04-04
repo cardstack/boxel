@@ -104,7 +104,6 @@ async function sendOption(
     msgtype: 'org.boxel.command',
     formatted_body: body,
     format: 'org.matrix.custom.html',
-    isStreamingFinished: true,
     data: {
       command: {
         type: 'patch',
@@ -162,6 +161,7 @@ async function sendError(
       eventToUpdate,
       {
         isStreamingFinished: true,
+        errorMessage: error.message,
       },
     );
   } catch (e) {

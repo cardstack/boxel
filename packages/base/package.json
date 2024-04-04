@@ -20,7 +20,7 @@
     "tracked-built-ins": "^2.0.1"
   },
   "peerDependencies": {
-    "ember-source": "~4.12.0"
+    "ember-source": "~5.4.0"
   },
   "scripts": {}
 }

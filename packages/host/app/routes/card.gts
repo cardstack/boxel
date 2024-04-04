@@ -114,9 +114,9 @@ export default class RenderCard extends Route<Model | null> {
     );
     if (
       !isPublicReadableRealm &&
-      !transition.to.queryParams['operatorModeEnabled']
+      !transition.to?.queryParams['operatorModeEnabled']
     ) {
-      let path = transition.to.params['path'] || '';
+      let path = transition.to?.params?.path ?? '';
       let url = path
         ? new URL(`/${path}`, ownRealmURL)
         : new URL('./', ownRealmURL);

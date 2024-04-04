@@ -291,6 +291,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('Clicking card in search panel opens card on a new stack', async function (assert) {
       await visitOperatorMode({});
 
+      await waitFor('[data-test-search-sheet="closed"]');
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -762,6 +763,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test('search can be dismissed with escape', async function (assert) {
       await visitOperatorMode({});
+      await waitFor('[data-test-search-sheet="closed"]');
       await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt');

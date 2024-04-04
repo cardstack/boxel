@@ -1,4 +1,5 @@
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import {
@@ -176,7 +177,7 @@ class Isolated extends Component<typeof CardsGrid> {
     isLoading: boolean;
   };
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.liveQuery = getLiveCards(
       {
