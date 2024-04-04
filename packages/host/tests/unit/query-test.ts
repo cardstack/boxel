@@ -438,6 +438,100 @@ module('Unit | query', function (hooks) {
     assert.deepEqual(getIds(cards), [mangoBirthday.id], 'results are correct');
   });
 
+  test(`can search with a 'not' filter`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          not: { eq: { name: 'Mango' } },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [ringo.id, vangogh.id],
+      'results are correct',
+    );
+  });
+
+  test('can handle a filter with double negatives', async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          not: { not: { not: { eq: { name: 'Mango' } } } },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [ringo.id, vangogh.id],
+      'results are correct',
+    );
+  });
+
   test(`gives a good error when query refers to missing card`, async function (assert) {
     await setupIndex(client, []);
 
