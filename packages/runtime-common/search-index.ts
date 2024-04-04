@@ -539,13 +539,13 @@ export class SearchIndex {
         }
       }
 
-      let qValueGT = api.getQueryableValue(fields[fields.length - 1], value.gt);
-      let qValueLT = api.getQueryableValue(fields[fields.length - 1], value.lt);
-      let qValueGTE = api.getQueryableValue(
+      let qValueGT = api.formatQueryValue(fields[fields.length - 1], value.gt);
+      let qValueLT = api.formatQueryValue(fields[fields.length - 1], value.lt);
+      let qValueGTE = api.formatQueryValue(
         fields[fields.length - 1],
         value.gte,
       );
-      let qValueLTE = api.getQueryableValue(
+      let qValueLTE = api.formatQueryValue(
         fields[fields.length - 1],
         value.lte,
       );
@@ -627,7 +627,7 @@ export class SearchIndex {
         }
       }
 
-      let queryValue = api.getQueryableValue(fields[fields.length - 1], value);
+      let queryValue = api.formatQueryValue(fields[fields.length - 1], value);
       let matcher: (instanceValue: any) => boolean | null;
       if (filterType === 'eq') {
         matcher = (instanceValue: any) => {
