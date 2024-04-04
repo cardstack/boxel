@@ -918,9 +918,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-card-error]');
       assert
         .dom('[data-test-card-error]')
-        .containsText(
-          'Error: cannot render card http://this-is-not-a-real-card.com/: status: 500 - Failed to fetch.',
-        );
+        .containsText('Error rendering attached cards');
       await percySnapshot(assert);
     });
 
@@ -1353,6 +1351,133 @@ module('Integration | operator-mode', function (hooks) {
           'ai-avatar-animated',
           'ai bot patch message does not have a spinner',
         );
+    });
+
+    test('it can retry a message when receiving an error from the AI bot', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@testuser:staging',
+        content: {
+          body: 'I have a feeling something will go wrong',
+          msgtype: 'org.boxel.message',
+          formatted_body: 'I have a feeling something will go wrong',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now() - 100,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event2',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'There was an error processing your request, please try again later',
+          msgtype: 'm.text',
+          formatted_body:
+            'There was an error processing your request, please try again later',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          errorMessage: 'AI bot error',
+        },
+        origin_server_ts: Date.now() - 99,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event3',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@testuser:staging',
+        content: {
+          body: 'I have a feeling something will go wrong',
+          msgtype: 'org.boxel.message',
+          formatted_body: 'I have a feeling something will go wrong',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now() - 98,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event4',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'There was an error processing your request, please try again later',
+          msgtype: 'm.text',
+          formatted_body:
+            'There was an error processing your request, please try again later',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          errorMessage: 'AI bot error',
+        },
+        origin_server_ts: Date.now() - 97,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      });
+
+      await waitFor('[data-test-message-idx="0"]');
+      assert
+        .dom('[data-test-message-idx="1"]')
+        .containsText(
+          'There was an error processing your request, please try again later',
+        );
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-ai-bot-retry-button]')
+        .doesNotExist('Only last errored message has a retry button');
+
+      assert
+        .dom('[data-test-message-idx="3"]')
+        .containsText(
+          'There was an error processing your request, please try again later',
+        );
+      assert
+        .dom('[data-test-message-idx="3"] [data-test-ai-bot-retry-button]')
+        .exists('Only last errored message has a retry button');
+
+      assert.dom('[data-test-message-idx="4"]').doesNotExist();
+
+      await click('[data-test-ai-bot-retry-button]');
+
+      // This below is user's previous message that is sent again after retry button is clicked
+      assert
+        .dom('[data-test-message-idx="4"]')
+        .exists('Retry message is sent to the AI bot');
+
+      assert
+        .dom('[data-test-message-idx="4"]')
+        .containsText('I have a feeling something will go wrong');
     });
   });
 

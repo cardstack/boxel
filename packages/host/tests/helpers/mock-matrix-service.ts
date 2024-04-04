@@ -20,7 +20,6 @@ let nonce = 0;
 export type MockMatrixService = MatrixService & {
   cardAPI: typeof cardApi;
   createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
-  lastMessageSent: any;
 };
 
 class MockClient {
@@ -67,7 +66,7 @@ function generateMockMatrixService(
 ) {
   class MockMatrixService extends Service implements MockMatrixService {
     @service declare loaderService: LoaderService;
-    lastMessageSent: any;
+
     // @ts-ignore
     @tracked client: MockClient = new MockClient('@testuser:staging', '');
     // @ts-ignore
@@ -132,10 +131,27 @@ function generateMockMatrixService(
     async sendMessage(
       roomId: string,
       body: string | undefined,
-      cards?: CardDef[],
-      context?: OperatorModeContext,
+      _cards?: CardDef[],
+      _context?: OperatorModeContext,
     ) {
-      this.lastMessageSent = { roomId, body, cards, context };
+      let event = {
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: this.userId,
+        content: {
+          body,
+          msgtype: 'org.boxel.message',
+          formatted_body: body,
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now(),
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      };
+      await addRoomEvent(this, event);
     }
 
     async logout() {
