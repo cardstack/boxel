@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 
 import {
   type CodeRef,
+  type LooseCardResource,
   Loader,
   VirtualNetwork,
   baseRealm,
@@ -19,6 +20,10 @@ import { testRealmURL, setupIndex, serializeCard } from '../helpers';
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
 let { sqlSchema, resolvedBaseRealmURL } = ENV;
+
+function getIds(resources: LooseCardResource[]): string[] {
+  return resources.map((r) => r.id!);
+}
 
 module('Unit | query', function (hooks) {
   let adapter: SQLiteAdapter;
@@ -160,8 +165,8 @@ module('Unit | query', function (hooks) {
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
-      cards,
-      [await serializeCard(mango), await serializeCard(vangogh)],
+      getIds(cards),
+      [mango.id, vangogh.id],
       'results are correct',
     );
   });
@@ -187,11 +192,7 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(
-      cards,
-      [await serializeCard(mango)],
-      'results are correct',
-    );
+    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
   });
 
   test(`can filter using 'eq' thru nested fields`, async function (assert) {
@@ -247,8 +248,8 @@ module('Unit | query', function (hooks) {
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
-      cards,
-      [await serializeCard(mango), await serializeCard(vangogh)],
+      getIds(cards),
+      [mango.id, vangogh.id],
       'results are correct',
     );
   });
@@ -293,11 +294,7 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(
-      cards,
-      [await serializeCard(ringo)],
-      'results are correct',
-    );
+    assert.deepEqual(getIds(cards), [ringo.id], 'results are correct');
   });
 
   test(`gives a good error when query refers to missing card`, async function (assert) {
@@ -413,11 +410,7 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(
-      cards,
-      [await serializeCard(vangogh)],
-      'results are correct',
-    );
+    assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
   });
 
   test(`it can filter on a nested field within a plural composite field using 'eq'`, async function (assert) {
@@ -464,11 +457,7 @@ module('Unit | query', function (hooks) {
         1,
         'the total results meta is correct',
       );
-      assert.deepEqual(
-        cards,
-        [await serializeCard(mango)],
-        'results are correct',
-      );
+      assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
     }
     {
       let { cards, meta } = await client.search(
@@ -487,8 +476,8 @@ module('Unit | query', function (hooks) {
         'the total results meta is correct',
       );
       assert.deepEqual(
-        cards,
-        [await serializeCard(mango), await serializeCard(vangogh)],
+        getIds(cards),
+        [mango.id, vangogh.id],
         'results are correct',
       );
     }
@@ -528,11 +517,7 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(
-      cards,
-      [await serializeCard(vangogh)],
-      'results are correct',
-    );
+    assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
   });
 
   test('it can match a leaf plural field nested in a plural composite field', async function (assert) {
@@ -575,11 +560,7 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(
-      cards,
-      [await serializeCard(mango)],
-      'results are correct',
-    );
+    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
   });
 
   test('it can match thru a plural nested composite field that is field of a singular composite field', async function (assert) {
@@ -619,11 +600,7 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(
-      cards,
-      [await serializeCard(vangogh)],
-      'results are correct',
-    );
+    assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
   });
 
   test(`can return a single result for a card when there are multiple matches within a result's search doc`, async function (assert) {
@@ -654,10 +631,93 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+  });
+
+  test('can perform query against WIP version of the index', async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(
+      client,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          card: mango,
+          data: { realm_version: 1, search_doc: { name: 'Mango' } },
+        },
+        {
+          card: vangogh,
+          data: { realm_version: 1, search_doc: { name: 'Van Gogh' } },
+        },
+        {
+          card: vangogh,
+          data: { realm_version: 2, search_doc: { name: 'Mango' } },
+        },
+        {
+          card: ringo,
+          data: { realm_version: 1, search_doc: { name: 'Mango' } },
+        },
+        {
+          card: ringo,
+          data: { realm_version: 2, search_doc: { name: 'Ringo' } },
+        },
+      ],
+    );
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          eq: { name: 'Mango' },
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+        },
+      },
+      loader,
+      { useWorkInProgressIndex: true },
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
-      cards,
-      [await serializeCard(mango)],
+      getIds(cards),
+      [mango.id, vangogh.id],
       'results are correct',
     );
+  });
+
+  test('can perform query against "production" version of the index', async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(
+      client,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          card: mango,
+          data: { realm_version: 1, search_doc: { name: 'Mango' } },
+        },
+        {
+          card: vangogh,
+          data: { realm_version: 1, search_doc: { name: 'Van Gogh' } },
+        },
+        {
+          card: vangogh,
+          data: { realm_version: 2, search_doc: { name: 'Mango' } },
+        },
+        {
+          card: ringo,
+          data: { realm_version: 1, search_doc: { name: 'Ringo' } },
+        },
+      ],
+    );
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          eq: { name: 'Mango' },
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
   });
 });

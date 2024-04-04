@@ -61,7 +61,9 @@ export interface RealmVersionsTable {
   current_version: number;
 }
 
-interface GetEntryOptions {
+type GetEntryOptions = WIPOptions;
+type QueryOptions = WIPOptions;
+interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
 
@@ -131,19 +133,13 @@ export class IndexerDBClient {
   ): Promise<IndexedCardsTable | undefined> {
     let result = (await this.query([
       `SELECT i.* 
-         FROM indexed_cards as i
-         JOIN realm_versions r ON i.realm_url = r.realm_url
-         WHERE i.card_url =`,
+       FROM indexed_cards as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       WHERE i.card_url =`,
       param(`${!url.href.endsWith('.json') ? url.href + '.json' : url.href}`),
-      ...(!opts?.useWorkInProgressIndex
-        ? // if we are not using the work in progress index then we limit the max
-          // version permitted to the current version for the realm
-          ['AND i.realm_version <= r.current_version']
-        : // otherwise we choose the highest version in the system
-          []),
-      'ORDER BY i.realm_version DESC',
-      'LIMIT 1',
-    ])) as unknown as IndexedCardsTable[];
+      'AND',
+      ...realmVersionExpression(!!opts?.useWorkInProgressIndex),
+    ] as Expression)) as unknown as IndexedCardsTable[];
     let maybeResult: IndexedCardsTable | undefined = result[0];
     if (!maybeResult) {
       return undefined;
@@ -170,13 +166,16 @@ export class IndexerDBClient {
     let rows = (await this.query([
       `SELECT card_url
        FROM
-         indexed_cards,
-         json_each(deps) as deps_each
+         indexed_cards as i,
+         json_each(i.deps) as deps_each
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE 
          deps_each.value =`,
       param(cardId),
-      'ORDER BY card_url',
-    ])) as Pick<IndexedCardsTable, 'card_url'>[];
+      'AND',
+      ...realmVersionExpression(true),
+      'ORDER BY i.card_url',
+    ] as Expression)) as Pick<IndexedCardsTable, 'card_url'>[];
     return rows.map((r) => r.card_url);
   }
 
@@ -187,11 +186,17 @@ export class IndexerDBClient {
   async search(
     { filter }: Query,
     loader: Loader,
+    opts?: QueryOptions,
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: LooseCardResource[]; meta: QueryResultsMeta }> {
     let conditions: CardExpression[] = [
-      addExplicitParens(['is_deleted = FALSE OR is_deleted IS NULL']),
+      [
+        ...every([
+          ['is_deleted = FALSE OR is_deleted IS NULL'],
+          realmVersionExpression(!!opts?.useWorkInProgressIndex),
+        ]),
+      ],
     ];
     if (filter) {
       conditions.push(this.filterCondition(filter, baseCardRef));
@@ -199,7 +204,8 @@ export class IndexerDBClient {
 
     let query = [
       'SELECT card_url, pristine_doc',
-      `FROM indexed_cards ${placeholder}`,
+      `FROM indexed_cards as i ${placeholder}`,
+      `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...every(conditions),
       // use a default sort for deterministic ordering, refactor this after
@@ -209,7 +215,8 @@ export class IndexerDBClient {
     ];
     let queryCount = [
       'SELECT count(DISTINCT card_url) as total',
-      `FROM indexed_cards ${placeholder}`,
+      `FROM indexed_cards as i ${placeholder}`,
+      `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...every(conditions),
     ];
@@ -603,16 +610,15 @@ export class IndexerDBClient {
         }
       })
       .join(' ');
+
     if (tableValuedFunctions.size > 0) {
-      // i'm slicing up the text as opposed to using a 'String.replace()' since
-      // the ()'s in the SQL query are treated like regex matches when using
-      // String.replace()
-      let index = text.indexOf(placeholder);
-      text = `${text.substring(0, index)}, ${[...tableValuedFunctions.values()]
-        .map((fn) => fn.fn)
-        .join(', ')}${text.substring(index + placeholder.length)}`;
+      text = replace(
+        text,
+        placeholder,
+        `, ${[...tableValuedFunctions.values()].map((fn) => fn.fn).join(', ')}`,
+      );
     } else {
-      text = text.replace('TABLE_VALUED_FUNCTIONS_PLACEHOLDER', '');
+      text = replace(text, placeholder, '');
     }
     return {
       text,
@@ -878,6 +884,23 @@ async function loadFieldOrCard(
   }
 }
 
+function realmVersionExpression(useWorkInProgressIndex: boolean) {
+  return [
+    'realm_version =',
+    ...addExplicitParens([
+      'SELECT MAX(i2.realm_version)',
+      'FROM indexed_cards i2',
+      'WHERE i2.card_url = i.card_url',
+      ...(!useWorkInProgressIndex
+        ? // if we are not using the work in progress index then we limit the max
+          // version permitted to the current version for the realm
+          ['AND i2.realm_version <= r.current_version']
+        : // otherwise we choose the highest version in the system
+          []),
+    ]),
+  ] as Expression;
+}
+
 function traveledThruPlural(pathTraveled: string) {
   return pathTraveled.includes('[');
 }
@@ -898,6 +921,19 @@ function isFieldPlural(field: Field): boolean {
   return (
     field.fieldType === 'containsMany' || field.fieldType === 'linksToMany'
   );
+}
+
+// i'm slicing up the text as opposed to using a 'String.replace()' since
+// the ()'s in the SQL query are treated like regex matches when using
+// String.replace()
+function replace(text: string, placeholder: string, replacement: string) {
+  let index = text.indexOf(placeholder);
+  if (index === -1) {
+    return text;
+  }
+  return `${text.substring(0, index)}${replacement}${text.substring(
+    index + placeholder.length,
+  )}`;
 }
 
 function assertNever(value: never) {
