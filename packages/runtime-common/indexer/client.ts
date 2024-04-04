@@ -251,6 +251,11 @@ export class IndexerDBClient {
       return this.eqCondition(filter, on);
     } else if ('not' in filter) {
       return this.notCondition(filter, on);
+    } else if ('every' in filter) {
+      // on = filter.on ?? on;
+      return every(
+        filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
+      );
     }
 
     // TODO handle filters for: any, every, contains, and range
