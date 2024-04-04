@@ -120,6 +120,13 @@ export class VirtualNetwork {
 
   async handle(request: Request): Promise<ResponseWithNodeStream> {
     let internalRequest = this.mapRequest(request, 'real-to-virtual');
+  async handle(
+    request: Request,
+    onMappedRequest?: (request: Request) => void,
+  ): Promise<ResponseWithNodeStream> {
+    if (onMappedRequest) {
+      onMappedRequest(internalRequest);
+    }
     for (let handler of this.handlers) {
       let response = await handler(internalRequest);
       if (response) {

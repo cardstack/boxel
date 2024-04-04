@@ -153,8 +153,15 @@ export class RealmServer {
       ...(reqBody ? { body: reqBody } : {}),
     });
 
-    setupCloseHandler(ctxt.res, request);
-    let realmResponse = await this.virtualNetwork.handle(request);
+    let realmResponse = await this.virtualNetwork.handle(
+      request,
+      (mappedRequest) => {
+        // Setup this handler only after the request has been mapped because
+        // the *mapped request* is the one that gets closed, not the original one
+        setupCloseHandler(ctxt.res, mappedRequest);
+      },
+    );
+
     let { status, statusText, headers, body, nodeStream } = realmResponse;
     ctxt.status = status;
     ctxt.message = statusText;
