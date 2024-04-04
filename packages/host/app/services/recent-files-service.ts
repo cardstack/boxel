@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
@@ -25,8 +26,8 @@ export default class RecentFilesService extends Service {
 
   @tracked recentFiles = new TrackedArray<RecentFile>([]);
 
-  constructor(properties: object) {
-    super(properties);
+  constructor(owner: Owner) {
+    super(owner);
     this.extractRecentFilesFromStorage();
   }
 

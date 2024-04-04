@@ -961,7 +961,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       }
       if (!(value instanceof this.card)) {
         throw new Error(
-          `tried set ${value} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }
@@ -1313,7 +1313,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     for (let value of values) {
       if (!isNotLoadedValue(value) && !(value instanceof this.card)) {
         throw new Error(
-          `tried set ${value} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }

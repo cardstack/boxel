@@ -1,4 +1,3 @@
-import { type EmptyObject } from '@ember/component/helper';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
 
@@ -83,7 +82,7 @@ export const IconButton: TemplateOnlyComponent<IconButtonSignature> = <template>
 </template>;
 
 interface TextSignature {
-  Args: EmptyObject;
+  Args: unknown;
   Blocks: { default: [] };
   Element: HTMLSpanElement;
 }

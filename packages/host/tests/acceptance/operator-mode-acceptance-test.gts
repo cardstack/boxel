@@ -441,6 +441,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       codePath: `${testRealmURL}employee.gts`,
     });
 
+    await waitFor('[data-test-profile-icon-button]');
     assert.dom('[data-test-profile-icon]').hasText('T');
     assert
       .dom('[data-test-profile-icon]')
