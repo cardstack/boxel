@@ -106,7 +106,7 @@ export class VirtualNetwork {
         ? urlOrRequest
         : new Request(urlOrRequest, init);
 
-    let internalRequest = this.mapRequest(request, 'virtual-to-real');
+    let internalRequest = await this.mapRequest(request, 'virtual-to-real');
     let response = await this.runFetch(internalRequest, init);
     if (internalRequest !== request) {
       Object.defineProperty(response, 'url', {
@@ -118,15 +118,15 @@ export class VirtualNetwork {
     return response;
   };
 
-  async handle(request: Request): Promise<ResponseWithNodeStream> {
-    let internalRequest = this.mapRequest(request, 'real-to-virtual');
   async handle(
     request: Request,
     onMappedRequest?: (request: Request) => void,
   ): Promise<ResponseWithNodeStream> {
+    let internalRequest = await this.mapRequest(request, 'real-to-virtual');
     if (onMappedRequest) {
       onMappedRequest(internalRequest);
     }
+
     for (let handler of this.handlers) {
       let response = await handler(internalRequest);
       if (response) {
@@ -136,18 +136,14 @@ export class VirtualNetwork {
     return new Response(undefined, { status: 404 });
   }
 
-  private mapRequest(
+  private async mapRequest(
     request: Request,
     direction: 'virtual-to-real' | 'real-to-virtual',
   ) {
     let remappedUrl = this.resolveURLMapping(request.url, direction);
-    if (remappedUrl && remappedUrl !== request.url) {
-      let requestInit: RequestInit & { duplex?: 'half' | 'none' } = request; // duplex is in the fetch standard (https://fetch.spec.whatwg.org/#dom-requestinit-duplex) but currently is not being pickued up here, thus the type addition
-      if (request.body) {
-        requestInit.duplex = 'half'; //  The `duplex` member must be specified for a request with a streaming body. Otherwise the browser will throw an error (with the same message) when a request has a (streaming) body.
-      }
 
-      return new Request(remappedUrl, requestInit);
+    if (remappedUrl) {
+      return await buildRequest(remappedUrl, request);
     } else {
       return request;
     }
@@ -172,4 +168,64 @@ function isUrlLike(moduleIdentifier: string): boolean {
     moduleIdentifier.startsWith('http://') ||
     moduleIdentifier.startsWith('https://')
   );
+}
+
+async function getContentOfReadableStream(
+  requestBody: ReadableStream<Uint8Array> | null,
+): Promise<Uint8Array | null> {
+  if (requestBody) {
+    let isPending = true;
+    let arrayLegnth = 0;
+    let unit8Arrays = [];
+    let reader = requestBody.getReader();
+    do {
+      let readableResults = await reader.read();
+
+      if (readableResults.value) {
+        arrayLegnth += readableResults.value.length;
+        unit8Arrays.push(readableResults.value);
+      }
+
+      isPending = !readableResults.done;
+    } while (isPending);
+    let mergedArray = new Uint8Array(arrayLegnth);
+    unit8Arrays.forEach((array) => mergedArray.set(array));
+    return mergedArray;
+  }
+  return null;
+}
+
+async function buildRequest(url: string, originalRequest: Request) {
+  if (url === originalRequest.url) {
+    return originalRequest;
+  }
+
+  // To reach the goal of creating a new Request but with a different url it is
+  // usually enough to create a new Request object with the new url and the same
+  // properties as the original request, but there are issues when the body is
+  // a ReadableStream - browser reports the following error:
+  // "TypeError: Failed to construct 'Request': The `duplex` member must be
+  // specified for a request with a streaming body." Even adding the `duplex`
+  // property will not fix the issue - the browser request being made to
+  // our local server then expects HTTP/2 connection which is currently not
+  // supported in our local server. To avoid all these issues, we resort to
+  // reading the body of the original request and creating a new Request with
+  // the new url and the body as a Uint8Array.
+
+  let body = null;
+  if (originalRequest.body) {
+    body = await getContentOfReadableStream(originalRequest.clone().body);
+  }
+  return new Request(url, {
+    method: originalRequest.method,
+    headers: originalRequest.headers,
+    body,
+    referrer: originalRequest.referrer,
+    referrerPolicy: originalRequest.referrerPolicy,
+    mode: originalRequest.mode,
+    credentials: originalRequest.credentials,
+    cache: originalRequest.cache,
+    redirect: originalRequest.redirect,
+    integrity: originalRequest.integrity,
+  });
 }
