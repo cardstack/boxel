@@ -100,7 +100,7 @@ const defaultPanelWidths: PanelWidths = {
     (document.documentElement.clientWidth - 40 - 36),
   codeEditorPanel: 0.4,
   rightPanel: 0.4,
-  emptyCodeModePanel: 0.2,
+  emptyCodeModePanel: 0.8,
 };
 
 const CodeModePanelHeights = 'code-mode-panel-heights';
@@ -771,7 +771,7 @@ export default class CodeSubmode extends Component<Signature> {
             <ResizablePanel
               @defaultLengthFraction={{defaultPanelWidths.codeEditorPanel}}
               @lengthPx={{this.panelWidths.codeEditorPanel}}
-              {{!-- @minLengthPx={{300}} --}}
+              @minLengthPx={{300}}
             >
               <InnerContainer>
                 {{#if this.isReady}}

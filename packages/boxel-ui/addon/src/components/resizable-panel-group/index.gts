@@ -203,6 +203,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
   // if the lengths dont fit the screen, the lengths should be adapted
   // lengths may not adapt when length in the application storage is stale
   // the default fractions dont
+  // we actually dont care about restoring the width unless the container size has changed
+  // should we revert to default or keep it the same
   @action
   registerPanel(context: {
     collapsible: boolean | undefined;
@@ -242,7 +244,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     );
 
     if (this.args.orientation === 'horizontal' && context.minLengthPx !== 371) {
-      debugger;
+      //debugger;
       // if (
       //   this.listPanelContext.size === 3 &&
       //   this.listPanelContext.isLengthsStale(this.panelGroupLengthPx)
@@ -255,7 +257,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       // console.log(this.panelGroupLengthPx);
       // console.log('lengthPx');
       // console.log(context.lengthPx);
-      // debugger;
+      // //debugger;
     }
     this.justRegistered = true;
     return id;
@@ -505,7 +507,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
         nextPanelElContext.initialMinLengthPx,
       );
     }
-    this.listPanelContext.recalculateRatios();
   }
 
   @action
@@ -554,6 +555,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
   // when u resize the container
   // ratios should never change. one should never recalculate ratios
   // lengths may change
+  // looks like reactivity doesn't seem to work when registering something
+  // that becomes bigger than the screen we might need to use on containerResize
   @action
   onContainerResize(entry?: ResizeObserverEntry, _observer?: ResizeObserver) {
     if (this.justRegistered === true) {
@@ -562,7 +565,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     }
     console.log('on resize container');
     // if (this.args.orientation === 'horizontal') {
-    //   debugger;
+    //   //debugger;
     // }
 
     if (!this.panelGroupElement) {
@@ -662,19 +665,35 @@ class PanelContextMap {
     return this.#panelContextMap.size;
   }
   // we are safe to always recalculate ratio
+  // we just dont want to recompute ratios when we r resizing. The ratios remain stale and we use them when recalculate lengths from ratios
   set(
     key: number,
     value: PanelContext,
     recompute = false,
     newScreenSize?: number,
   ) {
-    this.#panelContextMap.set(key, value);
+    let lengthPx =
+      value.minLengthPx && value.minLengthPx > value.lengthPx
+        ? value.minLengthPx
+        : value.lengthPx;
+    this.#panelContextMap.set(key, {
+      ...value,
+      lengthPx,
+    });
     if (recompute === true) {
       this.recalculateRatios();
     }
     if (newScreenSize !== undefined) {
       // if (this.isLengthsStale(newScreenSize)) {
+      console.log('windiow size', window.innerWidth);
+      console.log('screen size', newScreenSize);
+      console.log('length px', lengthPx);
+      console.log('minLengthPx px', value.minLengthPx);
+      console.log('default length fraction px', value.defaultLengthFraction);
+      //if length is stale than revert this
+      // if (this.isLengthsStale(newScreenSize)) {
       this.recalculateLengthsFromDefaultLengthFraction(newScreenSize);
+      // }
       // }
       // }
     }
@@ -779,15 +798,13 @@ class PanelContextMap {
   }
 
   recalculateLengthsFromCurrentRatios(screenSize: number) {
+    console.log('recaclculating lengths from ratios');
     if (this.isRatioStale) {
       console.log('ratios are stale not recalculating lengths');
       return;
     }
     for (const [k, v] of this.#panelContextMap.entries()) {
       let ratio = this.#ratios.get(k);
-      console.log('recalc');
-      console.log(k);
-      console.log(ratio);
       if (!ratio) {
         throw new Error('ratio unattainable');
       }
@@ -795,7 +812,7 @@ class PanelContextMap {
         k,
         {
           ...v,
-          lengthPx: screenSize * ratio,
+          lengthPx: Math.round(screenSize * ratio),
         },
         false,
       );
@@ -803,30 +820,37 @@ class PanelContextMap {
   }
 
   recalculateLengthsFromDefaultLengthFraction(screenSize: number) {
-    // if (this.isRatioStale) {
-    //   console.log('ratios are stale not recalculating lengths');
-    //   return;
-    // }
+    console.log('recaclculating lengths from default length fraction');
     for (const [_, v] of this.#panelContextMap.entries()) {
       if (v.defaultLengthFraction === undefined) {
         console.log('default length fraction doesn not exist');
-        debugger;
+        //debugger;
         return;
       }
     }
     let totalRatios = sumArray(this.defaultLengthFractions);
 
     for (const [k, v] of this.#panelContextMap.entries()) {
-      let ratio = v.defaultLengthFraction! / totalRatios;
-      this.#ratios.set(k, ratio);
+      if (this.#panelContextMap.size === 3) {
+        console.log('===default length recompute');
+        console.log('id', k);
+        console.log('lengtPx', v.lengthPx);
+        console.log('initialMinLenghtPx', v.initialMinLengthPx);
+        if (v.initialMinLengthPx === 2000 || v.minLengthPx === 2000) {
+          debugger;
+        }
+        console.log('ratio', this.#ratios.get(k));
+      }
+      let ratio = v.defaultLengthFraction! / totalRatios; // be very careful when normalising with fractions
       this.set(
         k,
         {
           ...v,
-          lengthPx: screenSize * (ratio / totalRatios),
+          lengthPx: Math.round(screenSize * ratio),
         },
         false,
       );
+      this.#ratios.set(k, ratio);
     }
   }
 
@@ -850,7 +874,7 @@ class PanelContextMap {
     //   }, 0);
     if (totalNewPanelRatio === 0) {
       if (this.size === 3) {
-        debugger;
+        //debugger;
       }
       throw new Error('new ratio 0');
     }
@@ -881,7 +905,7 @@ class PanelContextMap {
       if (!v.initialMinLengthPx) {
         let ratio = this.#ratios.get(k);
         if (ratio === undefined) {
-          debugger;
+          //debugger;
           throw new Error('ratio undefined');
         }
         let newPanelRatio = ratio / totalNewPanelRatio;
