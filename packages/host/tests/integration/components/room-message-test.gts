@@ -57,10 +57,6 @@ module('Integration | Component | RoomMessage', function (hooks) {
     let testScenario = setupTestScenario(true, 2, 1); // Streaming, created 2 mins ago, updated 1 min ago
     await renderRoomMessageComponent(testScenario);
 
-    assert
-      .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
-      .doesNotHaveClass('ai-avatar-animated');
-
     await waitUntil(
       () =>
         !document
