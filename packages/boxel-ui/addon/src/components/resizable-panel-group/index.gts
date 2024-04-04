@@ -125,6 +125,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @tracked private panelGroupElement: HTMLDivElement | undefined;
+  justRegistered: boolean = false;
 
   private get isHorizontal() {
     return this.args.orientation === 'horizontal';
@@ -209,6 +210,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     lengthPx: number | undefined;
     minLengthPx: number | undefined;
   }) {
+    console.log('registering panel');
     let id = Number(this.listPanelContext.size);
 
     if (context.lengthPx === undefined) {
@@ -255,6 +257,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       // console.log(context.lengthPx);
       // debugger;
     }
+    this.justRegistered = true;
     return id;
   }
 
@@ -315,6 +318,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
   // the size should remain the same
   @action
   onResizeHandleMouseMove(event: MouseEvent) {
+    // console.log('on resize handle mouse move');
+    // this gets triggered over hover its crazy
     if (
       !this.currentResizeHandle ||
       !this.currentResizeHandle.prevPanelEl ||
@@ -551,9 +556,15 @@ export default class ResizablePanelGroup extends Component<Signature> {
   // lengths may change
   @action
   onContainerResize(entry?: ResizeObserverEntry, _observer?: ResizeObserver) {
+    if (this.justRegistered === true) {
+      this.justRegistered = false;
+      return;
+    }
+    console.log('on resize container');
     // if (this.args.orientation === 'horizontal') {
     //   debugger;
     // }
+
     if (!this.panelGroupElement) {
       if (entry) {
         this.panelGroupElement = entry.target as HTMLDivElement;
@@ -569,10 +580,30 @@ export default class ResizablePanelGroup extends Component<Signature> {
       console.warn('Expected newContainerSize to be defined');
       return;
     }
+    // if (!this.listPanelContext.isLengthsStale(newContainerSize)) {
+    //   console.log('length is not stale');
+    //   return;
+    // }
+    if (this.args.orientation === 'horizontal') {
+      if (entry && entry.contentRect.width === 1880) {
+        return;
+      }
 
+      if (entry && entry.contentRect.width === 1920) {
+        return;
+      }
+    }
     // console.log(`newContainerSize ${newContainerSize}`);
 
-    this.listPanelContext.recomputeLengthsOnResize(newContainerSize);
+    // if (this.listPanelContext.isLengthsStale(newContainerSize)) {
+    //   console.log('length is stale');
+    // }
+    // if (entry) {
+    //   console.log(entry.contentRect.height);
+    //   console.log(entry.contentRect.width);
+    // }
+    // this.listPanelContext.recomputeLengthsOnResize(newContainerSize);
+    this.listPanelContext.recalculateLengthsFromCurrentRatios(newContainerSize);
   }
 
   private findPanelsByResizeHandle(ResizeHandleId: string) {
@@ -635,20 +666,20 @@ class PanelContextMap {
     key: number,
     value: PanelContext,
     recompute = false,
-    screenSize?: number,
+    newScreenSize?: number,
   ) {
     this.#panelContextMap.set(key, value);
     if (recompute === true) {
       this.recalculateRatios();
-      if (screenSize !== undefined) {
-        // if (this.isLengthsStale(screenSize)) {
-        // this.recalculateLengths(screenSize);
-        // }
-        // }
-      }
     }
-    // if (screenSize !== undefined) {
-    //   // this.recalculateLengths(screenSize);
+    if (newScreenSize !== undefined) {
+      // if (this.isLengthsStale(newScreenSize)) {
+      this.recalculateLengthsFromDefaultLengthFraction(newScreenSize);
+      // }
+      // }
+    }
+    // if (newScreenSize !== undefined) {
+    //   // this.recalculateLengths(newScreenSize);
     // }
     return this;
   }
@@ -660,11 +691,13 @@ class PanelContextMap {
   }
 
   delete(key: number) {
+    // let originalSize = this.sum;
     this.#panelContextMap.delete(key);
     this.#ratios.delete(key);
     //we intentionally do not recompute ratios at the end bcos if we did that then the ratios will be morphed
     //this keeps the memory of the last ratio
     // this.recalculateRatios();
+    // this.recalculateLengthsFromDefaultLengthFraction(originalSize);
   }
 
   remainingContainerSize(screenSize: number) {
@@ -697,6 +730,21 @@ class PanelContextMap {
     return Array.from(this.#ratios.values());
   }
 
+  get defaultLengthFractions() {
+    // let ratios = Array.from(this.values()).map((o) => o.ratio);
+    // return ratios.filter((r) => r !== undefined);
+    let vals = Array.from(this.#panelContextMap.values());
+    let valsWithDefaultLengthFraction = vals.filter(
+      (o) => o.defaultLengthFraction !== undefined,
+    );
+    if (vals.length !== valsWithDefaultLengthFraction.length) {
+      throw new Error('not all vals have defaultLengthFraction');
+    }
+    return valsWithDefaultLengthFraction.map(
+      (o) => o.defaultLengthFraction,
+    ) as number[];
+  }
+
   get isRatioStale() {
     let tolerance = 0.05;
     let ratioSum = sumArray(this.ratios);
@@ -706,7 +754,8 @@ class PanelContextMap {
   }
 
   isLengthsStale(fullWidth: number) {
-    let tolerance = 0.2; //%//px
+    let tolerance = 0.05; //%//px
+    console.log('length tolerance', tolerance);
 
     console.log(`sum vs fullWidth: ${this.sum} vs ${fullWidth}`);
     return Math.abs(fullWidth - this.sum) > tolerance * fullWidth;
@@ -729,7 +778,11 @@ class PanelContextMap {
     console.log('Ratios recalculated');
   }
 
-  recalculateLengths(screenSize: number) {
+  recalculateLengthsFromCurrentRatios(screenSize: number) {
+    if (this.isRatioStale) {
+      console.log('ratios are stale not recalculating lengths');
+      return;
+    }
     for (const [k, v] of this.#panelContextMap.entries()) {
       let ratio = this.#ratios.get(k);
       console.log('recalc');
@@ -743,6 +796,34 @@ class PanelContextMap {
         {
           ...v,
           lengthPx: screenSize * ratio,
+        },
+        false,
+      );
+    }
+  }
+
+  recalculateLengthsFromDefaultLengthFraction(screenSize: number) {
+    // if (this.isRatioStale) {
+    //   console.log('ratios are stale not recalculating lengths');
+    //   return;
+    // }
+    for (const [_, v] of this.#panelContextMap.entries()) {
+      if (v.defaultLengthFraction === undefined) {
+        console.log('default length fraction doesn not exist');
+        debugger;
+        return;
+      }
+    }
+    let totalRatios = sumArray(this.defaultLengthFractions);
+
+    for (const [k, v] of this.#panelContextMap.entries()) {
+      let ratio = v.defaultLengthFraction! / totalRatios;
+      this.#ratios.set(k, ratio);
+      this.set(
+        k,
+        {
+          ...v,
+          lengthPx: screenSize * (ratio / totalRatios),
         },
         false,
       );
