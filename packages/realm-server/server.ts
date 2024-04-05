@@ -9,6 +9,8 @@ import {
   logger,
   SupportedMimeType,
   type VirtualNetwork,
+  boxelUIAssetsDir,
+  ResponseWithNodeStream,
 } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { setupCloseHandler } from './node-realm';
@@ -18,7 +20,6 @@ import {
   httpLogging,
   httpBasicAuth,
   ecsMetadata,
-  assetRedirect,
   rootRealmRedirect,
   fullRequestURL,
 } from './middleware';
@@ -58,7 +59,41 @@ export class RealmServer {
       );
     }
 
-    this.assetsURL = opts?.assetsURL ?? new URL(mappedUrl);
+    this.assetsURL = opts?.assetsURL ?? new URL(`${baseRealm.url}${assetsDir}`);
+
+    // TODO: Get rid of this redirect by providing the final absolute URL in the assetsURL. In dev, distURL should be localhost:4200, in prod, the deployed host app url. Remove distDir.
+    virtualNetwork.mount(async (request: Request) => {
+      let url = new URL(request.url);
+      let path = url.pathname;
+
+      if (path.startsWith(`/${assetsDir}`)) {
+        let redirectURL = new URL(
+          `./${path.slice(assetsDir.length + 1)}`,
+          this.assetsURL,
+        ).href;
+
+        if (redirectURL !== url.href) {
+          return new Response(null, {
+            status: 302,
+            headers: {
+              Location: redirectURL,
+            },
+          }) as ResponseWithNodeStream;
+        }
+      }
+
+      if (path.startsWith(`/${boxelUIAssetsDir}`)) {
+        let redirectURL = new URL(`.${path}`, this.assetsURL).href;
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: redirectURL,
+          },
+        }) as ResponseWithNodeStream;
+      }
+
+      return null;
+    });
   }
 
   @Memoize()
@@ -101,7 +136,6 @@ export class RealmServer {
         await next();
       })
       .use(monacoMiddleware(this.assetsURL))
-      .use(assetRedirect(this.assetsURL))
       .use(convertAcceptHeaderQueryParam)
       .use(httpBasicAuth)
       .use(rootRealmRedirect(this.realms, this.virtualNetwork))

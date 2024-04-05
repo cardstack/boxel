@@ -130,6 +130,15 @@ export class VirtualNetwork {
     for (let handler of this.handlers) {
       let response = await handler(internalRequest);
       if (response) {
+        if (response.status > 300 && response.status < 400) {
+          response.headers.set(
+            'Location',
+            this.resolveURLMapping(
+              response.headers.get('Location')!,
+              'virtual-to-real',
+            )!,
+          );
+        }
         return response;
       }
     }

@@ -95,30 +95,6 @@ export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
   return next();
 }
 
-export function assetRedirect(
-  assetsURL: URL,
-): (ctxt: Koa.Context, next: Koa.Next) => void {
-  return (ctxt: Koa.Context, next: Koa.Next) => {
-    if (ctxt.path.startsWith(`/${assetsDir}`)) {
-      let redirectURL = new URL(
-        `./${ctxt.path.slice(assetsDir.length + 1)}`,
-        assetsURL,
-      ).href;
-
-      if (redirectURL !== ctxt.href) {
-        ctxt.redirect(redirectURL);
-        return;
-      }
-    }
-    if (ctxt.path.startsWith(`/${boxelUIAssetsDir}`)) {
-      let redirectURL = new URL(`.${ctxt.path}`, assetsURL).href;
-      ctxt.redirect(redirectURL);
-      return;
-    }
-    return next();
-  };
-}
-
 // requests for the root of the realm without a trailing slash aren't
 // technically inside the realm (as the realm includes the trailing '/').
 // So issue a redirect in those scenarios.
