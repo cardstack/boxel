@@ -35,6 +35,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     message: MessageField;
+    index?: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     currentEditor: number | undefined;
@@ -76,7 +77,7 @@ export default class RoomMessage extends Component<Signature> {
 
   <template>
     <AiAssistantMessage
-      id='message-container-{{@message.index}}'
+      id='message-container-{{@index}}'
       class='room-message'
       @formattedMessage={{htmlSafe (markdownToHtml @message.formattedMessage)}}
       @datetime={{@message.created}}
@@ -320,7 +321,7 @@ export default class RoomMessage extends Component<Signature> {
     element.style.height = `${height}px`;
 
     let outerContainer = document.getElementById(
-      `message-container-${this.args.message.index}`,
+      `message-container-${this.args.index}`,
     );
     if (!outerContainer) {
       return;
