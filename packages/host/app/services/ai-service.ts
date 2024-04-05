@@ -10,9 +10,16 @@ import {
   generateCardPatchCallSpecification,
 } from '@cardstack/runtime-common/helpers/ai';
 import CardService from './card-service';
+import MatrixService from './matrix-service';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import interactPrompt from '../lib/prompts/interact/system-with-editable-cards.txt';
 import interactPromptNoFunctions from '../lib/prompts/interact/system-without-editable-cards.txt';
+import { ro } from 'date-fns/locale';
+
+type ToolDef = {
+  type: 'function';
+  function: FunctionDef;
+};
 
 type FunctionDef = {
   name: string;
@@ -22,12 +29,14 @@ type FunctionDef = {
 
 export default class AiService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare matrixService: MatrixService;
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked declare aiCard: CardDef | null;
+  @tracked declare currentRoom: string;
 
   public async aiContext(attachedCards: CardDef[] = []) {
-    let functions: FunctionDef[] = [];
+    let functions: ToolDef[] = [];
     let attachedCardIds = attachedCards.map((c) => c.id);
     let systemPrompt = '';
 
@@ -59,7 +68,26 @@ export default class AiService extends Service {
     };
   }
 
-  callFunction(functionName: string, args: any) {
+  public async runAiCard(card: CardDef) {
+    if (this.aiCard && this.aiCard['run']) {
+      let content = await this.aiCard['run'](card);
+      console.log('Executed in card, got result', content);
+      if (content) {
+        this.matrixService.sendMessage(this.currentRoom, content, [card]);
+      }
+    }
+  }
+
+  setCurrentRoom(roomId: string) {
+    this.currentRoom = roomId;
+  }
+
+  callFunction(
+    functionName: string,
+    args: any,
+    functionCall: any,
+    roomId: string,
+  ) {
     console.log(
       'ai-service.ts: callFunction',
       functionName,
@@ -67,12 +95,16 @@ export default class AiService extends Service {
       this.aiCard[functionName],
     );
     if (this.aiCard && this.aiCard[functionName]) {
-      return this.aiCard[functionName](args);
+      let result = this.aiCard[functionName](args);
+      if (result) {
+        // send the result back to the bot
+        this.matrixService.sendToolUse(roomId, functionCall, result);
+      }
     }
   }
 
   private async getPatchFunctions(attachedOpenCards: CardDef[] = []) {
-    let functions: FunctionDef[] = [];
+    let functions: ToolDef[] = [];
     let mappings = await basicMappings(this.loaderService.loader);
     let cardAPI = await this.cardService.getAPI(this.loaderService.loader);
     // Generate function calls for patching currently open cards permitted for modification
@@ -88,21 +120,24 @@ export default class AiService extends Service {
       await realmSession.loaded;
       if (realmSession.canWrite) {
         functions.push({
-          name: 'patchCard',
-          description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
+          type: 'function',
+          function: {
+            name: 'patchCard',
+            description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
+                },
+                card_id: {
+                  type: 'string',
+                  const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+                },
+                attributes: patchSpec,
               },
-              card_id: {
-                type: 'string',
-                const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-              },
-              attributes: patchSpec,
+              required: ['card_id', 'attributes', 'description'],
             },
-            required: ['card_id', 'attributes', 'description'],
           },
         });
       }

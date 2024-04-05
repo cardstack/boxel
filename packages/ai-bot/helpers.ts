@@ -293,10 +293,29 @@ export function getModifyPrompt(
           content: body,
         });
       } else {
-        historicalMessages.push({
-          role: 'user',
-          content: body,
-        });
+        // With a tool result we must also construct the message from the assistant with the tool call in it.
+        if (event.content.data?.role == 'tool') {
+          let toolCall = event.content.data.functionCall;
+          let result = event.content.data.result;
+          // tool call
+          historicalMessages.push({
+            role: 'assistant',
+            content: null,
+            tool_calls: [toolCall],
+          });
+          // tool result
+          historicalMessages.push({
+            tool_call_id: toolCall.id,
+            role: 'tool' as const,
+            name: toolCall.function.name,
+            content: JSON.stringify(result),
+          });
+        } else {
+          historicalMessages.push({
+            role: 'user',
+            content: body,
+          });
+        }
       }
     }
   }
@@ -316,6 +335,7 @@ export function getModifyPrompt(
   ];
 
   messages = messages.concat(historicalMessages);
+  console.log('messages to send: ', JSON.stringify(messages, null, 2));
   return messages;
 }
 

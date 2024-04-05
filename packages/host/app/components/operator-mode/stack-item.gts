@@ -241,6 +241,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   @action
+  private runAiCard(card: CardDef) {
+    this.aiService.runAiCard(card);
+  }
+
+  @action
   private hoverOnRealmIcon() {
     this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
   }
@@ -457,7 +462,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     {{/if}}</Button>
                 </:trigger>
                 <:content>
-                  Edit
+                  Connect
+                </:content>
+              </Tooltip>
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <Button
+                    @width='24px'
+                    @height='24px'
+                    class='icon-button'
+                    aria-label='Run'
+                    {{on 'click' (fn this.runAiCard this.card)}}
+                  >Run</Button>
+                </:trigger>
+                <:content>
+                  Connect
                 </:content>
               </Tooltip>
               {{#if this.canWrite}}

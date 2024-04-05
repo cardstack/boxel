@@ -26,6 +26,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     message: MessageField;
+    roomId: string;
     isStreaming: boolean;
   };
 }
@@ -71,17 +72,19 @@ export default class Room extends Component<Signature> {
           class='patch-button-bar'
           data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
         >
-          {{#let @message.command as |command|}}
-            <ApplyButton
-              @state={{if
-                this.operatorModeStateService.patchCard.isRunning
-                'applying'
-                'ready'
-              }}
-              data-test-command-apply
-              {{on 'click' (fn this.callFunction command)}}
-            />
-          {{/let}}
+          {{#if @message.command}}
+            {{#let @message.command as |command|}}
+              <ApplyButton
+                @state={{if
+                  this.operatorModeStateService.patchCard.isRunning
+                  'applying'
+                  'ready'
+                }}
+                data-test-command-apply
+                {{on 'click' (fn this.callFunction command)}}
+              />
+            {{/let}}
+          {{/if}}
         </div>
       {{/if}}
     </AiAssistantMessage>
@@ -151,15 +154,12 @@ export default class Room extends Component<Signature> {
   // Hack this in. It doesn't need to be perfect, just to show the concept
   // Add to a list in a field of processed things. Only run iif it's new
   @action callFunction(command: any) {
-    console.log('callFunction', command);
+    console.log('callFunction', command, 'in', this.args.roomId);
     let result = this.aiService.callFunction(
       command.commandType,
       command.payload.patch,
+      command.functionCall,
+      this.args.roomId,
     );
-    // get return, do something with it
-    console.log('Result was ', result);
-    if (result) {
-      // return the message
-    }
   }
 }

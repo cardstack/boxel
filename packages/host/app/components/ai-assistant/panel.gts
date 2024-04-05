@@ -37,6 +37,7 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type AiService from '@cardstack/host/services/ai-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
@@ -248,6 +249,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare aiService: AiService;
   @service private declare router: RouterService;
 
   @tracked private currentRoomId: string | undefined;
@@ -390,6 +392,8 @@ export default class AiAssistantPanel extends Component<Signature> {
   @action
   private enterRoom(roomId: string, hidePastSessionsList = true) {
     this.currentRoomId = roomId;
+    // set current room in ai service
+    this.aiService.setCurrentRoom(roomId);
     if (hidePastSessionsList) {
       this.hidePastSessions();
     }

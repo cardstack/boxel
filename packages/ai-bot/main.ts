@@ -136,8 +136,8 @@ function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
     return openai.beta.chat.completions.stream({
       model: 'gpt-4-turbo-preview',
       messages: messages,
-      functions: functions,
-      function_call: 'auto',
+      tools: functions,
+      tool_choice: 'auto',
     });
   }
 }
@@ -360,7 +360,7 @@ Common issues are:
       const runner = getResponse(history, aiBotUserId)
         .on('content', async (_delta, snapshot) => {
           unsent += 1;
-          if (unsent > 5) {
+          if (unsent > 500) {
             unsent = 0;
             await sendMessage(
               client,
@@ -370,56 +370,63 @@ Common issues are:
             );
           }
         })
-        .on('functionCall', async (functionCall) => {
-          console.log('Function call', functionCall);
-          let args;
-          try {
-            args = JSON.parse(functionCall.arguments);
-          } catch (error) {
-            Sentry.captureException(error);
-            return await sendError(
-              client,
-              room,
-              error,
-              initialMessage.event_id,
-            );
+        .on('message', async (message) => {
+          // if role is assistant
+          if (message.role === 'assistant') {
+            //send each tool call
+            for (let toolCall of message.tool_calls || []) {
+              sentCommands += 1;
+              let functionCall = toolCall.function;
+              let args;
+              try {
+                args = JSON.parse(functionCall.arguments);
+              } catch (error) {
+                Sentry.captureException(error);
+                return await sendError(
+                  client,
+                  room,
+                  error,
+                  initialMessage.event_id,
+                );
+              }
+              if (functionCall.name === 'patchCard') {
+                sentCommands += 1;
+                return await sendOption(
+                  client,
+                  room,
+                  args,
+                  initialMessage.event_id,
+                );
+              } else {
+                log.info('sending option', functionCall);
+                const body =
+                  args['description'] ||
+                  `Calling tool ${functionCall.name}(${functionCall.arguments})`;
+                let messageObject = {
+                  body: body,
+                  msgtype: 'org.boxel.command',
+                  formatted_body: body,
+                  format: 'org.matrix.custom.html',
+                  data: {
+                    functionCall: toolCall,
+                    command: {
+                      type: functionCall.name,
+                      patch: args,
+                    },
+                  },
+                };
+                log.info(JSON.stringify(messageObject, null, 2));
+                return await sendEvent(
+                  client,
+                  room,
+                  'm.room.message',
+                  messageObject,
+                  initialMessage.event_id,
+                );
+              }
+            }
           }
-          if (functionCall.name === 'patchCard') {
-            sentCommands += 1;
-            return await sendOption(
-              client,
-              room,
-              args,
-              initialMessage.event_id,
-            );
-          } else {
-            log.info('sending option', functionCall);
-            const body =
-              args['description'] ||
-              `Calling ${functionCall.name}(${functionCall.arguments})`;
-            let messageObject = {
-              body: body,
-              msgtype: 'org.boxel.command',
-              formatted_body: body,
-              format: 'org.matrix.custom.html',
-              data: {
-                functionCall: functionCall,
-                command: {
-                  type: functionCall.name,
-                  patch: args,
-                },
-              },
-            };
-            log.info(JSON.stringify(messageObject, null, 2));
-            return await sendEvent(
-              client,
-              room,
-              'm.room.message',
-              messageObject,
-              initialMessage.event_id,
-            );
-          }
-          return;
+          console.log('Message', JSON.stringify(message, null, 2));
         })
         .on('error', async (error: OpenAIError) => {
           Sentry.captureException(error);

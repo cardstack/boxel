@@ -345,6 +345,25 @@ export default class MatrixService extends Service {
     }
   }
 
+  // New!
+  async sendToolUse(roomId: string, functionCall: any, result: any) {
+    console.log('Sending tool use', roomId, functionCall, result);
+    let body = `function result for ${JSON.stringify(
+      functionCall,
+    )} = ${result}`;
+    await this.sendEvent(roomId, 'm.room.message', {
+      msgtype: 'org.boxel.message',
+      body: body,
+      format: 'org.matrix.custom.html',
+      formatted_body: body,
+      data: {
+        role: 'tool',
+        functionCall: functionCall,
+        result: result,
+      },
+    } as CardMessageContent);
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
