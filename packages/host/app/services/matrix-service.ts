@@ -445,8 +445,7 @@ export default class MatrixService extends Service {
     let attachedCardsEventIds: string[] = [];
     if (serializedAttachedCards.length > 0) {
       for (let attachedCard of serializedAttachedCards) {
-        let eventId;
-        eventId = roomModule.getEventIdForCard(attachedCard);
+        let eventId = roomModule.getEventIdForCard(attachedCard);
         if (!eventId) {
           let responses = await this.sendCardFragments(roomId, attachedCard);
           eventId = responses[0].event_id; // we only care about the first fragment
