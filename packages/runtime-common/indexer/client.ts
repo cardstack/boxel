@@ -210,12 +210,13 @@ export class IndexerDBClient {
       conditions.push(this.filterCondition(filter, baseCardRef));
     }
 
+    let everyCondition = every(conditions);
     let query = [
       'SELECT card_url, pristine_doc',
       `FROM indexed_cards as i ${placeholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
-      ...every(conditions),
+      ...everyCondition,
       'GROUP BY card_url',
       ...this.orderExpression(sort),
     ];
@@ -224,7 +225,7 @@ export class IndexerDBClient {
       `FROM indexed_cards as i ${placeholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
-      ...every(conditions),
+      ...everyCondition,
     ];
 
     let [totalResults, results] = await Promise.all([
