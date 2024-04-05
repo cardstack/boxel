@@ -302,6 +302,43 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test(`can use 'eq' to match multiple fields`, async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            nickNames: ['Mang Mang', 'Baby'],
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            nickNames: ['Big boy', 'Farty'],
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          eq: { name: 'Van Gogh', nickNames: 'Farty' },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
+  });
+
   test(`can use 'eq' to find 'null' values`, async function (assert) {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(client, [
@@ -530,6 +567,125 @@ module('Unit | query', function (hooks) {
       [ringo.id, vangogh.id],
       'results are correct',
     );
+  });
+
+  test(`can use a 'contains' filter`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          contains: { name: 'ngo' },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, ringo.id],
+      'results are correct',
+    );
+  });
+
+  test(`can use 'contains' to match multiple fields`, async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            nickNames: ['Mang Mang', 'Pee Baby'],
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            nickNames: ['Big Baby', 'Farty'],
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          contains: { name: 'ngo', nickNames: 'Baby' },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+  });
+
+  test(`can use a 'contains' filter to match 'null'`, async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: null,
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          contains: { name: null },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
   });
 
   test(`can use 'every' to combine multiple filters`, async function (assert) {

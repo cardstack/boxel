@@ -33,6 +33,7 @@ import {
   type Filter,
   type EqFilter,
   type NotFilter,
+  type ContainsFilter,
 } from '../query';
 import { type SerializedError } from '../error';
 import { type DBAdapter } from '../db';
@@ -249,6 +250,8 @@ export class IndexerDBClient {
 
     if ('eq' in filter) {
       return this.eqCondition(filter, on);
+    } else if ('contains' in filter) {
+      return this.containsCondition(filter, on);
     } else if ('not' in filter) {
       return this.notCondition(filter, on);
     } else if ('every' in filter) {
@@ -281,7 +284,20 @@ export class IndexerDBClient {
     return every([
       this.typeCondition(on),
       ...Object.entries(filter.eq).map(([key, value]) => {
-        return this.fieldFilter(key, value, on);
+        return this.fieldEqFilter(key, value, on);
+      }),
+    ]);
+  }
+
+  private containsCondition(
+    filter: ContainsFilter,
+    on: CodeRef,
+  ): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      this.typeCondition(on),
+      ...Object.entries(filter.contains).map(([key, value]) => {
+        return this.fieldLikeFilter(key, value, on);
       }),
     ]);
   }
@@ -294,7 +310,7 @@ export class IndexerDBClient {
     ]);
   }
 
-  private fieldFilter(
+  private fieldEqFilter(
     key: string,
     value: JSONTypes.Value,
     onRef: CodeRef,
@@ -305,6 +321,19 @@ export class IndexerDBClient {
     }
     let v = fieldValue(key, [param(value)], onRef, 'filter');
     return [fieldArity(onRef, key, [query, '=', v], 'filter')];
+  }
+
+  private fieldLikeFilter(
+    key: string,
+    value: JSONTypes.Value,
+    onRef: CodeRef,
+  ): CardExpression {
+    let query = fieldQuery(key, onRef, 'filter');
+    if (value === null) {
+      return [query, 'IS NULL'];
+    }
+    let v = fieldValue(key, [param(`%${value}%`)], onRef, 'filter');
+    return [fieldArity(onRef, key, [query, 'LIKE', v], 'filter')];
   }
 
   private async cardQueryToSQL(query: CardExpression, loader: Loader) {
