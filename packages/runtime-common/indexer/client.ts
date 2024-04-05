@@ -216,8 +216,6 @@ export class IndexerDBClient {
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...every(conditions),
-      // use a default sort for deterministic ordering, refactor this after
-      // adding sort support to the query
       'GROUP BY card_url',
       ...this.orderExpression(sort),
     ];
