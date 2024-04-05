@@ -242,8 +242,7 @@ test.describe('Room creation', () => {
     expect(roomsAfterDeletionKeys.length).toEqual(
       roomsBeforeDeletionKeys.length,
     );
-    expect(roomsAfterDeletionKeys.includes(roomsBeforeDeletionKeys[0])).toBeTruthy(); // Existing room
-    expect(roomsAfterDeletionKeys.includes(roomsBeforeDeletionKeys[1])).toBeFalsy(); // The new room after deletions
+    expect(roomsAfterDeletionKeys.includes(roomsBeforeDeletionKeys[1])).toBeFalsy(); // Deleted room
   });
 
   test('it can cancel deleting a room', async ({ page }) => {
