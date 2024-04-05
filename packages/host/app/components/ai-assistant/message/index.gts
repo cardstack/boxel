@@ -239,6 +239,9 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       .error-message {
         align-self: center;
+        overflow: hidden;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
       }
       .retry-button {
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);

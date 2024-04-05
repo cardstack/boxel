@@ -222,6 +222,7 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare monacoService: MonacoService;
 
   @tracked private isDisplayingCode = false;
+  @tracked private patchCardError: { id: string; error: unknown } | undefined;
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -248,6 +249,18 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private get errorMessage() {
+    if (this.patchCardError) {
+      let message = '';
+      if (typeof this.patchCardError.error === 'string') {
+        message = this.patchCardError.error;
+      } else if (this.patchCardError.error instanceof Error) {
+        message = this.patchCardError.error.message;
+      } else {
+        console.error('Unexpected error type', this.patchCardError.error);
+      }
+      return `Failed to apply changes. ${message}`;
+    }
+
     if (this.args.message.errorMessage) {
       return this.args.message.errorMessage;
     }
@@ -270,11 +283,16 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  @action patchCard(cardId: string, attributes: Record<string, unknown>) {
+  @action async patchCard(cardId: string, attributes: Record<string, unknown>) {
+    this.patchCardError = undefined;
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
-    this.operatorModeStateService.patchCard.perform(cardId, attributes);
+    try {
+      await this.operatorModeStateService.patchCard.perform(cardId, attributes);
+    } catch (e) {
+      this.patchCardError = { id: cardId, error: e };
+    }
   }
 
   private get previewPatchCode() {

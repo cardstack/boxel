@@ -105,6 +105,15 @@ export default class OperatorModeStateService extends Service {
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
+        if (attributes && document.data.attributes) {
+          for (let key of Object.keys(attributes)) {
+            if (!(key in document.data.attributes)) {
+              throw new Error(
+                `The "${key}" attribute does not exist on the card "${item.card.id}"`,
+              );
+            }
+          }
+        }
         document.data.attributes = {
           ...document.data.attributes,
           ...attributes,
