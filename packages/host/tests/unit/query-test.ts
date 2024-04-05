@@ -750,6 +750,60 @@ module('Unit | query', function (hooks) {
     assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
   });
 
+  test(`can use 'any' to combine multiple filters`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          any: [
+            {
+              eq: { name: 'Mango' },
+            },
+            {
+              not: { eq: { name: 'Ringo' } },
+            },
+          ],
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, vangogh.id],
+      'results are correct',
+    );
+  });
+
   test(`gives a good error when query refers to missing card`, async function (assert) {
     await setupIndex(client, []);
 

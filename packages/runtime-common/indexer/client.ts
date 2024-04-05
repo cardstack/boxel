@@ -23,6 +23,7 @@ import {
   separatedByCommas,
   addExplicitParens,
   asExpressions,
+  any,
   every,
   fieldQuery,
   fieldValue,
@@ -275,17 +276,20 @@ export class IndexerDBClient {
     } else if ('not' in filter) {
       return this.notCondition(filter, on);
     } else if ('every' in filter) {
-      // on = filter.on ?? on;
       return every(
         filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
       );
+    } else if ('any' in filter) {
+      return any(
+        filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
+      );
     }
 
-    // TODO handle filters for: any, every, contains, and range
+    // TODO handle filter for range
     // refer to hub v2 for a good reference:
     // https://github.dev/cardstack/cardstack/blob/d36e6d114272a9107a7315d95d2f0f415e06bf5c/packages/hub/pgsearch/pgclient.ts
 
-    // TODO assert "notNever()" after we have implemented all the filters so we
+    // TODO assert "notNever()" after we have implemented the "range" filter so we
     // get type errors if new filters are introduced
     throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
   }
