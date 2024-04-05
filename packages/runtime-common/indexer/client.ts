@@ -28,7 +28,12 @@ import {
   fieldValue,
   fieldArity,
 } from './expression';
-import { type Query, type Filter, type EqFilter } from '../query';
+import {
+  type Query,
+  type Filter,
+  type EqFilter,
+  type NotFilter,
+} from '../query';
 import { type SerializedError } from '../error';
 import { type DBAdapter } from '../db';
 import { type SearchEntryWithErrors } from '../search-index';
@@ -244,12 +249,16 @@ export class IndexerDBClient {
 
     if ('eq' in filter) {
       return this.eqCondition(filter, on);
+    } else if ('not' in filter) {
+      return this.notCondition(filter, on);
     }
 
-    // TODO handle filters for: any, every, not, contains, and range
+    // TODO handle filters for: any, every, contains, and range
     // refer to hub v2 for a good reference:
     // https://github.dev/cardstack/cardstack/blob/d36e6d114272a9107a7315d95d2f0f415e06bf5c/packages/hub/pgsearch/pgclient.ts
 
+    // TODO assert "notNever()" after we have implemented all the filters so we
+    // get type errors if new filters are introduced
     throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
   }
 
@@ -269,6 +278,14 @@ export class IndexerDBClient {
       ...Object.entries(filter.eq).map(([key, value]) => {
         return this.fieldFilter(key, value, on);
       }),
+    ]);
+  }
+
+  private notCondition(filter: NotFilter, on: CodeRef): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      this.typeCondition(on),
+      ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
     ]);
   }
 
