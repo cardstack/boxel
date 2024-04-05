@@ -1173,4 +1173,103 @@ module('Unit | query', function (hooks) {
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
   });
+
+  test('can sort search results', async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        sort: [
+          {
+            on: { module: `${testRealmURL}person`, name: 'Person' },
+            by: 'name',
+          },
+        ],
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, ringo.id, vangogh.id],
+      'results are correct',
+    );
+  });
+
+  test('can sort descending', async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        sort: [
+          {
+            on: { module: `${testRealmURL}person`, name: 'Person' },
+            by: 'name',
+            direction: 'desc',
+          },
+        ],
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [vangogh.id, ringo.id, mango.id],
+      'results are correct',
+    );
+  });
 });

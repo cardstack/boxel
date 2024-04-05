@@ -34,6 +34,7 @@ import {
   type EqFilter,
   type NotFilter,
   type ContainsFilter,
+  type Sort,
 } from '../query';
 import { type SerializedError } from '../error';
 import { type DBAdapter } from '../db';
@@ -190,7 +191,7 @@ export class IndexerDBClient {
   // which could have conflicting loaders. It is up to the caller to provide the
   // loader that we should be using.
   async search(
-    { filter }: Query,
+    { filter, sort }: Query,
     loader: Loader,
     opts?: QueryOptions,
     // TODO this should be returning a CardCollectionDocument--handle that in
@@ -217,7 +218,7 @@ export class IndexerDBClient {
       // use a default sort for deterministic ordering, refactor this after
       // adding sort support to the query
       'GROUP BY card_url',
-      'ORDER BY card_url',
+      ...this.orderExpression(sort),
     ];
     let queryCount = [
       'SELECT count(DISTINCT card_url) as total',
@@ -239,6 +240,25 @@ export class IndexerDBClient {
       .filter(Boolean) as LooseCardResource[];
     let meta = { page: { total: totalResults[0].total } };
     return { cards, meta };
+  }
+
+  private orderExpression(sort: Sort | undefined): CardExpression {
+    if (!sort) {
+      return ['ORDER BY card_url'];
+    }
+    return [
+      'ORDER BY',
+      ...separatedByCommas([
+        ...sort.map((s) => [
+          // intentionally not using field arity here--not sure what it means to
+          // sort via a plural field
+          fieldQuery(s.by, s.on, 'sort'),
+          s.direction ?? 'asc',
+        ]),
+        // we include 'card_url' as the final sort key for deterministic results
+        ['card_url'],
+      ]),
+    ];
   }
 
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
