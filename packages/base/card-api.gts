@@ -57,6 +57,7 @@ export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol.for('cardstack-field-decorator');
 export const fieldType = Symbol.for('cardstack-field-type');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
+export const formatQuery = Symbol.for('cardstack-format-query');
 export const relativeTo = Symbol.for('cardstack-relative-to');
 export const realmInfo = Symbol.for('cardstack-realm-info');
 export const realmURL = Symbol.for('cardstack-realm-url');
@@ -1606,6 +1607,13 @@ export class BaseDef {
     }
   }
 
+  static [formatQuery](value: any): any {
+    if (primitive in this) {
+      return value;
+    }
+    throw new Error(`Cannot format query value for composite card/field`);
+  }
+
   static [queryableValue](value: any, stack: BaseDef[] = []): any {
     if (primitive in this) {
       return value;
@@ -2138,6 +2146,13 @@ export function getQueryableValue(
     return result;
   }
   return fieldOrCard.queryableValue(value, stack);
+}
+
+export function formatQueryValue(
+  field: Field<typeof BaseDef>,
+  queryValue: any,
+): any {
+  return field.card[formatQuery](queryValue);
 }
 
 function peekAtField(instance: BaseDef, fieldName: string): any {
