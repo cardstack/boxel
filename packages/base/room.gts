@@ -615,11 +615,9 @@ export class RoomField extends FieldDef {
         `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
       );
     }
-    let cardDoc = JSON.parse(
-      fragments.map((f) => f.data.cardFragment).join(''),
-    ) as LooseSingleCardDocument;
-
-    cardHashes.set(md5(JSON.stringify(cardDoc)), eventId);
+    let cardSource = fragments.map((f) => f.data.cardFragment).join('');
+    let cardDoc = JSON.parse(cardSource) as LooseSingleCardDocument;
+    cardHashes.set(md5(cardSource), eventId);
     return cardDoc;
   }
 
