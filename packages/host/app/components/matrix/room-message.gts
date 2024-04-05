@@ -26,6 +26,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
+import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
@@ -108,11 +109,7 @@ export default class RoomMessage extends Component<Signature> {
               {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
             </Button>
             <ApplyButton
-              @state={{if
-                this.operatorModeStateService.patchCard.isRunning
-                'applying'
-                'ready'
-              }}
+              @state={{this.applyButtonState}}
               data-test-command-apply
               {{on
                 'click'
@@ -223,6 +220,7 @@ export default class RoomMessage extends Component<Signature> {
 
   @tracked private isDisplayingCode = false;
   @tracked private patchCardError: { id: string; error: unknown } | undefined;
+  @tracked private applyButtonState: ApplyButtonState = 'ready';
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -289,9 +287,12 @@ export default class RoomMessage extends Component<Signature> {
       return;
     }
     try {
+      this.applyButtonState = 'applying';
       await this.operatorModeStateService.patchCard.perform(cardId, attributes);
+      this.applyButtonState = 'applied';
     } catch (e) {
       this.patchCardError = { id: cardId, error: e };
+      this.applyButtonState = 'failed';
     }
   }
 

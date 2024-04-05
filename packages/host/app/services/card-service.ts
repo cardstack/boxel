@@ -1,5 +1,7 @@
 import Service, { service } from '@ember/service';
 
+import isEqual from 'lodash/isEqual';
+
 import { stringify } from 'qs';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -260,13 +262,25 @@ export default class CardService extends Service {
   async patchCard(
     card: CardDef,
     doc: LooseSingleCardDocument,
+    patchAttributes: Record<string, any>,
     loader?: Loader,
   ): Promise<CardDef | undefined> {
     let api = await this.getAPI(loader);
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
-    return await this.saveModel(this, updatedCard);
+    let savedCard = await this.saveModel(this, updatedCard);
+
+    if (savedCard && patchAttributes) {
+      for (let [key, value] of Object.entries(patchAttributes)) {
+        let savedDoc = await this.serializeCard(savedCard);
+        let val = savedDoc.data.attributes?.[key];
+        if (!isEqual(val, value)) {
+          throw new Error('Patch failed.');
+        }
+      }
+    }
+    return savedCard;
   }
 
   private async saveCardDocument(

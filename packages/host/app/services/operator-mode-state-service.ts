@@ -119,7 +119,7 @@ export default class OperatorModeStateService extends Service {
           ...attributes,
         };
 
-        await this.cardService.patchCard(item.card, document);
+        await this.cardService.patchCard(item.card, document, attributes);
       }
     }
   });
