@@ -172,6 +172,10 @@ export function getBoxComponent(
       .field-component-card.atom-format {
         font: 700 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .field-component-card.atom-format.display-container-true {
