@@ -92,6 +92,11 @@ export default class CardPill extends Component<CardPillSignature> {
         display: flex;
         max-width: 100px;
       }
+      :deep(.atom-format) {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
     </style>
   </template>
 }
