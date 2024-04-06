@@ -94,6 +94,10 @@ export function getBoxComponent(
     };
   }
 
+  function title(format: Format) {
+    return format === 'atom' && isCard(model.value) ? model.value.title : '';
+  }
+
   let component: TemplateOnlyComponent<{
     Args: { format?: Format; displayContainer?: boolean };
   }> = <template>
@@ -112,6 +116,7 @@ export function getBoxComponent(
             fieldType=field.fieldType
             fieldName=field.name
           }}
+          title={{title f.format}}
           data-test-card-format={{f.format}}
           data-test-field-component-card
           {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
