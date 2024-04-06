@@ -41,12 +41,12 @@ export default class Auth extends Component {
   constructor(owner: Owner, args: any) {
     super(owner, args);
 
-    let sid = this.router.currentRoute.queryParams['sid'];
-    let clientSecret = this.router.currentRoute.queryParams['clientSecret'];
+    let sid = this.router.currentRoute?.queryParams['sid'];
+    let clientSecret = this.router.currentRoute?.queryParams['clientSecret'];
     if (sid && clientSecret) {
       this.resetPasswordParams = {
-        sid,
-        clientSecret,
+        sid: sid as string,
+        clientSecret: clientSecret as string,
       };
     }
   }

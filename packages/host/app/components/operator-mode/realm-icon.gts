@@ -1,4 +1,4 @@
-import Component from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 interface Signature {
   Args: {
@@ -8,13 +8,13 @@ interface Signature {
   Element: HTMLElement;
 }
 
-export default class RealmIcon extends Component<Signature> {
-  <template>
-    <img
-      src={{@realmIconURL}}
-      alt='Icon for workspace {{@realmName}}'
-      data-test-realm-icon-url={{@realmIconURL}}
-      ...attributes
-    />
-  </template>
-}
+const RealmIcon: TemplateOnlyComponent<Signature> = <template>
+  <img
+    src={{@realmIconURL}}
+    alt='Icon for workspace {{@realmName}}'
+    data-test-realm-icon-url={{@realmIconURL}}
+    ...attributes
+  />
+</template>;
+
+export default RealmIcon;

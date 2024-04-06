@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
@@ -95,8 +96,8 @@ export default class MatrixService extends Service {
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
 
-  constructor(properties: object) {
-    super(properties);
+  constructor(owner: Owner) {
+    super(owner);
     this.#ready = this.loadSDK.perform();
   }
 
@@ -440,11 +441,18 @@ export default class MatrixService extends Service {
         }),
       );
     }
+
+    let roomModule = await this.getRoomModule();
     let attachedCardsEventIds: string[] = [];
     if (serializedAttachedCards.length > 0) {
       for (let attachedCard of serializedAttachedCards) {
-        let eventIds = await this.sendCardFragments(roomId, attachedCard);
-        attachedCardsEventIds.push(eventIds[0].event_id); // we only care about the first fragment
+        let eventId = roomModule.getEventIdForCard(roomId, attachedCard);
+        if (!eventId) {
+          let responses = await this.sendCardFragments(roomId, attachedCard);
+          eventId = responses[0].event_id; // we only care about the first fragment
+        }
+
+        attachedCardsEventIds.push(eventId);
       }
     }
 

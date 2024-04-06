@@ -99,4 +99,5 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/destroyable', {});
   virtualNetwork.shimModule('marked', { marked: () => {} });
   virtualNetwork.shimModule('ethers', ethers);
+  virtualNetwork.shimModule('super-fast-md5', { md5: (_data: string) => {} });
 }

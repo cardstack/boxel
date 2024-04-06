@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -37,7 +38,7 @@ export class DirectoryResource extends Resource<Args> {
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
 
-  constructor(owner: unknown) {
+  constructor(owner: Owner) {
     super(owner);
     registerDestructor(this, () => {
       if (this.subscription) {

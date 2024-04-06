@@ -20,7 +20,9 @@ async function cardApi(
 }
 
 export async function renderComponent(C: ComponentLike) {
-  await render(precompileTemplate(`<C/>`, { scope: () => ({ C }) }));
+  await render(
+    precompileTemplate(`<C/>`, { strictMode: true, scope: () => ({ C }) }),
+  );
 }
 
 export async function renderCard(
