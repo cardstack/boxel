@@ -69,6 +69,22 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   setupRenderingTest(hooks);
   hooks.beforeEach(function (this: MyTestContext) {
     this.renderController = new RenderController();
+    this.renderController.panels = [
+      new PanelProperties(
+        { defaultLengthFraction: 0.6 },
+        {
+          showResizeHandle: true,
+          outerContainerStyle:
+            'border: 1px solid red; height: 100%; overflow-y:auto',
+        },
+      ),
+      new PanelProperties(
+        { defaultLengthFraction: 0.4, minLengthPx: 50 },
+        {
+          outerContainerStyle: 'border: 1px solid red; height: 100%',
+        },
+      ),
+    ];
   });
 
   async function renderVerticalResizablePanelGroup(
@@ -122,22 +138,6 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   test('it can lay out panels vertically (default)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 100px; height: 318px;';
-    this.renderController.panels = [
-      new PanelProperties(
-        { defaultLengthFraction: 0.6 },
-        {
-          showResizeHandle: true,
-          outerContainerStyle:
-            'border: 1px solid red; height: 100%; overflow-y:auto',
-        },
-      ),
-      new PanelProperties(
-        { defaultLengthFraction: 0.4, minLengthPx: 50 },
-        {
-          outerContainerStyle: 'border: 1px solid red; height: 100%',
-        },
-      ),
-    ];
     await renderVerticalResizablePanelGroup(this.renderController);
     assert.hasNumericStyle('.panel-0-content', 'height', (318 - 18) * 0.6, 1);
     assert.hasNumericStyle('.panel-1-content', 'height', (318 - 18) * 0.4, 1);
@@ -146,22 +146,6 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   test('it can lay out panels vertically (length specified)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 518px; border: 1px solid green';
-    this.renderController.panels = [
-      new PanelProperties(
-        { defaultLengthFraction: 0.6 },
-        {
-          showResizeHandle: true,
-          outerContainerStyle:
-            'border: 1px solid red; height: 100%; overflow-y:auto',
-        },
-      ),
-      new PanelProperties(
-        { defaultLengthFraction: 0.4, minLengthPx: 50 },
-        {
-          outerContainerStyle: 'border: 1px solid red; height: 100%',
-        },
-      ),
-    ];
     this.renderController.panels[0].lengthPx = 355;
     this.renderController.panels[1].lengthPx = 143;
     await renderVerticalResizablePanelGroup(this.renderController);
@@ -172,22 +156,6 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   test('it respects vertical minLength (default)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 108px;';
-    this.renderController.panels = [
-      new PanelProperties(
-        { defaultLengthFraction: 0.6 },
-        {
-          showResizeHandle: true,
-          outerContainerStyle:
-            'border: 1px solid red; height: 100%; overflow-y:auto',
-        },
-      ),
-      new PanelProperties(
-        { defaultLengthFraction: 0.4, minLengthPx: 50 },
-        {
-          outerContainerStyle: 'border: 1px solid red; height: 100%',
-        },
-      ),
-    ];
     await renderVerticalResizablePanelGroup(this.renderController);
     assert.hasNumericStyle('.panel-0-content', 'height', 40, 1);
     assert.hasNumericStyle('.panel-1-content', 'height', 50, 1);
@@ -196,22 +164,6 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   test('it respects vertical minLength (length specified)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 108px; border: 1px solid green';
-    this.renderController.panels = [
-      new PanelProperties(
-        { defaultLengthFraction: 0.6 },
-        {
-          showResizeHandle: true,
-          outerContainerStyle:
-            'border: 1px solid red; height: 100%; overflow-y:auto',
-        },
-      ),
-      new PanelProperties(
-        { defaultLengthFraction: 0.4, minLengthPx: 50 },
-        {
-          outerContainerStyle: 'border: 1px solid red; height: 100%',
-        },
-      ),
-    ];
     this.renderController.panels[0].lengthPx = 45;
     this.renderController.panels[1].lengthPx = 45;
     await renderVerticalResizablePanelGroup(this.renderController);
@@ -222,22 +174,6 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   test('it adjusts to its container growing (default)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 218px;';
-    this.renderController.panels = [
-      new PanelProperties(
-        { defaultLengthFraction: 0.6 },
-        {
-          showResizeHandle: true,
-          outerContainerStyle:
-            'border: 1px solid red; height: 100%; overflow-y:auto',
-        },
-      ),
-      new PanelProperties(
-        { defaultLengthFraction: 0.4, minLengthPx: 50 },
-        {
-          outerContainerStyle: 'border: 1px solid red; height: 100%',
-        },
-      ),
-    ];
     await renderVerticalResizablePanelGroup(this.renderController);
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 418px;';
@@ -249,22 +185,6 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   test('it adjusts to its container growing (length specified)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 218px; border: 1px solid green';
-    this.renderController.panels = [
-      new PanelProperties(
-        { defaultLengthFraction: 0.6 },
-        {
-          showResizeHandle: true,
-          outerContainerStyle:
-            'border: 1px solid red; height: 100%; overflow-y:auto',
-        },
-      ),
-      new PanelProperties(
-        { defaultLengthFraction: 0.4, minLengthPx: 50 },
-        {
-          outerContainerStyle: 'border: 1px solid red; height: 100%',
-        },
-      ),
-    ];
     this.renderController.panels[0].lengthPx = 100;
     this.renderController.panels[1].lengthPx = 100;
     await renderVerticalResizablePanelGroup(this.renderController);
@@ -280,22 +200,6 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   test('it adjusts to its container shrinking (default)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 418px;';
-    this.renderController.panels = [
-      new PanelProperties(
-        { defaultLengthFraction: 0.6 },
-        {
-          showResizeHandle: true,
-          outerContainerStyle:
-            'border: 1px solid red; height: 100%; overflow-y:auto',
-        },
-      ),
-      new PanelProperties(
-        { defaultLengthFraction: 0.4, minLengthPx: 50 },
-        {
-          outerContainerStyle: 'border: 1px solid red; height: 100%',
-        },
-      ),
-    ];
     await renderVerticalResizablePanelGroup(this.renderController);
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 218px;';
@@ -307,22 +211,6 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   test('it adjusts to its container shrinking (length specified A)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 420px; border: 1px solid green';
-    this.renderController.panels = [
-      new PanelProperties(
-        { defaultLengthFraction: 0.6 },
-        {
-          showResizeHandle: true,
-          outerContainerStyle:
-            'border: 1px solid red; height: 100%; overflow-y:auto',
-        },
-      ),
-      new PanelProperties(
-        { defaultLengthFraction: 0.4, minLengthPx: 50 },
-        {
-          outerContainerStyle: 'border: 1px solid red; height: 100%',
-        },
-      ),
-    ];
     // Height ratio panel 1 and panel 2 is 3:2
     this.renderController.panels[0].lengthPx = 240;
     this.renderController.panels[1].lengthPx = 160;
@@ -340,22 +228,6 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   test('it adjusts to its container shrinking (length specified B)', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 620px; border: 1px solid green';
-    this.renderController.panels = [
-      new PanelProperties(
-        { defaultLengthFraction: 0.6 },
-        {
-          showResizeHandle: true,
-          outerContainerStyle:
-            'border: 1px solid red; height: 100%; overflow-y:auto',
-        },
-      ),
-      new PanelProperties(
-        { defaultLengthFraction: 0.4, minLengthPx: 50 },
-        {
-          outerContainerStyle: 'border: 1px solid red; height: 100%',
-        },
-      ),
-    ];
     // Height ratio panel 1 and panel 2 is 2:1
     this.renderController.panels[0].lengthPx = 400;
     this.renderController.panels[1].lengthPx = 200;
@@ -375,22 +247,6 @@ module('Integration | ResizablePanelGroup', function (hooks) {
   test('it adjusts to its container shrinking and growing', async function (this: MyTestContext, assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 620px; border: 1px solid green';
-    this.renderController.panels = [
-      new PanelProperties(
-        { defaultLengthFraction: 0.6 },
-        {
-          showResizeHandle: true,
-          outerContainerStyle:
-            'border: 1px solid red; height: 100%; overflow-y:auto',
-        },
-      ),
-      new PanelProperties(
-        { defaultLengthFraction: 0.4, minLengthPx: 50 },
-        {
-          outerContainerStyle: 'border: 1px solid red; height: 100%',
-        },
-      ),
-    ];
     this.renderController.panels[0].lengthPx = 400;
     this.renderController.panels[1].lengthPx = 200;
     this.renderController.panels[0].innerContainerStyle =
