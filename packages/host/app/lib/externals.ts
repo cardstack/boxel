@@ -20,6 +20,7 @@ import * as emberResources from 'ember-resources';
 import * as ethers from 'ethers';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
+import * as superFastMD5 from 'super-fast-md5';
 import * as tracked from 'tracked-built-ins';
 
 import * as boxelUiComponents from '@cardstack/boxel-ui/components';
@@ -68,4 +69,5 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('ember-source/types/preview', {
     default: class {},
   });
+  virtualNetwork.shimModule('super-fast-md5', superFastMD5);
 }

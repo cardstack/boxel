@@ -1,3 +1,4 @@
+import format from 'date-fns/format';
 import { module, test } from 'qunit';
 
 import {
@@ -7,6 +8,7 @@ import {
   VirtualNetwork,
   baseRealm,
   IndexerDBClient,
+  internalKeyFor,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -15,10 +17,12 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { testRealmURL, setupIndex, serializeCard } from '../helpers';
+import { testRealmURL, setupIndex, serializeCard, p } from '../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
+let date: typeof import('https://cardstack.com/base/date');
+let codeRef: typeof import('https://cardstack.com/base/code-ref');
 let { sqlSchema, resolvedBaseRealmURL } = ENV;
 
 function getIds(resources: LooseCardResource[]): string[] {
@@ -39,6 +43,8 @@ module('Unit | query', function (hooks) {
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
+    date = await loader.import(`${baseRealm.url}date`);
+    codeRef = await loader.import(`${baseRealm.url}code-ref`);
 
     let {
       field,
@@ -51,6 +57,8 @@ module('Unit | query', function (hooks) {
       setCardAsSavedForTest,
     } = cardApi;
     let { default: StringField } = string;
+    let { default: CodeRefField } = codeRef;
+    let { default: DateField } = date;
     class Address extends FieldDef {
       @field street = contains(StringField);
       @field city = contains(StringField);
@@ -68,13 +76,38 @@ module('Unit | query', function (hooks) {
     class Cat extends CardDef {
       @field name = contains(StringField);
     }
+    class SimpleCatalogEntry extends CardDef {
+      @field title = contains(StringField);
+      @field ref = contains(CodeRefField);
+    }
+    class Event extends CardDef {
+      @field title = contains(StringField);
+      @field venue = contains(StringField);
+      @field date = contains(DateField);
+    }
 
     loader.shimModule(`${testRealmURL}person`, { Person });
     loader.shimModule(`${testRealmURL}fancy-person`, { FancyPerson });
     loader.shimModule(`${testRealmURL}cat`, { Cat });
+    loader.shimModule(`${testRealmURL}catalog-entry`, { SimpleCatalogEntry });
+    loader.shimModule(`${testRealmURL}event`, { Event });
+
+    let stringFieldEntry = new SimpleCatalogEntry({
+      title: 'String Field',
+      ref: {
+        module: `${baseRealm.url}string`,
+        name: 'default',
+      },
+    });
+    let numberFieldEntry = new SimpleCatalogEntry({
+      title: 'Number Field',
+      ref: {
+        module: `${baseRealm.url}number`,
+        name: 'default',
+      },
+    });
 
     let ringo = new Person({
-      id: `${testRealmURL}ringo`,
       name: 'Ringo',
       address: new Address({
         street: '100 Treat Street',
@@ -82,7 +115,6 @@ module('Unit | query', function (hooks) {
       }),
     });
     let vangogh = new Person({
-      id: `${testRealmURL}vangogh`,
       name: 'Van Gogh',
       address: new Address({
         street: '456 Grand Blvd',
@@ -92,7 +124,6 @@ module('Unit | query', function (hooks) {
       friends: [ringo],
     });
     let mango = new FancyPerson({
-      id: `${testRealmURL}mango`,
       name: 'Mango',
       address: new Address({
         street: '123 Main Street',
@@ -101,14 +132,31 @@ module('Unit | query', function (hooks) {
       bestFriend: vangogh,
       friends: [vangogh, ringo],
     });
-    let paper = new Cat({ id: `${testRealmURL}paper`, name: 'Paper' });
+    let paper = new Cat({ name: 'Paper' });
+
+    let mangoBirthday = new Event({
+      title: "Mango's Birthday",
+      venue: 'Dog Park',
+      date: p('2024-10-30'),
+    });
+    let vangoghBirthday = new Event({
+      title: "Van Gogh's Birthday",
+      venue: 'Backyard',
+      date: p('2024-11-19'),
+    });
+
     testCards = {
       mango,
       vangogh,
       ringo,
       paper,
+      mangoBirthday,
+      vangoghBirthday,
+      stringFieldEntry,
+      numberFieldEntry,
     };
-    for (let card of Object.values(testCards)) {
+    for (let [name, card] of Object.entries(testCards)) {
+      card.id = `${testRealmURL}${name}`;
       setCardAsSavedForTest(card);
     }
 
@@ -295,6 +343,255 @@ module('Unit | query', function (hooks) {
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.deepEqual(getIds(cards), [ringo.id], 'results are correct');
+  });
+
+  test('can filter eq from a code ref query value', async function (assert) {
+    let { stringFieldEntry, numberFieldEntry } = testCards;
+    await setupIndex(client, [
+      {
+        card: stringFieldEntry,
+        data: {
+          search_doc: {
+            title: stringFieldEntry.title,
+            ref: internalKeyFor((stringFieldEntry as any).ref, undefined),
+          },
+        },
+      },
+      {
+        card: numberFieldEntry,
+        data: {
+          search_doc: {
+            title: numberFieldEntry.title,
+            ref: internalKeyFor((numberFieldEntry as any).ref, undefined),
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: {
+            module: `${testRealmURL}catalog-entry`,
+            name: 'SimpleCatalogEntry',
+          },
+          eq: {
+            ref: {
+              module: `${baseRealm.url}string`,
+              name: 'default',
+            },
+          },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [stringFieldEntry.id],
+      'results are correct',
+    );
+  });
+
+  test('can filter eq from a date query value', async function (assert) {
+    let { mangoBirthday, vangoghBirthday } = testCards;
+    await setupIndex(client, [
+      {
+        card: mangoBirthday,
+        data: {
+          search_doc: {
+            title: mangoBirthday.title,
+            venue: (mangoBirthday as any).venue,
+            date: format((mangoBirthday as any).date, 'yyyy-MM-dd'),
+          },
+        },
+      },
+      {
+        card: vangoghBirthday,
+        data: {
+          search_doc: {
+            title: vangoghBirthday.title,
+            venue: (vangoghBirthday as any).venue,
+            date: format((vangoghBirthday as any).date, 'yyyy-MM-dd'),
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: {
+            module: `${testRealmURL}event`,
+            name: 'Event',
+          },
+          eq: {
+            date: '2024-10-30',
+          },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(cards), [mangoBirthday.id], 'results are correct');
+  });
+
+  test(`can search with a 'not' filter`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          not: { eq: { name: 'Mango' } },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [ringo.id, vangogh.id],
+      'results are correct',
+    );
+  });
+
+  test('can handle a filter with double negatives', async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          not: { not: { not: { eq: { name: 'Mango' } } } },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [ringo.id, vangogh.id],
+      'results are correct',
+    );
+  });
+
+  test(`can use 'every' to combine multiple filters`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+            },
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+            },
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+            },
+          },
+        },
+      },
+    ]);
+
+    let { cards, meta } = await client.search(
+      {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          every: [
+            {
+              eq: { 'address.city': 'Barksville' },
+            },
+            {
+              not: { eq: { 'address.street': '456 Grand Blvd' } },
+            },
+          ],
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
   });
 
   test(`gives a good error when query refers to missing card`, async function (assert) {
