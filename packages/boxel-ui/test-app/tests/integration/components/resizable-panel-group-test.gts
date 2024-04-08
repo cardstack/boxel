@@ -139,8 +139,8 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 100px; height: 318px;';
     await renderVerticalResizablePanelGroup(this.renderController);
-    assert.hasNumericStyle('.panel-0-content', 'height', (318 - 18) * 0.6, 1);
-    assert.hasNumericStyle('.panel-1-content', 'height', (318 - 18) * 0.4, 1);
+    assert.hasNumericStyle('.panel-0-content', 'height', 300 * 0.6, 1);
+    assert.hasNumericStyle('.panel-1-content', 'height', 300 * 0.4, 1);
   });
 
   test('it can lay out panels vertically (length specified)', async function (this: MyTestContext, assert) {
