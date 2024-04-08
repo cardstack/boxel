@@ -46,7 +46,9 @@ export default class CardPill extends Component<CardPillSignature> {
         </RealmInfoProvider>
       </:icon>
       <:default>
-        <this.component @displayContainer={{false}} />
+        <div class='card-content' title={{@card.title}}>
+          <this.component @displayContainer={{false}} />
+        </div>
         {{#if @removeCard}}
           <IconButton
             class='remove-button'
@@ -85,6 +87,15 @@ export default class CardPill extends Component<CardPillSignature> {
       }
       .is-autoattached {
         border-style: dashed;
+      }
+      .card-content {
+        display: flex;
+        max-width: 100px;
+      }
+      :deep(.atom-format) {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     </style>
   </template>
