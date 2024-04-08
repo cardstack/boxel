@@ -23,6 +23,7 @@ import {
   separatedByCommas,
   addExplicitParens,
   asExpressions,
+  any,
   every,
   fieldQuery,
   fieldValue,
@@ -33,6 +34,8 @@ import {
   type Filter,
   type EqFilter,
   type NotFilter,
+  type ContainsFilter,
+  type Sort,
 } from '../query';
 import { type SerializedError } from '../error';
 import { type DBAdapter } from '../db';
@@ -189,7 +192,7 @@ export class IndexerDBClient {
   // which could have conflicting loaders. It is up to the caller to provide the
   // loader that we should be using.
   async search(
-    { filter }: Query,
+    { filter, sort }: Query,
     loader: Loader,
     opts?: QueryOptions,
     // TODO this should be returning a CardCollectionDocument--handle that in
@@ -207,23 +210,22 @@ export class IndexerDBClient {
       conditions.push(this.filterCondition(filter, baseCardRef));
     }
 
+    let everyCondition = every(conditions);
     let query = [
       'SELECT card_url, pristine_doc',
       `FROM indexed_cards as i ${placeholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
-      ...every(conditions),
-      // use a default sort for deterministic ordering, refactor this after
-      // adding sort support to the query
+      ...everyCondition,
       'GROUP BY card_url',
-      'ORDER BY card_url',
+      ...this.orderExpression(sort),
     ];
     let queryCount = [
       'SELECT count(DISTINCT card_url) as total',
       `FROM indexed_cards as i ${placeholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
-      ...every(conditions),
+      ...everyCondition,
     ];
 
     let [totalResults, results] = await Promise.all([
@@ -240,6 +242,25 @@ export class IndexerDBClient {
     return { cards, meta };
   }
 
+  private orderExpression(sort: Sort | undefined): CardExpression {
+    if (!sort) {
+      return ['ORDER BY card_url'];
+    }
+    return [
+      'ORDER BY',
+      ...separatedByCommas([
+        ...sort.map((s) => [
+          // intentionally not using field arity here--not sure what it means to
+          // sort via a plural field
+          fieldQuery(s.by, s.on, 'sort'),
+          s.direction ?? 'asc',
+        ]),
+        // we include 'card_url' as the final sort key for deterministic results
+        ['card_url'],
+      ]),
+    ];
+  }
+
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
     if ('type' in filter) {
       return this.typeCondition(filter.type);
@@ -249,20 +270,25 @@ export class IndexerDBClient {
 
     if ('eq' in filter) {
       return this.eqCondition(filter, on);
+    } else if ('contains' in filter) {
+      return this.containsCondition(filter, on);
     } else if ('not' in filter) {
       return this.notCondition(filter, on);
     } else if ('every' in filter) {
-      // on = filter.on ?? on;
       return every(
         filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
       );
+    } else if ('any' in filter) {
+      return any(
+        filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
+      );
     }
 
-    // TODO handle filters for: any, every, contains, and range
+    // TODO handle filter for range
     // refer to hub v2 for a good reference:
     // https://github.dev/cardstack/cardstack/blob/d36e6d114272a9107a7315d95d2f0f415e06bf5c/packages/hub/pgsearch/pgclient.ts
 
-    // TODO assert "notNever()" after we have implemented all the filters so we
+    // TODO assert "notNever()" after we have implemented the "range" filter so we
     // get type errors if new filters are introduced
     throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
   }
@@ -281,7 +307,20 @@ export class IndexerDBClient {
     return every([
       this.typeCondition(on),
       ...Object.entries(filter.eq).map(([key, value]) => {
-        return this.fieldFilter(key, value, on);
+        return this.fieldEqFilter(key, value, on);
+      }),
+    ]);
+  }
+
+  private containsCondition(
+    filter: ContainsFilter,
+    on: CodeRef,
+  ): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      this.typeCondition(on),
+      ...Object.entries(filter.contains).map(([key, value]) => {
+        return this.fieldLikeFilter(key, value, on);
       }),
     ]);
   }
@@ -294,7 +333,7 @@ export class IndexerDBClient {
     ]);
   }
 
-  private fieldFilter(
+  private fieldEqFilter(
     key: string,
     value: JSONTypes.Value,
     onRef: CodeRef,
@@ -305,6 +344,19 @@ export class IndexerDBClient {
     }
     let v = fieldValue(key, [param(value)], onRef, 'filter');
     return [fieldArity(onRef, key, [query, '=', v], 'filter')];
+  }
+
+  private fieldLikeFilter(
+    key: string,
+    value: JSONTypes.Value,
+    onRef: CodeRef,
+  ): CardExpression {
+    let query = fieldQuery(key, onRef, 'filter');
+    if (value === null) {
+      return [query, 'IS NULL'];
+    }
+    let v = fieldValue(key, [param(`%${value}%`)], onRef, 'filter');
+    return [fieldArity(onRef, key, [query, 'LIKE', v], 'filter')];
   }
 
   private async cardQueryToSQL(query: CardExpression, loader: Loader) {
