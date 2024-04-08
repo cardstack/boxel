@@ -83,9 +83,7 @@ interface QueryResultsMeta {
   // consistent paginated results...
   page: {
     total: number;
-    realmVersion?: number;
-    startIndex?: number;
-    pageSize?: number;
+    realmVersion: number;
   };
 }
 
@@ -166,11 +164,12 @@ export class IndexerDBClient {
   }
 
   async cardsThatReference(cardId: string): Promise<string[]> {
-    // TODO we really need a cursor based solution to iterate through
-    // this--pervious implementations ran into a bug that necessitated a cursor
-    // for large invalidations. But beware, cursor support for SQLite in worker
-    // mode is very limited. This will likely require some custom work...
-
+    // TODO we really need a solution to iterate through large invalidation
+    // result sets for this--pervious implementations ran into a bug that
+    // necessitated a cursor for large invalidations. But beware, there is no
+    // cursor support for SQLite in worker mode. Instead, implement paging for
+    // this query. we can probably do something similar to how we are paging the
+    // search() method using realm_version for stability between pages.
     let rows = (await this.query([
       `SELECT card_url
        FROM
@@ -199,24 +198,25 @@ export class IndexerDBClient {
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: LooseCardResource[]; meta: QueryResultsMeta }> {
-    let [{ current_version }] = (await this.query([
-      'SELECT current_version FROM realm_versions WHERE realm_url =',
-      param(realmURL.href),
-    ])) as Pick<RealmVersionsTable, 'current_version'>[];
-    if (current_version == null) {
-      throw new Error(`No current version found for realm ${realmURL.href}`);
+    let version: number;
+    if (page?.realmVersion) {
+      version = page.realmVersion;
+    } else {
+      let [{ current_version }] = (await this.query([
+        'SELECT current_version FROM realm_versions WHERE realm_url =',
+        param(realmURL.href),
+      ])) as Pick<RealmVersionsTable, 'current_version'>[];
+      if (current_version == null) {
+        throw new Error(`No current version found for realm ${realmURL.href}`);
+      }
+      version = opts?.useWorkInProgressIndex
+        ? current_version + 1
+        : current_version;
     }
-    let version = opts?.useWorkInProgressIndex
-      ? current_version + 1
-      : current_version;
     let conditions: CardExpression[] = [
-      [
-        ...every([
-          ['i.realm_url = ', param(realmURL.href)],
-          ['is_deleted = FALSE OR is_deleted IS NULL'],
-          realmVersionExpression({ withMaxVersion: version }),
-        ]),
-      ],
+      ['i.realm_url = ', param(realmURL.href)],
+      ['is_deleted = FALSE OR is_deleted IS NULL'],
+      realmVersionExpression({ withMaxVersion: version }),
     ];
     if (filter) {
       conditions.push(this.filterCondition(filter, baseCardRef));
@@ -225,16 +225,17 @@ export class IndexerDBClient {
     let everyCondition = every(conditions);
     let query = [
       'SELECT card_url, pristine_doc',
-      `FROM indexed_cards as i ${placeholder}`,
+      `FROM indexed_cards AS i ${placeholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...everyCondition,
       'GROUP BY card_url',
       ...this.orderExpression(sort),
+      ...(page ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`] : []),
     ];
     let queryCount = [
-      'SELECT count(DISTINCT card_url) as total',
-      `FROM indexed_cards as i ${placeholder}`,
+      'SELECT count(DISTINCT card_url) AS total',
+      `FROM indexed_cards AS i ${placeholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...everyCondition,
@@ -823,23 +824,13 @@ export class Batch {
       ...addExplicitParens(separatedByCommas(valueExpressions)),
     ] as Expression);
 
-    // prune obsolete index entries
+    // prune obsolete generation index entries
     if (this.isNewGeneration) {
       await this.client.query([
         `DELETE FROM indexed_cards`,
         'WHERE realm_version <',
         param(this.realmVersion),
       ]);
-    } else {
-      await this.client.query([
-        `DELETE FROM indexed_cards`,
-        `WHERE card_url IN`,
-        ...addExplicitParens(
-          separatedByCommas([...this.touched].map((i) => [param(i)])),
-        ),
-        'AND realm_version <',
-        param(this.realmVersion),
-      ] as Expression);
     }
   }
 
