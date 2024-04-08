@@ -102,8 +102,12 @@ export default class OperatorModeStateService extends Service {
 
   patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
     let stackItems = this.state?.stacks.flat() ?? [];
+    if (!stackItems.length) {
+      throw new Error(`Please open card '${id}' to make changes to it.`);
+    }
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {
+        // TODO: error if card is not open
         let document = await this.cardService.serializeCard(item.card);
         if (attributes && document.data.attributes) {
           for (let key of Object.keys(attributes)) {

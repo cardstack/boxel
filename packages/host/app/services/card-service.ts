@@ -272,15 +272,42 @@ export default class CardService extends Service {
     let savedCard = await this.saveModel(this, updatedCard);
 
     if (savedCard && patchAttributes) {
-      for (let [key, value] of Object.entries(patchAttributes)) {
-        let savedDoc = await this.serializeCard(savedCard);
-        let val = savedDoc.data.attributes?.[key];
-        if (!isEqual(val, value)) {
-          throw new Error('Patch failed.');
-        }
+      let savedDoc = await this.serializeCard(savedCard);
+      if (!this.isPatchApplied(savedDoc.data.attributes, patchAttributes)) {
+        throw new Error('Patch failed.');
       }
     }
     return savedCard;
+  }
+
+  private isPatchApplied(
+    savedData: Record<string, any> | undefined,
+    patchData: Record<string, any>,
+  ): boolean {
+    if (!savedData || !patchData) {
+      return false;
+    }
+    if (isEqual(savedData, patchData)) {
+      return true;
+    }
+    for (let [key, value] of Object.entries(patchData)) {
+      if (!(key in savedData)) {
+        return false;
+      }
+      let val = savedData[key];
+      if (
+        !isEqual(val, value) &&
+        typeof val === 'object' &&
+        typeof value === 'object'
+      ) {
+        if (!this.isPatchApplied(val, value)) {
+          return false;
+        }
+      } else if (!isEqual(val, value)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private async saveCardDocument(

@@ -26,7 +26,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       Apply
     </BoxelButton>
   {{else}}
-    <div class='state-indicator {{@state}}' ...attributes>
+    <div class='state-indicator {{@state}}' data-test-apply-state={{@state}}>
       {{#if (eq @state 'applying')}}
         <CircleSpinner width='18' height='18' />
       {{else if (eq @state 'applied')}}

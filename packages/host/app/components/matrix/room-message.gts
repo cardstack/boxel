@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -89,7 +88,11 @@ export default class RoomMessage extends Component<Signature> {
       @resources={{this.resources}}
       @errorMessage={{this.errorMessage}}
       @isStreaming={{@isStreaming}}
-      @retryAction={{@retryAction}}
+      @retryAction={{if
+        (eq @message.command.commandType 'patch')
+        this.patchCard
+        @retryAction
+      }}
       @isPending={{@isPending}}
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
@@ -99,25 +102,20 @@ export default class RoomMessage extends Component<Signature> {
           class='patch-button-bar'
           data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
         >
-          {{#let @message.command.payload as |payload|}}
-            <Button
-              class='view-code-button'
-              {{on 'click' this.viewCodeToggle}}
-              @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
-              @size='extra-small'
-              data-test-view-code-button
-            >
-              {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
-            </Button>
-            <ApplyButton
-              @state={{this.applyButtonState}}
-              data-test-command-apply
-              {{on
-                'click'
-                (fn this.patchCard payload.id payload.patch.attributes)
-              }}
-            />
-          {{/let}}
+          <Button
+            class='view-code-button'
+            {{on 'click' this.viewCodeToggle}}
+            @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
+            @size='extra-small'
+            data-test-view-code-button
+          >
+            {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
+          </Button>
+          <ApplyButton
+            @state={{this.applyButtonState}}
+            {{on 'click' this.patchCard}}
+            data-test-command-apply={{this.applyButtonState}}
+          />
         </div>
         {{#if this.isDisplayingCode}}
           <div class='preview-code'>
@@ -282,17 +280,21 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  @action async patchCard(cardId: string, attributes: Record<string, unknown>) {
-    this.patchCardError = undefined;
+  @action async patchCard() {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
+    let { id, patch } = this.args.message.command.payload;
+    this.patchCardError = undefined;
     try {
       this.applyButtonState = 'applying';
-      await this.operatorModeStateService.patchCard.perform(cardId, attributes);
+      await this.operatorModeStateService.patchCard.perform(
+        id,
+        patch.attributes,
+      );
       this.applyButtonState = 'applied';
     } catch (e) {
-      this.patchCardError = { id: cardId, error: e };
+      this.patchCardError = { id, error: e };
       this.applyButtonState = 'failed';
     }
   }

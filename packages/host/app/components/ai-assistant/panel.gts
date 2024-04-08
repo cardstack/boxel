@@ -37,7 +37,6 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
 
@@ -140,13 +139,19 @@ export default class AiAssistantPanel extends Component<Signature> {
 
         {{#if this.displayRoomError}}
           <NewSession @errorAction={{this.createNewSession}} />
-        {{else if this.doCreateRoom.isRunning}}
+        {{else if this.isReady}}
+          {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
+          {{#if this.this.currentRoomId}}
+            <Room
+              @roomId={{this.currentRoomId}}
+              @monacoSDK={{this.monacoSDK}}
+            />
+          {{/if}}
+        {{else}}
           <LoadingIndicator
             class='loading-new-session'
             @color='var(--boxel-light)'
           />
-        {{else if this.currentRoomId}}
-          <Room @roomId={{this.currentRoomId}} @monacoSDK={{this.monacoSDK}} />
         {{/if}}
       </div>
     </Velcro>
@@ -259,7 +264,6 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare router: RouterService;
 
   @tracked private currentRoomId: string | undefined;
@@ -476,5 +480,11 @@ export default class AiAssistantPanel extends Component<Signature> {
       return this.maybeMonacoSDK;
     }
     throw new Error(`cannot use monaco SDK before it has loaded`);
+  }
+
+  private get isReady() {
+    return Boolean(
+      this.currentRoomId && this.maybeMonacoSDK && this.doCreateRoom.isIdle,
+    );
   }
 }
