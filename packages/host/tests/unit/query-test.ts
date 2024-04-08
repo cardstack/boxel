@@ -173,7 +173,11 @@ module('Unit | query', function (hooks) {
     let { mango, vangogh, paper } = testCards;
     await setupIndex(client, [mango, vangogh, paper]);
 
-    let { cards, meta } = await client.search({}, loader);
+    let { cards, meta } = await client.search(
+      new URL(testRealmURL),
+      {},
+      loader,
+    );
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
     assert.deepEqual(
       cards,
@@ -194,7 +198,7 @@ module('Unit | query', function (hooks) {
       { card: paper, data: { is_deleted: true } },
     ]);
 
-    let { meta } = await client.search({}, loader);
+    let { meta } = await client.search(new URL(testRealmURL), {}, loader);
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
   });
 
@@ -203,6 +207,7 @@ module('Unit | query', function (hooks) {
     await setupIndex(client, [mango, vangogh, paper]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           type: { module: `${testRealmURL}person`, name: 'Person' },
@@ -230,6 +235,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           eq: { name: 'Mango' },
@@ -285,6 +291,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -326,6 +333,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -369,6 +377,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -406,6 +415,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: {
@@ -457,6 +467,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: {
@@ -505,6 +516,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -552,6 +564,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -599,6 +612,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -640,6 +654,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -675,6 +690,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -730,6 +746,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -780,6 +797,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -809,6 +827,7 @@ module('Unit | query', function (hooks) {
 
     try {
       await client.search(
+        new URL(testRealmURL),
         {
           filter: {
             on: {
@@ -837,6 +856,7 @@ module('Unit | query', function (hooks) {
     };
     try {
       await client.search(
+        new URL(testRealmURL),
         {
           filter: {
             on: cardRef,
@@ -863,6 +883,7 @@ module('Unit | query', function (hooks) {
 
     try {
       await client.search(
+        new URL(testRealmURL),
         {
           filter: {
             on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -907,6 +928,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -950,6 +972,7 @@ module('Unit | query', function (hooks) {
 
     {
       let { cards, meta } = await client.search(
+        new URL(testRealmURL),
         {
           filter: {
             on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -968,6 +991,7 @@ module('Unit | query', function (hooks) {
     }
     {
       let { cards, meta } = await client.search(
+        new URL(testRealmURL),
         {
           filter: {
             on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -1014,6 +1038,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -1057,6 +1082,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -1097,6 +1123,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -1128,6 +1155,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -1171,6 +1199,7 @@ module('Unit | query', function (hooks) {
     );
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           eq: { name: 'Mango' },
@@ -1182,6 +1211,11 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.strictEqual(
+      meta.page.realmVersion,
+      2,
+      'the realm version queried is correct',
+    );
     assert.deepEqual(
       getIds(cards),
       [mango.id, vangogh.id],
@@ -1215,6 +1249,7 @@ module('Unit | query', function (hooks) {
     );
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           eq: { name: 'Mango' },
@@ -1225,6 +1260,11 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.strictEqual(
+      meta.page.realmVersion,
+      1,
+      'the realm version queried is correct',
+    );
     assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
   });
 
@@ -1258,6 +1298,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         sort: [
           {
@@ -1307,6 +1348,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         sort: [
           {

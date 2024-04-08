@@ -7,7 +7,7 @@ import { type CodeRef, isCodeRef } from './index';
 export interface Query {
   filter?: Filter;
   sort?: Sort;
-  page?: { size?: number | string; cursor?: string }; // Support for this is not yet implmented
+  page?: { size?: number | string; realmVersion?: number };
 }
 
 export type CardURL = string;

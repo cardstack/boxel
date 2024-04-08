@@ -146,7 +146,7 @@ export class IndexerDBClient {
        WHERE i.card_url =`,
       param(`${!url.href.endsWith('.json') ? url.href + '.json' : url.href}`),
       'AND',
-      ...realmVersionExpression(!!opts?.useWorkInProgressIndex),
+      ...realmVersionExpression(opts),
     ] as Expression)) as unknown as IndexedCardsTable[];
     let maybeResult: IndexedCardsTable | undefined = result[0];
     if (!maybeResult) {
@@ -181,7 +181,7 @@ export class IndexerDBClient {
          deps_each.value =`,
       param(cardId),
       'AND',
-      ...realmVersionExpression(true),
+      ...realmVersionExpression({ useWorkInProgressIndex: true }),
       'ORDER BY i.card_url',
     ] as Expression)) as Pick<IndexedCardsTable, 'card_url'>[];
     return rows.map((r) => r.card_url);
@@ -192,17 +192,29 @@ export class IndexerDBClient {
   // which could have conflicting loaders. It is up to the caller to provide the
   // loader that we should be using.
   async search(
-    { filter, sort }: Query,
+    realmURL: URL,
+    { filter, sort, page }: Query,
     loader: Loader,
     opts?: QueryOptions,
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: LooseCardResource[]; meta: QueryResultsMeta }> {
+    let [{ current_version }] = (await this.query([
+      'SELECT current_version FROM realm_versions WHERE realm_url =',
+      param(realmURL.href),
+    ])) as Pick<RealmVersionsTable, 'current_version'>[];
+    if (current_version == null) {
+      throw new Error(`No current version found for realm ${realmURL.href}`);
+    }
+    let version = opts?.useWorkInProgressIndex
+      ? current_version + 1
+      : current_version;
     let conditions: CardExpression[] = [
       [
         ...every([
+          ['i.realm_url = ', param(realmURL.href)],
           ['is_deleted = FALSE OR is_deleted IS NULL'],
-          realmVersionExpression(!!opts?.useWorkInProgressIndex),
+          realmVersionExpression({ withMaxVersion: version }),
         ]),
       ],
     ];
@@ -238,7 +250,9 @@ export class IndexerDBClient {
     let cards = results
       .map((r) => r.pristine_doc)
       .filter(Boolean) as LooseCardResource[];
-    let meta = { page: { total: totalResults[0].total } };
+    let meta: QueryResultsMeta = {
+      page: { total: totalResults[0].total, realmVersion: version },
+    };
     return { cards, meta };
   }
 
@@ -959,14 +973,19 @@ async function loadFieldOrCard(
   }
 }
 
-function realmVersionExpression(useWorkInProgressIndex: boolean) {
+function realmVersionExpression(opts?: {
+  useWorkInProgressIndex?: boolean;
+  withMaxVersion?: number;
+}) {
   return [
     'realm_version =',
     ...addExplicitParens([
       'SELECT MAX(i2.realm_version)',
       'FROM indexed_cards i2',
       'WHERE i2.card_url = i.card_url',
-      ...(!useWorkInProgressIndex
+      ...(opts?.withMaxVersion
+        ? ['AND i2.realm_version <=', param(opts?.withMaxVersion)]
+        : !opts?.useWorkInProgressIndex
         ? // if we are not using the work in progress index then we limit the max
           // version permitted to the current version for the realm
           ['AND i2.realm_version <= r.current_version']
