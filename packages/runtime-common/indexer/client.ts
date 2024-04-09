@@ -23,12 +23,20 @@ import {
   separatedByCommas,
   addExplicitParens,
   asExpressions,
+  any,
   every,
   fieldQuery,
   fieldValue,
   fieldArity,
 } from './expression';
-import { type Query, type Filter, type EqFilter } from '../query';
+import {
+  type Query,
+  type Filter,
+  type EqFilter,
+  type NotFilter,
+  type ContainsFilter,
+  type Sort,
+} from '../query';
 import { type SerializedError } from '../error';
 import { type DBAdapter } from '../db';
 import { type SearchEntryWithErrors } from '../search-index';
@@ -61,7 +69,9 @@ export interface RealmVersionsTable {
   current_version: number;
 }
 
-interface GetEntryOptions {
+type GetEntryOptions = WIPOptions;
+type QueryOptions = WIPOptions;
+interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
 
@@ -131,19 +141,13 @@ export class IndexerDBClient {
   ): Promise<IndexedCardsTable | undefined> {
     let result = (await this.query([
       `SELECT i.* 
-         FROM indexed_cards as i
-         JOIN realm_versions r ON i.realm_url = r.realm_url
-         WHERE i.card_url =`,
+       FROM indexed_cards as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       WHERE i.card_url =`,
       param(`${!url.href.endsWith('.json') ? url.href + '.json' : url.href}`),
-      ...(!opts?.useWorkInProgressIndex
-        ? // if we are not using the work in progress index then we limit the max
-          // version permitted to the current version for the realm
-          ['AND i.realm_version <= r.current_version']
-        : // otherwise we choose the highest version in the system
-          []),
-      'ORDER BY i.realm_version DESC',
-      'LIMIT 1',
-    ])) as unknown as IndexedCardsTable[];
+      'AND',
+      ...realmVersionExpression(!!opts?.useWorkInProgressIndex),
+    ] as Expression)) as unknown as IndexedCardsTable[];
     let maybeResult: IndexedCardsTable | undefined = result[0];
     if (!maybeResult) {
       return undefined;
@@ -170,13 +174,16 @@ export class IndexerDBClient {
     let rows = (await this.query([
       `SELECT card_url
        FROM
-         indexed_cards,
-         json_each(deps) as deps_each
+         indexed_cards as i,
+         json_each(i.deps) as deps_each
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE 
          deps_each.value =`,
       param(cardId),
-      'ORDER BY card_url',
-    ])) as Pick<IndexedCardsTable, 'card_url'>[];
+      'AND',
+      ...realmVersionExpression(true),
+      'ORDER BY i.card_url',
+    ] as Expression)) as Pick<IndexedCardsTable, 'card_url'>[];
     return rows.map((r) => r.card_url);
   }
 
@@ -185,33 +192,40 @@ export class IndexerDBClient {
   // which could have conflicting loaders. It is up to the caller to provide the
   // loader that we should be using.
   async search(
-    { filter }: Query,
+    { filter, sort }: Query,
     loader: Loader,
+    opts?: QueryOptions,
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: LooseCardResource[]; meta: QueryResultsMeta }> {
     let conditions: CardExpression[] = [
-      addExplicitParens(['is_deleted = FALSE OR is_deleted IS NULL']),
+      [
+        ...every([
+          ['is_deleted = FALSE OR is_deleted IS NULL'],
+          realmVersionExpression(!!opts?.useWorkInProgressIndex),
+        ]),
+      ],
     ];
     if (filter) {
       conditions.push(this.filterCondition(filter, baseCardRef));
     }
 
+    let everyCondition = every(conditions);
     let query = [
       'SELECT card_url, pristine_doc',
-      `FROM indexed_cards ${placeholder}`,
+      `FROM indexed_cards as i ${placeholder}`,
+      `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
-      ...every(conditions),
-      // use a default sort for deterministic ordering, refactor this after
-      // adding sort support to the query
+      ...everyCondition,
       'GROUP BY card_url',
-      'ORDER BY card_url',
+      ...this.orderExpression(sort),
     ];
     let queryCount = [
       'SELECT count(DISTINCT card_url) as total',
-      `FROM indexed_cards ${placeholder}`,
+      `FROM indexed_cards as i ${placeholder}`,
+      `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
-      ...every(conditions),
+      ...everyCondition,
     ];
 
     let [totalResults, results] = await Promise.all([
@@ -228,6 +242,25 @@ export class IndexerDBClient {
     return { cards, meta };
   }
 
+  private orderExpression(sort: Sort | undefined): CardExpression {
+    if (!sort) {
+      return ['ORDER BY card_url'];
+    }
+    return [
+      'ORDER BY',
+      ...separatedByCommas([
+        ...sort.map((s) => [
+          // intentionally not using field arity here--not sure what it means to
+          // sort via a plural field
+          fieldQuery(s.by, s.on, 'sort'),
+          s.direction ?? 'asc',
+        ]),
+        // we include 'card_url' as the final sort key for deterministic results
+        ['card_url'],
+      ]),
+    ];
+  }
+
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
     if ('type' in filter) {
       return this.typeCondition(filter.type);
@@ -237,12 +270,26 @@ export class IndexerDBClient {
 
     if ('eq' in filter) {
       return this.eqCondition(filter, on);
+    } else if ('contains' in filter) {
+      return this.containsCondition(filter, on);
+    } else if ('not' in filter) {
+      return this.notCondition(filter, on);
+    } else if ('every' in filter) {
+      return every(
+        filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
+      );
+    } else if ('any' in filter) {
+      return any(
+        filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
+      );
     }
 
-    // TODO handle filters for: any, every, not, contains, and range
+    // TODO handle filter for range
     // refer to hub v2 for a good reference:
     // https://github.dev/cardstack/cardstack/blob/d36e6d114272a9107a7315d95d2f0f415e06bf5c/packages/hub/pgsearch/pgclient.ts
 
+    // TODO assert "notNever()" after we have implemented the "range" filter so we
+    // get type errors if new filters are introduced
     throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
   }
 
@@ -260,12 +307,33 @@ export class IndexerDBClient {
     return every([
       this.typeCondition(on),
       ...Object.entries(filter.eq).map(([key, value]) => {
-        return this.fieldFilter(key, value, on);
+        return this.fieldEqFilter(key, value, on);
       }),
     ]);
   }
 
-  private fieldFilter(
+  private containsCondition(
+    filter: ContainsFilter,
+    on: CodeRef,
+  ): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      this.typeCondition(on),
+      ...Object.entries(filter.contains).map(([key, value]) => {
+        return this.fieldLikeFilter(key, value, on);
+      }),
+    ]);
+  }
+
+  private notCondition(filter: NotFilter, on: CodeRef): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      this.typeCondition(on),
+      ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
+    ]);
+  }
+
+  private fieldEqFilter(
     key: string,
     value: JSONTypes.Value,
     onRef: CodeRef,
@@ -276,6 +344,19 @@ export class IndexerDBClient {
     }
     let v = fieldValue(key, [param(value)], onRef, 'filter');
     return [fieldArity(onRef, key, [query, '=', v], 'filter')];
+  }
+
+  private fieldLikeFilter(
+    key: string,
+    value: JSONTypes.Value,
+    onRef: CodeRef,
+  ): CardExpression {
+    let query = fieldQuery(key, onRef, 'filter');
+    if (value === null) {
+      return [query, 'IS NULL'];
+    }
+    let v = fieldValue(key, [param(`%${value}%`)], onRef, 'filter');
+    return [fieldArity(onRef, key, [query, 'LIKE', v], 'filter')];
   }
 
   private async cardQueryToSQL(query: CardExpression, loader: Loader) {
@@ -443,18 +524,19 @@ export class IndexerDBClient {
       path,
       exp,
       // Leaf field handler
-      async (_api, _field, expression) => {
-        // right now there is no need to run code from the Card/FieldDef to
-        // transform this query expression's value into a format that matches
-        // the search doc. the assumption is that when the search doc was
-        // created the `[queryableValue]` hook was run on the deserialized card
-        // data which forms the search doc value. the query expression should be
-        // serialized already in a manner that matches the serialization of the
-        // search doc value so we can compare apples to apples, e.g. dates
-        // strings in YYYY-MM-DD format. If that assumption changes then we can
-        // use the api and fieldCard callback params to run Card/FieldDef code
-        // as necessary here
-        return expression;
+      async (api, field, expression) => {
+        let queryValue: any;
+        let [value] = expression;
+        if (isParam(value)) {
+          queryValue = api.formatQueryValue(field, value.param);
+        } else if (typeof value === 'string') {
+          queryValue = api.formatQueryValue(field, value);
+        } else {
+          throw new Error(
+            `Do not know how to handle field value: ${JSON.stringify(value)}`,
+          );
+        }
+        return [param(queryValue)];
       },
     );
   }
@@ -603,16 +685,15 @@ export class IndexerDBClient {
         }
       })
       .join(' ');
+
     if (tableValuedFunctions.size > 0) {
-      // i'm slicing up the text as opposed to using a 'String.replace()' since
-      // the ()'s in the SQL query are treated like regex matches when using
-      // String.replace()
-      let index = text.indexOf(placeholder);
-      text = `${text.substring(0, index)}, ${[...tableValuedFunctions.values()]
-        .map((fn) => fn.fn)
-        .join(', ')}${text.substring(index + placeholder.length)}`;
+      text = replace(
+        text,
+        placeholder,
+        `, ${[...tableValuedFunctions.values()].map((fn) => fn.fn).join(', ')}`,
+      );
     } else {
-      text = text.replace('TABLE_VALUED_FUNCTIONS_PLACEHOLDER', '');
+      text = replace(text, placeholder, '');
     }
     return {
       text,
@@ -878,6 +959,23 @@ async function loadFieldOrCard(
   }
 }
 
+function realmVersionExpression(useWorkInProgressIndex: boolean) {
+  return [
+    'realm_version =',
+    ...addExplicitParens([
+      'SELECT MAX(i2.realm_version)',
+      'FROM indexed_cards i2',
+      'WHERE i2.card_url = i.card_url',
+      ...(!useWorkInProgressIndex
+        ? // if we are not using the work in progress index then we limit the max
+          // version permitted to the current version for the realm
+          ['AND i2.realm_version <= r.current_version']
+        : // otherwise we choose the highest version in the system
+          []),
+    ]),
+  ] as Expression;
+}
+
 function traveledThruPlural(pathTraveled: string) {
   return pathTraveled.includes('[');
 }
@@ -898,6 +996,19 @@ function isFieldPlural(field: Field): boolean {
   return (
     field.fieldType === 'containsMany' || field.fieldType === 'linksToMany'
   );
+}
+
+// i'm slicing up the text as opposed to using a 'String.replace()' since
+// the ()'s in the SQL query are treated like regex matches when using
+// String.replace()
+function replace(text: string, placeholder: string, replacement: string) {
+  let index = text.indexOf(placeholder);
+  if (index === -1) {
+    return text;
+  }
+  return `${text.substring(0, index)}${replacement}${text.substring(
+    index + placeholder.length,
+  )}`;
 }
 
 function assertNever(value: never) {

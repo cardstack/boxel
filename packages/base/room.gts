@@ -22,6 +22,7 @@ import {
 import { cached } from '@glimmer/tracking';
 import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
+import { md5 } from 'super-fast-md5';
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -244,6 +245,21 @@ class CommandType extends FieldDef {
 class PatchField extends FieldDef {
   @field commandType = contains(CommandType);
   @field payload = contains(PatchObjectField);
+}
+
+// A map from a hash of roomId + card document to the first card fragment event id.
+// This map can be used to avoid sending the same version of the card more than once in a conversation.
+// We can reuse exisiting eventId if user attached the same version of the card.
+const cardHashes: Map<string, string> = new Map();
+function generateCardHashKey(roomId: string, cardDoc: LooseSingleCardDocument) {
+  return md5(roomId + JSON.stringify(cardDoc));
+}
+
+export function getEventIdForCard(
+  roomId: string,
+  cardDoc: LooseSingleCardDocument,
+) {
+  return cardHashes.get(generateCardHashKey(roomId, cardDoc));
 }
 
 export class MessageField extends FieldDef {
@@ -614,9 +630,12 @@ export class RoomField extends FieldDef {
         `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
       );
     }
-    return JSON.parse(
+
+    let cardDoc = JSON.parse(
       fragments.map((f) => f.data.cardFragment).join(''),
     ) as LooseSingleCardDocument;
+    cardHashes.set(generateCardHashKey(this.roomId, cardDoc), eventId);
+    return cardDoc;
   }
 
   // The edit template is meant to be read-only, this field card is not mutable

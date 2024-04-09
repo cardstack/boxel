@@ -1,9 +1,5 @@
 lockfileVersion: '6.0'
 
-settings:
-  autoInstallPeers: true
-  excludeLinksFromLockfile: false
-
 overrides:
   '@types/eslint': 8.4.1
   '@embroider/util': 1.12.0
@@ -193,6 +189,9 @@ importers:
       ethers:
         specifier: ^6.6.2
         version: 6.6.2
+      super-fast-md5:
+        specifier: ^1.0.1
+        version: 1.0.1
       tracked-built-ins:
         specifier: ^2.0.1
         version: 2.0.1
@@ -1369,6 +1368,9 @@ importers:
       stream-browserify:
         specifier: ^3.0.0
         version: 3.0.0
+      super-fast-md5:
+        specifier: ^1.0.1
+        version: 1.0.1
       testem:
         specifier: 3.10.1
         version: 3.10.1(lodash@4.17.21)
@@ -2048,28 +2050,21 @@ packages:
   /@babel/code-frame@7.12.11:
     resolution: {integrity: sha512-Zt1yodBx1UcyiePMSkWnU4hPqhwq7hGi2nFL1LeA3EUl+q2LQx16MISgJ0+z7dnmgvP9QtIleuETGOiOH1RcIw==}
     dependencies:
-      '@babel/highlight': 7.23.4
+      '@babel/highlight': 7.24.2
     dev: true
 
   /@babel/code-frame@7.22.13:
     resolution: {integrity: sha512-XktuhWlJ5g+3TJXc5upd9Ks1HutSArik6jf2eAjYFyIOf4ej3RN+184cZbzDvbPnuTJIUhPKKJE3cIsYTiAT3w==}
     engines: {node: '>=6.9.0'}
     dependencies:
-      '@babel/highlight': 7.22.20
+      '@babel/highlight': 7.24.2
       chalk: 2.4.2
 
   /@babel/code-frame@7.22.5:
     resolution: {integrity: sha512-Xmwn266vad+6DAqEB2A6V/CcZVp62BbwVmcOJc2RPuwih1kw02TjQvWVWlcKGbBPd+8/0V5DEkOcizRGYsspYQ==}
     engines: {node: '>=6.9.0'}
     dependencies:
-      '@babel/highlight': 7.22.20
-
-  /@babel/code-frame@7.23.5:
-    resolution: {integrity: sha512-CgH3s1a96LipHCmSUmYFPwY7MNx8C3avkq7i4Wl3cfa662ldtUe4VM1TPXX70pfmrlWTb6jLqTYrZyT2ZTJBgA==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
       '@babel/highlight': 7.24.2
-      chalk: 2.4.2
 
   /@babel/code-frame@7.24.2:
     resolution: {integrity: sha512-y5+tLQyV8pg3fsiln67BVLD1P13Eg4lh5RW9mF0zUuvLrv9uIQ4MCL+CRT+FTsBlBjcIan6PGsLcBN0m3ClUyQ==}
@@ -2272,7 +2267,7 @@ packages:
     resolution: {integrity: sha512-0pYVBnDKZO2fnSPCrgM/6WMc7eS20Fbok+0r88fp+YtWVLZrp4CkafFGIp+W0VKw4a22sgebPT99y+FDNMdP4w==}
     engines: {node: '>=6.9.0'}
     dependencies:
-      '@babel/types': 7.23.0
+      '@babel/types': 7.24.0
 
   /@babel/helper-module-transforms@7.18.9:
     resolution: {integrity: sha512-KYNqY0ICwfv19b31XzvmI/mfcylOzbLtowkw+mfvGPAQ3kfCnMLYbED3YecL5tPd8nAYFQFAd6JHp2LxZk/J1g==}
@@ -2408,23 +2403,6 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  /@babel/highlight@7.22.20:
-    resolution: {integrity: sha512-dkdMCN3py0+ksCgYmGG8jKeGA/8Tk+gJwSYYlFGxG5lmhfKNoAy004YpLxpS1W2J8m/EK2Ew+yOs9pVRwO89mg==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@babel/helper-validator-identifier': 7.22.20
-      chalk: 2.4.2
-      js-tokens: 4.0.0
-
-  /@babel/highlight@7.23.4:
-    resolution: {integrity: sha512-acGdbYSfp2WheJoJm/EBBBLh/ID8KDc64ISZ9DYtBmC8/Q204PZJLHyzeB5qMzJ5trcOkybd78M4x2KWsUq++A==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@babel/helper-validator-identifier': 7.22.20
-      chalk: 2.4.2
-      js-tokens: 4.0.0
-    dev: true
-
   /@babel/highlight@7.24.2:
     resolution: {integrity: sha512-Yac1ao4flkTxTteCDZLEvdxg2fZfz1v8M4QpaGypq/WPDqg3ijHYbDfs+LG5hvzSoqaSZ9/Z9lKSP3CjZjv+pA==}
     engines: {node: '>=6.9.0'}
@@ -2439,7 +2417,7 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
     dependencies:
-      '@babel/types': 7.23.0
+      '@babel/types': 7.24.0
 
   /@babel/parser@7.23.3:
     resolution: {integrity: sha512-uVsWNvlVsIninV2prNz/3lHCb+5CJ+e+IUBfbjToAHODtfGYLfCFuY4AU7TskI+dAKk+njsPiBjq1gKTvZOBaw==}
@@ -2447,13 +2425,6 @@ packages:
     hasBin: true
     dependencies:
       '@babel/types': 7.23.0
-
-  /@babel/parser@7.24.0:
-    resolution: {integrity: sha512-QuP/FxEAzMSjXygs8v4N9dvdXzEHN4W1oF3PxuWAtPo08UdM17u89RDMgjLn/mlc56iM0HlLmVkO/wgR+rDgHg==}
-    engines: {node: '>=6.0.0'}
-    hasBin: true
-    dependencies:
-      '@babel/types': 7.24.0
 
   /@babel/parser@7.24.1:
     resolution: {integrity: sha512-Zo9c7N3xdOIQrNip7Lc9wvRPzlRtovHVE4lkz8WEDr7uYh/GMQhSiIgFxGIArRHYdJE5kxtZjAf8rT0xhdLCzg==}
@@ -3395,7 +3366,7 @@ packages:
       '@babel/plugin-transform-unicode-regex': 7.22.5(@babel/core@7.24.3)
       '@babel/plugin-transform-unicode-sets-regex': 7.22.5(@babel/core@7.24.3)
       '@babel/preset-modules': 0.1.6-no-external-plugins(@babel/core@7.24.3)
-      '@babel/types': 7.23.0
+      '@babel/types': 7.24.0
       babel-plugin-polyfill-corejs2: 0.4.6(@babel/core@7.24.3)
       babel-plugin-polyfill-corejs3: 0.8.5(@babel/core@7.24.3)
       babel-plugin-polyfill-regenerator: 0.5.3(@babel/core@7.24.3)
@@ -3440,8 +3411,8 @@ packages:
     resolution: {integrity: sha512-Bkf2q8lMB0AFpX0NFEqSbx1OkTHf0f+0j82mkw+ZpzBnkk7e9Ql0891vlfgi+kHwOk8tQjiQHpqh4LaSa0fKEA==}
     engines: {node: '>=6.9.0'}
     dependencies:
-      '@babel/code-frame': 7.23.5
-      '@babel/parser': 7.24.0
+      '@babel/code-frame': 7.24.2
+      '@babel/parser': 7.24.1
       '@babel/types': 7.24.0
 
   /@babel/traverse@7.17.9:
@@ -3465,14 +3436,14 @@ packages:
     resolution: {integrity: sha512-azpe59SQ48qG6nu2CzcMLbxUudtN+dOM9kDbUqGq3HXUJRlo7i8fvPoxQUzYgLZ4cMVmuZgm8vvBpNeRhd6XSw==}
     engines: {node: '>=6.9.0'}
     dependencies:
-      '@babel/code-frame': 7.22.13
+      '@babel/code-frame': 7.24.2
       '@babel/generator': 7.23.0
       '@babel/helper-environment-visitor': 7.22.20
       '@babel/helper-function-name': 7.23.0
       '@babel/helper-hoist-variables': 7.22.5
       '@babel/helper-split-export-declaration': 7.22.6
-      '@babel/parser': 7.23.3
-      '@babel/types': 7.23.0
+      '@babel/parser': 7.24.1
+      '@babel/types': 7.24.0
       debug: 4.3.4(supports-color@8.1.1)
       globals: 11.12.0
     transitivePeerDependencies:
@@ -3525,7 +3496,7 @@ packages:
     resolution: {integrity: sha512-zo3MIHGOkPOfoRXitsgHLjEXmlDaD/5KU1Uzuc9GNiZPhSqVxVRtxuPaSBZDsYZ9qV88AjtMtWW7ww98loJ9KA==}
     engines: {node: '>=6.9.0'}
     dependencies:
-      '@babel/helper-string-parser': 7.22.5
+      '@babel/helper-string-parser': 7.23.4
       '@babel/helper-validator-identifier': 7.22.20
       to-fast-properties: 2.0.0
 
@@ -3533,7 +3504,7 @@ packages:
     resolution: {integrity: sha512-0oIyUfKoI3mSqMvsxBdclDwxXKXAUA8v/apZbc+iSyARYou1o8ZGDxbUYyLFoW2arqS2jDGqJuZvv1d/io1axg==}
     engines: {node: '>=6.9.0'}
     dependencies:
-      '@babel/helper-string-parser': 7.22.5
+      '@babel/helper-string-parser': 7.23.4
       '@babel/helper-validator-identifier': 7.22.20
       to-fast-properties: 2.0.0
 
@@ -4429,7 +4400,7 @@ packages:
       '@types/ember__object': ^4.0.4
       '@types/ember__routing': ^4.0.11
       ember-cli-htmlbars: ^6.0.1
-      ember-modifier: ^4.1.0
+      ember-modifier: ^3.2.7 || ^4.0.0
     peerDependenciesMeta:
       '@types/ember__array':
         optional: true
@@ -5073,7 +5044,7 @@ packages:
   /@prettier/sync@0.2.1(prettier@3.1.0-dev):
     resolution: {integrity: sha512-7ls1R6//+GPYD9vof1XaL5psViv83CwpdwlS8oUkWldYgbPhzZ3WgxIQMWqGyBmWPmoBfQg8C7jj7KI/ZuDHhQ==}
     peerDependencies:
-      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
+      prettier: ^3.0.0
     dependencies:
       prettier: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
     dev: true
@@ -5334,7 +5305,7 @@ packages:
   /@types/babel__template@7.4.3:
     resolution: {integrity: sha512-ciwyCLeuRfxboZ4isgdNZi/tkt06m8Tw6uGbBSBgWrnnZGNXiEyM27xc/PjXGQLqlZ6ylbgHMnm7ccF9tCkOeQ==}
     dependencies:
-      '@babel/parser': 7.24.0
+      '@babel/parser': 7.24.1
       '@babel/types': 7.24.0
 
   /@types/babel__traverse@7.14.2:
@@ -12229,7 +12200,7 @@ packages:
     resolution: {integrity: sha512-89oVHVJwmLDvGvAUWgS87KpBoRhy3aZ6U0Ql6HOmU4TrPkyaa8pM0W81wj9cIwjYprcQtN9EwzZMHnq46+oUyw==}
     engines: {node: 8.* || 10.* || >= 12}
     dependencies:
-      '@babel/parser': 7.23.3
+      '@babel/parser': 7.24.1
       '@babel/traverse': 7.23.2
       recast: 0.18.10
     transitivePeerDependencies:
@@ -12414,7 +12385,7 @@ packages:
     engines: {node: ^16.0.0 || ^18.0.0 || >=20.0.0}
     peerDependencies:
       ember-template-lint: '>= 4.0.0'
-      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
+      prettier: '>= 3.0.0'
     dependencies:
       '@prettier/sync': 0.2.1(prettier@3.1.0-dev)
       ember-template-lint: 5.11.2
@@ -12608,7 +12579,7 @@ packages:
     resolution: {integrity: sha512-4V6rT9b9XSeMaPmiYYA2hIhfMD088vru6AvfGWBY7L1w/st5hYv6iIfamy9+W1l9xKvIH3Hcl8+B0637/SRmzQ==}
     engines: {node: 14.* || >= 16}
     peerDependencies:
-      ember-modifier: ^4.1.0
+      ember-modifier: ^3.2.7 || >= 4.0.0
       ember-source: ^3.28.0 || ^4.0.0 || >= 5.0.0
     dependencies:
       '@embroider/addon-shim': 1.8.7
@@ -13267,7 +13238,7 @@ packages:
     peerDependencies:
       eslint: '>=5.0.0'
       eslint-config-prettier: '*'
-      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
+      prettier: '>=1.13.0'
     peerDependenciesMeta:
       eslint-config-prettier:
         optional: true
@@ -13282,10 +13253,10 @@ packages:
     resolution: {integrity: sha512-AgaZCVuYDXHUGxj/ZGu1u8H8CYgDY3iG6w5kUFw4AzMVXzB7VvbKgYR4nATIN+OvUrghMbiDLeimVjVY5ilq3w==}
     engines: {node: ^14.18.0 || >=16.0.0}
     peerDependencies:
-      '@types/eslint': 8.4.1
+      '@types/eslint': '>=8.0.0'
       eslint: '>=8.0.0'
       eslint-config-prettier: '*'
-      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
+      prettier: '>=3.0.0'
     peerDependenciesMeta:
       '@types/eslint':
         optional: true
@@ -13303,10 +13274,10 @@ packages:
     resolution: {integrity: sha512-AgaZCVuYDXHUGxj/ZGu1u8H8CYgDY3iG6w5kUFw4AzMVXzB7VvbKgYR4nATIN+OvUrghMbiDLeimVjVY5ilq3w==}
     engines: {node: ^14.18.0 || >=16.0.0}
     peerDependencies:
-      '@types/eslint': 8.4.1
+      '@types/eslint': '>=8.0.0'
       eslint: '>=8.0.0'
       eslint-config-prettier: '*'
-      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
+      prettier: '>=3.0.0'
     peerDependenciesMeta:
       '@types/eslint':
         optional: true
@@ -19165,7 +19136,7 @@ packages:
     resolution: {integrity: sha512-zJTC+NhEU0kHNnVh7OtcvMmkJmYTgFTist76FP9q07m9+WCvcaunR1sTFIOlGE9TH/5UGm6rlF86Umt9ouorAg==}
     engines: {node: 16.* || 18.* || >= 20}
     peerDependencies:
-      prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
+      prettier: '>= 3.0.0'
     dependencies:
       '@babel/core': 7.24.3(supports-color@8.1.1)
       '@glimmer/syntax': 0.84.3
@@ -23267,3 +23238,7 @@ packages:
     transitivePeerDependencies:
       - supports-color
     dev: true
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
