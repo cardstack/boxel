@@ -77,6 +77,10 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/realm-server
+      - name: Lint Runtime Common
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/runtime-common
 
   ai-bot-test:
     name: AI bot Tests
