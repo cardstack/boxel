@@ -1,11 +1,5 @@
 import proxy from 'koa-proxies';
-import {
-  assetsDir,
-  boxelUIAssetsDir,
-  logger as getLogger,
-  VirtualNetwork,
-  type Realm,
-} from '@cardstack/runtime-common';
+import { logger as getLogger } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import basicAuth from 'basic-auth';
 
@@ -93,36 +87,6 @@ export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
     );
   }
   return next();
-}
-
-// requests for the root of the realm without a trailing slash aren't
-// technically inside the realm (as the realm includes the trailing '/').
-// So issue a redirect in those scenarios.
-export function rootRealmRedirect(
-  realms: Realm[],
-  virtualNetwork: VirtualNetwork,
-): (ctxt: Koa.Context, next: Koa.Next) => void {
-  return (ctxt: Koa.Context, next: Koa.Next) => {
-    let url = fullRequestURL(ctxt);
-
-    let realmUrlWithoutQueryParams = url.href.split('?')[0];
-
-    if (
-      !realmUrlWithoutQueryParams.endsWith('/') &&
-      realms.find((realm) => {
-        let mappedRealmUrl =
-          virtualNetwork.resolveURLMapping(realm.url, 'virtual-to-real') ||
-          realm.url;
-
-        return `${realmUrlWithoutQueryParams}/` === mappedRealmUrl;
-      })
-    ) {
-      url.pathname = `${url.pathname}/`;
-      ctxt.redirect(`${url.href}`); // Adding a trailing slash to the URL one line above will update the href
-      return;
-    }
-    return next();
-  };
 }
 
 export function fullRequestURL(ctxt: Koa.Context): URL {

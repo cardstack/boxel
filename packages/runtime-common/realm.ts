@@ -799,6 +799,11 @@ export class Realm {
     request: Request,
     isLocal: boolean,
   ): Promise<ResponseWithNodeStream> {
+    let redirectResponse = this.rootRealmRedirect(request);
+    if (redirectResponse) {
+      return redirectResponse;
+    }
+
     try {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
@@ -832,6 +837,25 @@ export class Realm {
 
       throw e;
     }
+  }
+
+  // Requests for the root of the realm without a trailing slash aren't
+  // technically inside the realm (as the realm includes the trailing '/'),
+  // so issue a redirect in those scenarios.
+  private rootRealmRedirect(request: Request) {
+    let url = new URL(request.url);
+    let urlWithoutQueryParams = url.protocol + '//' + url.host + url.pathname;
+    if (`${urlWithoutQueryParams}/` === this.url) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: String(url.searchParams)
+            ? `${this.url}?${url.searchParams}`
+            : this.url,
+        },
+      });
+    }
+    return undefined;
   }
 
   async fallbackHandle(request: Request) {

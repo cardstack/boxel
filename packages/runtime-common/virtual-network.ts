@@ -84,9 +84,18 @@ export class VirtualNetwork {
         if (absoluteURL.href.endsWith('/')) {
           return toPath.directoryURL(sourcePath.local(absoluteURL)).href;
         } else {
-          return toPath.fileURL(
-            sourcePath.local(absoluteURL, { preserveQuerystring: true }),
-          ).href;
+          let local = sourcePath.local(absoluteURL, {
+            preserveQuerystring: true,
+          });
+          let resolved = toPath.fileURL(local).href;
+
+          // A special case for root realm urls with missing trailing slash, for
+          // example http://localhost:4201/base – we want the mapped url also not to have a trailing slash
+          // (so that the realm handler knows it needs to redirect to the correct url with a trailing slash)
+          if (local === '' && !absoluteURL.pathname.endsWith('/')) {
+            resolved = resolved.replace(/\/$/, '');
+          }
+          return resolved;
         }
       }
     }
@@ -130,15 +139,7 @@ export class VirtualNetwork {
     for (let handler of this.handlers) {
       let response = await handler(internalRequest);
       if (response) {
-        if (response.status > 300 && response.status < 400) {
-          response.headers.set(
-            'Location',
-            this.resolveURLMapping(
-              response.headers.get('Location')!,
-              'virtual-to-real',
-            )!,
-          );
-        }
+        this.mapRedirectionURL(response);
         return response;
       }
     }
@@ -155,6 +156,28 @@ export class VirtualNetwork {
       return await buildRequest(remappedUrl, request);
     } else {
       return request;
+    }
+  }
+
+  private mapRedirectionURL(response: Response): void {
+    if (response.status > 300 && response.status < 400) {
+      let redirectionURL = response.headers.get('Location')!;
+      let isRelativeRedirectionURL = !/^[a-z][a-z0-9+.-]*:|\/\//i.test(
+        redirectionURL,
+      ); // doesn't start with a protocol scheme and "//" (e.g., "http://", "https://", "//")
+
+      let finalRedirectionURL;
+
+      if (isRelativeRedirectionURL) {
+        finalRedirectionURL = redirectionURL;
+      } else {
+        let remappedRedirectionURL = this.resolveURLMapping(
+          redirectionURL,
+          'virtual-to-real',
+        );
+        finalRedirectionURL = remappedRedirectionURL || redirectionURL;
+      }
+      response.headers.set('Location', finalRedirectionURL);
     }
   }
 
