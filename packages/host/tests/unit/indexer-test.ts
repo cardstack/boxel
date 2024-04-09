@@ -461,11 +461,11 @@ module('Unit | indexer', function (hooks) {
     );
     assert.strictEqual(
       versions.length,
-      1,
+      2,
       'correct number of versions exist for the entry after finishing the batch',
     );
 
-    let [finalVersion] = versions;
+    let [_, finalVersion] = versions;
     assert.deepEqual(
       finalVersion,
       {
@@ -558,11 +558,11 @@ module('Unit | indexer', function (hooks) {
     );
     assert.strictEqual(
       versions.length,
-      1,
+      2,
       'correct number of versions exist for the entry after finishing the batch',
     );
 
-    let [finalVersion] = versions;
+    let [_, finalVersion] = versions;
     assert.deepEqual(
       finalVersion,
       { realm_version: 2, is_deleted: true },
