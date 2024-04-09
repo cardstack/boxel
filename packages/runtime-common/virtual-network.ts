@@ -68,7 +68,7 @@ export class VirtualNetwork {
     return getNativeFetch()(...args);
   }
 
-  resolveURLMapping(
+  private resolveURLMapping(
     url: string,
     direction: 'virtual-to-real' | 'real-to-virtual',
   ): string | undefined {
@@ -190,6 +190,11 @@ export class VirtualNetwork {
     }
 
     return this.nativeFetch(request, init);
+  }
+
+  createEventSource(url: string) {
+    let mappedUrl = this.resolveURLMapping(url, 'virtual-to-real');
+    return new EventSource(mappedUrl || url);
   }
 }
 

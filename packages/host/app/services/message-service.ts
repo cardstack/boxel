@@ -13,21 +13,13 @@ export default class MessageService extends Service {
   }
 
   subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
-    let mappedRealmURL =
-      this.loaderService.virtualNetwork.resolveURLMapping(
-        realmURL,
-        'virtual-to-real',
-      ) || realmURL;
-
-    if (!mappedRealmURL) {
-      throw new Error(`No mapping found for ${realmURL} in virtual network`);
-    }
-    let maybeEventSource = this.subscriptions.get(mappedRealmURL);
+    let maybeEventSource = this.subscriptions.get(realmURL);
 
     if (!maybeEventSource) {
-      maybeEventSource = new EventSource(mappedRealmURL);
+      maybeEventSource =
+        this.loaderService.virtualNetwork.createEventSource(realmURL);
       maybeEventSource.onerror = () => eventSource.close();
-      this.subscriptions.set(mappedRealmURL, maybeEventSource);
+      this.subscriptions.set(realmURL, maybeEventSource);
     }
 
     let eventSource = maybeEventSource;
