@@ -771,6 +771,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Fadhlan');
 
       let roomId = await openAiAssistant();
+      let cardID = `${testRealmURL}Person/burcu`;
       await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
@@ -786,7 +787,7 @@ module('Integration | operator-mode', function (hooks) {
           data: JSON.stringify({
             command: {
               type: 'patch',
-              id: `${testRealmURL}Person/anotherPerson`,
+              id: cardID,
               patch: {
                 attributes: { firstName: 'Dave' },
               },
@@ -795,11 +796,32 @@ module('Integration | operator-mode', function (hooks) {
         },
       });
 
-      await waitFor('[data-test-command-apply]');
+      let done = assert.async();
+      setupOnerror(function (error) {
+        assert.ok(error, 'expected a global error');
+        assert.strictEqual(
+          error.message,
+          `Please open card '${cardID}' to make changes to it.`,
+        );
+        assert.dom('[data-test-apply-state="failed"]').exists();
+        assert.dom('[data-test-ai-bot-retry-button]').exists();
+        done();
+      });
+
+      await waitFor('[data-test-command-apply="ready"]');
       await click('[data-test-command-apply]');
 
       await waitFor('[data-test-person="Fadhlan"]');
       assert.dom('[data-test-person]').hasText('Fadhlan');
+
+      await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+      await waitFor('[data-test-person="Burcu"]');
+      await click('[data-test-ai-bot-retry-button]');
+      assert.dom('[data-test-apply-state="applying"]').exists();
+
+      await waitFor('[data-test-patch-card-idle]');
+      assert.dom('[data-test-apply-state="applied"]').exists();
+      assert.dom('[data-test-person]').hasText('Dave');
     });
 
     test<TestContextWithSave>('it can preview code when a change is proposed', async function (assert) {
