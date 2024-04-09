@@ -44,9 +44,9 @@ export let Person = (_class = (_class2 = class Person extends CardDef {
   }
 }, _defineProperty(_class2, "displayName", 'Person'), _defineProperty(_class2, \"isolated\", setComponentTemplate(createTemplateFactory(
 /*
-\ \
+\ \ 
       <h1 data-test-card><@fields.firstName /></h1>
-\ \ \ \
+\ \ \ \ 
 */
 {
   \"id\": ${id},
