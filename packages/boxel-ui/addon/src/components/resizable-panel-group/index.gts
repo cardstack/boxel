@@ -1,6 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
 import { action } from '@ember/object';
-import { next } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { WithBoundArgs } from '@glint/template';
@@ -531,7 +530,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
     if (!this.panelGroupElement) {
       if (entry) {
         this.panelGroupElement = entry.target as HTMLDivElement;
-        next(this, this.onContainerResize, entry, _observer);
       }
       return;
     }
