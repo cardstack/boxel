@@ -104,10 +104,6 @@ export default class Panel extends Component<Signature> {
     registerDestructor(this, this.unregisterPanel);
   }
 
-  get panelElId() {
-    return this.args.resizablePanelElId(this.id);
-  }
-
   @action
   registerPanel() {
     if (this.id == undefined) {
