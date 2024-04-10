@@ -290,6 +290,9 @@ export default class CardService extends Service {
     if (isEqual(savedData, patchData)) {
       return true;
     }
+    if (!Object.keys(patchData).length) {
+      return false;
+    }
     for (let [key, value] of Object.entries(patchData)) {
       if (!(key in savedData)) {
         return false;

@@ -115,7 +115,7 @@ export default class OperatorModeStateService extends Service {
           for (let key of Object.keys(attributes)) {
             if (!(key in document.data.attributes)) {
               throw new Error(
-                `The "${key}" attribute does not exist on the card "${item.card.id}"`,
+                `The "${key}" attribute does not exist on the card "${item.card.id}".`,
               );
             }
           }

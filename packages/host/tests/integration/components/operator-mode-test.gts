@@ -222,11 +222,40 @@ module('Integration | operator-mode', function (hooks) {
       };
     }
 
+    class Country extends CardDef {
+      static displayName = 'Country';
+      @field name = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia(this: Country) {
+          return this.name;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <address>
+            <@fields.name />
+          </address>
+        </template>
+      };
+    }
+    class Trips extends FieldDef {
+      static displayName = 'Trips';
+      @field countriesVisited = linksToMany(Country);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <address>
+            <@fields.countriesVisited />
+          </address>
+        </template>
+      };
+    }
+
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
       @field friends = linksToMany(Pet);
+      @field trips = contains(Trips);
       @field firstLetterOfTheName = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName[0];
@@ -251,6 +280,7 @@ module('Integration | operator-mode', function (hooks) {
           Friends:
           <@fields.friends />
           <div data-test-addresses>Address: <@fields.address /></div>
+          <div>Trips: <span data-test-trips><@fields.trips /></span></div>
         </template>
       };
     }
@@ -771,7 +801,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Fadhlan');
 
       let roomId = await openAiAssistant();
-      let cardID = `${testRealmURL}Person/burcu`;
+      let otherCardID = `${testRealmURL}Person/burcu`;
       await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
@@ -787,7 +817,7 @@ module('Integration | operator-mode', function (hooks) {
           data: JSON.stringify({
             command: {
               type: 'patch',
-              id: cardID,
+              id: otherCardID,
               patch: {
                 attributes: { firstName: 'Dave' },
               },
@@ -801,30 +831,35 @@ module('Integration | operator-mode', function (hooks) {
         assert.ok(error, 'expected a global error');
         assert.strictEqual(
           error.message,
-          `Please open card '${cardID}' to make changes to it.`,
+          `Please open card '${otherCardID}' to make changes to it.`,
         );
-        assert.dom('[data-test-apply-state="failed"]').exists();
-        assert.dom('[data-test-ai-bot-retry-button]').exists();
         done();
       });
 
       await waitFor('[data-test-command-apply="ready"]');
       await click('[data-test-command-apply]');
 
-      await waitFor('[data-test-person="Fadhlan"]');
+      await waitFor('[data-test-patch-card-idle]');
+      assert.dom('[data-test-apply-state="failed"]').exists();
+      assert.dom('[data-test-ai-bot-retry-button]').exists();
+      assert.dom('[data-test-command-apply]').doesNotExist();
       assert.dom('[data-test-person]').hasText('Fadhlan');
+      await percySnapshot(assert);
 
-      await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+      await setCardInOperatorModeState(otherCardID);
       await waitFor('[data-test-person="Burcu"]');
-      await click('[data-test-ai-bot-retry-button]');
+      await click('[data-test-ai-bot-retry-button]'); // retry the command with correct card
       assert.dom('[data-test-apply-state="applying"]').exists();
 
       await waitFor('[data-test-patch-card-idle]');
       assert.dom('[data-test-apply-state="applied"]').exists();
       assert.dom('[data-test-person]').hasText('Dave');
+      assert.dom('[data-test-command-apply]').doesNotExist();
+      assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
+      await percySnapshot(assert);
     });
 
-    test<TestContextWithSave>('it can preview code when a change is proposed', async function (assert) {
+    test('it can apply change to nested contains field', async function (assert) {
       await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
       await renderComponent(
         class TestDriver extends GlimmerComponent {
@@ -868,14 +903,240 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-view-code-button]');
 
       await waitForCodeEditor();
-      assert.deepEqual(JSON.parse(getMonacoContent()), {
-        commandType: 'patch',
-        payload,
-      });
+      assert.deepEqual(
+        JSON.parse(getMonacoContent()),
+        {
+          commandType: 'patch',
+          payload,
+        },
+        'it can preview code when a change is proposed',
+      );
       assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
 
       await click('[data-test-view-code-button]');
       assert.dom('[data-test-code-editor]').doesNotExist();
+
+      await click('[data-test-command-apply="ready"]');
+      await waitFor('[data-test-patch-card-idle]');
+      assert.dom('[data-test-apply-state="applied"]').exists();
+      assert.dom('[data-test-person]').hasText('Joy');
+      assert.dom(`[data-test-preferredcarrier]`).hasText('UPS');
+    });
+
+    test('it will throw error when patch code refers to nonexistent or incorrect field', async function (assert) {
+      let id = `${testRealmURL}Person/fadhlan`;
+      await setCardInOperatorModeState(id);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person="Fadhlan"]');
+
+      let roomId = await openAiAssistant();
+      addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Removing pet from person card',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id,
+              patch: { attributes: { pet: null } },
+            },
+          }),
+        },
+      });
+      await waitFor('[data-test-command-apply="ready"]');
+      await click('[data-test-command-apply]');
+      await waitFor('[data-test-patch-card-idle]');
+      assert.dom('[data-test-apply-state="failed"]').exists();
+      assert
+        .dom(`[data-test-card-error]`)
+        .hasText(
+          `Failed to apply changes. The "pet" attribute does not exist on the card "${id}".`,
+        );
+
+      addRoomEvent(matrixService, {
+        event_id: 'event2',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Remove all attributes from person card',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id,
+              patch: { attributes: {} },
+            },
+          }),
+        },
+      });
+      await waitFor('[data-test-command-apply]');
+      await click('[data-test-command-apply]');
+      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
+        .exists();
+      assert
+        .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
+        .hasText(`Failed to apply changes. Patch failed.`);
+
+      addRoomEvent(matrixService, {
+        event_id: 'event3',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body:
+            "Adding 'Indonesia' to the list of countries visited in the trips attribute.",
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id,
+              patch: {
+                attributes: {
+                  trips: {
+                    countriesVisited: ['Indonesia'],
+                  },
+                },
+              },
+            },
+          }),
+        },
+      });
+      await waitFor('[data-test-command-apply="ready"]');
+      await click('[data-test-command-apply]');
+      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
+        .exists();
+      assert
+        .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
+        .hasText(`Failed to apply changes. Patch failed.`);
+      assert.dom('[data-test-trips]').hasText('');
+    });
+
+    test('button states only apply to a single button in a chat room', async function (assert) {
+      let id = `${testRealmURL}Person/fadhlan`;
+      await setCardInOperatorModeState(id);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person="Fadhlan"]');
+
+      let roomId = await openAiAssistant();
+      addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Change first name to Dave',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id,
+              patch: { attributes: { firstName: 'Dave' } },
+            },
+          }),
+        },
+      });
+      addRoomEvent(matrixService, {
+        event_id: 'event2',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Change first name to Dave',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id,
+              patch: { attributes: { pet: 'Harry' } },
+            },
+          }),
+        },
+      });
+      addRoomEvent(matrixService, {
+        event_id: 'event3',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Change first name to Dave',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id,
+              patch: { attributes: { firstName: 'Jackie' } },
+            },
+          }),
+        },
+      });
+
+      await waitFor('[data-test-command-apply="ready"]', { count: 3 });
+
+      await click('[data-test-message-idx="2"] [data-test-command-apply]');
+      assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
+      assert
+        .dom('[data-test-message-idx="2"] [data-test-apply-state="applying"]')
+        .exists();
+
+      await waitFor('[data-test-message-idx="2"] [data-test-patch-card-idle]');
+      assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
+      assert
+        .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+        .exists();
+      assert.dom('[data-test-command-apply="ready"]').exists({ count: 2 });
+      assert.dom('[data-test-person]').hasText('Jackie');
+
+      await click('[data-test-message-idx="1"] [data-test-command-apply]');
+      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
+      assert.dom('[data-test-apply-state="failed"]').exists({ count: 1 });
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
+        .exists();
+      assert.dom('[data-test-command-apply="ready"]').exists({ count: 1 });
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
+        .exists();
     });
 
     test('it can handle an error in a card attached to a matrix message', async function (assert) {
