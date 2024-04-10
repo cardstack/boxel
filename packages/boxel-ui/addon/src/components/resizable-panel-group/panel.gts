@@ -105,7 +105,6 @@ export default class Panel extends Component<Signature> {
   }
 
   get panelElId() {
-    debugger;
     return this.args.resizablePanelElId(this.id);
   }
 
