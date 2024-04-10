@@ -99,13 +99,6 @@ export class Loader {
   private modules = new Map<string, Module>();
   private urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
 
-  // use a tuple array instead of a map so that we can support reversing
-  // different resolutions back to the same URL. the resolution that we apply
-  // will be in order of precedence. consider 2 realms in the same server
-  // wanting to communicate via localhost resolved URL's, but also a browser
-  // that talks to the realm (we need to reverse the resolution in the server.ts
-  // to figure out which realm the request is talking to)
-  private urlMappings: [string, string][] = [];
   private moduleShims = new Map<string, Record<string, any>>();
   private identities = new WeakMap<
     Function,
@@ -129,7 +122,6 @@ export class Loader {
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport);
     clone.urlHandlers = loader.urlHandlers;
-    clone.urlMappings = loader.urlMappings;
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
     }
