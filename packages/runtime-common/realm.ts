@@ -1000,7 +1000,7 @@ export class Realm {
     request: Request,
     neededPermission: 'read' | 'write',
   ) {
-    let endpontsWithoutAuthNeeded: RouteTable<true> = new Map([
+    let endpointsWithoutAuthNeeded: RouteTable<true> = new Map([
       // authentication endpoint
       [
         SupportedMimeType.Session,
@@ -1019,7 +1019,7 @@ export class Realm {
     ]);
 
     if (
-      lookupRouteTable(endpontsWithoutAuthNeeded, this.paths, request) ||
+      lookupRouteTable(endpointsWithoutAuthNeeded, this.paths, request) ||
       request.method === 'HEAD' ||
       // If the realm is public readable or writable, do not require a JWT
       (neededPermission === 'read' &&
