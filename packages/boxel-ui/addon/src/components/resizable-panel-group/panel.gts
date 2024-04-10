@@ -16,9 +16,9 @@ export type PanelContext = {
   defaultLengthFraction?: number;
   id: number;
   initialMinLengthPx?: number;
+  isHidden?: boolean;
   lengthPx: number;
   minLengthPx?: number;
-  isHidden?: boolean;
 };
 
 interface Signature {
@@ -35,9 +35,9 @@ interface Signature {
     registerPanel: (context: {
       collapsible: boolean | undefined;
       defaultLengthFraction: number | undefined;
+      isHidden: boolean | undefined;
       lengthPx: number | undefined;
       minLengthPx: number | undefined;
-      isHidden: boolean | undefined;
     }) => number;
     resizablePanelElId: (id: number | undefined) => string;
     unregisterPanel: (id: number) => void;

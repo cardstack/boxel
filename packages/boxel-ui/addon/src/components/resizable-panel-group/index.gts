@@ -202,9 +202,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
   registerPanel(context: {
     collapsible: boolean | undefined;
     defaultLengthFraction: number | undefined;
+    isHidden: boolean | undefined;
     lengthPx: number | undefined;
     minLengthPx: number | undefined;
-    isHidden: boolean | undefined;
   }) {
     let id = Number(this.listPanelContext.size);
 
