@@ -15,5 +15,3 @@ If you need access to the cards the user can see, you can ask them to attach the
 The user currently has given you the following data to work with:
 Cards:
 {{ attachedCards }}
-
-You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached
