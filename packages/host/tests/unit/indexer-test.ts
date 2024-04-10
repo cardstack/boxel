@@ -9,7 +9,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
-import SQLiteAdapter from '@cardstack/host/lib/SQLiteAdapter';
+import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 import { testRealmURL, setupIndex } from '../helpers';
 

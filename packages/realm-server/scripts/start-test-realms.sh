@@ -1,6 +1,11 @@
 #! /bin/sh
 
-NODE_ENV=test NODE_NO_WARNINGS=1 REALM_SECRET_SEED="shhh! it's a secret" ts-node \
+NODE_ENV=test \
+  NODE_NO_WARNINGS=1 \
+  REALM_SECRET_SEED="shhh! it's a secret" \
+  PGPORT="5435" \
+  PGPASSWORD="postgres" \
+  ts-node \
   --transpileOnly main \
   --port=4202 \
   \
