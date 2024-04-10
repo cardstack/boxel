@@ -18,6 +18,7 @@ export type PanelContext = {
   initialMinLengthPx?: number;
   lengthPx: number;
   minLengthPx?: number;
+  isHidden?: boolean;
 };
 
 interface Signature {
@@ -36,6 +37,7 @@ interface Signature {
       defaultLengthFraction: number | undefined;
       lengthPx: number | undefined;
       minLengthPx: number | undefined;
+      isHidden: boolean | undefined;
     }) => number;
     resizablePanelElId: (id: number | undefined) => string;
     unregisterPanel: (id: number) => void;
@@ -46,15 +48,9 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-let managePanelRegistration = modifier(
-  (_element, [panel, isHidden]: [Panel, boolean | undefined]) => {
-    if (isHidden) {
-      scheduleOnce('afterRender', panel, panel.unregisterPanel);
-    } else {
-      scheduleOnce('afterRender', panel, panel.registerPanel);
-    }
-  },
-);
+let managePanelRegistration = modifier((_element, [panel]: [Panel]) => {
+  scheduleOnce('afterRender', panel, panel.registerPanel);
+});
 
 export default class Panel extends Component<Signature> {
   <template>
@@ -73,7 +69,7 @@ export default class Panel extends Component<Signature> {
         )
       }}
       {{createRef (@resizablePanelElId this.id) bucket=@panelGroupComponent}}
-      {{managePanelRegistration this @isHidden}}
+      {{managePanelRegistration this}}
       ...attributes
     >
       {{yield}}
@@ -108,6 +104,11 @@ export default class Panel extends Component<Signature> {
     registerDestructor(this, this.unregisterPanel);
   }
 
+  get panelElId() {
+    debugger;
+    return this.args.resizablePanelElId(this.id);
+  }
+
   @action
   registerPanel() {
     if (this.id == undefined) {
@@ -116,6 +117,7 @@ export default class Panel extends Component<Signature> {
         defaultLengthFraction: this.args.defaultLengthFraction,
         minLengthPx: this.args.minLengthPx,
         collapsible: this.args.collapsible,
+        isHidden: this.args.isHidden,
       });
     }
   }

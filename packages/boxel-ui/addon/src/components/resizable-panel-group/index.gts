@@ -204,6 +204,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     defaultLengthFraction: number | undefined;
     lengthPx: number | undefined;
     minLengthPx: number | undefined;
+    isHidden: boolean | undefined;
   }) {
     let id = Number(this.listPanelContext.size);
 
@@ -213,6 +214,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
         context.defaultLengthFraction === undefined
       ) {
         context.lengthPx = -1;
+      } else if (context.isHidden) {
+        context.lengthPx = 0;
       } else {
         context.lengthPx =
           context.defaultLengthFraction * this.panelGroupLengthPx;
@@ -226,6 +229,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       minLengthPx: context.minLengthPx,
       collapsible:
         context.collapsible == undefined ? true : context.collapsible,
+      isHidden: context.isHidden,
     });
 
     this.calculatePanelRatio();
