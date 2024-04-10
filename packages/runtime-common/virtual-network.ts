@@ -127,6 +127,11 @@ export class VirtualNetwork {
     return response;
   };
 
+  // This method is used to handle the boundary between the real and virtual network,
+  // when a request is made to the realm from the realm server - it maps requests
+  // by changing their URL from real to virtual, as defined in the url mapping config
+  // (e.g http://localhost:4201/base to https://cardstack.com/base) so that the realms
+  // that have a virtual URL know that they are being requested
   async handle(
     request: Request,
     onMappedRequest?: (request: Request) => void,
