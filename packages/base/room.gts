@@ -19,10 +19,10 @@ import {
   getCard,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-//@ts-expect-error cached type not available yet
 import { cached } from '@glimmer/tracking';
 import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
+import { md5 } from 'super-fast-md5';
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -138,6 +138,7 @@ class RoomMembershipField extends FieldDef {
 type CardArgs = {
   author: RoomMemberField;
   created: Date;
+  updated: Date;
   message: string;
   formattedMessage: string;
   index: number;
@@ -246,16 +247,33 @@ class PatchField extends FieldDef {
   @field payload = contains(PatchObjectField);
 }
 
+// A map from a hash of roomId + card document to the first card fragment event id.
+// This map can be used to avoid sending the same version of the card more than once in a conversation.
+// We can reuse exisiting eventId if user attached the same version of the card.
+const cardHashes: Map<string, string> = new Map();
+function generateCardHashKey(roomId: string, cardDoc: LooseSingleCardDocument) {
+  return md5(roomId + JSON.stringify(cardDoc));
+}
+
+export function getEventIdForCard(
+  roomId: string,
+  cardDoc: LooseSingleCardDocument,
+) {
+  return cardHashes.get(generateCardHashKey(roomId, cardDoc));
+}
+
 export class MessageField extends FieldDef {
   @field author = contains(RoomMemberField);
   @field message = contains(MarkdownField);
   @field formattedMessage = contains(MarkdownField);
   @field created = contains(DateTimeField);
+  @field updated = contains(DateTimeField);
   @field attachedCardIds = containsMany(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
   @field command = contains(PatchField);
   @field isStreamingFinished = contains(BooleanField);
+  @field errorMessage = contains(StringField);
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
   @field clientGeneratedId = contains(StringField);
@@ -483,6 +501,7 @@ export class RoomField extends FieldDef {
         let cardArgs: CardArgs = {
           author,
           created: new Date(event.origin_server_ts),
+          updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
           message: event.content.body,
           formattedMessage: event.content.formatted_body,
           index,
@@ -491,6 +510,11 @@ export class RoomField extends FieldDef {
           attachedCard: null,
           command: null,
         };
+
+        if ('errorMessage' in event.content) {
+          (cardArgs as any).errorMessage = event.content.errorMessage;
+        }
+
         let messageField = undefined;
         if (event.content.msgtype === 'org.boxel.cardFragment') {
           let fragments = fragmentCache.get(this);
@@ -606,9 +630,12 @@ export class RoomField extends FieldDef {
         `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
       );
     }
-    return JSON.parse(
+
+    let cardDoc = JSON.parse(
       fragments.map((f) => f.data.cardFragment).join(''),
     ) as LooseSingleCardDocument;
+    cardHashes.set(generateCardHashKey(this.roomId, cardDoc), eventId);
+    return cardDoc;
   }
 
   // The edit template is meant to be read-only, this field card is not mutable
@@ -713,6 +740,7 @@ interface MessageEvent extends BaseMatrixEvent {
     body: string;
     formatted_body: string;
     isStreamingFinished: boolean;
+    errorMessage?: string;
   };
   unsigned: {
     age: number;
@@ -766,6 +794,7 @@ export interface CardMessageContent {
   body: string;
   formatted_body: string;
   isStreamingFinished?: boolean;
+  errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
   clientGeneratedId?: string;
@@ -797,6 +826,7 @@ export interface CardFragmentContent {
   format: 'org.boxel.card';
   formatted_body: string;
   body: string;
+  errorMessage?: string;
   data: {
     nextFragment?: string;
     cardFragment: string;

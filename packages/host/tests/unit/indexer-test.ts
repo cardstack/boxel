@@ -170,6 +170,74 @@ module('Unit | indexer', function (hooks) {
     );
   });
 
+  test('only invalidates latest version of content', async function (assert) {
+    await setupIndex(
+      client,
+      [{ realm_url: testRealmURL, current_version: 2 }],
+      [
+        {
+          card_url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}2.json`],
+        },
+        {
+          card_url: `${testRealmURL}2.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}4.json`],
+        },
+        {
+          card_url: `${testRealmURL}2.json`,
+          realm_version: 2,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          card_url: `${testRealmURL}3.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}2.json`],
+        },
+        {
+          card_url: `${testRealmURL}4.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          card_url: `${testRealmURL}5.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}4.json`],
+        },
+      ],
+    );
+
+    let batch = await client.createBatch(new URL(testRealmURL));
+    let invalidations = await batch.invalidate(
+      new URL(`${testRealmURL}4.json`),
+    );
+
+    assert.deepEqual(invalidations.sort(), [
+      `${testRealmURL}4.json`,
+      `${testRealmURL}5.json`,
+    ]);
+    let invalidatedEntries = await adapter.execute(
+      'SELECT card_url, realm_url, is_deleted FROM indexed_cards WHERE realm_version = 3 ORDER BY card_url',
+      { coerceTypes: { is_deleted: 'BOOLEAN' } },
+    );
+    assert.deepEqual(
+      invalidatedEntries,
+      [4, 5].map((i) => ({
+        card_url: `${testRealmURL}${i}.json`,
+        realm_url: testRealmURL,
+        is_deleted: true,
+      })),
+      'the "work-in-progress" version of the index entries have been marked as deleted',
+    );
+  });
+
   test('can prevent concurrent batch invalidations from colliding', async function (assert) {
     await setupIndex(
       client,
@@ -393,11 +461,11 @@ module('Unit | indexer', function (hooks) {
     );
     assert.strictEqual(
       versions.length,
-      1,
+      2,
       'correct number of versions exist for the entry after finishing the batch',
     );
 
-    let [finalVersion] = versions;
+    let [_, finalVersion] = versions;
     assert.deepEqual(
       finalVersion,
       {
@@ -490,11 +558,11 @@ module('Unit | indexer', function (hooks) {
     );
     assert.strictEqual(
       versions.length,
-      1,
+      2,
       'correct number of versions exist for the entry after finishing the batch',
     );
 
-    let [finalVersion] = versions;
+    let [_, finalVersion] = versions;
     assert.deepEqual(
       finalVersion,
       { realm_version: 2, is_deleted: true },

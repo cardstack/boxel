@@ -73,7 +73,7 @@ export async function serializeCard(card: CardDef): Promise<CardResource> {
   return api.serializeCard(card).data as CardResource;
 }
 
-type TestIndexRow =
+export type TestIndexRow =
   | (Pick<IndexedCardsTable, 'card_url'> &
       Partial<Omit<IndexedCardsTable, 'card_url'>>)
   | CardDef
@@ -134,6 +134,9 @@ export async function setupIndex(
           types: await getTypes(r),
         };
       }
+      row.card_url = !row.card_url.endsWith('.json')
+        ? `${row.card_url}.json`
+        : row.card_url;
       return asExpressions(
         { ...defaultIndexEntry, ...row },
         {

@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -12,8 +13,8 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 export default class RecentCardsService extends Service {
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
-  constructor(properties: object) {
-    super(properties);
+  constructor(owner: Owner) {
+    super(owner);
     this.constructRecentCards.perform();
   }
 

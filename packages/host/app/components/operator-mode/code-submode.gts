@@ -89,14 +89,15 @@ type PanelHeights = {
 type SelectedAccordionItem = 'schema-editor' | null;
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
+const defaultLeftPanelWidth =
+  (14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
+  (document.documentElement.clientWidth - 40 - 36);
 const defaultPanelWidths: PanelWidths = {
   // 14rem as a fraction of the layout width
-  leftPanel:
-    (14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
-    (document.documentElement.clientWidth - 40 - 36),
-  codeEditorPanel: 0.4,
-  rightPanel: 0.4,
-  emptyCodeModePanel: 0.8,
+  leftPanel: defaultLeftPanelWidth,
+  codeEditorPanel: (1 - defaultLeftPanelWidth) / 2,
+  rightPanel: (1 - defaultLeftPanelWidth) / 2,
+  emptyCodeModePanel: 1 - defaultLeftPanelWidth,
 };
 
 const CodeModePanelHeights = 'code-mode-panel-heights';

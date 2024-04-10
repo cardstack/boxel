@@ -1,4 +1,5 @@
 import { hash } from '@ember/helper';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 
 import cn from '../../helpers/cn.ts';
@@ -32,7 +33,7 @@ export interface Signature {
 }
 
 export default class RadioInput extends Component<Signature> {
-  constructor(owner: unknown, args: Signature['Args']) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
   }
   <template>
