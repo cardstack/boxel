@@ -345,12 +345,21 @@ export default class MatrixService extends Service {
     }
   }
 
+  // Yes, should be elsewhere
+  private truncateWithEllipsis(input: string, maxLength: number = 80): string {
+    if (input.length <= maxLength) {
+      return input;
+    }
+    return input.substring(0, maxLength) + '...';
+  }
+
   // New!
   async sendToolUse(roomId: string, functionCall: any, result: any) {
     console.log('Sending tool use', roomId, functionCall, result);
+    let resultBody = this.truncateWithEllipsis(JSON.stringify(result));
     let body = `function result for ${JSON.stringify(
       functionCall,
-    )} = ${result}`;
+    )} = ${resultBody}`;
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: 'org.boxel.message',
       body: body,

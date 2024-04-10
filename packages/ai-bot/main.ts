@@ -374,7 +374,12 @@ Common issues are:
           // if role is assistant
           if (message.role === 'assistant') {
             //send each tool call
+            log.info(
+              'Tool Calls',
+              JSON.stringify(message.tool_calls || [], null, 2),
+            );
             for (let toolCall of message.tool_calls || []) {
+              log.info('Tool Call', toolCall);
               sentCommands += 1;
               let functionCall = toolCall.function;
               let args;
@@ -398,7 +403,7 @@ Common issues are:
                   initialMessage.event_id,
                 );
               } else {
-                log.info('sending option', functionCall);
+                log.info('sending option #', sentCommands, functionCall);
                 const body =
                   args['description'] ||
                   `Calling tool ${functionCall.name}(${functionCall.arguments})`;
@@ -416,17 +421,21 @@ Common issues are:
                   },
                 };
                 log.info(JSON.stringify(messageObject, null, 2));
-                return await sendEvent(
+                // only overwrite the first "thinking" event, otherwise we send multiple tool use calls that overwrite each other
+                await sendEvent(
                   client,
                   room,
                   'm.room.message',
                   messageObject,
-                  initialMessage.event_id,
+                  sentCommands == 1 ? initialMessage.event_id : undefined, // here we avoid overwriting it.
                 );
               }
             }
           }
-          console.log('Message', JSON.stringify(message, null, 2));
+          console.log(
+            'End of sending Message',
+            JSON.stringify(message, null, 2),
+          );
         })
         .on('error', async (error: OpenAIError) => {
           Sentry.captureException(error);

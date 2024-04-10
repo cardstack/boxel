@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "bill": "Twin & Earth Cable - 2.5mm² x 100m - £75.5 x 1\n\nBG Slimline 13A Double 2 Gang White Switched Power Socket with USB A & USB C 4.2A - £20 x 4\n\nVimark 2 Gang Dry Lining Box Single - 35mm - £1.65 x 4\n\n",
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../experimental",
+        "name": "InvoiceBuilder"
+      }
+    }
+  }
+}

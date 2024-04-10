@@ -240,10 +240,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.aiService.aiCard = card;
   }
 
-  @action
-  private runAiCard(card: CardDef) {
-    this.aiService.runAiCard(card);
-  }
+  private runAiCard = restartableTask(async (card, action) => {
+    console.log('Run AI card', card, action);
+    await this.aiService.runAiCard(card, action);
+  });
 
   @action
   private hoverOnRealmIcon() {
@@ -266,6 +266,48 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get canWrite() {
     return this.realmSession?.canWrite;
+  }
+  /*
+
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <Button
+                    @width='24px'
+                    @height='24px'
+                    class='icon-button'
+                    aria-label='Run'
+                    {{on 'click' (fn this.runAiCard this.card)}}
+                  >Run</Button>
+                </:trigger>
+                <:content>
+                  Connect
+                </:content>
+              </Tooltip>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+*/
+  private get aiCardRunActions() {
+    let menuItems: MenuItem[] = [];
+    for (let action of this.aiService.aiRunFunctions()) {
+      menuItems.push(
+        new MenuItem(action.name, 'action', {
+          action: () => this.runAiCard.perform(this.card, action.prompt),
+        }),
+      );
+    }
+    return menuItems;
   }
 
   private get moreOptionsMenuItems() {
@@ -403,6 +445,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl = el;
   };
 
+  private get hasAiFunctions() {
+    console.log('Checking has ai');
+    return this.aiService.aiRunFunctions().length > 0;
+  }
+
   <template>
     <div
       class='item {{if this.isBuried "buried"}}'
@@ -447,6 +494,33 @@ export default class OperatorModeStackItem extends Component<Signature> {
               {{/if}}
             </:icon>
             <:actions>
+              {{#if this.hasAiFunctions}}
+                <BoxelDropdown>
+                  <:trigger as |bindings|>
+                    <Tooltip @placement='top'>
+                      <:trigger>
+                        <Button
+                          @width='20px'
+                          @height='20px'
+                          class='icon-button'
+                          aria-label='Options'
+                          data-test-more-options-button
+                          {{bindings}}
+                        >AI Actions</Button>
+                      </:trigger>
+                      <:content>
+                        AI Actions
+                      </:content>
+                    </Tooltip>
+                  </:trigger>
+                  <:content as |dd|>
+                    <BoxelMenu
+                      @closeMenu={{dd.close}}
+                      @items={{this.aiCardRunActions}}
+                    />
+                  </:content>
+                </BoxelDropdown>
+              {{/if}}
               <Tooltip @placement='top'>
                 <:trigger>
                   <Button
@@ -456,24 +530,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     aria-label='Connect'
                     {{on 'click' (fn this.setAiCard this.card)}}
                   >{{#if this.isConnected}}
-                      Connected
+                      Current assistant
                     {{else}}
-                      Connect
+                      Use in assistant
                     {{/if}}</Button>
-                </:trigger>
-                <:content>
-                  Connect
-                </:content>
-              </Tooltip>
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <Button
-                    @width='24px'
-                    @height='24px'
-                    class='icon-button'
-                    aria-label='Run'
-                    {{on 'click' (fn this.runAiCard this.card)}}
-                  >Run</Button>
                 </:trigger>
                 <:content>
                   Connect

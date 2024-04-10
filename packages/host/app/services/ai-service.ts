@@ -68,13 +68,20 @@ export default class AiService extends Service {
     };
   }
 
-  public async runAiCard(card: CardDef) {
-    if (this.aiCard && this.aiCard['run']) {
-      let content = await this.aiCard['run'](card);
-      console.log('Executed in card, got result', content);
-      if (content) {
-        this.matrixService.sendMessage(this.currentRoom, content, [card]);
-      }
+  public aiRunFunctions() {
+    console.log('aiRunFunctions', this.aiCard?.aiCardFunctions);
+    if (this.aiCard?.aiCardFunctions) {
+      return this.aiCard.aiCardFunctions;
+    }
+    return [];
+  }
+
+  public async runAiCard(card: CardDef, functionCall: Function) {
+    console.log(card, functionCall);
+    let content = await functionCall(card);
+    console.log('Executed in card, got result', content);
+    if (content) {
+      this.matrixService.sendMessage(this.currentRoom, content, [card]);
     }
   }
 
@@ -82,7 +89,7 @@ export default class AiService extends Service {
     this.currentRoom = roomId;
   }
 
-  callFunction(
+  async callFunction(
     functionName: string,
     args: any,
     functionCall: any,
@@ -95,7 +102,7 @@ export default class AiService extends Service {
       this.aiCard[functionName],
     );
     if (this.aiCard && this.aiCard[functionName]) {
-      let result = this.aiCard[functionName](args);
+      let result = await this.aiCard[functionName](args);
       if (result) {
         // send the result back to the bot
         this.matrixService.sendToolUse(roomId, functionCall, result);

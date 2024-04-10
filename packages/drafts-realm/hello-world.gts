@@ -17,9 +17,20 @@ export class AICard extends CardDef {
   static displayName = 'ENS Helper';
   @field status = contains(StringCard);
 
-
-  run(card: CardDef) {
-    return 'I need an ENS domain for the attached card with id ' + card.id;
+  get aiCardFunctions() {
+    // These are functions that take a card as an input, the card gets attached to the chat and the string is used as a user message
+    return [
+      {
+        name: 'Get a domain for this',
+        tooltip:
+          'Run the ENS helper to get a .eth domain representing this card',
+        prompt: (card) => {
+          return (
+            'I need an ENS domain for the attached card with id ' + card.id
+          );
+        },
+      },
+    ];
   }
 
   get aiContext() {

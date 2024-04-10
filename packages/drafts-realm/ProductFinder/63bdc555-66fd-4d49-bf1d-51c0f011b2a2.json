@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": null,
+      "title": "Wickes product search",
+      "description": "This card has an attached function and system prompt that the assistant can use to search a hardware store in the UK called Wickes. This is a connection to the real store.",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../experimental",
+        "name": "ProductFinder"
+      }
+    }
+  }
+}

@@ -288,10 +288,15 @@ export function getModifyPrompt(
     let body = event.content.body;
     if (body) {
       if (event.sender === aiBotUserId) {
-        historicalMessages.push({
-          role: 'assistant',
-          content: body,
-        });
+        let functionCall = event.content.data?.functionCall;
+        if (functionCall) {
+          console.log('functionCall: ', functionCall); // Don't add to message list, need a result otherwise there's an API error
+        } else {
+          historicalMessages.push({
+            role: 'assistant',
+            content: body,
+          });
+        }
       } else {
         // With a tool result we must also construct the message from the assistant with the tool call in it.
         if (event.content.data?.role == 'tool') {
