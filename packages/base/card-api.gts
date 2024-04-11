@@ -1823,12 +1823,14 @@ class DefaultAtomViewTemplate extends GlimmerComponent<{
     fields: Record<string, new () => GlimmerComponent>;
   };
 }> {
+  get text() {
+    return (
+      this.args.model.title?.trim() ||
+      `Untitled ${this.args.model.constructor.displayName}`
+    );
+  }
   <template>
-    {{#each-in @fields as |key Field|}}
-      {{#if (eq key 'title')}}
-        <Field />
-      {{/if}}
-    {{/each-in}}
+    {{this.text}}
   </template>
 }
 
