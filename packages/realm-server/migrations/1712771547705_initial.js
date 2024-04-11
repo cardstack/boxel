@@ -1,8 +1,4 @@
-/* eslint-disable camelcase */
-
-import { MigrationBuilder } from 'node-pg-migrate';
-
-export function up(pgm: MigrationBuilder) {
+exports.up = (pgm) => {
   pgm.createTable('indexed_cards', {
     card_url: { type: 'varchar', notNull: true },
     realm_version: { type: 'varchar', notNull: true },
@@ -63,4 +59,4 @@ export function up(pgm: MigrationBuilder) {
     result: 'jsonb',
   });
   pgm.sql('ALTER TABLE jobs SET UNLOGGED');
-}
+};
