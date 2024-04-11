@@ -98,5 +98,48 @@ export default class IconButtonUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
+
+    <FreestyleUsage @name='All Icons'>
+      <:example>
+        <section class='all-icons'>
+          {{#each ALL_ICON_COMPONENTS as |icon|}}
+            <div class='icon-and-label'>
+              <BoxelIconButton
+                @icon={{icon}}
+                @variant={{this.variant}}
+                @width={{this.width}}
+                @height={{this.height}}
+                aria-label='Special Button'
+                {{on 'click' (fn this.log 'Button clicked')}}
+                class='icon'
+                style={{cssVar
+                  boxel-icon-button-width=this.boxelIconButtonWidth.value
+                  boxel-icon-button-height=this.boxelIconButtonHeight.value
+                }}
+              />
+              <span class='label'>{{icon.name}}</span>
+            </div>
+          {{/each}}
+        </section>
+      </:example>
+    </FreestyleUsage>
+    <style>
+      .all-icons {
+        display: flex;
+        flex-wrap: wrap;
+      }
+
+      .icon-and-label {
+        display: flex;
+        width: 15rem;
+        flex-direction: column;
+        align-items: center;
+        margin: 0 10px 10px 0;
+      }
+
+      .icon {
+        border: 1px solid #eee;
+      }
+    </style>
   </template>
 }
