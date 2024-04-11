@@ -1,14 +1,16 @@
 import { RealmPaths } from './paths';
 import { Loader } from './loader';
 import type { RunnerOpts } from './search-index';
+import {
+  PackageShimHandler,
+  PACKAGES_FAKE_ORIGIN,
+} from './package-shim-handler';
 import type { Readable } from 'stream';
-
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
-const PACKAGES_FAKE_ORIGIN = 'https://packages/';
 
 function getNativeFetch(): typeof fetch {
   if (isFastBoot) {
@@ -38,18 +40,10 @@ export class VirtualNetwork {
     return moduleIdentifier;
   };
 
-  private shimmingLoader = new Loader(() => {
-    throw new Error('This loader should never call fetch');
-  }, this.resolveImport);
+  private packageShimHandler = new PackageShimHandler(this.resolveImport);
 
   constructor() {
-    this.mount(async (request) => {
-      if (request.url.startsWith(PACKAGES_FAKE_ORIGIN)) {
-        return this.shimmingLoader.fetch(request);
-      }
-
-      return null;
-    });
+    this.mount(this.packageShimHandler.handle);
   }
 
   createLoader() {
@@ -57,7 +51,7 @@ export class VirtualNetwork {
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    this.shimmingLoader.shimModule(moduleIdentifier, module);
+    this.packageShimHandler.shimModule(moduleIdentifier, module);
   }
 
   addURLMapping(from: URL, to: URL) {
