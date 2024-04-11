@@ -67,7 +67,7 @@
     "yargs": "^17.5.1"
   },
   "scripts": {
-    "test": "NODE_NO_WARNINGS=1 PGPORT=5435 qunit --require ts-node/register/transpile-only tests/index.ts",
+    "test": "./scripts/remove-test-dbs.sh && NODE_NO_WARNINGS=1 PGPORT=5435 qunit --require ts-node/register/transpile-only tests/index.ts",
     "test:dom": "cd ../matrix && pnpm register-test-user && cd ../realm-server && start-server-and-test 'pnpm run wait' 'http://127.0.0.1:4205' 'testem ci -f ./testem.js'",
     "start:test-container": "http-server ./dom-tests -p 4205 --silent",
     "start:matrix": "cd ../matrix && pnpm assert-synapse-running",
