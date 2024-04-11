@@ -87,7 +87,7 @@
     "eslint-plugin-n": "^16.2.0",
     "eslint-plugin-prettier": "^5.0.1",
     "eslint-plugin-qunit": "^8.0.1",
-    "glimmer-scoped-css": "^0.4.0",
+    "glimmer-scoped-css": "^0.4.1",
     "loader.js": "^4.7.0",
     "normalize.css": "8.0.1",
     "prettier": "^3.0.3",
