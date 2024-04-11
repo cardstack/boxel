@@ -5,7 +5,6 @@ NODE_ENV=development \
   LOG_LEVELS='*=info' \
   REALM_SECRET_SEED="shhh! it's a secret" \
   PGPORT="5435" \
-  PGPASSWORD="postgres" \
   ts-node \
   --transpileOnly main \
   --port=4201 \
