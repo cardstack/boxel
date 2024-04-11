@@ -127,6 +127,17 @@ export class VirtualNetwork {
     return response;
   };
 
+  private async runFetch(request: Request, init?: RequestInit) {
+    for (let handler of this.handlers) {
+      let response = await handler(request);
+      if (response) {
+        return await followRedirections(request, response, this.fetch);
+      }
+    }
+
+    return this.nativeFetch(request, init);
+  }
+
   // This method is used to handle the boundary between the real and virtual network,
   // when a request is made to the realm from the realm server - it maps requests
   // by changing their URL from real to virtual, as defined in the url mapping config
@@ -184,17 +195,6 @@ export class VirtualNetwork {
       }
       response.headers.set('Location', finalRedirectionURL);
     }
-  }
-
-  private async runFetch(request: Request, init?: RequestInit) {
-    for (let handler of this.handlers) {
-      let response = await handler(request);
-      if (response) {
-        return response;
-      }
-    }
-
-    return this.nativeFetch(request, init);
   }
 
   createEventSource(url: string) {
@@ -270,4 +270,41 @@ async function buildRequest(url: string, originalRequest: Request) {
     redirect: originalRequest.redirect,
     integrity: originalRequest.integrity,
   });
+}
+
+// todo use this in loader too
+async function followRedirections(
+  request: Request,
+  result: Response,
+  fetch: any,
+): Promise<Response> {
+  const urlString = request.url;
+  let redirectedHeaderKey = 'simulated-fetch-redirected'; // Temporary header to track if the request was redirected in the redirection chain
+
+  if (result.status >= 300 && result.status < 400) {
+    const location = result.headers.get('location');
+    if (location) {
+      request.headers.set(redirectedHeaderKey, 'true');
+      return await fetch(new URL(location, urlString), request);
+    }
+  }
+
+  // We are using Object.defineProperty because `url` and `redirected`
+  // response properties are read-only. We are overriding these properties to
+  // conform to the Fetch API specification where the `url` property is set to
+  // the final URL and the `redirected` property is set to true if the request
+  // was redirected. Normally, when using a native fetch, these properties are
+  // set automatically by the client, but in this case, we are simulating the
+  // fetch and need to set these properties manually.
+
+  if (request.url && !result.url) {
+    Object.defineProperty(result, 'url', { value: urlString });
+
+    if (request.headers.get(redirectedHeaderKey) === 'true') {
+      Object.defineProperty(result, 'redirected', { value: true });
+      request.headers.delete(redirectedHeaderKey);
+    }
+  }
+
+  return result;
 }
