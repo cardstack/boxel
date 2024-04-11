@@ -11,7 +11,7 @@ import postgresConfig from './pg-config';
 
 function config() {
   return postgresConfig({
-    database: `boxel${process.env.NODE_ENV ? '_' + process.env.NODE_ENV : ''}`,
+    database: 'boxel',
   });
 }
 
