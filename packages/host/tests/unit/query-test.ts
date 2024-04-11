@@ -12,8 +12,8 @@ import {
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
-import SQLiteAdapter from '@cardstack/host/lib/SQLiteAdapter';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
