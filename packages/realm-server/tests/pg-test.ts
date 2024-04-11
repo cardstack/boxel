@@ -15,7 +15,7 @@ module('Postgres', function (hooks) {
       let result = await adapter.execute(`
         SELECT column_name
         FROM information_schema.columns
-        WHERE table_schema = 'public' -- Replace 'public' with the schema name if it's different
+        WHERE table_schema = 'public'
         AND table_name = 'indexed_cards'
       `);
       let columns = result.map((r) => r.column_name);
@@ -38,7 +38,7 @@ module('Postgres', function (hooks) {
       let result = await adapter.execute(`
         SELECT column_name
         FROM information_schema.columns
-        WHERE table_schema = 'public' -- Replace 'public' with the schema name if it's different
+        WHERE table_schema = 'public'
         AND table_name = 'realm_versions'
       `);
       let columns = result.map((r) => r.column_name);
@@ -48,7 +48,7 @@ module('Postgres', function (hooks) {
       let result = await adapter.execute(`
         SELECT column_name
         FROM information_schema.columns
-        WHERE table_schema = 'public' -- Replace 'public' with the schema name if it's different
+        WHERE table_schema = 'public'
         AND table_name = 'jobs'
       `);
       let columns = result.map((r) => r.column_name);
