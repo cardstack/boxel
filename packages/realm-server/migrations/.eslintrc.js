@@ -12,7 +12,6 @@ module.exports = {
   },
   extends: ['plugin:n/recommended'],
   rules: {
-    '@typescript-eslint/no-var-requires': 'off',
     camelcase: 'off',
   },
 };
