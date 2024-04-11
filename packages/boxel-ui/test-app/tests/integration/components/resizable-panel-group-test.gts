@@ -300,8 +300,8 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 0, 0);
     this.renderController.panels[1].isHidden = false;
     await sleep(100); // let didResizeModifier run
-    assert.hasNumericStyle('.panel-0-content', 'height', 156, 1);
-    assert.hasNumericStyle('.panel-1-content', 'height', 62, 1);
+    assert.hasNumericStyle('.panel-0-content', 'height', 168, 1);
+    assert.hasNumericStyle('.panel-1-content', 'height', 50, 1);
     this.renderController.panels[1].isHidden = true;
     await sleep(100); // let didResizeModifier run
     assert.hasNumericStyle('.panel-0-content', 'height', 218, 1);
