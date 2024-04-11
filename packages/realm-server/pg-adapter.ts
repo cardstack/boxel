@@ -93,6 +93,7 @@ export default class PgAdapter implements DBAdapter {
       },
       count: Infinity,
       dir: join(__dirname, 'migrations'),
+      ignorePattern: '.*\\.eslintrc\\.js',
       log: (...args) => console.log(...args),
     });
   }
