@@ -63,5 +63,9 @@
   "peerDependencies": {
     "@babel/core": "^7.24.3",
     "ember-cli-htmlbars": "^6.3.0"
+  },
+  "scripts": {
+    "lint": "eslint . --cache --ext ts",
+    "lint:js:fix": "eslint . --fix"
   }
 }
