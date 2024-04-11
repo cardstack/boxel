@@ -181,6 +181,8 @@ export default class IconButtonUsage extends Component {
 
       .show-borders .icon {
         border: 1px solid var(--boxel-500);
+        width: calc(var(--boxel-icon-button-width) + 2px);
+        height: calc(var(--boxel-icon-button-height) + 2px);
       }
     </style>
   </template>
