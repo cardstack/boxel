@@ -3,7 +3,7 @@
 
  CREATE TABLE IF NOT EXISTS indexed_cards (
     card_url TEXT NOT NULL,
-   realm_version TEXT NOT NULL,
+   realm_version INTEGER NOT NULL,
    realm_url TEXT NOT NULL,
    pristine_doc JSON,
    search_doc JSON,
