@@ -211,20 +211,20 @@ async function getContentOfReadableStream(
 ): Promise<Uint8Array | null> {
   if (requestBody) {
     let isPending = true;
-    let arrayLegnth = 0;
+    let arrayLength = 0;
     let unit8Arrays = [];
     let reader = requestBody.getReader();
     do {
       let readableResults = await reader.read();
 
       if (readableResults.value) {
-        arrayLegnth += readableResults.value.length;
+        arrayLength += readableResults.value.length;
         unit8Arrays.push(readableResults.value);
       }
 
       isPending = !readableResults.done;
     } while (isPending);
-    let mergedArray = new Uint8Array(arrayLegnth);
+    let mergedArray = new Uint8Array(arrayLength);
     unit8Arrays.forEach((array) => mergedArray.set(array));
     return mergedArray;
   }
