@@ -29,6 +29,10 @@ let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 let manager = new RunnerOptionsManager();
 let getRunner: IndexRunner | undefined;
 
+export async function prepareTestDB() {
+  process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
+}
+
 export async function createRealm(
   loader: Loader,
   dir: string,

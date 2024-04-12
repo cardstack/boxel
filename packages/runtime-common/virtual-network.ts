@@ -1,14 +1,16 @@
 import { RealmPaths } from './paths';
 import { Loader } from './loader';
 import type { RunnerOpts } from './search-index';
+import {
+  PackageShimHandler,
+  PACKAGES_FAKE_ORIGIN,
+} from './package-shim-handler';
 import type { Readable } from 'stream';
-
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
-const PACKAGES_FAKE_ORIGIN = 'https://packages/';
 
 function getNativeFetch(): typeof fetch {
   if (isFastBoot) {
@@ -38,18 +40,10 @@ export class VirtualNetwork {
     return moduleIdentifier;
   };
 
-  private shimmingLoader = new Loader(() => {
-    throw new Error('This loader should never call fetch');
-  }, this.resolveImport);
+  private packageShimHandler = new PackageShimHandler(this.resolveImport);
 
   constructor() {
-    this.mount(async (request) => {
-      if (request.url.startsWith(PACKAGES_FAKE_ORIGIN)) {
-        return this.shimmingLoader.fetch(request);
-      }
-
-      return null;
-    });
+    this.mount(this.packageShimHandler.handle);
   }
 
   createLoader() {
@@ -57,7 +51,7 @@ export class VirtualNetwork {
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    this.shimmingLoader.shimModule(moduleIdentifier, module);
+    this.packageShimHandler.shimModule(moduleIdentifier, module);
   }
 
   addURLMapping(from: URL, to: URL) {
@@ -217,20 +211,20 @@ async function getContentOfReadableStream(
 ): Promise<Uint8Array | null> {
   if (requestBody) {
     let isPending = true;
-    let arrayLegnth = 0;
+    let arrayLength = 0;
     let unit8Arrays = [];
     let reader = requestBody.getReader();
     do {
       let readableResults = await reader.read();
 
       if (readableResults.value) {
-        arrayLegnth += readableResults.value.length;
+        arrayLength += readableResults.value.length;
         unit8Arrays.push(readableResults.value);
       }
 
       isPending = !readableResults.done;
     } while (isPending);
-    let mergedArray = new Uint8Array(arrayLegnth);
+    let mergedArray = new Uint8Array(arrayLength);
     unit8Arrays.forEach((array) => mergedArray.set(array));
     return mergedArray;
   }

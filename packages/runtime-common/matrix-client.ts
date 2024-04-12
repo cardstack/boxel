@@ -148,7 +148,9 @@ export class MatrixClient {
     return json as T;
   }
 
-  async getProfile(userId: string): Promise<{ displayname: string } | undefined> {
+  async getProfile(
+    userId: string,
+  ): Promise<{ displayname: string } | undefined> {
     let response = await this.request(
       `_matrix/client/v3/profile/${userId}`,
       'GET',

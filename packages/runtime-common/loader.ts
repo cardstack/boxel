@@ -779,7 +779,7 @@ async function maybeHandleScopedCSSRequest(req: Request) {
     if (typeof (globalThis as any).document == 'undefined') {
       return Promise.resolve(new Response('', { status: 200 }));
     } else {
-      let decodedCSS = decodeScopedCSSRequest(req.url);
+      let decodedCSS = decodeScopedCSSRequest(req.url).css;
       return Promise.resolve(
         new Response(`
           let styleNode = document.createElement('style');
