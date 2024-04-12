@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import SQLiteAdapter from '@cardstack/host/lib/SQLiteAdapter';
+import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 module('Unit | sqlite | SQLiteAdapter', function () {
   test('run a sqlite db using the SQLiteAdapter', async function (assert) {
