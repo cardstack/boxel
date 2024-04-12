@@ -12,12 +12,18 @@ import {
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
-import SQLiteAdapter from '@cardstack/host/lib/SQLiteAdapter';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { testRealmURL, setupIndex, serializeCard, p } from '../helpers';
+import {
+  testRealmURL,
+  setupIndex,
+  serializeCard,
+  p,
+  type TestIndexRow,
+} from '../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -176,7 +182,11 @@ module('Unit | query', function (hooks) {
     let { mango, vangogh, paper } = testCards;
     await setupIndex(client, [mango, vangogh, paper]);
 
-    let { cards, meta } = await client.search({}, loader);
+    let { cards, meta } = await client.search(
+      new URL(testRealmURL),
+      {},
+      loader,
+    );
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
     assert.deepEqual(
       cards,
@@ -197,7 +207,7 @@ module('Unit | query', function (hooks) {
       { card: paper, data: { is_deleted: true } },
     ]);
 
-    let { meta } = await client.search({}, loader);
+    let { meta } = await client.search(new URL(testRealmURL), {}, loader);
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
   });
 
@@ -206,6 +216,7 @@ module('Unit | query', function (hooks) {
     await setupIndex(client, [mango, vangogh, paper]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           type: { module: `${testRealmURL}person`, name: 'Person' },
@@ -233,6 +244,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           eq: { name: 'Mango' },
@@ -288,6 +300,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -329,6 +342,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -372,6 +386,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -409,6 +424,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: {
@@ -460,6 +476,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: {
@@ -508,6 +525,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -555,6 +573,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -602,6 +621,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -643,6 +663,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -678,6 +699,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -733,6 +755,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -783,6 +806,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -812,6 +836,7 @@ module('Unit | query', function (hooks) {
 
     try {
       await client.search(
+        new URL(testRealmURL),
         {
           filter: {
             on: {
@@ -840,6 +865,7 @@ module('Unit | query', function (hooks) {
     };
     try {
       await client.search(
+        new URL(testRealmURL),
         {
           filter: {
             on: cardRef,
@@ -866,6 +892,7 @@ module('Unit | query', function (hooks) {
 
     try {
       await client.search(
+        new URL(testRealmURL),
         {
           filter: {
             on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -910,6 +937,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -953,6 +981,7 @@ module('Unit | query', function (hooks) {
 
     {
       let { cards, meta } = await client.search(
+        new URL(testRealmURL),
         {
           filter: {
             on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -971,6 +1000,7 @@ module('Unit | query', function (hooks) {
     }
     {
       let { cards, meta } = await client.search(
+        new URL(testRealmURL),
         {
           filter: {
             on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -1017,6 +1047,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -1060,6 +1091,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -1100,6 +1132,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -1131,6 +1164,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           on: { module: `${testRealmURL}person`, name: 'Person' },
@@ -1174,6 +1208,7 @@ module('Unit | query', function (hooks) {
     );
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           eq: { name: 'Mango' },
@@ -1185,6 +1220,11 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.strictEqual(
+      meta.page.realmVersion,
+      2,
+      'the realm version queried is correct',
+    );
     assert.deepEqual(
       getIds(cards),
       [mango.id, vangogh.id],
@@ -1218,6 +1258,7 @@ module('Unit | query', function (hooks) {
     );
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         filter: {
           eq: { name: 'Mango' },
@@ -1228,6 +1269,11 @@ module('Unit | query', function (hooks) {
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.strictEqual(
+      meta.page.realmVersion,
+      1,
+      'the realm version queried is correct',
+    );
     assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
   });
 
@@ -1261,6 +1307,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         sort: [
           {
@@ -1310,6 +1357,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards, meta } = await client.search(
+      new URL(testRealmURL),
       {
         sort: [
           {
@@ -1328,5 +1376,172 @@ module('Unit | query', function (hooks) {
       [vangogh.id, ringo.id, mango.id],
       'results are correct',
     );
+  });
+
+  test('can get paginated results that are stable during index mutations', async function (assert) {
+    let { mango } = testCards;
+    let Card = mango.constructor as typeof CardDef;
+    let testData: TestIndexRow[] = [];
+    for (let i = 0; i < 10; i++) {
+      testData.push({
+        card: new Card({ id: `${testRealmURL}mango${i}` }),
+        data: { search_doc: { name: `Mango-${i}` } },
+      });
+    }
+
+    await setupIndex(client, testData);
+
+    // page 1
+    let { cards, meta } = await client.search(
+      new URL(testRealmURL),
+      {
+        page: { number: 0, size: 3 },
+        sort: [
+          {
+            on: { module: `${testRealmURL}person`, name: 'Person' },
+            by: 'name',
+            direction: 'desc',
+          },
+        ],
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          contains: { name: 'Mango' },
+        },
+      },
+      loader,
+    );
+
+    let {
+      page: { total, realmVersion },
+    } = meta;
+    assert.strictEqual(total, 10, 'the total results meta is correct');
+    assert.strictEqual(realmVersion, 1, 'the query realm version is correct');
+    assert.deepEqual(getIds(cards), [
+      `${testRealmURL}mango9`,
+      `${testRealmURL}mango8`,
+      `${testRealmURL}mango7`,
+    ]);
+
+    {
+      // page 2
+      let { cards, meta } = await client.search(
+        new URL(testRealmURL),
+        {
+          // providing the realm version received from the 1st page's meta keeps
+          // the result set stable while we page over it
+          page: { number: 1, size: 3, realmVersion },
+          sort: [
+            {
+              on: { module: `${testRealmURL}person`, name: 'Person' },
+              by: 'name',
+              direction: 'desc',
+            },
+          ],
+          filter: {
+            on: { module: `${testRealmURL}person`, name: 'Person' },
+            contains: { name: 'Mango' },
+          },
+        },
+        loader,
+      );
+      assert.strictEqual(
+        meta.page.total,
+        10,
+        'the total results meta is correct',
+      );
+      assert.strictEqual(
+        meta.page.realmVersion,
+        1,
+        'the query realm version is correct',
+      );
+      assert.deepEqual(getIds(cards), [
+        `${testRealmURL}mango6`,
+        `${testRealmURL}mango5`,
+        `${testRealmURL}mango4`,
+      ]);
+    }
+
+    // mutate the index
+    let batch = await client.createBatch(new URL(testRealmURL));
+    await batch.deleteEntry(new URL(`${testRealmURL}mango3.json`));
+    await batch.done();
+
+    {
+      // page 3
+      let { cards, meta } = await client.search(
+        new URL(testRealmURL),
+        {
+          // providing the realm version received from the 1st page's meta keeps
+          // the result set stable while we page over it
+          page: { number: 2, size: 3, realmVersion },
+          sort: [
+            {
+              on: { module: `${testRealmURL}person`, name: 'Person' },
+              by: 'name',
+              direction: 'desc',
+            },
+          ],
+          filter: {
+            on: { module: `${testRealmURL}person`, name: 'Person' },
+            contains: { name: 'Mango' },
+          },
+        },
+        loader,
+      );
+      assert.strictEqual(
+        meta.page.total,
+        10,
+        'the total results meta is correct',
+      );
+      assert.strictEqual(
+        meta.page.realmVersion,
+        1,
+        'the query realm version is correct',
+      );
+      assert.deepEqual(getIds(cards), [
+        `${testRealmURL}mango3`, // this is actually removed in the current index
+        `${testRealmURL}mango2`,
+        `${testRealmURL}mango1`,
+      ]);
+    }
+
+    // assert that a new search against the current index no longer contains the
+    // removed card
+    {
+      let { cards, meta } = await client.search(
+        new URL(testRealmURL),
+        {
+          sort: [
+            {
+              on: { module: `${testRealmURL}person`, name: 'Person' },
+              by: 'name',
+              direction: 'desc',
+            },
+          ],
+          filter: {
+            on: { module: `${testRealmURL}person`, name: 'Person' },
+            contains: { name: 'Mango' },
+          },
+        },
+        loader,
+      );
+
+      let {
+        page: { total, realmVersion },
+      } = meta;
+      assert.strictEqual(total, 9, 'the total results meta is correct');
+      assert.strictEqual(realmVersion, 2, 'the query realm version is correct');
+      assert.deepEqual(getIds(cards), [
+        `${testRealmURL}mango9`,
+        `${testRealmURL}mango8`,
+        `${testRealmURL}mango7`,
+        `${testRealmURL}mango6`,
+        `${testRealmURL}mango5`,
+        `${testRealmURL}mango4`,
+        `${testRealmURL}mango2`,
+        `${testRealmURL}mango1`,
+        `${testRealmURL}mango0`,
+      ]);
+    }
   });
 });

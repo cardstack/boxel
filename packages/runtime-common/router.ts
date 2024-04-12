@@ -43,10 +43,14 @@ export function extractSupportedMimeType(
 
 export type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
 
-export function lookupRouteTable<T>(routeTable: RouteTable<T>, paths: RealmPaths, request: Request) {
+export function lookupRouteTable<T>(
+  routeTable: RouteTable<T>,
+  paths: RealmPaths,
+  request: Request,
+) {
   let acceptMimeType = extractSupportedMimeType(
     request.headers.get('Accept') as unknown as null | string | [string],
-  )
+  );
   if (!acceptMimeType) {
     return;
   }
@@ -77,7 +81,10 @@ export function lookupRouteTable<T>(routeTable: RouteTable<T>, paths: RealmPaths
 }
 
 export class Router {
-  #routeTable: RouteTable<Handler> = new Map<SupportedMimeType, Map<Method, Map<string, Handler>>>();
+  #routeTable: RouteTable<Handler> = new Map<
+    SupportedMimeType,
+    Map<Method, Map<string, Handler>>
+  >();
   log = logger('realm:router');
   #paths: RealmPaths;
   constructor(mountURL: URL) {

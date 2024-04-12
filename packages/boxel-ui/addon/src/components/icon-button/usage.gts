@@ -21,6 +21,9 @@ export default class IconButtonUsage extends Component {
   @tracked width = '40px';
   @tracked height = '40px';
 
+  @tracked showIconBorders = false;
+  @tracked hideIconOverflow = false;
+
   cssClassName = 'boxel-icon-button';
   @cssVariable declare boxelIconButtonWidth: CSSVariableInfo;
   @cssVariable declare boxelIconButtonHeight: CSSVariableInfo;
@@ -28,6 +31,14 @@ export default class IconButtonUsage extends Component {
   @action log(message: string): void {
     // eslint-disable-next-line no-console
     console.log(message);
+  }
+
+  @action toggleShowIconBorders(): void {
+    this.showIconBorders = !this.showIconBorders;
+  }
+
+  @action toggleHideIconOverflow(): void {
+    this.hideIconOverflow = !this.hideIconOverflow;
   }
 
   <template>
@@ -98,5 +109,79 @@ export default class IconButtonUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
+
+    <FreestyleUsage @name='All Icons'>
+      <:example>
+        <label class='checkbox-label'>
+          <input
+            type='checkbox'
+            checked={{this.showIconBorders}}
+            {{on 'change' this.toggleShowIconBorders}}
+          />
+          Show icon bounds
+        </label>
+        <label class='checkbox-label'>
+          <input
+            type='checkbox'
+            checked={{this.hideIconOverflow}}
+            {{on 'change' this.toggleHideIconOverflow}}
+          />
+          Hide icon overflow
+        </label>
+        <section class='all-icons'>
+          {{#each ALL_ICON_COMPONENTS as |icon|}}
+            <div
+              class='icon-and-label
+                {{if this.showIconBorders "show-borders"}}
+                {{if this.hideIconOverflow "hide-icon-overflow"}}'
+            >
+              <BoxelIconButton
+                @icon={{icon}}
+                @variant={{this.variant}}
+                @width={{this.width}}
+                @height={{this.height}}
+                aria-label='Special Button'
+                {{on 'click' (fn this.log 'Button clicked')}}
+                class='icon'
+                style={{cssVar
+                  boxel-icon-button-width=this.boxelIconButtonWidth.value
+                  boxel-icon-button-height=this.boxelIconButtonHeight.value
+                }}
+              />
+              <span class='label'>{{icon.name}}</span>
+            </div>
+          {{/each}}
+        </section>
+      </:example>
+    </FreestyleUsage>
+    <style>
+      .checkbox-label {
+        display: flex;
+        align-items: center;
+        margin-bottom: var(--boxel-sp);
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .all-icons {
+        display: flex;
+        flex-wrap: wrap;
+      }
+
+      .icon-and-label {
+        display: flex;
+        width: 15rem;
+        flex-direction: column;
+        align-items: center;
+        margin: 0 10px 10px 0;
+      }
+
+      .hide-icon-overflow .icon {
+        overflow: hidden;
+      }
+
+      .show-borders .icon {
+        border: 1px solid var(--boxel-500);
+      }
+    </style>
   </template>
 }

@@ -1243,6 +1243,7 @@ module('Integration | card-basics', function (hooks) {
     let { default: StringField } = string;
     let { default: NumberField } = number;
     class Person extends FieldDef {
+      static displayName = 'Person';
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
       @field age = contains(NumberField);
@@ -1253,16 +1254,23 @@ module('Integration | card-basics', function (hooks) {
       });
     }
     loader.shimModule(`${testRealmURL}test-cards`, { Person });
-    let helloWorld = new Person({
+    let person = new Person({
       firstName: 'Arthur',
       lastName: 'M',
       age: 10,
     });
 
-    await renderCard(loader, helloWorld, 'atom');
+    await renderCard(loader, person, 'atom');
     assert.dom('[data-test-compound-field-component]').hasText('Arthur M');
     assert.dom('[data-test-compound-field-component]').doesNotContainText('10');
     assert.dom('[data-test-compound-field-format="atom"]').exists();
+
+    person.firstName = '';
+    person.lastName = '';
+    await renderCard(loader, person, 'atom');
+    assert
+      .dom('[data-test-compound-field-component]')
+      .hasText('Untitled Person');
   });
 
   test('render user-provided atom view template', async function (assert) {
