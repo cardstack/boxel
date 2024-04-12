@@ -34,7 +34,7 @@
     "ember-concurrency-async-plugin": "workspace:*",
     "ember-source": "~5.4.0",
     "flat": "^5.0.2",
-    "glimmer-scoped-css": "^0.4.0",
+    "glimmer-scoped-css": "^0.4.1",
     "http-status-codes": "^2.2.0",
     "ignore": "^5.2.0",
     "js-string-escape": "^1.0.1",
@@ -63,5 +63,9 @@
   "peerDependencies": {
     "@babel/core": "^7.24.3",
     "ember-cli-htmlbars": "^6.3.0"
+  },
+  "scripts": {
+    "lint": "eslint . --cache --ext ts",
+    "lint:js:fix": "eslint . --fix"
   }
 }
