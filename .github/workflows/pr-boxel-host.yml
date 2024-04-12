@@ -57,7 +57,7 @@ jobs:
           OTHER_REALM_URLS: https://realms-staging.stack.cards/published/
           RESOLVED_BASE_REALM_URL: https://realms-staging.stack.cards/base/
           MATRIX_URL: https://matrix-staging.stack.cards
-          MATRIX_SERVER_NAME: stack.cards
+          MATRIX_SERVER_NAME: matrix-staging.stack.cards
           EXPERIMENTAL_AI_ENABLED: true
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
           AWS_S3_BUCKET: boxel-host-preview.stack.cards

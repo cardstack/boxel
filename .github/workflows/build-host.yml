@@ -36,7 +36,7 @@ jobs:
             echo "OTHER_REALM_URLS=https://realms-staging.stack.cards/published/" >> $GITHUB_ENV
             echo "RESOLVED_BASE_REALM_URL=https://realms-staging.stack.cards/base/" >> $GITHUB_ENV
             echo "MATRIX_URL=https://matrix-staging.stack.cards" >> $GITHUB_ENV
-            echo "MATRIX_SERVER_NAME=stack.cards" >> $GITHUB_ENV
+            echo "MATRIX_SERVER_NAME=matrix-staging.stack.cards" >> $GITHUB_ENV
             echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
           else
             echo "unrecognized environment"
