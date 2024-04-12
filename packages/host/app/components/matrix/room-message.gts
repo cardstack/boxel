@@ -90,7 +90,7 @@ export default class RoomMessage extends Component<Signature> {
       @isStreaming={{@isStreaming}}
       @retryAction={{if
         (eq @message.command.commandType 'patch')
-        this.patchCard
+        (perform this.patchCard)
         @retryAction
       }}
       @isPending={{@isPending}}
@@ -113,7 +113,7 @@ export default class RoomMessage extends Component<Signature> {
           </Button>
           <ApplyButton
             @state={{this.applyButtonState}}
-            {{on 'click' this.patchCard}}
+            {{on 'click' (perform this.patchCard)}}
             data-test-command-apply={{this.applyButtonState}}
           />
         </div>
@@ -280,7 +280,7 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  @action async patchCard() {
+  private patchCard = task(async () => {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
@@ -297,7 +297,7 @@ export default class RoomMessage extends Component<Signature> {
       this.patchCardError = { id, error: e };
       this.applyButtonState = 'failed';
     }
-  }
+  });
 
   private get previewPatchCode() {
     let { commandType, payload } = this.args.message.command;

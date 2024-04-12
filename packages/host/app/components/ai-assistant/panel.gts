@@ -141,7 +141,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           <NewSession @errorAction={{this.createNewSession}} />
         {{else if this.isReady}}
           {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
-          {{#if this.this.currentRoomId}}
+          {{#if this.currentRoomId}}
             <Room
               @roomId={{this.currentRoomId}}
               @monacoSDK={{this.monacoSDK}}
