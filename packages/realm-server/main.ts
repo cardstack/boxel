@@ -179,7 +179,7 @@ if (distURL) {
       {
         url,
         adapter: new NodeAdapter(resolve(String(path))),
-        loader,
+        loader: null,
         indexRunner: getRunner,
         runnerOptsMgr: manager,
         getIndexHTML: async () =>
@@ -187,6 +187,7 @@ if (distURL) {
         matrix: { url: new URL(matrixURL), username, password },
         realmSecretSeed: REALM_SECRET_SEED,
         permissions: realmPermissions.users,
+        virtualNetwork,
       },
       {
         deferStartUp: true,

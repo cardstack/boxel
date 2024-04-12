@@ -84,7 +84,7 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
-import type { ResponseWithNodeStream } from './virtual-network';
+import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 export type RealmInfo = {
   name: string;
@@ -264,13 +264,14 @@ export class Realm {
     {
       url,
       adapter,
-      loader,
+      _loader,
       indexRunner,
       runnerOptsMgr,
       getIndexHTML,
       matrix,
       realmSecretSeed,
       permissions,
+      virtualNetwork,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -281,6 +282,7 @@ export class Realm {
       matrix: { url: URL; username: string; password: string };
       permissions: RealmPermissions;
       realmSecretSeed: string;
+      virtualNetwork: VirtualNetwork;
     },
     opts?: Options,
   ) {
@@ -291,8 +293,11 @@ export class Realm {
     this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
+
+    let loader = virtualNetwork.createLoader();
+
     this.loaderTemplate = loader;
-    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
+    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this)); // this is currently still shared
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -594,6 +599,7 @@ export class Realm {
 
   // This is scaffolding that should be deleted once we can finish the isolated
   // loader refactor
+  // once loaders are isolated, the request will always be internal
   maybeExternalHandle = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
@@ -870,7 +876,7 @@ export class Realm {
       return notFound(this, request, `${request.url} not found`);
     }
 
-    let handle = maybeHandle;
+    let handle = maybeHandle; // todo rename to fileHandle (or ref)
 
     if (
       executableExtensions.some((extension) =>
@@ -878,6 +884,8 @@ export class Realm {
       ) &&
       !localPath.startsWith(assetsDir)
     ) {
+      // propagate the shimmed symbol to the response - the loader should deal with it
+      // value should not be the proxied module
       return this.makeJS(await fileContentToText(handle), handle.path);
     } else {
       return await this.serveLocalFile(handle);

@@ -147,7 +147,7 @@ export class Loader {
       proxiedModule[propName]; // Makes sure the shimmed modules get into the identity map.
     }
 
-    this.moduleShims.set(moduleIdentifier, proxiedModule);
+    this.moduleShims.set(moduleIdentifier, module);
 
     this.setModule(moduleIdentifier, {
       state: 'evaluated',
@@ -481,12 +481,12 @@ export class Loader {
         }
       }
 
-      let shimmedModule = this.moduleShims.get(
-        this.asRequest(urlOrRequest, init).url,
-      );
-      if (shimmedModule) {
+      let url = this.asRequest(urlOrRequest, init).url;
+
+      let shimmed = this.moduleShims.get(trimModuleIdentifier(url));
+      if (shimmed) {
         let response = new Response();
-        (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
+        (response as any)[Symbol.for('shimmed-module')] = shimmed;
         return response;
       }
 
@@ -565,7 +565,7 @@ export class Loader {
     if (loaded.type === 'shimmed') {
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
-        moduleInstance: loaded.module,
+        moduleInstance: this.createModuleProxy(loaded.module, moduleIdentifier),
         consumedModules: new Set(),
       });
       module.deferred.fulfill();

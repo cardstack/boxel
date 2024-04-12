@@ -471,14 +471,47 @@ async function setupTestRealm({
   ) as LoaderService;
 
   realmURL = realmURL ?? testRealmURL;
+  let localIndexer = owner.lookup(
+    'service:local-indexer',
+  ) as unknown as MockLocalIndexer;
+
+  let adapter = new TestRealmAdapter({}, new URL(realmURL));
+
+  let realm = new Realm(
+    {
+      url: realmURL,
+      adapter,
+      loader: null, // todo: remove
+      indexRunner: async (optsId) => {
+        let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
+        await localIndexer.configureRunner(
+          registerRunner,
+          entrySetter,
+          adapter,
+        );
+      },
+      runnerOptsMgr,
+      getIndexHTML: async () =>
+        `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
+      matrix: testMatrix,
+      permissions,
+      realmSecretSeed: testRealmSecretSeed,
+      virtualNetwork,
+    },
+    { deferStartUp: true },
+  );
+
+  debugger;
 
   for (const [path, mod] of Object.entries(contents)) {
     if (path.endsWith('.gts') && typeof mod !== 'string') {
       let moduleURLString = `${realmURL}${path.replace(/\.gts$/, '')}`;
-      loader.shimModule(moduleURLString, mod as object);
-    }
+      realm.loaderTemplate.shimModule(moduleURLString, mod as object);
+    } // TODO: refactor TestRealmAdapter to handle this
   }
-  let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
+  let api = await realm.loaderTemplate.import<CardAPI>(
+    `${baseRealm.url}card-api`,
+  );
   for (const [path, value] of Object.entries(contents)) {
     if (path.endsWith('.json') && api.isCard(value)) {
       value.id = `${realmURL}${path.replace(/\.json$/, '')}`;
@@ -502,7 +535,8 @@ async function setupTestRealm({
       flatFiles[path] = JSON.stringify(value);
     }
   }
-  let adapter = new TestRealmAdapter(flatFiles, new URL(realmURL));
+  adapter.setFiles(flatFiles);
+
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
   } else {
@@ -512,10 +546,6 @@ async function setupTestRealm({
     await makeRenderer();
   }
 
-  let localIndexer = owner.lookup(
-    'service:local-indexer',
-  ) as unknown as MockLocalIndexer;
-  let realm: Realm;
   if (onFetch) {
     // we need to register this before the realm is created so
     // that it is in prime position in the url handlers list
@@ -535,24 +565,8 @@ async function setupTestRealm({
     });
   }
 
-  realm = new Realm({
-    url: realmURL,
-    adapter,
-    loader,
-    indexRunner: async (optsId) => {
-      let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
-      await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
-    },
-    runnerOptsMgr,
-    getIndexHTML: async () =>
-      `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
-    matrix: testMatrix,
-    permissions,
-    realmSecretSeed: testRealmSecretSeed,
-  });
-
   virtualNetwork.mount(realm.maybeHandle);
-  await realm.ready;
+  await realm.start();
   return { realm, adapter };
 }
 
@@ -615,6 +629,27 @@ export class TestRealmAdapter implements RealmAdapter {
     realmURL = new URL(testRealmURL),
   ) {
     this.#paths = new RealmPaths(realmURL);
+    let now = Date.now();
+    for (let [path, content] of Object.entries(flatFiles)) {
+      let segments = path.split('/');
+      let last = segments.pop()!;
+      let dir = this.#traverse(segments, 'directory');
+      if (typeof dir === 'string') {
+        throw new Error(`tried to use file as directory`);
+      }
+      this.#lastModified.set(this.#paths.fileURL(path).href, now);
+      if (typeof content === 'string') {
+        dir[last] = content;
+      } else {
+        dir[last] = JSON.stringify(content);
+      }
+    }
+  }
+
+  // when someone opens a file from the adapter and we know it's a shimmed one, put a symbol on it
+  // for the openFile
+
+  setFiles(flatFiles: FilesForTestAdapter) {
     let now = Date.now();
     for (let [path, content] of Object.entries(flatFiles)) {
       let segments = path.split('/');
@@ -725,6 +760,7 @@ export class TestRealmAdapter implements RealmAdapter {
       path,
       content,
       lastModified: this.#lastModified.get(this.#paths.fileURL(path).href)!,
+      [Symbol.for('shimmed-module')]: moduleContents, // moduleContents -> mod as object in setupTestRealm
     };
   }
 
