@@ -97,7 +97,8 @@
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
     "migrate": "PGDATABASE=boxel ./scripts/ensure-db-exists.sh && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres node-pg-migrate",
-    "make-schema": "./scripts/schema-dump.sh"
+    "make-schema": "./scripts/schema-dump.sh",
+    "drop-db": "docker exec boxel-pg dropdb -U postgres -w boxel"
   },
   "volta": {
     "extends": "../../package.json"

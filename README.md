@@ -117,10 +117,10 @@ When running tests we isolate the database between each test run by actually cre
 
 If you wish to drop the development database you can execute:
 ```
-docker exec boxel-pg dropdb -U postgres -w boxel
+pnpm drop-db
 ```
 
-You can then run `pnpm migrate up` to create the database again.
+You can then run `pnpm migrate up` or start the realm server to create the database again.
 
 #### DB Migrations
 When the realm server starts up it will automatically run DB migrations that live in the `packages/realm-server/migrations` folder. As part of development you may wish to run migrations manually as well as to create a new migration.
