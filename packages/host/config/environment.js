@@ -108,7 +108,8 @@ function getLatestSchemaFile() {
   let files = fs.readdirSync(schemaDir);
   let latestSchemaFile = files.sort().pop();
   if (
-    lastMigration.replace(/_.*/, '') !== latestSchemaFile.replace(/_.*/, '')
+    lastMigration.replace(/_.*/, '') !== latestSchemaFile.replace(/_.*/, '') &&
+    ['development', 'test'].includes(process.env.EMBER_ENV)
   ) {
     throw new Error(
       `The sqlite schema file is out of date--please regenerate the sqlite schema file`,

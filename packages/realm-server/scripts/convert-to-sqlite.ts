@@ -30,10 +30,6 @@ let pgDump = readFileSync(pgDumpFile, 'utf8');
 
 let cst = parse(prepareDump(pgDump), {
   dialect: 'postgresql',
-  includeSpaces: true,
-  includeNewlines: true,
-  includeComments: true,
-  includeRange: true,
 });
 
 let sql: string[] = [
@@ -122,10 +118,14 @@ function createColumns(
 
     columns.push(column.join(' '));
   }
-  sql.push([...columns, makePrimaryKeyConstraint(cst, tableName)].join(',\n'));
+  let pkConstraint = makePrimaryKeyConstraint(cst, tableName);
+  sql.push([...columns, ...(pkConstraint ? [pkConstraint] : [])].join(',\n'));
 }
 
-function makePrimaryKeyConstraint(cst: Program, tableName: string): string {
+function makePrimaryKeyConstraint(
+  cst: Program,
+  tableName: string,
+): string | undefined {
   let alterTableStmts = cst.statements.filter(
     (s) =>
       s.type === 'alter_table_stmt' &&
@@ -179,6 +179,9 @@ function makePrimaryKeyConstraint(cst: Program, tableName: string): string {
         }
       }
     }
+  }
+  if (pkConstraint.length === 0) {
+    return undefined;
   }
   return pkConstraint.join(' ');
 }
