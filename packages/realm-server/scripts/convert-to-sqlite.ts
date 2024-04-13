@@ -12,7 +12,7 @@ import {
 // TABLE statements that add primary key constraints. All the other schema aspects of the
 // pg_dump are generally beyond the capability of SQLite. Perhaps index creation
 // can be added but it will get really tricky fast since SQLite's indices are
-// more more simplistic than postgres.
+// much more simplistic than postgres.
 
 const args = process.argv;
 const migrationsDir = resolve(join(__dirname, '..', 'migrations'));
