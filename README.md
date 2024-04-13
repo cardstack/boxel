@@ -136,7 +136,6 @@ To run the migration, execute:
 pnpm migrate up
 ```
 
-
 To revert the migration, execute:
 ```
 pnpm migrate down
