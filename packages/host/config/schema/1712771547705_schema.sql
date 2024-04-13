@@ -2,7 +2,7 @@
 -- Please don't directly modify this file
 
  CREATE TABLE IF NOT EXISTS indexed_cards (
-    card_url TEXT NOT NULL,
+   card_url TEXT NOT NULL,
    realm_version INTEGER NOT NULL,
    realm_url TEXT NOT NULL,
    pristine_doc JSON,
@@ -18,7 +18,7 @@
 );
 
  CREATE TABLE IF NOT EXISTS realm_versions (
-    realm_url TEXT NOT NULL,
+   realm_url TEXT NOT NULL,
    current_version INTEGER NOT NULL,
    PRIMARY KEY ( realm_url ) 
 );

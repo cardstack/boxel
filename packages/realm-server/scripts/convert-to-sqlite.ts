@@ -74,12 +74,12 @@ function createColumns(
     return;
   }
   let columns: string[] = [];
-  for (let item of statement.columns.expr.items) {
+  for (let [index, item] of statement.columns.expr.items.entries()) {
     if (item.type !== 'column_definition') {
       continue;
     }
     let column: string[] = [];
-    column.push(INDENT, item.name.name);
+    column.push(index === 0 ? INDENT.substring(1) : INDENT, item.name.name);
     if (item.dataType?.type === 'named_data_type') {
       let dataTypeName = Array.isArray(item.dataType.nameKw)
         ? item.dataType.nameKw[0]
