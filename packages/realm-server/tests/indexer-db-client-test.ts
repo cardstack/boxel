@@ -7,7 +7,8 @@ import {
   type IndexedCardsTable,
   type LooseCardResource,
 } from '@cardstack/runtime-common';
-import { testRealmURL, setupIndex } from './helpers';
+import { setupIndex } from './helpers';
+import { testRealmURL } from '@cardstack/runtime-common/helpers/const';
 import PgAdapter from '../pg-adapter';
 
 const testRealmURL2 = `http://test-realm/test2/`;
