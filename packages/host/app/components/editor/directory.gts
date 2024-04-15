@@ -77,7 +77,7 @@ export default class Directory extends Component<Args> {
     {{/each}}
     <style>
       .level {
-        --icon-length: 18px;
+        --icon-length: 14px;
         --icon-margin: 4px;
 
         padding-left: 0em;
@@ -118,7 +118,8 @@ export default class Directory extends Component<Args> {
       .directory :deep(.icon) {
         width: var(--icon-length);
         height: var(--icon-length);
-        margin-bottom: -4px;
+        margin-bottom: -2px;
+        padding: 0 2px;
       }
 
       .directory :deep(.icon.closed) {
