@@ -43,6 +43,7 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 
 import {
@@ -451,7 +452,6 @@ export async function setupIntegrationTestRealm({
 
 export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
-  loader,
   contents,
   realmURL,
   onFetch,
@@ -469,6 +469,9 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
 }) {
   let owner = (getContext() as TestContext).owner;
+  let { loader, virtualNetwork } = owner.lookup(
+    'service:loader-service',
+  ) as LoaderService;
 
   realmURL = realmURL ?? testRealmURL;
 
@@ -551,6 +554,7 @@ async function setupTestRealm({
     realmSecretSeed: testRealmSecretSeed,
   });
 
+  virtualNetwork.mount(realm.maybeHandle);
   await realm.ready;
   return { realm, adapter };
 }

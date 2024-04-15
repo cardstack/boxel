@@ -28,7 +28,7 @@ import {
   catalogEntryRef,
   CodeRef,
 } from '@cardstack/runtime-common';
-import { makeResolvedURL } from '@cardstack/runtime-common/loader';
+
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
@@ -236,8 +236,8 @@ export default class EditFieldModal extends Component<Signature> {
         fieldType,
         fieldDefinitionType: this.isFieldDef ? 'field' : 'card',
         incomingRelativeTo,
-        outgoingRelativeTo: this.loaderService.loader.reverseResolution(
-          makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
+        outgoingRelativeTo: new URL(
+          this.operatorModeStateService.state.codePath!,
         ),
         outgoingRealmURL: new URL(this.args.file.realmURL),
         addFieldAtIndex,
