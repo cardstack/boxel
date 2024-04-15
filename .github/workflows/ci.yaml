@@ -179,9 +179,34 @@ jobs:
   matrix-client-test-1:
     name: Matrix Client Tests - Group 1
     runs-on: ubuntu-latest
-    concurrency:
-      group: matrix-client-test-1-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        instance:
+          [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+          ]
+
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
@@ -215,9 +240,34 @@ jobs:
   matrix-client-test-2:
     name: Matrix Client Tests - Group 2
     runs-on: ubuntu-latest
-    concurrency:
-      group: matrix-client-test-2-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        instance:
+          [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+          ]
+
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
