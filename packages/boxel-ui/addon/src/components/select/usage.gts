@@ -55,6 +55,7 @@ export default class BoxelSelectUsage extends Component {
   }
 
   <template>
+    {{! In normal circumstance, you don't need to pass the class via an arg in the component. But because of wormholes, we need to pass in an unscoped class so the wormhole can pick it up }}
     <style
       unscoped
     >
