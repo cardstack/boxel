@@ -111,7 +111,7 @@ The realm server uses the request accept header to determine the type of request
 
 ### Database
 
-The boxel system leverages a Postgres database. The Postgres database lives within a docker container, `boxel-pg`, that is started as part of `pnpm start:all`. You can manually start and stop the `boxel-pg` docker container using `pnpm start:pg` and `pnpm stop:pg`. The postgres database runs on port 5435 so that it doesn't conflict with a natively installed postgres that may be running on your system.
+Boxel uses a Postgres database. In development, the Postgres database runs within a docker container, `boxel-pg`, that is started as part of `pnpm start:all`. You can manually start and stop the `boxel-pg` docker container using `pnpm start:pg` and `pnpm stop:pg`. The postgres database runs on port 5435 so that it doesn't conflict with a natively installed postgres that may be running on your system.
 
 When running tests we isolate the database between each test run by actually creating a new database for each test with a random database name (e.g. `test_db_1234567`). The test databases are dropped before the beginning of each test run.
 
