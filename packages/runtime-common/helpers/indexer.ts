@@ -21,7 +21,7 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-export const testRealmURL = `http://test-realm/test/`;
+import { testRealmURL } from './const';
 
 const defaultIndexEntry = {
   realm_version: 1,
