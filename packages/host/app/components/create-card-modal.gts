@@ -19,6 +19,7 @@ import {
   moduleFrom,
   codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common/code-ref';
+import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -34,8 +35,8 @@ export default class CreateCardModal extends Component {
         <ModalContainer
           @title='Create New Card'
           @onClose={{fn this.save undefined}}
-          @zIndex={{this.zIndex}}
           data-test-create-new-card={{card.constructor.name}}
+          style={{cssVar boxel-modal-z-index='var(--boxel-layer-modal-urgent)'}}
         >
           <:content>
             <CardEditor @card={{card}} @onSave={{this.save}} />
@@ -52,7 +53,6 @@ export default class CreateCardModal extends Component {
         deferred: Deferred<CardDef | undefined>;
       }
     | undefined = undefined;
-  @tracked zIndex = 20;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -70,7 +70,6 @@ export default class CreateCardModal extends Component {
       doc?: LooseSingleCardDocument;
     },
   ): Promise<undefined | T> {
-    this.zIndex++;
     return (await this._create.perform(ref, relativeTo, opts)) as T | undefined;
   }
 
