@@ -9,7 +9,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask } from 'ember-concurrency';
 
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 
 import {
   Deferred,
