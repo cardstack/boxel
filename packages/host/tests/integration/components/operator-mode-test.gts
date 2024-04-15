@@ -826,20 +826,15 @@ module('Integration | operator-mode', function (hooks) {
         },
       });
 
-      let done = assert.async();
-      setupOnerror(function (error) {
-        assert.ok(error, 'expected a global error');
-        assert.strictEqual(
-          error.message,
-          `Please open card '${otherCardID}' to make changes to it.`,
-        );
-        done();
-      });
-
       await waitFor('[data-test-command-apply="ready"]');
       await click('[data-test-command-apply]');
 
       await waitFor('[data-test-patch-card-idle]');
+      assert
+        .dom('[data-test-card-error]')
+        .containsText(
+          `Please open card '${otherCardID}' to make changes to it.`,
+        );
       assert.dom('[data-test-apply-state="failed"]').exists();
       assert.dom('[data-test-ai-bot-retry-button]').exists();
       assert.dom('[data-test-command-apply]').doesNotExist();
