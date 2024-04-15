@@ -17,10 +17,11 @@
     "ember-css-url": "^1.0.0",
     "ember-modifier": "^3.2.1",
     "ethers": "^6.6.2",
+    "super-fast-md5": "^1.0.1",
     "tracked-built-ins": "^2.0.1"
   },
   "peerDependencies": {
-    "ember-source": "~4.12.0"
+    "ember-source": "~5.4.0"
   },
   "scripts": {}
 }

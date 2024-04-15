@@ -16,6 +16,7 @@ export type PanelContext = {
   defaultLengthFraction?: number;
   id: number;
   initialMinLengthPx?: number;
+  isHidden?: boolean;
   lengthPx: number;
   minLengthPx?: number;
 };
@@ -34,6 +35,7 @@ interface Signature {
     registerPanel: (context: {
       collapsible: boolean | undefined;
       defaultLengthFraction: number | undefined;
+      isHidden: boolean | undefined;
       lengthPx: number | undefined;
       minLengthPx: number | undefined;
     }) => number;
@@ -46,15 +48,9 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-let managePanelRegistration = modifier(
-  (_element, [panel, isHidden]: [Panel, boolean | undefined]) => {
-    if (isHidden) {
-      scheduleOnce('afterRender', panel, panel.unregisterPanel);
-    } else {
-      scheduleOnce('afterRender', panel, panel.registerPanel);
-    }
-  },
-);
+let managePanelRegistration = modifier((_element, [panel]: [Panel]) => {
+  scheduleOnce('afterRender', panel, panel.registerPanel);
+});
 
 export default class Panel extends Component<Signature> {
   <template>
@@ -73,7 +69,7 @@ export default class Panel extends Component<Signature> {
         )
       }}
       {{createRef (@resizablePanelElId this.id) bucket=@panelGroupComponent}}
-      {{managePanelRegistration this @isHidden}}
+      {{managePanelRegistration this}}
       ...attributes
     >
       {{yield}}
@@ -116,6 +112,7 @@ export default class Panel extends Component<Signature> {
         defaultLengthFraction: this.args.defaultLengthFraction,
         minLengthPx: this.args.minLengthPx,
         collapsible: this.args.collapsible,
+        isHidden: this.args.isHidden,
       });
     }
   }

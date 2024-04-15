@@ -2953,6 +2953,38 @@ posts/ignore-me.json
           },
         },
       },
+      'event-1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: "Mango's Birthday",
+            venue: 'Dog Park',
+            date: '2024-10-30',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}event`,
+              name: 'Event',
+            },
+          },
+        },
+      },
+      'event-2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: "Van Gogh's Birthday",
+            venue: 'Backyard',
+            date: '2024-11-19',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}event`,
+              name: 'Event',
+            },
+          },
+        },
+      },
       'mango.json': {
         data: {
           type: 'card',
@@ -3348,7 +3380,7 @@ posts/ignore-me.json
       }
     });
 
-    test('can use a range filter with custom queryableValue', async function (assert) {
+    test('can use a range filter with custom formatQuery', async function (assert) {
       let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}dog`, name: 'Dog' },
@@ -3360,6 +3392,21 @@ posts/ignore-me.json
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${paths.url}vangogh`],
+      );
+    });
+
+    test('can use an eq filter with a date field', async function (assert) {
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}event`, name: 'Event' },
+          eq: {
+            date: '2024-10-30',
+          },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}event-1`],
       );
     });
 
@@ -3663,6 +3710,8 @@ posts/ignore-me.json
           `${paths.url}mango`, // dog
           `${paths.url}ringo`, // dog
           `${paths.url}vangogh`, // dog
+          `${paths.url}event-1`, // event
+          `${paths.url}event-2`, // event
           `${paths.url}friend2`, // friend
           `${paths.url}friend1`, // friend
           `${paths.url}person-card1`, // person

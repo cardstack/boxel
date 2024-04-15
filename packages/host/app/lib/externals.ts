@@ -6,7 +6,6 @@ import * as emberModifier from '@ember/modifier';
 import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
 import * as emberTemplate from '@ember/template';
-//@ts-expect-error
 import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
@@ -21,6 +20,7 @@ import * as emberResources from 'ember-resources';
 import * as ethers from 'ethers';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
+import * as superFastMD5 from 'super-fast-md5';
 import * as tracked from 'tracked-built-ins';
 
 import * as boxelUiComponents from '@cardstack/boxel-ui/components';
@@ -69,4 +69,5 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('ember-source/types/preview', {
     default: class {},
   });
+  virtualNetwork.shimModule('super-fast-md5', superFastMD5);
 }

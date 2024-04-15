@@ -1,4 +1,4 @@
-import Component from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import RouteTemplate from 'ember-route-template';
 
@@ -8,7 +8,7 @@ interface ApplicationRouteSignature {
   Args: {};
 }
 
-class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
+const ApplicationRouteComponent: TemplateOnlyComponent<ApplicationRouteSignature> =
   <template>
     {{outlet}}
     <CardPrerender />
@@ -16,7 +16,6 @@ class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
     {{! this is a signal for the Realm DOM tests to know that app has loaded }}
     {{! template-lint-disable no-inline-styles }}
     <div data-test-boxel-root style='display: none;'></div>
-  </template>
-}
+  </template>;
 
 export default RouteTemplate(ApplicationRouteComponent);

@@ -82,6 +82,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4204 | `root (/)` drafts realm                                   | ✅                  | 🚫                   |
 | :4205 | qunit server mounting realms in iframes for testing       | ✅                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
+| :5435 | Postgres DB                                               | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                     | ✅                  | 🚫                   |
 
 #### Using `start:development`
@@ -107,6 +108,45 @@ The realm server uses the request accept header to determine the type of request
 | `text/event-stream`           | only `<REALM_URL>/_messages` is supported                                                                                                                                                                                                                                                                            | Used to subscribe to realm events via Server Sent Events                                                                                                                       |
 | `text/html`                   | Card instance URL's should not include the `.json` file extension. This is considered a 404                                                                                                                                                                                                                          | Used to request rendered card instance html (this serves the host application)                                                                                                 |
 | `*/*`                         | We support node-like resolution, which means that the extension is optional                                                                                                                                                                                                                                          | Used to request transpiled executable code modules                                                                                                                             |
+
+### Database
+
+Boxel uses a Postgres database. In development, the Postgres database runs within a docker container, `boxel-pg`, that is started as part of `pnpm start:all`. You can manually start and stop the `boxel-pg` docker container using `pnpm start:pg` and `pnpm stop:pg`. The postgres database runs on port 5435 so that it doesn't conflict with a natively installed postgres that may be running on your system.
+
+When running tests we isolate the database between each test run by actually creating a new database for each test with a random database name (e.g. `test_db_1234567`). The test databases are dropped before the beginning of each test run.
+
+If you wish to drop the development database you can execute:
+```
+pnpm drop-db
+```
+
+You can then run `pnpm migrate up` or start the realm server to create the database again.
+
+#### DB Migrations
+When the realm server starts up it will automatically run DB migrations that live in the `packages/realm-server/migrations` folder. As part of development you may wish to run migrations manually as well as to create a new migration.
+
+To create a new migration, from `packages/realm-server`, execute:
+```
+pnpm migrate create name-of-migration
+```
+This creates a new migration file in `packages/realm-server/migrations`. You can then edit the newly created migration file with the details of your migration. We use `node-pg-migrate` to handle our migrations. You can find the API at https://salsita.github.io/node-pg-migrate. 
+
+To run the migration, execute:
+```
+pnpm migrate up
+```
+
+To revert the migration, execute:
+```
+pnpm migrate down
+```
+
+Boxel also uses SQLite in order to run the DB in the browser as part of running browser tests (and eventually we may run the realm server in the browser to provide a local index). We treat the Postgres database schema as the source of truth and derive the SQLite schema from it. Therefore, once you author and apply a migration, you should generate a new schema SQL file for SQLite. To generate a new SQLite schema, from `packages/realm-server`, execute:
+```
+pnpm make-schema
+```
+This will create a new SQLite schema based on the current postgres DB (the schema file will be placed in the `packages/host/config/schema` directory). This schema file will share the same timestamp as the latest migration file's timestamp. If you forget to generate a new schema file, the next time you start the host app, you will receive an error that the SQLite schema is out of date.
+
 
 ### Matrix Server
 

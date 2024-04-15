@@ -155,7 +155,7 @@ function generatePatchCallSpecification(
     properties: {},
   };
 
-  const { id: removedIdField, ...fields } = cardApi.getFields(def, {
+  const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
     usedFieldsOnly: false,
   });
 

@@ -1,10 +1,12 @@
 {
   "data": {
     "type": "card",
-    "id": "http://localhost:4202/test/hassan",
     "attributes": {
       "firstName": "Hassan",
-      "lastName": "Abdel-Rahman"
+      "lastName": "Abdel-Rahman",
+      "email": null,
+      "posts": null,
+      "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

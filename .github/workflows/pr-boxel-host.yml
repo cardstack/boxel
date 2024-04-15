@@ -29,6 +29,9 @@ jobs:
         uses: tj-actions/changed-files@v39
         with:
           files: |
+            .github/workflows/build-host.yml
+            .github/workflows/deploy-host.yml
+            .github/workflows/pr-boxel-host.yml
             packages/host/**
             packages/boxel-ui/**
 
@@ -54,6 +57,8 @@ jobs:
           OTHER_REALM_URLS: https://realms-staging.stack.cards/published/
           RESOLVED_BASE_REALM_URL: https://realms-staging.stack.cards/base/
           MATRIX_URL: https://matrix-staging.stack.cards
+          MATRIX_SERVER_NAME: stack.cards
+          EXPERIMENTAL_AI_ENABLED: true
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
           AWS_REGION: us-east-1
@@ -84,6 +89,8 @@ jobs:
           OTHER_REALM_URLS: https://realms.cardstack.com/published/
           RESOLVED_BASE_REALM_URL: https://realms.cardstack.com/base/
           MATRIX_URL: https://matrix.cardstack.com
+          MATRIX_SERVER_NAME: matrix.cardstack.com
+          EXPERIMENTAL_AI_ENABLED: true
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.cardstack.com
           AWS_S3_BUCKET: boxel-host-preview.cardstack.com
           AWS_REGION: us-east-1

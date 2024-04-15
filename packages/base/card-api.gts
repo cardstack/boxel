@@ -57,6 +57,7 @@ export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol.for('cardstack-field-decorator');
 export const fieldType = Symbol.for('cardstack-field-type');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
+export const formatQuery = Symbol.for('cardstack-format-query');
 export const relativeTo = Symbol.for('cardstack-relative-to');
 export const realmInfo = Symbol.for('cardstack-realm-info');
 export const realmURL = Symbol.for('cardstack-realm-url');
@@ -961,7 +962,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       }
       if (!(value instanceof this.card)) {
         throw new Error(
-          `tried set ${value} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }
@@ -1313,7 +1314,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     for (let value of values) {
       if (!isNotLoadedValue(value) && !(value instanceof this.card)) {
         throw new Error(
-          `tried set ${value} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }
@@ -1606,6 +1607,13 @@ export class BaseDef {
     }
   }
 
+  static [formatQuery](value: any): any {
+    if (primitive in this) {
+      return value;
+    }
+    throw new Error(`Cannot format query value for composite card/field`);
+  }
+
   static [queryableValue](value: any, stack: BaseDef[] = []): any {
     if (primitive in this) {
       return value;
@@ -1815,12 +1823,14 @@ class DefaultAtomViewTemplate extends GlimmerComponent<{
     fields: Record<string, new () => GlimmerComponent>;
   };
 }> {
+  get text() {
+    return (
+      this.args.model.title?.trim() ||
+      `Untitled ${this.args.model.constructor.displayName}`
+    );
+  }
   <template>
-    {{#each-in @fields as |key Field|}}
-      {{#if (eq key 'title')}}
-        <Field />
-      {{/if}}
-    {{/each-in}}
+    {{this.text}}
   </template>
 }
 
@@ -2138,6 +2148,13 @@ export function getQueryableValue(
     return result;
   }
   return fieldOrCard.queryableValue(value, stack);
+}
+
+export function formatQueryValue(
+  field: Field<typeof BaseDef>,
+  queryValue: any,
+): any {
+  return field.card[formatQuery](queryValue);
 }
 
 function peekAtField(instance: BaseDef, fieldName: string): any {

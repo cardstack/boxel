@@ -15,23 +15,33 @@ import {
   type CardExpression,
   type FieldQuery,
   type FieldValue,
-  type TableValuedFunction,
+  type FieldArity,
   param,
   isParam,
-  tableValuedFunction,
+  tableValuedEach,
+  tableValuedTree,
   separatedByCommas,
   addExplicitParens,
   asExpressions,
+  any,
   every,
   fieldQuery,
   fieldValue,
+  fieldArity,
 } from './expression';
-import { type Query, type Filter, type EqFilter } from '../query';
+import {
+  type Query,
+  type Filter,
+  type EqFilter,
+  type NotFilter,
+  type ContainsFilter,
+  type Sort,
+} from '../query';
 import { type SerializedError } from '../error';
 import { type DBAdapter } from '../db';
 import { type SearchEntryWithErrors } from '../search-index';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export interface IndexedCardsTable {
@@ -59,7 +69,9 @@ export interface RealmVersionsTable {
   current_version: number;
 }
 
-interface GetEntryOptions {
+type GetEntryOptions = WIPOptions;
+type QueryOptions = WIPOptions;
+interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
 
@@ -71,9 +83,7 @@ interface QueryResultsMeta {
   // consistent paginated results...
   page: {
     total: number;
-    realmVersion?: number;
-    startIndex?: number;
-    pageSize?: number;
+    realmVersion: number;
   };
 }
 
@@ -85,6 +95,8 @@ const coerceTypes = Object.freeze({
   search_doc: 'JSON',
   is_deleted: 'BOOLEAN',
 });
+
+const placeholder = '__TABLE_VALUED_FUNCTIONS__';
 
 export class IndexerDBClient {
   #ready: Promise<void>;
@@ -127,19 +139,13 @@ export class IndexerDBClient {
   ): Promise<IndexedCardsTable | undefined> {
     let result = (await this.query([
       `SELECT i.* 
-         FROM indexed_cards as i
-         JOIN realm_versions r ON i.realm_url = r.realm_url
-         WHERE i.card_url =`,
+       FROM indexed_cards as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       WHERE i.card_url =`,
       param(`${!url.href.endsWith('.json') ? url.href + '.json' : url.href}`),
-      ...(!opts?.useWorkInProgressIndex
-        ? // if we are not using the work in progress index then we limit the max
-          // version permitted to the current version for the realm
-          ['AND i.realm_version <= r.current_version']
-        : // otherwise we choose the highest version in the system
-          []),
-      'ORDER BY i.realm_version DESC',
-      'LIMIT 1',
-    ])) as unknown as IndexedCardsTable[];
+      'AND',
+      ...realmVersionExpression(opts),
+    ] as Expression)) as unknown as IndexedCardsTable[];
     let maybeResult: IndexedCardsTable | undefined = result[0];
     if (!maybeResult) {
       return undefined;
@@ -158,24 +164,25 @@ export class IndexerDBClient {
   }
 
   async cardsThatReference(cardId: string): Promise<string[]> {
-    // TODO we really need a cursor based solution to iterate through
-    // this--pervious implementations ran into a bug that necessitated a cursor
-    // for large invalidations. But beware, cursor support for SQLite in worker
-    // mode is very limited. This will likely require some custom work...
-
+    // TODO we really need a solution to iterate through large invalidation
+    // result sets for this--pervious implementations ran into a bug that
+    // necessitated a cursor for large invalidations. But beware, there is no
+    // cursor support for SQLite in worker mode. Instead, implement paging for
+    // this query. we can probably do something similar to how we are paging the
+    // search() method using realm_version for stability between pages.
     let rows = (await this.query([
-      `SELECT indexed_cards.card_url
-         FROM
-           indexed_cards,
-           json_each(indexed_cards.deps) as deps_each
-         WHERE 
-           deps_each.value =`,
-      // WARNING!!! SQLite doesn't support arrays, and the json_each() and
-      // json_tree() functions that it does support are table-valued functions
-      // meaning that we can only use them like tables. unsure if there is a
-      // postgres equivalent. Need to research this.
+      `SELECT card_url
+       FROM
+         indexed_cards as i,
+         json_each(i.deps) as deps_each
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       WHERE 
+         deps_each.value =`,
       param(cardId),
-    ])) as Pick<IndexedCardsTable, 'card_url'>[];
+      'AND',
+      ...realmVersionExpression({ useWorkInProgressIndex: true }),
+      'ORDER BY i.card_url',
+    ] as Expression)) as Pick<IndexedCardsTable, 'card_url'>[];
     return rows.map((r) => r.card_url);
   }
 
@@ -184,50 +191,54 @@ export class IndexerDBClient {
   // which could have conflicting loaders. It is up to the caller to provide the
   // loader that we should be using.
   async search(
-    { filter }: Query,
+    realmURL: URL,
+    { filter, sort, page }: Query,
     loader: Loader,
+    opts?: QueryOptions,
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: LooseCardResource[]; meta: QueryResultsMeta }> {
+    let version: number;
+    if (page?.realmVersion) {
+      version = page.realmVersion;
+    } else {
+      let [{ current_version }] = (await this.query([
+        'SELECT current_version FROM realm_versions WHERE realm_url =',
+        param(realmURL.href),
+      ])) as Pick<RealmVersionsTable, 'current_version'>[];
+      if (current_version == null) {
+        throw new Error(`No current version found for realm ${realmURL.href}`);
+      }
+      version = opts?.useWorkInProgressIndex
+        ? current_version + 1
+        : current_version;
+    }
     let conditions: CardExpression[] = [
-      addExplicitParens(['is_deleted = FALSE OR is_deleted IS NULL']),
+      ['i.realm_url = ', param(realmURL.href)],
+      ['is_deleted = FALSE OR is_deleted IS NULL'],
+      realmVersionExpression({ withMaxVersion: version }),
     ];
     if (filter) {
       conditions.push(this.filterCondition(filter, baseCardRef));
     }
 
-    // need to pluck out the functions to add as tables from the
-    // tabledValuedFunctions
-    let tableValuedFunctions = [
-      ...conditions
-        .reduce((tableValuedFunctions, i) => {
-          let fns = i.filter(
-            (i) => typeof i === 'object' && i.kind === 'table-valued',
-          ) as TableValuedFunction[];
-          for (let fn of fns) {
-            tableValuedFunctions.set(fn.as, fn);
-          }
-          return tableValuedFunctions;
-        }, new Map<string, TableValuedFunction>())
-        .values(),
-    ].map((t) => [`${t.fn} as ${t.as}`]);
-
+    let everyCondition = every(conditions);
     let query = [
       'SELECT card_url, pristine_doc',
-      'FROM',
-      ...separatedByCommas([['indexed_cards'], ...tableValuedFunctions]),
+      `FROM indexed_cards AS i ${placeholder}`,
+      `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
-      ...every(conditions),
-      // use a default sort for deterministic ordering, refactor this after
-      // adding sort support to the query
-      'ORDER BY card_url',
+      ...everyCondition,
+      'GROUP BY card_url',
+      ...this.orderExpression(sort),
+      ...(page ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`] : []),
     ];
     let queryCount = [
-      'SELECT count(*) as total',
-      'FROM',
-      ...separatedByCommas([['indexed_cards'], ...tableValuedFunctions]),
+      'SELECT count(DISTINCT card_url) AS total',
+      `FROM indexed_cards AS i ${placeholder}`,
+      `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
-      ...every(conditions),
+      ...everyCondition,
     ];
 
     let [totalResults, results] = await Promise.all([
@@ -240,8 +251,29 @@ export class IndexerDBClient {
     let cards = results
       .map((r) => r.pristine_doc)
       .filter(Boolean) as LooseCardResource[];
-    let meta = { page: { total: totalResults[0].total } };
+    let meta: QueryResultsMeta = {
+      page: { total: totalResults[0].total, realmVersion: version },
+    };
     return { cards, meta };
+  }
+
+  private orderExpression(sort: Sort | undefined): CardExpression {
+    if (!sort) {
+      return ['ORDER BY card_url'];
+    }
+    return [
+      'ORDER BY',
+      ...separatedByCommas([
+        ...sort.map((s) => [
+          // intentionally not using field arity here--not sure what it means to
+          // sort via a plural field
+          fieldQuery(s.by, s.on, 'sort'),
+          s.direction ?? 'asc',
+        ]),
+        // we include 'card_url' as the final sort key for deterministic results
+        ['card_url'],
+      ]),
+    ];
   }
 
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
@@ -253,22 +285,35 @@ export class IndexerDBClient {
 
     if ('eq' in filter) {
       return this.eqCondition(filter, on);
+    } else if ('contains' in filter) {
+      return this.containsCondition(filter, on);
+    } else if ('not' in filter) {
+      return this.notCondition(filter, on);
+    } else if ('every' in filter) {
+      return every(
+        filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
+      );
+    } else if ('any' in filter) {
+      return any(
+        filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
+      );
     }
 
-    // TODO handle filters for: any, every, not, contains, and range
+    // TODO handle filter for range
     // refer to hub v2 for a good reference:
     // https://github.dev/cardstack/cardstack/blob/d36e6d114272a9107a7315d95d2f0f415e06bf5c/packages/hub/pgsearch/pgclient.ts
 
+    // TODO assert "notNever()" after we have implemented the "range" filter so we
+    // get type errors if new filters are introduced
     throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
   }
 
   // the type condition only consumes absolute URL card refs.
   private typeCondition(ref: CodeRef): CardExpression {
     return [
-      tableValuedFunction('json_each(indexed_cards.types)', 'types_each', [
-        'types_each.value =',
-        param(internalKeyFor(ref, undefined)),
-      ]),
+      tableValuedEach('types', '$'),
+      '=',
+      param(internalKeyFor(ref, undefined)),
     ];
   }
 
@@ -277,19 +322,33 @@ export class IndexerDBClient {
     return every([
       this.typeCondition(on),
       ...Object.entries(filter.eq).map(([key, value]) => {
-        return this.fieldFilter(key, value, on);
+        return this.fieldEqFilter(key, value, on);
       }),
     ]);
   }
 
-  // TODO handle containsMany fields. We should load the field for the `onRef`
-  // and see if it's a containsMany or not. based on that we'd return a
-  // different CardExpression (take a look at hub v2 for an example). Also
-  // plural fields will really push SQLite to the extreme in terms of the query
-  // that we need--this is challenging because the original hub v2
-  // implementation leveraged array operators for this query which SQLite does
-  // not have.
-  private fieldFilter(
+  private containsCondition(
+    filter: ContainsFilter,
+    on: CodeRef,
+  ): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      this.typeCondition(on),
+      ...Object.entries(filter.contains).map(([key, value]) => {
+        return this.fieldLikeFilter(key, value, on);
+      }),
+    ]);
+  }
+
+  private notCondition(filter: NotFilter, on: CodeRef): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      this.typeCondition(on),
+      ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
+    ]);
+  }
+
+  private fieldEqFilter(
     key: string,
     value: JSONTypes.Value,
     onRef: CodeRef,
@@ -299,7 +358,20 @@ export class IndexerDBClient {
       return [query, 'IS NULL'];
     }
     let v = fieldValue(key, [param(value)], onRef, 'filter');
-    return [query, '=', v];
+    return [fieldArity(onRef, key, [query, '=', v], 'filter')];
+  }
+
+  private fieldLikeFilter(
+    key: string,
+    value: JSONTypes.Value,
+    onRef: CodeRef,
+  ): CardExpression {
+    let query = fieldQuery(key, onRef, 'filter');
+    if (value === null) {
+      return [query, 'IS NULL'];
+    }
+    let v = fieldValue(key, [param(`%${value}%`)], onRef, 'filter');
+    return [fieldArity(onRef, key, [query, 'LIKE', v], 'filter')];
   }
 
   private async cardQueryToSQL(query: CardExpression, loader: Loader) {
@@ -313,14 +385,19 @@ export class IndexerDBClient {
     return flatten(
       await Promise.all(
         query.map((element) => {
-          if (isParam(element) || typeof element === 'string') {
+          if (
+            isParam(element) ||
+            typeof element === 'string' ||
+            element.kind === 'table-valued-each' ||
+            element.kind === 'table-valued-tree'
+          ) {
             return Promise.resolve([element]);
-          } else if (element.kind === 'table-valued') {
-            return this.makeExpression(element.value, loader);
           } else if (element.kind === 'field-query') {
             return this.handleFieldQuery(element, loader);
           } else if (element.kind === 'field-value') {
             return this.handleFieldValue(element, loader);
+          } else if (element.kind === 'field-arity') {
+            return this.handleFieldArity(element, loader);
           } else {
             throw assertNever(element);
           }
@@ -329,60 +406,152 @@ export class IndexerDBClient {
     );
   }
 
-  // TODO need to handle plural fields
+  // The goal of this handler is to ensure that the use of table valued
+  // json_tree() function that we use for querying thru fields that are plural
+  // is confined to the specific JSON path that our query should run. This means
+  // that we need to determine the root path for the json_tree() function, as
+  // well as the "query path" for the json_tree() function. The query path
+  // predicate is AND'ed to the expression contained in the FieldArity
+  // expression. Queries that do not go thru a plural field can use the normal
+  // '->' and '->>' JSON operators.
+  // The result is a query that looks like this:
+  //
+  //   SELECT card_url, pristine_doc
+  //   FROM
+  //     indexed_cards,
+  //     json_each(types, '$') as types0_each,
+  //     -- This json_tree was derived by this handler:
+  //     json_tree(search_doc, '$.friends') as friends1_tree
+  //   WHERE
+  //     ( ( is_deleted = FALSE OR is_deleted IS NULL ) )
+  //     AND (
+  //       ( types0_each.value = $1 )
+  //       AND (
+  //         ( friends1_tree.value = $2 )
+  //         AND
+  //         -- This predicate was derived by this handler:
+  //         ( friends1_tree.fullkey LIKE '$.friends[%].bestFriend.name' )
+  //       )
+  //     )
+  //   GROUP BY card_url
+  //   ORDER BY card_url
+
+  private async handleFieldArity(
+    fieldArity: FieldArity,
+    loader: Loader,
+  ): Promise<Expression> {
+    let { path, value, type } = fieldArity;
+
+    let exp: CardExpression = await this.walkFilterFieldPath(
+      loader,
+      await loadFieldOrCard(type, loader),
+      path,
+      value,
+      // Leaf field handler
+      async (_api, _field, expression, _fieldName, pathTraveled) => {
+        if (traveledThruPlural(pathTraveled)) {
+          return [
+            ...every([
+              expression,
+              [
+                tableValuedTree(
+                  'search_doc',
+                  trimPathAtFirstPluralField(pathTraveled),
+                  'fullkey',
+                ),
+                `LIKE '$.${convertBracketsToWildCards(pathTraveled)}'`,
+              ],
+            ]),
+          ];
+        }
+        return expression;
+      },
+    );
+    return await this.makeExpression(exp, loader);
+  }
+
   private async handleFieldQuery(
     fieldQuery: FieldQuery,
     loader: Loader,
   ): Promise<Expression> {
-    let { path } = fieldQuery;
+    let { path, type } = fieldQuery;
+    // The rootPluralPath should line up with the tableValuedTree that was
+    // used in the handleFieldArity (the multiple tableValuedTree expressions will
+    // collapse into a single function)
+    let rootPluralPath: string | undefined;
 
-    return await this.walkFilterFieldPath(
+    let exp = await this.walkFilterFieldPath(
       loader,
-      await loadFieldOrCard(fieldQuery.type, loader),
+      await loadFieldOrCard(type, loader),
       path,
-      ['search_doc'],
+      [],
       // Leaf field handler
-      async (_api, _fieldCard, expression, fieldName) => {
+      async (_api, field, expression, fieldName, pathTraveled) => {
         // TODO we should probably add a new hook in our cards to support custom
         // query expressions, like casting to a bigint for integers:
         //     return ['(', ...source, '->>', { param: fieldName }, ')::bigint'];
-        return [...expression, '->>', param(fieldName)];
+        if (isFieldPlural(field)) {
+          rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
+          return [tableValuedTree('search_doc', rootPluralPath, 'value')];
+        } else if (!rootPluralPath) {
+          return [...expression, '->>', param(fieldName)];
+        }
+        return expression;
       },
       // interior field handler
       {
-        enter: async (_api, _fieldCard, expression, fieldName) => {
-          return [...expression, '->', param(fieldName)];
+        enter: async (_api, field, expression, _fieldName, pathTraveled) => {
+          // we work forwards determining if any interior fields are plural
+          // since that requires a different style predicate
+          if (isFieldPlural(field)) {
+            rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
+            return [tableValuedTree('search_doc', rootPluralPath, 'value')];
+          }
+          return expression;
+        },
+        exit: async (_api, field, expression, fieldName, _pathTraveled) => {
+          // we populate the singular fields backwards as we can only do that
+          // after we are assured that we are not leveraging the plural style
+          // predicate
+          if (!isFieldPlural(field) && !rootPluralPath) {
+            return ['->', param(fieldName), ...expression];
+          }
+          return expression;
         },
       },
     );
+    if (!rootPluralPath) {
+      exp = ['search_doc', ...exp];
+    }
+    return exp;
   }
 
-  // TODO need to handle plural fields
   private async handleFieldValue(
     fieldValue: FieldValue,
     loader: Loader,
   ): Promise<Expression> {
-    let { path, value } = fieldValue;
+    let { path, value, type } = fieldValue;
     let exp = await this.makeExpression(value, loader);
 
     return await this.walkFilterFieldPath(
       loader,
-      await loadFieldOrCard(fieldValue.type, loader),
+      await loadFieldOrCard(type, loader),
       path,
       exp,
       // Leaf field handler
-      async (_api, _fieldCard, expression) => {
-        // right now there is no need to run code from the Card/FieldDef to
-        // transform this query expression's value into a format that matches
-        // the search doc. the assumption is that when the search doc was
-        // created the `[queryableValue]` hook was run on the deserialized card
-        // data which forms the search doc value. the query expression should be
-        // serialized already in a manner that matches the serialization of the
-        // search doc value so we can compare apples to apples, e.g. dates
-        // strings in YYYY-MM-DD format. If that assumption changes then we can
-        // use the api and fieldCard callback params to run Card/FieldDef code
-        // as necessary here
-        return expression;
+      async (api, field, expression) => {
+        let queryValue: any;
+        let [value] = expression;
+        if (isParam(value)) {
+          queryValue = api.formatQueryValue(field, value.param);
+        } else if (typeof value === 'string') {
+          queryValue = api.formatQueryValue(field, value);
+        } else {
+          throw new Error(
+            `Do not know how to handle field value: ${JSON.stringify(value)}`,
+          );
+        }
+        return [param(queryValue)];
       },
     );
   }
@@ -394,6 +563,7 @@ export class IndexerDBClient {
     expression: Expression,
     handleLeafField: FilterFieldHandler<Expression>,
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<Expression>,
+    pathTraveled?: string[],
   ): Promise<Expression>;
   private async walkFilterFieldPath(
     loader: Loader,
@@ -402,6 +572,7 @@ export class IndexerDBClient {
     expression: CardExpression,
     handleLeafField: FilterFieldHandler<CardExpression>,
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<CardExpression>,
+    pathTraveled?: string[],
   ): Promise<CardExpression>;
   private async walkFilterFieldPath(
     loader: Loader,
@@ -410,6 +581,7 @@ export class IndexerDBClient {
     expression: Expression,
     handleLeafField: FilterFieldHandler<any[]>,
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<any[]>,
+    pathTraveled?: string[],
   ): Promise<any> {
     let pathSegments = path.split('.');
     let isLeaf = pathSegments.length === 1;
@@ -429,20 +601,26 @@ export class IndexerDBClient {
         )}`,
       );
     }
-    let fieldCard = field.card;
+    // we use '[]' to denote plural fields as that has important ramifications
+    // to how we compose our queries in the various handlers and ultimately in
+    // SQL construction
+    let traveled = [
+      ...(pathTraveled ?? []),
+      `${currentSegment}${isFieldPlural(field) ? '[]' : ''}`,
+    ].join('.');
     if (isLeaf) {
       expression = await handleLeafField(
         api,
-        fieldCard,
+        field,
         expression,
         currentSegment,
+        traveled,
       );
     } else {
       let passThru: FilterFieldHandler<any[]> = async (
         _api,
         _fc,
         e: Expression,
-        _f,
       ) => e;
       // when dealing with an interior field that is not a leaf path segment,
       // the entrance and exit hooks allow you to decorate the expression for
@@ -459,17 +637,19 @@ export class IndexerDBClient {
 
       let interiorExpression = await this.walkFilterFieldPath(
         loader,
-        fieldCard,
+        field.card,
         pathSegments.join('.'),
-        await entranceHandler(api, fieldCard, expression, currentSegment),
+        await entranceHandler(api, field, expression, currentSegment, traveled),
         handleLeafField,
         handleInteriorField,
+        traveled.split('.'),
       );
       expression = await exitHandler(
         api,
-        fieldCard,
+        field,
         interiorExpression,
         currentSegment,
+        traveled,
       );
     }
     return expression;
@@ -477,6 +657,14 @@ export class IndexerDBClient {
 
   private expressionToSql(query: Expression) {
     let values: PgPrimitive[] = [];
+    let nonce = 0;
+    let tableValuedFunctions = new Map<
+      string,
+      {
+        name: string;
+        fn: string;
+      }
+    >();
     let text = query
       .map((element) => {
         if (isParam(element)) {
@@ -484,11 +672,44 @@ export class IndexerDBClient {
           return `$${values.length}`;
         } else if (typeof element === 'string') {
           return element;
+        } else if (
+          element.kind === 'table-valued-each' ||
+          element.kind === 'table-valued-tree'
+        ) {
+          let { column, path } = element;
+          let virtualColumn =
+            element.kind === 'table-valued-tree' ? element.treeColumn : 'value';
+          let type = element.kind === 'table-valued-tree' ? 'tree' : 'each';
+          let field = trimBrackets(
+            path === '$' ? column : path.split('.').pop()!,
+          );
+          let key = `${type}_${column}_${path}`;
+          let { name } = tableValuedFunctions.get(key) ?? {};
+          if (!name) {
+            name = `${field}${nonce++}_${type}`;
+            let absolutePath = path === '$' ? '$' : `$.${path}`;
+
+            tableValuedFunctions.set(key, {
+              name,
+              fn: `json_${type}(${column}, '${absolutePath}') as ${name}`,
+            });
+          }
+          return `${name}.${virtualColumn}`;
         } else {
-          throw new Error(`should never happen ${element}`);
+          throw assertNever(element);
         }
       })
       .join(' ');
+
+    if (tableValuedFunctions.size > 0) {
+      text = replace(
+        text,
+        placeholder,
+        `, ${[...tableValuedFunctions.values()].map((fn) => fn.fn).join(', ')}`,
+      );
+    } else {
+      text = replace(text, placeholder, '');
+    }
     return {
       text,
       values,
@@ -603,23 +824,13 @@ export class Batch {
       ...addExplicitParens(separatedByCommas(valueExpressions)),
     ] as Expression);
 
-    // prune obsolete index entries
+    // prune obsolete generation index entries
     if (this.isNewGeneration) {
       await this.client.query([
         `DELETE FROM indexed_cards`,
         'WHERE realm_version <',
         param(this.realmVersion),
       ]);
-    } else {
-      await this.client.query([
-        `DELETE FROM indexed_cards`,
-        `WHERE card_url IN`,
-        ...addExplicitParens(
-          separatedByCommas([...this.touched].map((i) => [param(i)])),
-        ),
-        'AND realm_version <',
-        param(this.realmVersion),
-      ] as Expression);
     }
   }
 
@@ -753,15 +964,73 @@ async function loadFieldOrCard(
   }
 }
 
+function realmVersionExpression(opts?: {
+  useWorkInProgressIndex?: boolean;
+  withMaxVersion?: number;
+}) {
+  return [
+    'realm_version =',
+    ...addExplicitParens([
+      'SELECT MAX(i2.realm_version)',
+      'FROM indexed_cards i2',
+      'WHERE i2.card_url = i.card_url',
+      ...(opts?.withMaxVersion
+        ? ['AND i2.realm_version <=', param(opts?.withMaxVersion)]
+        : !opts?.useWorkInProgressIndex
+        ? // if we are not using the work in progress index then we limit the max
+          // version permitted to the current version for the realm
+          ['AND i2.realm_version <= r.current_version']
+        : // otherwise we choose the highest version in the system
+          []),
+    ]),
+  ] as Expression;
+}
+
+function traveledThruPlural(pathTraveled: string) {
+  return pathTraveled.includes('[');
+}
+
+function trimBrackets(pathTraveled: string) {
+  return pathTraveled.replace(/\[\]/g, '');
+}
+
+function trimPathAtFirstPluralField(pathTraveled: string) {
+  return pathTraveled.substring(0, pathTraveled.indexOf('['));
+}
+
+function convertBracketsToWildCards(pathTraveled: string) {
+  return pathTraveled.replace(/\[\]/g, '[%]');
+}
+
+function isFieldPlural(field: Field): boolean {
+  return (
+    field.fieldType === 'containsMany' || field.fieldType === 'linksToMany'
+  );
+}
+
+// i'm slicing up the text as opposed to using a 'String.replace()' since
+// the ()'s in the SQL query are treated like regex matches when using
+// String.replace()
+function replace(text: string, placeholder: string, replacement: string) {
+  let index = text.indexOf(placeholder);
+  if (index === -1) {
+    return text;
+  }
+  return `${text.substring(0, index)}${replacement}${text.substring(
+    index + placeholder.length,
+  )}`;
+}
+
 function assertNever(value: never) {
   return new Error(`should never happen ${value}`);
 }
 
 type FilterFieldHandler<T> = (
   api: typeof CardAPI,
-  fieldCard: typeof BaseDef,
+  field: Field,
   expression: T,
   fieldName: string,
+  pathTraveled: string,
 ) => Promise<T>;
 
 interface FilterFieldHandlerWithEntryAndExit<T> {

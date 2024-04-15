@@ -2,6 +2,7 @@ import {
   primitive,
   serialize,
   queryableValue,
+  formatQuery,
   Component,
   useIndexBasedKey,
   FieldDef,
@@ -48,10 +49,10 @@ export default class BooleanField extends FieldDef {
   }
 
   static [queryableValue](val: any): boolean {
-    if (typeof val === 'string') {
-      return val.toLowerCase() === 'true';
-    }
-    return Boolean(val);
+    return asBoolean(val);
+  }
+  static [formatQuery](val: any): boolean {
+    return asBoolean(val);
   }
 
   static embedded = View;
@@ -86,4 +87,11 @@ export default class BooleanField extends FieldDef {
       return String(this.args.model);
     }
   };
+}
+
+function asBoolean(val: any): boolean {
+  if (typeof val === 'string') {
+    return val.toLowerCase() === 'true';
+  }
+  return Boolean(val);
 }
