@@ -91,6 +91,7 @@ export default class CardCatalogModal extends Component<Signature> {
   <template>
     {{#if (and (gt this.stateStack.length 0) (not this.state.dismissModal))}}
       <ModalContainer
+        class='card-catalog-modal'
         @title={{this.state.chooseCardTitle}}
         @onClose={{fn this.pick undefined}}
         @zIndex={{this.zIndex}}
@@ -195,6 +196,12 @@ export default class CardCatalogModal extends Component<Signature> {
       </ModalContainer>
     {{/if}}
     <style>
+      .card-catalog-modal > :deep(.boxel-modal__inner) {
+        max-height: 80vh;
+      }
+      .card-catalog-modal.large {
+        --boxel-modal-offset-top: var(--boxel-sp-xxxl);
+      }
       .footer {
         display: flex;
         justify-content: space-between;
