@@ -141,7 +141,7 @@ To revert the migration, execute:
 pnpm migrate down
 ```
 
-The boxel system also uses SQLite in order to run the DB in the browser as part of running browser tests (and eventually we may run the realm server in the browser to provide a local index). After you have completed your migration you then need to generate a new schema SQL file for SQLite. To generate a new SQLite schema, from `packages/realm-server`, execute:
+Boxel also uses SQLite in order to run the DB in the browser as part of running browser tests (and eventually we may run the realm server in the browser to provide a local index). We treat the Postgres database schema as the source of truth and derive the SQLite schema from it. Therefore, once you author and apply a migration, you should generate a new schema SQL file for SQLite. To generate a new SQLite schema, from `packages/realm-server`, execute:
 ```
 pnpm make-schema
 ```
