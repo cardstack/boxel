@@ -14,6 +14,7 @@ import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
 import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers';
+import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -49,8 +50,6 @@ import CardCatalog from './index';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
-
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 
 interface Signature {
   Args: {

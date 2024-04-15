@@ -9,6 +9,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask } from 'ember-concurrency';
 
+import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+
 import {
   Deferred,
   RealmPaths,
@@ -19,7 +21,6 @@ import {
   moduleFrom,
   codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common/code-ref';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
