@@ -1,7 +1,7 @@
 exports.up = (pgm) => {
   pgm.createTable('indexed_cards', {
     card_url: { type: 'varchar', notNull: true },
-    realm_version: { type: 'varchar', notNull: true },
+    realm_version: { type: 'integer', notNull: true },
     realm_url: { type: 'varchar', notNull: true },
     pristine_doc: 'jsonb',
     search_doc: 'jsonb',

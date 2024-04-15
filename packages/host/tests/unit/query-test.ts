@@ -44,7 +44,10 @@ module('Unit | query', function (hooks) {
   hooks.beforeEach(async function () {
     let virtualNetwork = new VirtualNetwork();
     loader = virtualNetwork.createLoader();
-    loader.addURLMapping(new URL(baseRealm.url), new URL(resolvedBaseRealmURL));
+    virtualNetwork.addURLMapping(
+      new URL(baseRealm.url),
+      new URL(resolvedBaseRealmURL),
+    );
     shimExternals(virtualNetwork);
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);

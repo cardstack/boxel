@@ -272,8 +272,8 @@ export default class OperatorModeStateService extends Service {
   }
 
   get codePathRelativeToRealm() {
-    if (this.state.codePath && this.resolvedRealmURL) {
-      let realmPath = new RealmPaths(this.resolvedRealmURL);
+    if (this.state.codePath && this.realmURL) {
+      let realmPath = new RealmPaths(this.realmURL);
 
       if (realmPath.inRealm(this.state.codePath)) {
         try {
@@ -501,10 +501,6 @@ export default class OperatorModeStateService extends Service {
     }
 
     return this.cardService.defaultURL;
-  }
-
-  get resolvedRealmURL() {
-    return this.loaderService.loader.resolve(this.realmURL);
   }
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
