@@ -1,10 +1,5 @@
 import proxy from 'koa-proxies';
-import {
-  assetsDir,
-  boxelUIAssetsDir,
-  logger as getLogger,
-  type Realm,
-} from '@cardstack/runtime-common';
+import { logger as getLogger } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import basicAuth from 'basic-auth';
 
@@ -92,56 +87,6 @@ export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
     );
   }
   return next();
-}
-
-export function assetRedirect(
-  assetsURL: URL,
-): (ctxt: Koa.Context, next: Koa.Next) => void {
-  return (ctxt: Koa.Context, next: Koa.Next) => {
-    if (ctxt.path.startsWith(`/${assetsDir}`)) {
-      let redirectURL = new URL(
-        `./${ctxt.path.slice(assetsDir.length + 1)}`,
-        assetsURL,
-      ).href;
-
-      if (redirectURL !== ctxt.href) {
-        ctxt.redirect(redirectURL);
-        return;
-      }
-    }
-    if (ctxt.path.startsWith(`/${boxelUIAssetsDir}`)) {
-      let redirectURL = new URL(`.${ctxt.path}`, assetsURL).href;
-      ctxt.redirect(redirectURL);
-      return;
-    }
-    return next();
-  };
-}
-
-// requests for the root of the realm without a trailing slash aren't
-// technically inside the realm (as the realm includes the trailing '/').
-// So issue a redirect in those scenarios.
-export function rootRealmRedirect(
-  realms: Realm[],
-): (ctxt: Koa.Context, next: Koa.Next) => void {
-  return (ctxt: Koa.Context, next: Koa.Next) => {
-    let url = fullRequestURL(ctxt);
-
-    let realmUrlWithoutQueryParams = url.href.split('?')[0];
-    if (
-      !realmUrlWithoutQueryParams.endsWith('/') &&
-      realms.find(
-        (r) =>
-          r.loader.reverseResolution(`${realmUrlWithoutQueryParams}/`).href ===
-          r.url,
-      )
-    ) {
-      url.pathname = `${url.pathname}/`;
-      ctxt.redirect(`${url.href}`); // Adding a trailing slash to the URL one line above will update the href
-      return;
-    }
-    return next();
-  };
 }
 
 export function fullRequestURL(ctxt: Koa.Context): URL {

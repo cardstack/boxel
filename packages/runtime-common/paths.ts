@@ -17,7 +17,7 @@ export class RealmPaths {
       url = new URL(url);
     }
 
-    if (!url.href.startsWith(this.url)) {
+    if (!this.inRealm(url)) {
       let error = new Error(`realm ${this.url} does not contain ${url.href}`);
       (error as any).status = 404;
       throw error;
@@ -52,7 +52,10 @@ export class RealmPaths {
   }
 
   inRealm(url: URL): boolean {
-    return url.href.startsWith(this.url);
+    return (
+      url.href.startsWith(this.url) ||
+      url.href.split('?')[0] == this.url.replace(/\/$/, '') // check if url without querystring same as realm url without trailing slash (for detecting root realm urls with missing trailing slash)
+    );
   }
 }
 
