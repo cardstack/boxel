@@ -63,8 +63,8 @@ export default class ModalContainer extends Component<Signature> {
         <Header @title={{@title}} class='dialog-box__header'>
           <IconButton
             @icon={{IconX}}
-            @width='20'
-            @height='20'
+            @width='12'
+            @height='12'
             {{on 'click' @onClose}}
             class='dialog-box__close'
             aria-label='close modal'
@@ -141,7 +141,6 @@ export default class ModalContainer extends Component<Signature> {
         right: 1px;
         width: 50px;
         height: 50px;
-        padding: var(--boxel-sp-xs);
         border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
       }
 

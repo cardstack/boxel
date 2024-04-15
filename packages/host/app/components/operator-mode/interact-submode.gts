@@ -102,7 +102,7 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
       }}
       {{on 'click' (fn @onTrigger @triggerSide)}}
     >
-      <Download width='25' height='25' />
+      <Download width='19' height='19' />
     </button>
   </template>
 }
