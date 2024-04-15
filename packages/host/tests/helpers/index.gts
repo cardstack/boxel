@@ -54,7 +54,7 @@ import { WebMessageStream, messageCloseHandler } from './stream';
 import visitOperatorMode from './visit-operator-mode';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
-export * from './indexer';
+export * from '@cardstack/runtime-common/helpers/indexer';
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
