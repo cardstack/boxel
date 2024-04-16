@@ -9,8 +9,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask } from 'ember-concurrency';
 
-import { cssVar } from '@cardstack/boxel-ui/helpers';
-
 import {
   Deferred,
   RealmPaths,
@@ -37,7 +35,6 @@ export default class CreateCardModal extends Component {
           @title='Create New Card'
           @onClose={{fn this.save undefined}}
           data-test-create-new-card={{card.constructor.name}}
-          style={{cssVar boxel-modal-z-index='var(--boxel-layer-modal-urgent)'}}
         >
           <:content>
             <CardEditor @card={{card}} @onSave={{this.save}} />

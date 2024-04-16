@@ -13,7 +13,7 @@ import debounce from 'lodash/debounce';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
-import { and, eq, gt, not, cssVar } from '@cardstack/boxel-ui/helpers';
+import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -101,7 +101,6 @@ export default class CardCatalogModal extends Component<Signature> {
         }}
         {{on 'keydown' this.handleKeydown}}
         data-test-card-catalog-modal
-        style={{cssVar boxel-modal-z-index='var(--boxel-layer-modal-urgent)'}}
       >
         <:header>
           <BoxelInput
