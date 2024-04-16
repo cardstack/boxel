@@ -500,6 +500,7 @@ async function setupTestRealm({
     }
   }
   let adapter = new TestRealmAdapter(flatFiles, new URL(realmURL));
+
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
   } else {
@@ -532,24 +533,31 @@ async function setupTestRealm({
     });
   }
 
-  realm = new Realm({
-    url: realmURL,
-    adapter,
-    loader,
-    indexRunner: async (optsId) => {
-      let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
-      await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
+  realm = new Realm(
+    {
+      url: realmURL,
+      adapter,
+      loader,
+      indexRunner: async (optsId) => {
+        let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
+        await localIndexer.configureRunner(
+          registerRunner,
+          entrySetter,
+          adapter,
+        );
+      },
+      runnerOptsMgr,
+      getIndexHTML: async () =>
+        `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
+      matrix: testMatrix,
+      permissions,
+      realmSecretSeed: testRealmSecretSeed,
     },
-    runnerOptsMgr,
-    getIndexHTML: async () =>
-      `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
-    matrix: testMatrix,
-    permissions,
-    realmSecretSeed: testRealmSecretSeed,
-  });
+    { deferStartUp: true },
+  );
 
   virtualNetwork.mount(realm.maybeHandle);
-  await realm.ready;
+  await realm.start();
   return { realm, adapter };
 }
 
