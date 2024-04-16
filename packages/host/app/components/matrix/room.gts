@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
+import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -122,9 +123,12 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   private roomResource = getRoom(this, () => this.args.roomId);
-  private lastTopMostCard: CardDef | undefined;
+  private autoAttachmentResource = getAutoAttachment(
+    this,
+    () => this.lastTopMostCard,
+    () => this.cardsToAttach,
+  );
 
-  @tracked private isAutoAttachedCardDisplayed = true;
   @tracked private currentMonacoContainer: number | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -235,15 +239,10 @@ export default class Room extends Component<Signature> {
 
   @action
   private removeCard(card: CardDef) {
-    // If card doesn't exist in `cardsToAttch`,
-    // then it is an auto-attached card.
-    const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
-    if (
-      cardIndex == undefined ||
-      (cardIndex === -1 && this.autoAttachedCard?.id === card.id)
-    ) {
-      this.isAutoAttachedCardDisplayed = false;
+    if (this.autoAttachedCard?.id === card.id) {
+      this.autoAttachmentResource.clear();
     } else {
+      const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
       if (cardIndex != undefined && cardIndex !== -1) {
         this.cardsToAttach?.splice(cardIndex, 1);
       }
@@ -253,7 +252,6 @@ export default class Room extends Component<Signature> {
       );
     }
   }
-
   private doSendMessage = enqueueTask(
     async (message: string | undefined, cards?: CardDef[]) => {
       this.matrixService.messagesToSend.set(this.args.roomId, undefined);
@@ -274,15 +272,7 @@ export default class Room extends Component<Signature> {
     },
   );
 
-  @action
-  private setLastTopMostCard(card: CardDef) {
-    if (this.lastTopMostCard?.id !== card.id) {
-      this.lastTopMostCard = card;
-      this.isAutoAttachedCardDisplayed = true;
-    }
-  }
-
-  private get autoAttachedCard(): CardDef | undefined {
+  get lastTopMostCard() {
     let stackItems = this.operatorModeStateService.topMostStackItems();
     if (stackItems.length === 0) {
       return undefined;
@@ -302,14 +292,11 @@ export default class Room extends Component<Signature> {
         return undefined;
       }
     }
-    this.setLastTopMostCard(topMostCard);
-
-    let card = this.cardsToAttach?.find((c) => c.id === topMostCard.id);
-    if (!this.isAutoAttachedCardDisplayed || card) {
-      return undefined;
-    }
-
     return topMostCard;
+  }
+
+  private get autoAttachedCard(): CardDef | undefined {
+    return this.autoAttachmentResource.card;
   }
 
   private get canSend() {
