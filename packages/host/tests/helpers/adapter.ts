@@ -1,8 +1,9 @@
 import {
+  Loader,
   LocalPath,
-  LooseSingleCardDocument,
   RealmAdapter,
   RealmPaths,
+  baseRealm,
   createResponse,
 } from '@cardstack/runtime-common';
 
@@ -10,7 +11,6 @@ import {
   FileRef,
   Kind,
   Realm,
-  RealmInfo,
   TokenClaims,
   UpdateEventData,
 } from '@cardstack/runtime-common/realm';
@@ -19,27 +19,69 @@ import { testRealmURL } from './const';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
 
-import { CardDocFiles, Dir, createJWT } from '.';
+import { Dir, createJWT } from '.';
 
-type FilesForTestAdapter = Record<
-  string,
-  string | LooseSingleCardDocument | CardDocFiles | RealmInfo
->;
+type CardAPI = typeof import('https://cardstack.com/base/card-api');
+
 class TokenExpiredError extends Error {}
 class JsonWebTokenError extends Error {}
+
+interface TestAdapterContents {
+  [path: string]: string | object;
+}
+
+let shimmedModuleIndicator = '// this file is shimmed';
 
 export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
   #subscriber: ((message: UpdateEventData) => void) | undefined;
+  #contents: TestAdapterContents = {};
 
-  constructor(
-    flatFiles: FilesForTestAdapter,
-    realmURL = new URL(testRealmURL),
-  ) {
+  constructor(realmURL = new URL(testRealmURL)) {
     this.#paths = new RealmPaths(realmURL);
+  }
+
+  async setContents(contents: TestAdapterContents, loader: Loader) {
     let now = Date.now();
+    let realmURL = this.#paths.url;
+    this.#contents = contents;
+
+    let cardApi = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
+
+    for (const [path, value] of Object.entries(contents)) {
+      if (path.endsWith('.json') && cardApi.isCard(value)) {
+        value.id = `${realmURL}${path.replace(/\.json$/, '')}`;
+        cardApi.setCardAsSavedForTest(value);
+      }
+    }
+
+    for (const [path, mod] of Object.entries(contents)) {
+      if (path.endsWith('.gts') && typeof mod !== 'string') {
+        let moduleURLString = `${realmURL}${path.replace(/\.gts$/, '')}`;
+        loader.shimModule(moduleURLString, mod as object);
+      }
+    } // This is needed so that we can serialize in the next step
+
+    for (const [path, value] of Object.entries(contents)) {
+      if (path.endsWith('.json') && cardApi.isCard(value)) {
+        let doc = cardApi.serializeCard(value);
+        contents[path] = doc;
+      }
+    }
+
+    let flatFiles: Record<string, string> = {};
+    for (const [path, value] of Object.entries(contents)) {
+      if (path.endsWith('.gts') && typeof value !== 'string') {
+        flatFiles[path] = shimmedModuleIndicator;
+      } else if (typeof value === 'string') {
+        flatFiles[path] = value;
+      } else {
+        flatFiles[path] = JSON.stringify(value);
+      }
+    }
+
     for (let [path, content] of Object.entries(flatFiles)) {
       let segments = path.split('/');
       let last = segments.pop()!;
@@ -132,6 +174,10 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
+  get c() {
+    return this.#contents;
+  }
+
   async openFile(path: LocalPath): Promise<FileRef | undefined> {
     let content;
     try {
@@ -145,11 +191,18 @@ export class TestRealmAdapter implements RealmAdapter {
     if (typeof content !== 'string') {
       return undefined;
     }
-    return {
+
+    let fileRef: FileRef = {
       path,
       content,
       lastModified: this.#lastModified.get(this.#paths.fileURL(path).href)!,
     };
+
+    if (content === shimmedModuleIndicator) {
+      fileRef[Symbol.for('shimmed-module')] = this.#contents[path] as object;
+    }
+
+    return fileRef;
   }
 
   async write(

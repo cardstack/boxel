@@ -469,38 +469,6 @@ async function setupTestRealm({
 
   realmURL = realmURL ?? testRealmURL;
 
-  for (const [path, mod] of Object.entries(contents)) {
-    if (path.endsWith('.gts') && typeof mod !== 'string') {
-      let moduleURLString = `${realmURL}${path.replace(/\.gts$/, '')}`;
-      loader.shimModule(moduleURLString, mod as object);
-    }
-  }
-  let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
-  for (const [path, value] of Object.entries(contents)) {
-    if (path.endsWith('.json') && api.isCard(value)) {
-      value.id = `${realmURL}${path.replace(/\.json$/, '')}`;
-      api.setCardAsSavedForTest(value);
-    }
-  }
-  for (const [path, value] of Object.entries(contents)) {
-    if (path.endsWith('.json') && api.isCard(value)) {
-      let doc = api.serializeCard(value);
-      contents[path] = doc;
-    }
-  }
-
-  let flatFiles: Record<string, string> = {};
-  for (const [path, value] of Object.entries(contents)) {
-    if (path.endsWith('.gts') && typeof value !== 'string') {
-      flatFiles[path] = '// this file is shimmed';
-    } else if (typeof value === 'string') {
-      flatFiles[path] = value;
-    } else {
-      flatFiles[path] = JSON.stringify(value);
-    }
-  }
-  let adapter = new TestRealmAdapter(flatFiles, new URL(realmURL));
-
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
   } else {
@@ -533,6 +501,8 @@ async function setupTestRealm({
     });
   }
 
+  let adapter = new TestRealmAdapter(new URL(realmURL));
+
   realm = new Realm(
     {
       url: realmURL,
@@ -555,9 +525,11 @@ async function setupTestRealm({
     },
     { deferStartUp: true },
   );
-
   virtualNetwork.mount(realm.maybeHandle);
+
+  await adapter.setContents(contents, realm.loader);
   await realm.start();
+
   return { realm, adapter };
 }
 

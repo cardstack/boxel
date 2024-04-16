@@ -96,6 +96,7 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+  [key: symbol]: object;
 }
 
 export interface TokenClaims {
@@ -861,26 +862,39 @@ export class Realm {
   async fallbackHandle(request: Request) {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
-    let maybeHandle = await this.getFileWithFallbacks(
+
+    let maybeFileRef = await this.getFileWithFallbacks(
       localPath,
       executableExtensions,
     );
 
-    if (!maybeHandle) {
+    if (!maybeFileRef) {
       return notFound(this, request, `${request.url} not found`);
     }
 
-    let handle = maybeHandle;
+    let fileRef = maybeFileRef; // todo rename to fileHandle (or ref)
 
     if (
       executableExtensions.some((extension) =>
-        handle.path.endsWith(extension),
+        fileRef.path.endsWith(extension),
       ) &&
       !localPath.startsWith(assetsDir)
     ) {
-      return this.makeJS(await fileContentToText(handle), handle.path);
+      // propagate the shimmed symbol to the response - the loader should deal with it
+      // value should not be the proxied module but the module
+      let response = this.makeJS(
+        await fileContentToText(fileRef),
+        fileRef.path,
+      );
+
+      if (fileRef[Symbol.for('shimmed-module')]) {
+        (response as any)[Symbol.for('shimmed-module')] =
+          fileRef[Symbol.for('shimmed-module')];
+      }
+
+      return response;
     } else {
-      return await this.serveLocalFile(handle);
+      return await this.serveLocalFile(fileRef);
     }
   }
 
