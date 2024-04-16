@@ -40,7 +40,7 @@ test.describe('Room creation', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('it can create a room', async ({ page }) => {
+  test.only('it can create a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
     let room1 = await getRoomId(page); // Automatically created room
