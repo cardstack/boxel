@@ -129,12 +129,12 @@ function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
   let messages = getModifyPrompt(history, aiBotUsername, functions);
   if (functions.length === 0) {
     return openai.beta.chat.completions.stream({
-      model: 'gpt-4-1106-preview',
+      model: 'gpt-4-turbo',
       messages: messages,
     });
   } else {
     return openai.beta.chat.completions.stream({
-      model: 'gpt-4-1106-preview',
+      model: 'gpt-4-turbo',
       messages: messages,
       functions: functions,
       function_call: 'auto',
