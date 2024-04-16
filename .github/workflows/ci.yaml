@@ -176,8 +176,8 @@ jobs:
         with:
           junit_files: junit/host.xml
 
-  matrix-client-test-1:
-    name: Matrix Client Tests - Group 1
+  matrix-client-test:
+    name: Matrix Client Tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
