@@ -213,6 +213,46 @@ jobs:
           path: packages/matrix/playwright-report/
           retention-days: 30
 
+  matrix-client-merge-reports-and-publish:
+    name: Merge Matrix reports and publish
+    if: always()
+    needs: matrix-client-test
+    runs-on: ubuntu-latest
+
+    outputs:
+      timestamp: ${{ steps.timestampid.outputs.timestamp }}
+
+    steps:
+      - name: Create a timestamp as a directory to store reports in
+        id: timestampid
+        run: echo "timestamp=$(date --utc +%Y%m%d_%H%M%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
+
+      - name: Download blob reports from artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: playwright-report
+          path: downloaded-merged-reports-as-blob
+
+      - name: Merge blobs into one single report
+        run: npx playwright merge-reports --reporter html ./downloaded-merged-reports-as-blob
+
+      - name: Upload merged report as artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-report-${{ steps.timestampid.outputs.timestamp }}
+          path: playwright-report
+          retention-days: 90
+
+      - name: Push to Github Pages
+        uses: peaceiris/actions-gh-pages@v3.9.3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./playwright-report
+          destination_dir: ${{ steps.timestampid.outputs.timestamp }}
+
   realm-server-test:
     name: Realm Server Tests
     runs-on: ubuntu-latest
