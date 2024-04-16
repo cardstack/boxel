@@ -39,9 +39,10 @@ export type Event = Partial<IEvent>;
 
 export interface EventSendingContext {
   rooms: Map<string, Promise<RoomField>>;
-  pendingMessages: Map<string, MessageField | undefined>;
   cardAPI: typeof CardAPI;
   loaderService: LoaderService;
+  getPendingMessage: (roomId: string) => MessageField | undefined;
+  removePendingMessage: (roomId: string) => void;
 }
 
 export interface Context extends EventSendingContext {
@@ -106,7 +107,7 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       event as unknown as DiscreteMatrixEvent,
     ];
 
-    let pendingMessage = context.pendingMessages.get(resolvedRoom.roomId);
+    let pendingMessage = context.getPendingMessage(resolvedRoom.roomId);
     if (
       pendingMessage &&
       event.type === 'm.room.message' &&
@@ -114,7 +115,7 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       (event.content as CardMessageContent).clientGeneratedId ===
         pendingMessage.clientGeneratedId
     ) {
-      context.pendingMessages.set(resolvedRoom.roomId, undefined);
+      context.removePendingMessage(resolvedRoom.roomId);
     }
   }
 }

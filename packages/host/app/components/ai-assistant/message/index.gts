@@ -53,6 +53,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         'ai-assistant-message'
         is-from-assistant=@isFromAssistant
         is-pending=@isPending
+        is-error=@errorMessage
       }}
       {{ScrollIntoView}}
       data-test-ai-assistant-message
@@ -205,6 +206,13 @@ export default class AiAssistantMessage extends Component<Signature> {
       .is-pending .content,
       .is-pending .content .cards > :deep(.card-pill),
       .is-pending .content .cards > :deep(.card-pill .boxel-card-container) {
+        background: var(--boxel-200);
+        color: var(--boxel-500);
+      }
+
+      .is-error .content,
+      .is-error .content .cards > :deep(.card-pill),
+      .is-error .content .cards > :deep(.card-pill .boxel-card-container) {
         background: var(--boxel-200);
         color: var(--boxel-500);
       }

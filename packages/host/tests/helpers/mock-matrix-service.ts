@@ -20,6 +20,14 @@ let nonce = 0;
 export type MockMatrixService = MatrixService & {
   cardAPI: typeof cardApi;
   createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
+  setPendingMessageForTest(
+    roomId: string,
+    message: MessageField | undefined,
+  ): void;
+  setMessageFailedToSendForTest(
+    roomId: string,
+    message: MessageField | undefined,
+  ): void;
 };
 
 class MockClient {
@@ -79,7 +87,10 @@ function generateMockMatrixService(
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
-    pendingMessages: TrackedMap<string, MessageField> = new TrackedMap();
+    private pendingMessages: TrackedMap<string, MessageField | undefined> =
+      new TrackedMap();
+    private messagesFailedToSend: TrackedMap<string, MessageField | undefined> =
+      new TrackedMap();
 
     async start(_auth?: any) {}
 
@@ -221,6 +232,32 @@ function generateMockMatrixService(
         room.events[room.events.length - 1]?.origin_server_ts ??
         room.created.getTime()
       );
+    }
+
+    getPendingMessage(roomId: string) {
+      return this.pendingMessages.get(roomId);
+    }
+
+    removePendingMessage(roomId: string) {
+      this.pendingMessages.set(roomId, undefined);
+    }
+
+    setPendingMessageForTest(
+      roomId: string,
+      message: MessageField | undefined,
+    ) {
+      this.pendingMessages.set(roomId, message);
+    }
+
+    getMessageFailedToSend(roomId: string) {
+      return this.messagesFailedToSend.get(roomId);
+    }
+
+    setMessageFailedToSendForTest(
+      roomId: string,
+      message: MessageField | undefined,
+    ) {
+      this.messagesFailedToSend.set(roomId, message);
     }
   }
   return MockMatrixService;

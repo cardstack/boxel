@@ -40,7 +40,7 @@ export default class Room extends Component<Signature> {
       data-test-room-name={{this.room.name}}
       data-test-room={{this.room.roomId}}
     >
-      {{#if this.hasMessagesOrPending}}
+      {{#if this.hasMessages}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
@@ -61,7 +61,18 @@ export default class Room extends Component<Signature> {
               @isPending={{true}}
               @currentEditor={{this.currentMonacoContainer}}
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
-              data-test-message-idx={{this.room.messages.length}}
+              data-test-message-idx={{this.pendingMessage.clientGeneratedId}}
+            />
+          {{/if}}
+          {{#if this.messageFailedToSend}}
+            <RoomMessage
+              @message={{this.messageFailedToSend}}
+              @monacoSDK={{@monacoSDK}}
+              @isStreaming={{false}}
+              @currentEditor={{this.currentMonacoContainer}}
+              @setCurrentEditor={{this.setCurrentMonacoContainer}}
+              @retryAction={{this.resendFailedMessage}}
+              data-test-message-idx={{this.messageFailedToSend.clientGeneratedId}}
             />
           {{/if}}
         </AiAssistantConversation>
@@ -152,8 +163,12 @@ export default class Room extends Component<Signature> {
     await this.roomResource.loading;
   });
 
-  private get hasMessagesOrPending() {
-    return (this.room && this.room.messages.length > 0) || this.pendingMessage;
+  private get hasMessages() {
+    return (
+      (this.room && this.room.messages.length > 0) ||
+      this.pendingMessage ||
+      this.messageFailedToSend
+    );
   }
 
   private get room() {
@@ -173,7 +188,11 @@ export default class Room extends Component<Signature> {
   }
 
   private get pendingMessage() {
-    return this.matrixService.pendingMessages.get(this.args.roomId);
+    return this.matrixService.getPendingMessage(this.args.roomId);
+  }
+
+  private get messageFailedToSend() {
+    return this.matrixService.getMessageFailedToSend(this.args.roomId);
   }
 
   @action resendLastMessage() {
@@ -198,6 +217,22 @@ export default class Room extends Component<Signature> {
       .filter((card) => card !== undefined) as CardDef[];
 
     this.doSendMessage.perform(myLastMessage.message, attachedCards);
+  }
+
+  @action resendFailedMessage() {
+    if (!this.messageFailedToSend) {
+      throw new Error(
+        'Bug: should not be able to resend if there is no message failed to send',
+      );
+    }
+    let attachedCards = (this.messageFailedToSend.attachedResources || [])
+      .map((resource) => resource.card)
+      .filter((card) => card !== undefined) as CardDef[];
+    this.doSendMessage.perform(
+      this.messageFailedToSend.message,
+      attachedCards,
+      this.messageFailedToSend.clientGeneratedId,
+    );
   }
 
   @action sendPrompt(prompt: string) {
@@ -254,7 +289,11 @@ export default class Room extends Component<Signature> {
   }
 
   private doSendMessage = enqueueTask(
-    async (message: string | undefined, cards?: CardDef[]) => {
+    async (
+      message: string | undefined,
+      cards?: CardDef[],
+      clientGeneratedId?: string,
+    ) => {
       this.matrixService.messagesToSend.set(this.args.roomId, undefined);
       this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       let context = {
@@ -269,6 +308,7 @@ export default class Room extends Component<Signature> {
         message,
         cards,
         context,
+        clientGeneratedId,
       );
     },
   );

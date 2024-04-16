@@ -1109,7 +1109,7 @@ module('Integration | operator-mode', function (hooks) {
           roomId: roomId,
         });
         let clientGeneratedId = 'client-generated-id';
-        this.pendingMessages.set(
+        matrixService.setPendingMessageForTest(
           roomId,
           new room.MessageField({
             author: roomMember,
@@ -1160,7 +1160,146 @@ module('Integration | operator-mode', function (hooks) {
             ) as HTMLButtonElement
           ).disabled,
       );
-      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-sending');
+      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-pending');
+      matrixService.sendMessage = originalSendMessage;
+    });
+
+    test('displays retry button for message that failed to send', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      let sendMessageDeferred = new Deferred<void>();
+      let originalSendMessage = matrixService.sendMessage;
+      matrixService.sendMessage = async function (
+        roomId: string,
+        body: string,
+        attachedCards: [],
+        _context?: any,
+      ) {
+        this.messagesToSend.set(roomId, undefined);
+        matrixService.cardsToSend.set(roomId, undefined);
+        let roomMember = new room.RoomMemberField({
+          id: this.userId,
+          userId: this.userId,
+          roomId: roomId,
+        });
+        let clientGeneratedId = 'client-generated-id';
+        matrixService.setPendingMessageForTest(
+          roomId,
+          new room.MessageField({
+            author: roomMember,
+            message: body,
+            formattedMessage: body ?? '',
+            created: new Date(1709652566421).getTime(),
+            clientGeneratedId,
+            transactionId: null,
+            attachedCardIds: attachedCards?.map((c: CardDef) => c.id) || [],
+          }),
+        );
+        await sendMessageDeferred.promise;
+        let message = matrixService.getPendingMessage(roomId);
+        message!.errorMessage = 'Failed to send';
+        matrixService.setMessageFailedToSendForTest(roomId, message);
+        matrixService.setPendingMessageForTest(roomId, undefined);
+      };
+      await openAiAssistant();
+
+      await fillIn('[data-test-message-field]', 'Test Message');
+      assert.dom('[data-test-message-field]').hasValue('Test Message');
+      assert.dom('[data-test-send-message-btn]').isEnabled();
+      assert.dom('[data-test-ai-assistant-message]').doesNotExist();
+      await click('[data-test-send-message-btn]');
+
+      assert.dom('[data-test-message-field]').hasValue('');
+      assert.dom('[data-test-send-message-btn]').isDisabled();
+      assert.dom('[data-test-ai-assistant-message]').exists();
+      assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
+
+      sendMessageDeferred.fulfill();
+      await waitUntil(
+        () =>
+          !(
+            document.querySelector(
+              '[data-test-send-message-btn]',
+            ) as HTMLButtonElement
+          ).disabled,
+      );
+      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-pending');
+      assert.dom('[data-test-card-error]').containsText('Failed to send');
+      assert.dom('[data-test-ai-bot-retry-button]').exists();
+      await percySnapshot(assert);
+
+      sendMessageDeferred = new Deferred<void>();
+      matrixService.sendMessage = async function (
+        roomId: string,
+        body: string,
+        attachedCards: [],
+        _context?: any,
+      ) {
+        matrixService.messagesToSend.set(roomId, undefined);
+        matrixService.cardsToSend.set(roomId, undefined);
+        matrixService.setMessageFailedToSendForTest(roomId, undefined);
+        let roomMember = new room.RoomMemberField({
+          id: this.userId,
+          userId: this.userId,
+          roomId: roomId,
+        });
+        let clientGeneratedId = 'client-generated-id';
+        matrixService.setPendingMessageForTest(
+          roomId,
+          new room.MessageField({
+            author: roomMember,
+            message: body,
+            formattedMessage: body ?? '',
+            created: new Date(1709652566421).getTime(),
+            clientGeneratedId,
+            transactionId: null,
+            attachedCardIds: attachedCards?.map((c: CardDef) => c.id) || [],
+          }),
+        );
+        await sendMessageDeferred.promise;
+        addRoomEvent(matrixService, {
+          event_id: 'event1',
+          room_id: roomId,
+          state_key: 'state',
+          type: 'm.room.message',
+          origin_server_ts: 1709652566421,
+          content: {
+            body,
+            msgtype: 'org.boxel.message',
+            formatted_body: body,
+            format: 'org.matrix.custom.html',
+            clientGeneratedId,
+          },
+        });
+      };
+      await click('[data-test-ai-bot-retry-button]');
+
+      assert.dom('[data-test-card-error]').doesNotExist();
+      assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
+      assert.dom('[data-test-message-field]').hasValue('');
+      assert.dom('[data-test-send-message-btn]').isDisabled();
+      assert.dom('[data-test-ai-assistant-message]').exists();
+      assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
+      sendMessageDeferred.fulfill();
+
+      await waitUntil(
+        () =>
+          !(
+            document.querySelector(
+              '[data-test-send-message-btn]',
+            ) as HTMLButtonElement
+          ).disabled,
+      );
+      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-pending');
+
       matrixService.sendMessage = originalSendMessage;
     });
 
