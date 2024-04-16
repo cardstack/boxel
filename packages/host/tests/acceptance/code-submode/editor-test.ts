@@ -19,7 +19,6 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
-  TestRealmAdapter,
   percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
@@ -34,6 +33,7 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
+import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };

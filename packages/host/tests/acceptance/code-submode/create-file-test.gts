@@ -21,9 +21,9 @@ import {
   waitForCodeEditor,
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
-  TestRealmAdapter,
   type TestContextWithSave,
 } from '../../helpers';
+import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const testRealmURL2 = 'http://test-realm/test2/';

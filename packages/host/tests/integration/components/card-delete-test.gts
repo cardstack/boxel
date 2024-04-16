@@ -25,10 +25,10 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupServerSentEvents,
-  TestRealmAdapter,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
 } from '../../helpers';
+import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 

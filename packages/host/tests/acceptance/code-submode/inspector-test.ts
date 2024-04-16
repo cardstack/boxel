@@ -29,7 +29,6 @@ import { SerializedState } from '@cardstack/host/services/operator-mode-state-se
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
-  TestRealmAdapter,
   elementIsVisible,
   getMonacoContent,
   percySnapshot,
@@ -44,6 +43,7 @@ import {
   type TestContextWithSave,
   setMonacoContent,
 } from '../../helpers';
+import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const testRealmURL2 = 'http://test-realm/test2/';
