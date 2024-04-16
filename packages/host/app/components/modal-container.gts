@@ -15,7 +15,6 @@ interface Signature {
   Args: {
     title: string;
     onClose: () => void;
-    zIndex?: number;
     size?: 'small' | 'medium' | 'large';
     centered?: boolean;
     cardContainerClass?: string;
@@ -43,7 +42,6 @@ export default class ModalContainer extends Component<Signature> {
       @isOpen={{this.isOpen}}
       @onClose={{@onClose}}
       @centered={{@centered}}
-      @zIndex={{@zIndex}}
       ...attributes
     >
       <CardContainer
