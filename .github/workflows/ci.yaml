@@ -235,6 +235,9 @@ jobs:
           name: playwright-report
           path: downloaded-merged-reports-as-blob
 
+      - run: ls -l
+      - run: ls -l downloaded-merged-reports-as-blob
+
       - name: Merge blobs into one single report
         run: npx playwright merge-reports --reporter html ./downloaded-merged-reports-as-blob
 
