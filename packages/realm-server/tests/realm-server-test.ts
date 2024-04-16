@@ -125,6 +125,10 @@ module('Realm Server', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
+  if (!virtualNetwork) {
+    debugger;
+  }
+
   setupBaseRealmServer(hooks, loader, virtualNetwork);
 
   hooks.beforeEach(async function () {
@@ -146,7 +150,7 @@ module('Realm Server', function (hooks) {
         ));
       });
 
-      test('serves the request', async function (assert) {
+      test.only('serves the request', async function (assert) {
         let response = await request
           .get('/person-1')
           .set('Accept', 'application/vnd.card+json');
@@ -2034,6 +2038,10 @@ module('Realm Server serving from root', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
+  if (!virtualNetwork) {
+    debugger;
+  }
+
   setupBaseRealmServer(hooks, loader, virtualNetwork);
 
   hooks.beforeEach(async function () {
@@ -2232,6 +2240,10 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
+  if (!virtualNetwork) {
+    debugger;
+  }
+
   setupBaseRealmServer(hooks, loader, virtualNetwork);
 
   hooks.beforeEach(async function () {
@@ -2291,10 +2303,10 @@ async function setupPermissionedRealm(permissions: RealmPermissions) {
   shimExternals(virtualNetwork);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
 
-  let testRealmServerLoader = virtualNetwork.createLoader();
+  // let testRealmServerLoader = virtualNetwork.createLoader();
 
   ({ testRealm, testRealmServer } = await runTestRealmServer(
-    testRealmServerLoader,
+    null,
     virtualNetwork,
     dir.name,
     undefined,
@@ -2304,5 +2316,5 @@ async function setupPermissionedRealm(permissions: RealmPermissions) {
 
   request = supertest(testRealmServer);
 
-  return { testRealm, testRealmServer, request, dir, testRealmServerLoader };
+  return { testRealm, testRealmServer, request, dir };
 }

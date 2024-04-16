@@ -482,8 +482,11 @@ export class Loader {
       }
 
       let url = this.asRequest(urlOrRequest, init).url;
-
+      if (url.includes('card-api')) {
+        debugger;
+      }
       let shimmed = this.moduleShims.get(trimModuleIdentifier(url));
+
       if (shimmed) {
         let response = new Response();
         (response as any)[Symbol.for('shimmed-module')] = shimmed;

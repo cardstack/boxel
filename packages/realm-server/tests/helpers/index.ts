@@ -39,6 +39,7 @@ export async function createRealm(
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   realmURL = testRealm,
   permissions: RealmPermissions = { '*': ['read', 'write'] },
+  virtualNetwork: VirtualNetwork,
 ): Promise<Realm> {
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
@@ -46,6 +47,7 @@ export async function createRealm(
       manager.getOptions.bind(manager),
     ));
   }
+
   for (let [filename, contents] of Object.entries(flatFiles)) {
     if (typeof contents === 'string') {
       writeFileSync(join(dir, filename), contents);
@@ -53,18 +55,22 @@ export async function createRealm(
       writeJSONSync(join(dir, filename), contents);
     }
   }
-  return new Realm({
-    url: realmURL,
-    adapter: new NodeAdapter(dir),
-    loader,
-    indexRunner: getRunner,
-    runnerOptsMgr: manager,
-    getIndexHTML: async () =>
-      readFileSync(join(distPath, 'index.html')).toString(),
-    matrix: testMatrix,
-    permissions,
-    realmSecretSeed: "shhh! it's a secret",
-  });
+  return new Realm(
+    {
+      url: realmURL,
+      adapter: new NodeAdapter(dir),
+      loader: null,
+      indexRunner: getRunner,
+      runnerOptsMgr: manager,
+      getIndexHTML: async () =>
+        readFileSync(join(distPath, 'index.html')).toString(),
+      matrix: testMatrix,
+      permissions,
+      realmSecretSeed: "shhh! it's a secret",
+      virtualNetwork,
+    },
+    { deferStartUp: true },
+  );
 }
 
 export function setupBaseRealmServer(
@@ -74,6 +80,9 @@ export function setupBaseRealmServer(
 ) {
   let baseRealmServer: Server;
   hooks.before(async function () {
+    if (!virtualNetwork) {
+      debugger;
+    }
     baseRealmServer = await runBaseRealmServer(loader, virtualNetwork);
   });
 
@@ -89,15 +98,25 @@ export async function runBaseRealmServer(
   let localBaseRealmURL = new URL(localBaseRealm);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
+  if (!virtualNetwork) {
+    debugger;
+  }
+
+  debugger;
+
   let testBaseRealm = await createRealm(
     loader,
     basePath,
     undefined,
     baseRealm.url,
+    virtualNetwork,
   );
   virtualNetwork.mount(testBaseRealm.maybeExternalHandle);
-  await testBaseRealm.ready;
+
+  await testBaseRealm.start();
+
   let testBaseRealmServer = new RealmServer([testBaseRealm], virtualNetwork);
+  debugger;
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
 
@@ -110,14 +129,16 @@ export async function runTestRealmServer(
   permissions?: RealmPermissions,
 ) {
   let testRealm = await createRealm(
-    loader,
+    null,
     dir,
     flatFiles,
     testRealmURL.href,
     permissions,
+    virtualNetwork,
   );
   virtualNetwork.mount(testRealm.maybeExternalHandle);
-  await testRealm.ready;
+  await testRealm.start();
+
   let testRealmServer = await new RealmServer(
     [testRealm],
     virtualNetwork,

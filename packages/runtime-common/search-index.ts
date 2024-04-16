@@ -160,6 +160,7 @@ export class SearchIndex {
         onInvalidation?: (invalidatedURLs: URL[]) => void,
       ) => Promise<RunState>)
     | undefined;
+  #virtualNetwork: VirtualNetwork;
 
   constructor(
     realm: Realm,
@@ -172,6 +173,7 @@ export class SearchIndex {
     ) => Promise<{ content: string; lastModified: number } | undefined>,
     runner: IndexRunner,
     runnerOptsManager: RunnerOptionsManager,
+    virtualNetwork: VirtualNetwork,
   ) {
     this.#realm = realm;
     this.#reader = { readdir, readFileAsText };
@@ -190,6 +192,7 @@ export class SearchIndex {
         moduleErrors: 0,
       },
     };
+    this.#virtualNetwork = virtualNetwork;
   }
 
   get stats() {
@@ -252,7 +255,10 @@ export class SearchIndex {
 
   private async setupRunner(start: () => Promise<void>) {
     let optsId = this.runnerOptsMgr.setOptions({
-      _fetch: this.loader.fetch.bind(this.loader),
+      _fetch: (...args) => {
+        debugger;
+        return this.#virtualNetwork.fetch(...args);
+      },
       reader: this.#reader,
       entrySetter: (url, entry) => {
         this.#index.instances.set(url, entry);

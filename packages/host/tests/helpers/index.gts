@@ -475,7 +475,7 @@ async function setupTestRealm({
     'service:local-indexer',
   ) as unknown as MockLocalIndexer;
 
-  let adapter = new TestRealmAdapter({}, new URL(realmURL));
+  let adapter = new TestRealmAdapter(new URL(realmURL));
 
   let realm = new Realm(
     {
@@ -501,7 +501,9 @@ async function setupTestRealm({
     { deferStartUp: true },
   );
 
-  debugger;
+  let cardApi = await realm.loaderTemplate.import<CardAPI>(
+    `${baseRealm.url}card-api`,
+  );
 
   for (const [path, mod] of Object.entries(contents)) {
     if (path.endsWith('.gts') && typeof mod !== 'string') {
@@ -509,33 +511,45 @@ async function setupTestRealm({
       realm.loaderTemplate.shimModule(moduleURLString, mod as object);
     } // TODO: refactor TestRealmAdapter to handle this
   }
-  let api = await realm.loaderTemplate.import<CardAPI>(
-    `${baseRealm.url}card-api`,
-  );
-  for (const [path, value] of Object.entries(contents)) {
-    if (path.endsWith('.json') && api.isCard(value)) {
-      value.id = `${realmURL}${path.replace(/\.json$/, '')}`;
-      api.setCardAsSavedForTest(value);
-    }
-  }
-  for (const [path, value] of Object.entries(contents)) {
-    if (path.endsWith('.json') && api.isCard(value)) {
-      let doc = api.serializeCard(value);
-      contents[path] = doc;
-    }
-  }
+  adapter.setFiles(contents, cardApi);
 
-  let flatFiles: Record<string, string> = {};
-  for (const [path, value] of Object.entries(contents)) {
-    if (path.endsWith('.gts') && typeof value !== 'string') {
-      flatFiles[path] = '// this file is shimmed';
-    } else if (typeof value === 'string') {
-      flatFiles[path] = value;
-    } else {
-      flatFiles[path] = JSON.stringify(value);
-    }
-  }
-  adapter.setFiles(flatFiles);
+  // todo: pass contents and card api to test adapter
+  // the openFile in testAdapter should return a symbol on the file if it is a shimmed module
+  // then, propagate the shimmed symbol to the realm's fallbackhandle in this.makeJs up so that the loader
+  // can deal with that value
+  // for (const [path, mod] of Object.entries(contents)) {
+  //   if (path.endsWith('.gts') && typeof mod !== 'string') {
+  //     let moduleURLString = `${realmURL}${path.replace(/\.gts$/, '')}`;
+  //     realm.loaderTemplate.shimModule(moduleURLString, mod as object);
+  //   } // TODO: refactor TestRealmAdapter to handle this
+  // }
+  // let api = await realm.loaderTemplate.import<CardAPI>(
+  //   `${baseRealm.url}card-api`,
+  // );
+  // for (const [path, value] of Object.entries(contents)) {
+  //   if (path.endsWith('.json') && api.isCard(value)) {
+  //     value.id = `${realmURL}${path.replace(/\.json$/, '')}`;
+  //     api.setCardAsSavedForTest(value);
+  //   }
+  // }
+  // for (const [path, value] of Object.entries(contents)) {
+  //   if (path.endsWith('.json') && api.isCard(value)) {
+  //     let doc = api.serializeCard(value);
+  //     contents[path] = doc;
+  //   }
+  // }
+
+  // let flatFiles: Record<string, string> = {};
+  // for (const [path, value] of Object.entries(contents)) {
+  //   if (path.endsWith('.gts') && typeof value !== 'string') {
+  //     flatFiles[path] = '// this file is shimmed';
+  //   } else if (typeof value === 'string') {
+  //     flatFiles[path] = value;
+  //   } else {
+  //     flatFiles[path] = JSON.stringify(value);
+  //   }
+  // }
+  // adapter.setFiles(flatFiles);
 
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
@@ -567,6 +581,7 @@ async function setupTestRealm({
 
   virtualNetwork.mount(realm.maybeHandle);
   await realm.start();
+
   return { realm, adapter };
 }
 
@@ -623,13 +638,73 @@ export class TestRealmAdapter implements RealmAdapter {
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
   #subscriber: ((message: UpdateEventData) => void) | undefined;
+  #cardApi: CardAPI;
+  contents: {};
 
-  constructor(
-    flatFiles: FilesForTestAdapter,
-    realmURL = new URL(testRealmURL),
-  ) {
+  constructor(realmURL = new URL(testRealmURL)) {
     this.#paths = new RealmPaths(realmURL);
+
+    // let now = Date.now();
+
+    // for (const [path, value] of Object.entries(contents)) {
+    //   if (path.endsWith('.json') && cardApi.isCard(value)) {
+    //     value.id = `${realmURL}${path.replace(/\.json$/, '')}`;
+    //     cardApi.setCardAsSavedForTest(value);
+    //   }
+    // }
+
+    // for (const [path, value] of Object.entries(contents)) {
+    //   if (path.endsWith('.json') && cardApi.isCard(value)) {
+    //     let doc = cardApi.serializeCard(value);
+    //     contents[path] = doc;
+    //   }
+    // }
+
+    // for (let [path, content] of Object.entries(contents)) {
+    //   let segments = path.split('/');
+    //   let last = segments.pop()!;
+    //   let dir = this.#traverse(segments, 'directory');
+    //   if (typeof dir === 'string') {
+    //     throw new Error(`tried to use file as directory`);
+    //   }
+    //   this.#lastModified.set(this.#paths.fileURL(path).href, now);
+    //   if (typeof content === 'string') {
+    //     dir[last] = content;
+    //   } else {
+    //     dir[last] = content;
+    //   }
+    // }
+  }
+
+  setFiles(contents, cardApi: CardAPI) {
     let now = Date.now();
+    let realmURL = this.#paths.url;
+    this.contents = contents;
+    for (const [path, value] of Object.entries(contents)) {
+      if (path.endsWith('.json') && cardApi.isCard(value)) {
+        value.id = `${realmURL}${path.replace(/\.json$/, '')}`;
+        cardApi.setCardAsSavedForTest(value);
+      }
+    }
+
+    for (const [path, value] of Object.entries(contents)) {
+      if (path.endsWith('.json') && cardApi.isCard(value)) {
+        let doc = cardApi.serializeCard(value);
+        contents[path] = doc;
+      }
+    }
+
+    let flatFiles: Record<string, string> = {};
+    for (const [path, value] of Object.entries(contents)) {
+      if (path.endsWith('.gts') && typeof value !== 'string') {
+        flatFiles[path] = '// this file is shimmed';
+      } else if (typeof value === 'string') {
+        flatFiles[path] = value;
+      } else {
+        flatFiles[path] = JSON.stringify(value);
+      }
+    }
+
     for (let [path, content] of Object.entries(flatFiles)) {
       let segments = path.split('/');
       let last = segments.pop()!;
@@ -648,24 +723,6 @@ export class TestRealmAdapter implements RealmAdapter {
 
   // when someone opens a file from the adapter and we know it's a shimmed one, put a symbol on it
   // for the openFile
-
-  setFiles(flatFiles: FilesForTestAdapter) {
-    let now = Date.now();
-    for (let [path, content] of Object.entries(flatFiles)) {
-      let segments = path.split('/');
-      let last = segments.pop()!;
-      let dir = this.#traverse(segments, 'directory');
-      if (typeof dir === 'string') {
-        throw new Error(`tried to use file as directory`);
-      }
-      this.#lastModified.set(this.#paths.fileURL(path).href, now);
-      if (typeof content === 'string') {
-        dir[last] = content;
-      } else {
-        dir[last] = JSON.stringify(content);
-      }
-    }
-  }
 
   createJWT(claims: TokenClaims, expiration: string, secret: string) {
     return createJWT(claims, expiration, secret);
@@ -756,11 +813,20 @@ export class TestRealmAdapter implements RealmAdapter {
     if (typeof content !== 'string') {
       return undefined;
     }
+
+    if (content === '// this file is shimmed') {
+      return {
+        path,
+        content,
+        lastModified: this.#lastModified.get(this.#paths.fileURL(path).href)!,
+        [Symbol.for('shimmed-module')]: this.contents[path],
+      };
+    }
+
     return {
       path,
       content,
       lastModified: this.#lastModified.get(this.#paths.fileURL(path).href)!,
-      [Symbol.for('shimmed-module')]: moduleContents, // moduleContents -> mod as object in setupTestRealm
     };
   }
 
@@ -816,6 +882,7 @@ export class TestRealmAdapter implements RealmAdapter {
     originalPath = segments.join('/'),
   ): string | Dir {
     let dir: Dir | string = this.#files;
+
     while (segments.length > 0) {
       if (typeof dir === 'string') {
         throw new Error(`tried to use file as directory`);
@@ -824,6 +891,7 @@ export class TestRealmAdapter implements RealmAdapter {
       if (name === '') {
         return dir;
       }
+
       if (dir[name] === undefined) {
         if (
           segments.length > 0 ||
@@ -838,6 +906,7 @@ export class TestRealmAdapter implements RealmAdapter {
       }
       dir = dir[name];
     }
+
     return dir;
   }
 

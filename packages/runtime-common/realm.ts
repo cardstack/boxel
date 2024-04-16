@@ -299,12 +299,15 @@ export class Realm {
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this)); // this is currently still shared
     this.#adapter = adapter;
+
+    // todo pass virtual network to search index?
     this.#searchIndex = new SearchIndex(
       this,
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this),
       indexRunner,
       runnerOptsMgr,
+      virtualNetwork,
     );
 
     this.#router = new Router(new URL(url))
@@ -556,7 +559,7 @@ export class Realm {
   async #startup() {
     await Promise.resolve();
     await this.#warmUpCache();
-    await this.#searchIndex.run();
+    await this.#searchIndex.run(); // maybe pass virtual network here?
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
   }
 
@@ -867,28 +870,40 @@ export class Realm {
   async fallbackHandle(request: Request) {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
-    let maybeHandle = await this.getFileWithFallbacks(
+
+    let maybeFileRef = await this.getFileWithFallbacks(
       localPath,
       executableExtensions,
     );
 
-    if (!maybeHandle) {
+    if (!maybeFileRef) {
       return notFound(this, request, `${request.url} not found`);
     }
 
-    let handle = maybeHandle; // todo rename to fileHandle (or ref)
+    let fileRef = maybeFileRef; // todo rename to fileHandle (or ref)
 
     if (
       executableExtensions.some((extension) =>
-        handle.path.endsWith(extension),
+        fileRef.path.endsWith(extension),
       ) &&
       !localPath.startsWith(assetsDir)
     ) {
       // propagate the shimmed symbol to the response - the loader should deal with it
-      // value should not be the proxied module
-      return this.makeJS(await fileContentToText(handle), handle.path);
+      // value should not be the proxied module but the module
+      let response = this.makeJS(
+        await fileContentToText(fileRef),
+        fileRef.path,
+      );
+
+      if (fileRef[Symbol.for('shimmed-module')]) {
+        debugger;
+        response[Symbol.for('shimmed-module')] =
+          fileRef[Symbol.for('shimmed-module')];
+      }
+
+      return response;
     } else {
-      return await this.serveLocalFile(handle);
+      return await this.serveLocalFile(fileRef);
     }
   }
 

@@ -109,8 +109,16 @@ export class VirtualNetwork {
         ? urlOrRequest
         : new Request(urlOrRequest, init);
 
+    for (let handler of this.handlers) {
+      let response = await handler(request);
+      if (response) {
+        return await followRedirections(request, response, this.fetch);
+      }
+    }
     let internalRequest = await this.mapRequest(request, 'virtual-to-real');
-    let response = await this.runFetch(internalRequest, init);
+
+    let response = await this.nativeFetch(request, init);
+
     if (internalRequest !== request) {
       Object.defineProperty(response, 'url', {
         value:
@@ -120,17 +128,6 @@ export class VirtualNetwork {
     }
     return response;
   };
-
-  private async runFetch(request: Request, init?: RequestInit) {
-    for (let handler of this.handlers) {
-      let response = await handler(request);
-      if (response) {
-        return await followRedirections(request, response, this.fetch);
-      }
-    }
-
-    return this.nativeFetch(request, init);
-  }
 
   // This method is used to handle the boundary between the real and virtual network,
   // when a request is made to the realm from the realm server - it maps requests

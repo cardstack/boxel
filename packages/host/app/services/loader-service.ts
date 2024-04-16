@@ -39,6 +39,13 @@ export default class LoaderService extends Service {
     if (this.fastboot.isFastBoot) {
       let loader = this.virtualNetwork.createLoader();
       shimExternals(this.virtualNetwork);
+
+      // debugger;
+      // this.virtualNetwork.addURLMapping(
+      //   new URL(baseRealm.url),
+      //   new URL(config.resolvedBaseRealmURL),
+      // );
+
       return loader;
     }
 
