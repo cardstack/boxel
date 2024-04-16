@@ -542,7 +542,7 @@ export default class InteractSubmode extends Component<Signature> {
               {{on 'click' (fn (perform this.addCard))}}
               data-test-add-card-button
             >
-              <IconPlus width='50px' height='50px' />
+              <IconPlus width='36px' height='36px' />
             </button>
           </div>
         {{else}}
