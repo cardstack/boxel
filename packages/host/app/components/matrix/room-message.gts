@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -26,6 +25,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
+import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
@@ -34,6 +34,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     message: MessageField;
+    index?: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     currentEditor: number | undefined;
@@ -75,7 +76,7 @@ export default class RoomMessage extends Component<Signature> {
 
   <template>
     <AiAssistantMessage
-      id='message-container-{{@message.index}}'
+      id='message-container-{{@index}}'
       class='room-message'
       @formattedMessage={{htmlSafe (markdownToHtml @message.formattedMessage)}}
       @datetime={{@message.created}}
@@ -87,7 +88,11 @@ export default class RoomMessage extends Component<Signature> {
       @resources={{this.resources}}
       @errorMessage={{this.errorMessage}}
       @isStreaming={{@isStreaming}}
-      @retryAction={{@retryAction}}
+      @retryAction={{if
+        (eq @message.command.commandType 'patch')
+        (perform this.patchCard)
+        @retryAction
+      }}
       @isPending={{@isPending}}
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
@@ -97,29 +102,20 @@ export default class RoomMessage extends Component<Signature> {
           class='patch-button-bar'
           data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
         >
-          {{#let @message.command.payload as |payload|}}
-            <Button
-              class='view-code-button'
-              {{on 'click' this.viewCodeToggle}}
-              @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
-              @size='extra-small'
-              data-test-view-code-button
-            >
-              {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
-            </Button>
-            <ApplyButton
-              @state={{if
-                this.operatorModeStateService.patchCard.isRunning
-                'applying'
-                'ready'
-              }}
-              data-test-command-apply
-              {{on
-                'click'
-                (fn this.patchCard payload.id payload.patch.attributes)
-              }}
-            />
-          {{/let}}
+          <Button
+            class='view-code-button'
+            {{on 'click' this.viewCodeToggle}}
+            @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
+            @size='extra-small'
+            data-test-view-code-button
+          >
+            {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
+          </Button>
+          <ApplyButton
+            @state={{this.applyButtonState}}
+            {{on 'click' (perform this.patchCard)}}
+            data-test-command-apply={{this.applyButtonState}}
+          />
         </div>
         {{#if this.isDisplayingCode}}
           <div class='preview-code'>
@@ -222,6 +218,8 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare monacoService: MonacoService;
 
   @tracked private isDisplayingCode = false;
+  @tracked private patchCardError: { id: string; error: unknown } | undefined;
+  @tracked private applyButtonState: ApplyButtonState = 'ready';
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -248,6 +246,18 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private get errorMessage() {
+    if (this.patchCardError) {
+      let message = '';
+      if (typeof this.patchCardError.error === 'string') {
+        message = this.patchCardError.error;
+      } else if (this.patchCardError.error instanceof Error) {
+        message = this.patchCardError.error.message;
+      } else {
+        console.error('Unexpected error type', this.patchCardError.error);
+      }
+      return `Failed to apply changes. ${message}`;
+    }
+
     if (this.args.message.errorMessage) {
       return this.args.message.errorMessage;
     }
@@ -270,12 +280,24 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  @action patchCard(cardId: string, attributes: Record<string, unknown>) {
+  private patchCard = task(async () => {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
-    this.operatorModeStateService.patchCard.perform(cardId, attributes);
-  }
+    let { id, patch } = this.args.message.command.payload;
+    this.patchCardError = undefined;
+    try {
+      this.applyButtonState = 'applying';
+      await this.operatorModeStateService.patchCard.perform(
+        id,
+        patch.attributes,
+      );
+      this.applyButtonState = 'applied';
+    } catch (e) {
+      this.patchCardError = { id, error: e };
+      this.applyButtonState = 'failed';
+    }
+  });
 
   private get previewPatchCode() {
     let { commandType, payload } = this.args.message.command;
@@ -301,7 +323,7 @@ export default class RoomMessage extends Component<Signature> {
     element.style.height = `${height}px`;
 
     let outerContainer = document.getElementById(
-      `message-container-${this.args.message.index}`,
+      `message-container-${this.args.index}`,
     );
     if (!outerContainer) {
       return;

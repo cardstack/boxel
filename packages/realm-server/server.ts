@@ -8,6 +8,9 @@ import {
   assetsDir,
   logger,
   SupportedMimeType,
+  type VirtualNetwork,
+  boxelUIAssetsDir,
+  ResponseWithNodeStream,
 } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { setupCloseHandler } from './node-realm';
@@ -17,8 +20,6 @@ import {
   httpLogging,
   httpBasicAuth,
   ecsMetadata,
-  assetRedirect,
-  rootRealmRedirect,
   fullRequestURL,
 } from './middleware';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
@@ -39,28 +40,54 @@ export class RealmServer {
 
   constructor(
     private realms: Realm[],
+    private virtualNetwork: VirtualNetwork,
     opts?: Options,
   ) {
     detectRealmCollision(realms);
     this.realms = realms;
-    // defaults to using the base realm to host assets (this is the dev env default)
-    // All realms should have URL mapping for the base realm
-    this.assetsURL =
-      opts?.assetsURL ??
-      realms[0].loader.resolve(`${baseRealm.url}${assetsDir}`);
+
+    this.assetsURL = opts?.assetsURL ?? new URL(`${baseRealm.url}${assetsDir}`);
+
+    // TODO: Get rid of this redirect by providing the final absolute URL in the assetsURL. In dev, distURL should be localhost:4200, in prod, the deployed host app url. Remove distDir.
+    virtualNetwork.mount(async (request: Request) => {
+      let url = new URL(request.url);
+      let path = url.pathname;
+
+      if (path.startsWith(`/${assetsDir}`)) {
+        let redirectURL = new URL(
+          `./${path.slice(assetsDir.length + 1)}`,
+          this.assetsURL,
+        ).href;
+
+        if (redirectURL !== url.href) {
+          return new Response(null, {
+            status: 302,
+            headers: {
+              Location: redirectURL,
+            },
+          }) as ResponseWithNodeStream;
+        }
+      }
+
+      if (path.startsWith(`/${boxelUIAssetsDir}`)) {
+        let redirectURL = new URL(`.${path}`, this.assetsURL).href;
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: redirectURL,
+          },
+        }) as ResponseWithNodeStream;
+      }
+
+      return null;
+    });
   }
 
   @Memoize()
   get app() {
     let router = new Router();
     router.head('/', livenessCheck);
-    router.get(
-      '/',
-      healthCheck,
-      this.serveIndex(),
-      rootRealmRedirect(this.realms),
-      this.serveFromRealm,
-    );
+    router.get('/', healthCheck, this.serveIndex(), this.serveFromRealm);
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
@@ -90,10 +117,8 @@ export class RealmServer {
         await next();
       })
       .use(monacoMiddleware(this.assetsURL))
-      .use(assetRedirect(this.assetsURL))
       .use(convertAcceptHeaderQueryParam)
       .use(httpBasicAuth)
-      .use(rootRealmRedirect(this.realms))
       .use(router.routes())
       .use(this.serveFromRealm);
 
@@ -130,49 +155,27 @@ export class RealmServer {
     if (ctxt.request.path === '/_boom') {
       throw new Error('boom');
     }
-
-    let realm = this.realms.find((r) => {
-      let reversedResolution = r.loader.reverseResolution(
-        fullRequestURL(ctxt).href,
-      );
-      this.log.debug(
-        `Looking for realm to handle request with full URL: ${
-          fullRequestURL(ctxt).href
-        } (reversed: ${reversedResolution.href})`,
-      );
-
-      let inRealm = r.paths.inRealm(reversedResolution);
-      this.log.debug(
-        `${reversedResolution} in realm ${JSON.stringify({
-          url: r.url,
-          paths: r.paths,
-        })}: ${inRealm}`,
-      );
-      return inRealm;
-    });
-
-    if (!realm) {
-      ctxt.status = 404;
-      return;
-    }
-
     let reqBody: string | undefined;
     if (['POST', 'PATCH'].includes(ctxt.method)) {
       reqBody = await nodeStreamToText(ctxt.req);
     }
 
-    let reversedResolution = realm.loader.reverseResolution(
-      fullRequestURL(ctxt).href,
-    );
-
-    let request = new Request(reversedResolution.href, {
+    let url = fullRequestURL(ctxt).href;
+    let request = new Request(url, {
       method: ctxt.method,
       headers: ctxt.req.headers as { [name: string]: string },
       ...(reqBody ? { body: reqBody } : {}),
     });
 
-    setupCloseHandler(ctxt.res, request);
-    let realmResponse = await realm.handle(request);
+    let realmResponse = await this.virtualNetwork.handle(
+      request,
+      (mappedRequest) => {
+        // Setup this handler only after the request has been mapped because
+        // the *mapped request* is the one that gets closed, not the original one
+        setupCloseHandler(ctxt.res, mappedRequest);
+      },
+    );
+
     let { status, statusText, headers, body, nodeStream } = realmResponse;
     ctxt.status = status;
     ctxt.message = statusText;
@@ -180,7 +183,7 @@ export class RealmServer {
       ctxt.set(header, value);
     }
     if (!headers.get('content-type')) {
-      let fileName = reversedResolution.href.split('/').pop()!;
+      let fileName = url.split('/').pop()!;
       ctxt.type = mime.lookup(fileName) || 'application/octet-stream';
     }
 

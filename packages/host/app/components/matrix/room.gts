@@ -45,6 +45,7 @@ export default class Room extends Component<Signature> {
           {{#each this.room.messages as |message i|}}
             <RoomMessage
               @message={{message}}
+              @index={{i}}
               @monacoSDK={{@monacoSDK}}
               @isStreaming={{this.isMessageStreaming message i}}
               @currentEditor={{this.currentMonacoContainer}}

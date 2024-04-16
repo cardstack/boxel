@@ -8,6 +8,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   createRealm,
+  localBaseRealm,
   testRealm,
   setupCardLogs,
   setupBaseRealmServer,
@@ -36,10 +37,7 @@ module('indexing', function (hooks) {
   let virtualNetwork = new VirtualNetwork();
   let loader = virtualNetwork.createLoader();
 
-  loader.addURLMapping(
-    new URL(baseRealm.url),
-    new URL('http://localhost:4201/base/'),
-  );
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   shimExternals(virtualNetwork);
 
   setupCardLogs(
@@ -50,15 +48,10 @@ module('indexing', function (hooks) {
   let dir: string;
   let realm: Realm;
 
-  setupBaseRealmServer(hooks, loader);
+  setupBaseRealmServer(hooks, loader, virtualNetwork);
 
   hooks.beforeEach(async function () {
     let testRealmLoader = virtualNetwork.createLoader();
-    testRealmLoader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/'),
-    );
-    shimExternals(virtualNetwork);
 
     dir = dirSync().name;
     realm = await createRealm(testRealmLoader, dir, {
