@@ -87,8 +87,8 @@ export default class AiAssistantPanel extends Component<Signature> {
             class='close-ai-panel'
             @variant='primary'
             @icon={{IconX}}
-            @width='20px'
-            @height='20px'
+            @width='12px'
+            @height='12px'
             {{on 'click' @onClose}}
             aria-label='Close AI Assistant'
             data-test-close-ai-assistant
