@@ -67,7 +67,7 @@ test.describe('Room creation', () => {
 
   // SKIPPING FLAKY TEST!
   // https://linear.app/cardstack/issue/CS-6640/flaky-matrix-test-room-creation-spec-does-not-create-a-new-room-when
-  test('it does not create a new room when another new room is available', async ({
+  test.skip('it does not create a new room when another new room is available', async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
