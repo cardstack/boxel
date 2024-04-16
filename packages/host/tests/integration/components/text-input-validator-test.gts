@@ -67,10 +67,6 @@ module('Integration | text-input-validator', function (hooks) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 
-    loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/'),
-    );
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     let bigInteger: typeof import('https://cardstack.com/base/big-integer');
     cardApi = await loader.import(`${baseRealm.url}card-api`);

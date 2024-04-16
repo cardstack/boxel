@@ -58,13 +58,12 @@ export const isNode =
 
 export { Realm } from './realm';
 export { SupportedMimeType } from './router';
-export { VirtualNetwork } from './virtual-network';
+export { VirtualNetwork, type ResponseWithNodeStream } from './virtual-network';
 
 export type {
   Kind,
   RealmAdapter,
   FileRef,
-  ResponseWithNodeStream,
   RealmInfo,
   TokenClaims,
   RealmPermissions,

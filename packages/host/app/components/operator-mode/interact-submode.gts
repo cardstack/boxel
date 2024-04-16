@@ -532,7 +532,7 @@ export default class InteractSubmode extends Component<Signature> {
     >
       <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
         {{#if (eq this.allStackItems.length 0)}}
-          <div class='no-cards'>
+          <div class='no-cards' data-test-empty-stack>
             <p class='add-card-title'>
               Add a card to get started
             </p>
