@@ -6,10 +6,15 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {
-    lastTopMostCard: CardDef | undefined;
-    attachedCards: CardDef[] | undefined;
+    lastTopMostCard: CardDef | undefined; // top-most card from the card stack
+    attachedCards: CardDef[] | undefined; // cards manually attached in ai panel
   };
 }
+
+/**
+ * Manages the auto-attachment of the top-most card in consideration of user-actions of manually
+ * removing and attaching new cards in the ai panel
+ */
 
 export class AutoAttachment extends Resource<Args> {
   @tracked card: CardDef | undefined;
