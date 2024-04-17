@@ -28,6 +28,7 @@ import {
   fieldQuery,
   fieldValue,
   fieldArity,
+  upsert,
 } from './expression';
 import {
   type Query,
@@ -114,8 +115,6 @@ export class IndexerDBClient {
 
   async query(query: Expression) {
     let sql = await this.expressionToSql(query);
-    // set chrome console to "Verbose" to see these queries in the console
-    console.debug(`sql: ${sql.text} bindings: ${sql.values}`);
     return await this.dbAdapter.execute(sql.text, {
       coerceTypes,
       bind: sql.values,
@@ -124,8 +123,6 @@ export class IndexerDBClient {
 
   async queryCards(query: CardExpression, loader: Loader) {
     let sql = await this.cardQueryToSQL(query, loader);
-    // set chrome console to "Verbose" to see these queries in the console
-    console.debug(`sql: ${sql.text} bindings: ${sql.values}`);
     return await this.dbAdapter.execute(sql.text, {
       coerceTypes,
       bind: sql.values,
@@ -173,15 +170,15 @@ export class IndexerDBClient {
     let rows = (await this.query([
       `SELECT card_url
        FROM
-         indexed_cards as i,
-         json_each(i.deps) as deps_each
+         indexed_cards as i
+       CROSS JOIN LATERAL jsonb_array_each(i.deps) as deps_each
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE 
-         deps_each.value =`,
+         deps_each.text_value =`,
       param(cardId),
       'AND',
       ...realmVersionExpression({ useWorkInProgressIndex: true }),
-      'ORDER BY i.card_url',
+      'ORDER BY i.card_url COLLATE "POSIX"',
     ] as Expression)) as Pick<IndexedCardsTable, 'card_url'>[];
     return rows.map((r) => r.card_url);
   }
@@ -259,7 +256,7 @@ export class IndexerDBClient {
 
   private orderExpression(sort: Sort | undefined): CardExpression {
     if (!sort) {
-      return ['ORDER BY card_url'];
+      return ['ORDER BY card_url COLLATE "POSIX"'];
     }
     return [
       'ORDER BY',
@@ -271,7 +268,7 @@ export class IndexerDBClient {
           s.direction ?? 'asc',
         ]),
         // we include 'card_url' as the final sort key for deterministic results
-        ['card_url'],
+        ['card_url COLLATE "POSIX"'],
       ]),
     ];
   }
@@ -678,20 +675,25 @@ export class IndexerDBClient {
         ) {
           let { column, path } = element;
           let virtualColumn =
-            element.kind === 'table-valued-tree' ? element.treeColumn : 'value';
-          let type = element.kind === 'table-valued-tree' ? 'tree' : 'each';
+            element.kind === 'table-valued-tree'
+              ? element.treeColumn
+              : 'text_value';
+          let fn =
+            element.kind === 'table-valued-tree'
+              ? 'json_tree'
+              : 'jsonb_array_each';
           let field = trimBrackets(
             path === '$' ? column : path.split('.').pop()!,
           );
-          let key = `${type}_${column}_${path}`;
+          let key = `${fn}_${column}_${path}`;
           let { name } = tableValuedFunctions.get(key) ?? {};
           if (!name) {
-            name = `${field}${nonce++}_${type}`;
+            name = `${field}${nonce++}_${element.kind.split('-').pop()!}`;
             let absolutePath = path === '$' ? '$' : `$.${path}`;
 
             tableValuedFunctions.set(key, {
               name,
-              fn: `json_${type}(${column}, '${absolutePath}') as ${name}`,
+              fn: `${fn}(${column}, '${absolutePath}') as ${name}`,
             });
           }
           return `${name}.${virtualColumn}`;
@@ -705,7 +707,9 @@ export class IndexerDBClient {
       text = replace(
         text,
         placeholder,
-        `, ${[...tableValuedFunctions.values()].map((fn) => fn.fn).join(', ')}`,
+        ` CROSS JOIN LATERAL ${[...tableValuedFunctions.values()]
+          .map((fn) => fn.fn)
+          .join(', ')}`,
       );
     } else {
       text = replace(text, placeholder, '');
@@ -766,11 +770,13 @@ export class Batch {
     );
 
     await this.client.query([
-      `INSERT OR REPLACE INTO indexed_cards`,
-      ...addExplicitParens(separatedByCommas(nameExpressions)),
-      'VALUES',
-      ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ] as Expression);
+      ...upsert(
+        'indexed_cards',
+        'indexed_cards_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
   }
 
   async deleteEntry(url: URL): Promise<void> {
@@ -784,11 +790,13 @@ export class Batch {
     } as IndexedCardsTable);
 
     await this.client.query([
-      `INSERT OR REPLACE INTO indexed_cards`,
-      ...addExplicitParens(separatedByCommas(nameExpressions)),
-      'VALUES',
-      ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ] as Expression);
+      ...upsert(
+        'indexed_cards',
+        'indexed_cards_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
   }
 
   async makeNewGeneration() {
@@ -802,10 +810,13 @@ export class Batch {
         this.client.query([
           `INSERT INTO indexed_cards`,
           ...addExplicitParens(separatedByCommas(cols)),
-          `SELECT card_url, realm_url, 2 as realm_version, true as is_deleted`,
-          'FROM indexed_cards WHERE realm_url =',
+          `SELECT i.card_url, i.realm_url, ${this.realmVersion} as realm_version, true as is_deleted`,
+          'FROM indexed_cards as i',
+          'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
+          'WHERE i.realm_url =',
           param(this.realmURL.href),
-          'GROUP BY card_url',
+          'AND',
+          ...realmVersionExpression({ useWorkInProgressIndex: false }),
         ] as Expression),
       { isMakingNewGeneration: true },
     );
@@ -818,11 +829,13 @@ export class Batch {
     } as RealmVersionsTable);
     // Make the batch updates live
     await this.client.query([
-      `INSERT OR REPLACE INTO realm_versions`,
-      ...addExplicitParens(separatedByCommas(nameExpressions)),
-      'VALUES',
-      ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ] as Expression);
+      ...upsert(
+        'realm_versions',
+        'realm_versions_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
 
     // prune obsolete generation index entries
     if (this.isNewGeneration) {
@@ -905,9 +918,10 @@ export class Batch {
     try {
       return await fn();
     } catch (e: any) {
-      // TODO need to also catch the pg form of this error
-      // which would be great to bake into the adapter layer
-      if (e.result?.message?.includes('UNIQUE constraint failed')) {
+      if (
+        e.message?.includes('violates unique constraint') || // postgres
+        e.result?.message?.includes('UNIQUE constraint failed') // sqlite
+      ) {
         let message = `Invalidation conflict error in realm ${this.realmURL.href} version ${this.realmVersion}`;
         if (opts?.url && opts?.invalidations) {
           message = `${message}: the invalidation ${

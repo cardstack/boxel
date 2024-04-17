@@ -18,6 +18,10 @@ import {
   type TokenClaims,
 } from '@cardstack/runtime-common';
 
+import {
+  testRealmInfo,
+  testRealmURL,
+} from '@cardstack/runtime-common/helpers/const';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -44,7 +48,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
-import { testRealmInfo, testRealmURL } from './const';
 import percySnapshot from './percy-snapshot';
 
 import { renderComponent } from './render-component';
@@ -52,7 +55,7 @@ import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
-export * from './indexer';
+export * from '@cardstack/runtime-common/helpers/indexer';
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
