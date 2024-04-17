@@ -15,11 +15,9 @@ import {
   UpdateEventData,
 } from '@cardstack/runtime-common/realm';
 
-import { testRealmURL } from './const';
-
 import { WebMessageStream, messageCloseHandler } from './stream';
 
-import { Dir, createJWT } from '.';
+import { Dir, createJWT, testRealmURL } from '.';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
