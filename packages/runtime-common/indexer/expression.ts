@@ -1,6 +1,7 @@
 import * as JSONTypes from 'json-typescript';
 import isPlainObject from 'lodash/isPlainObject';
 import stringify from 'safe-stable-stringify';
+import flattenDeep from 'lodash/flattenDeep';
 
 import { CodeRef } from '../index';
 
@@ -230,4 +231,24 @@ export function asExpressions(
     return v;
   });
   return { nameExpressions, valueExpressions };
+}
+
+export function upsert(
+  table: string,
+  constraint: string,
+  nameExpressions: string[][],
+  valueExpressions: Expression[],
+) {
+  let names = flattenDeep(nameExpressions);
+  return [
+    'INSERT INTO',
+    table,
+    ...addExplicitParens(separatedByCommas(nameExpressions)),
+    'VALUES',
+    ...addExplicitParens(separatedByCommas(valueExpressions)),
+    'ON CONFLICT ON CONSTRAINT',
+    constraint,
+    'DO UPDATE SET',
+    ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
+  ] as Expression;
 }

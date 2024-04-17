@@ -10,7 +10,7 @@ exports.up = (pgm) => {
     types: 'jsonb',
     embedded_html: 'varchar',
     isolated_html: 'varchar',
-    indexed_at: 'integer',
+    indexed_at: 'bigint',
     is_deleted: 'boolean',
   });
   pgm.sql('ALTER TABLE indexed_cards SET UNLOGGED');
@@ -59,4 +59,20 @@ exports.up = (pgm) => {
     result: 'jsonb',
   });
   pgm.sql('ALTER TABLE jobs SET UNLOGGED');
+
+  pgm.sql(`
+    CREATE OR REPLACE FUNCTION jsonb_array_each(data JSONB)
+    RETURNS TABLE (index_text TEXT, text_value TEXT) AS
+    $$
+    BEGIN
+      RETURN QUERY
+      SELECT
+        index::TEXT,
+        value::TEXT
+      FROM
+        jsonb_array_elements_text(data) WITH ORDINALITY AS arr(value, index);
+    END;
+    $$
+    LANGUAGE PLPGSQL;
+  `);
 };
