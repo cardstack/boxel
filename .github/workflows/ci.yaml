@@ -287,9 +287,9 @@ jobs:
           publish_dir: ./playwright-report
           destination_dir: ${{ steps.timestampid.outputs.timestamp }}
 
-    - name: Store Playwright report URL
-      shell: bash
-      run: echo "PLAYWRIGHT_REPORT_URL=https://cardstack.github.io/boxel/${{ steps.timestampid.outputs.timestamp }}/" >> $GITHUB_ENV
+      - name: Store Playwright report URL
+        shell: bash
+        run: echo "PLAYWRIGHT_REPORT_URL=https://cardstack.github.io/boxel/${{ steps.timestampid.outputs.timestamp }}/" >> $GITHUB_ENV
 
       - name: Add check with link to Playwright report
         shell: bash
