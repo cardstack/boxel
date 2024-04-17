@@ -1,5 +1,5 @@
 import { RealmPaths } from './paths';
-import { Loader } from './loader';
+import { Loader, followRedirections } from './loader';
 import type { RunnerOpts } from './search-index';
 import {
   PackageShimHandler,
@@ -109,9 +109,9 @@ export class VirtualNetwork {
         ? urlOrRequest
         : new Request(urlOrRequest, init);
 
-    let internalRequest = await this.mapRequest(request, 'virtual-to-real');
-    let response = await this.runFetch(internalRequest, init);
-    if (internalRequest !== request) {
+    let response = await this.runFetch(request, init);
+
+    if (response.url !== request.url) {
       Object.defineProperty(response, 'url', {
         value:
           this.resolveURLMapping(response.url, 'real-to-virtual') ??
@@ -184,11 +184,12 @@ export class VirtualNetwork {
     for (let handler of this.handlers) {
       let response = await handler(request);
       if (response) {
-        return response;
+        return await followRedirections(request, response, this.fetch);
       }
     }
 
-    return this.nativeFetch(request, init);
+    let internalRequest = await this.mapRequest(request, 'virtual-to-real');
+    return await this.nativeFetch(internalRequest, init);
   }
 
   createEventSource(url: string) {
