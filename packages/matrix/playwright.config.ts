@@ -1,7 +1,4 @@
 import { defineConfig } from '@playwright/test';
-import { readdirSync } from 'fs';
-
-let tests = readdirSync('./tests');
 
 /**
  * See https://playwright.dev/docs/test-configuration.
