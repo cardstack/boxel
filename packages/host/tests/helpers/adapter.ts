@@ -172,10 +172,6 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
-  get c() {
-    return this.#contents;
-  }
-
   async openFile(path: LocalPath): Promise<FileRef | undefined> {
     let content;
     try {
