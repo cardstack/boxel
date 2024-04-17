@@ -287,6 +287,24 @@ jobs:
           publish_dir: ./playwright-report
           destination_dir: ${{ steps.timestampid.outputs.timestamp }}
 
+    - name: Store Playwright report URL
+      shell: bash
+      run: echo "PLAYWRIGHT_REPORT_URL=https://cardstack.github.io/boxel/${{ steps.timestampid.outputs.timestamp }}/" >> $GITHUB_ENV
+
+      - name: Add check with link to Playwright report
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          curl \
+            -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
+            -d '{"context":"Playwright report","description":"","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
+
   realm-server-test:
     name: Realm Server Tests
     runs-on: ubuntu-latest
