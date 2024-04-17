@@ -872,7 +872,7 @@ export class Realm {
       return notFound(this, request, `${request.url} not found`);
     }
 
-    let fileRef = maybeFileRef; // todo rename to fileHandle (or ref)
+    let fileRef = maybeFileRef;
 
     if (
       executableExtensions.some((extension) =>
@@ -880,8 +880,6 @@ export class Realm {
       ) &&
       !localPath.startsWith(assetsDir)
     ) {
-      // propagate the shimmed symbol to the response - the loader should deal with it
-      // value should not be the proxied module but the module
       let response = this.makeJS(
         await fileContentToText(fileRef),
         fileRef.path,
