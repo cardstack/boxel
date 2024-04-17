@@ -165,9 +165,13 @@ export default class SQLiteAdapter implements DBAdapter {
         }
         return `ON CONFLICT (${pkColumns})`;
       })
+      .replace(/ANY_VALUE\(([^)]*)\)/g, '$1')
       .replace(/CROSS JOIN LATERAL/g, 'CROSS JOIN')
       .replace(/jsonb_array_each\(/g, 'json_each(')
+      .replace(/jsonb_tree\(/g, 'json_tree(')
       .replace(/\.text_value/g, '.value')
+      .replace(/\.jsonb_value/g, '.value')
+      .replace(/= 'null'::jsonb/g, 'IS NULL')
       .replace(/COLLATE "POSIX"/g, '');
   }
 }

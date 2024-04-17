@@ -23,6 +23,7 @@ export interface Param {
 export interface FieldQuery {
   type: CodeRef;
   path: string;
+  useJsonBValue: boolean;
   errorHint: string;
   kind: 'field-query';
 }
@@ -38,7 +39,6 @@ export interface FieldValue {
 export interface TableValuedEach {
   kind: 'table-valued-each';
   column: string;
-  path: string;
 }
 
 export interface TableValuedTree {
@@ -52,6 +52,8 @@ export interface FieldArity {
   type: CodeRef;
   path: string;
   value: CardExpression;
+  pluralValue?: CardExpression;
+  usePluralContainer?: boolean;
   errorHint: string;
   kind: 'field-arity';
 }
@@ -97,11 +99,10 @@ export function isParam(expression: any): expression is Param {
   return isPlainObject(expression) && 'param' in expression;
 }
 
-export function tableValuedEach(column: string, path: string): TableValuedEach {
+export function tableValuedEach(column: string): TableValuedEach {
   return {
     kind: 'table-valued-each',
     column,
-    path,
   };
 }
 
@@ -121,11 +122,13 @@ export function tableValuedTree(
 export function fieldQuery(
   path: string,
   type: CodeRef,
+  useJsonBValue: boolean,
   errorHint: string,
 ): FieldQuery {
   return {
     type,
     path,
+    useJsonBValue,
     errorHint,
     kind: 'field-query',
   };
@@ -146,17 +149,28 @@ export function fieldValue(
   };
 }
 
-export function fieldArity(
-  type: CodeRef,
-  path: string,
-  value: CardExpression,
-  errorHint: string,
-): FieldArity {
+export function fieldArity({
+  type,
+  path,
+  value,
+  usePluralContainer,
+  errorHint,
+  pluralValue,
+}: {
+  type: CodeRef;
+  path: string;
+  value: CardExpression;
+  usePluralContainer?: boolean;
+  errorHint: string;
+  pluralValue?: CardExpression;
+}): FieldArity {
   return {
     type,
     path,
     value,
     errorHint,
+    usePluralContainer,
+    pluralValue,
     kind: 'field-arity',
   };
 }

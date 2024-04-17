@@ -62,12 +62,12 @@ exports.up = (pgm) => {
 
   pgm.sql(`
     CREATE OR REPLACE FUNCTION jsonb_array_each(data JSONB)
-    RETURNS TABLE (index_text TEXT, text_value TEXT) AS
+    RETURNS TABLE (index_text INTEGER, text_value TEXT) AS
     $$
     BEGIN
       RETURN QUERY
       SELECT
-        index::TEXT,
+        index::INTEGER,
         value::TEXT
       FROM
         jsonb_array_elements_text(data) WITH ORDINALITY AS arr(value, index);
@@ -78,7 +78,7 @@ exports.up = (pgm) => {
 
   pgm.sql(`
     CREATE OR REPLACE FUNCTION jsonb_tree(data JSONB, root_path TEXT DEFAULT NULL)
-    RETURNS TABLE (fullkey TEXT, text_value JSONB, level INT) AS
+    RETURNS TABLE (fullkey TEXT, jsonb_value JSONB, text_value TEXT, level INT) AS
     $$
     WITH RECURSIVE cte AS (
         SELECT
@@ -90,8 +90,9 @@ exports.up = (pgm) => {
             ) AS current_key,
             (CASE
               WHEN root_path IS NULL THEN data
-              ELSE data #> string_to_array(substring(root_path from '\.(.*)'), '.')
-            END) AS current_value,
+              ELSE data #> string_to_array(substring(root_path from 3), '.') -- trim off leading '$.'
+            END) AS jsonb_value,
+            null AS text_value,
             1 AS level
 
         UNION ALL
@@ -99,31 +100,35 @@ exports.up = (pgm) => {
         (
           SELECT
               CASE
-                  WHEN jsonb_typeof(c.current_value) = 'object' THEN c.current_key || '.' || key
-                  WHEN jsonb_typeof(c.current_value) = 'array' THEN c.current_key || '[' || (index - 1)::TEXT || ']'
+                  WHEN c.jsonb_value IS JSON OBJECT THEN c.current_key || '.' || key
+                  WHEN c.jsonb_value IS JSON ARRAY THEN c.current_key || '[' || (index - 1)::TEXT || ']'
                   ELSE c.current_key
               END,
               CASE
-                  WHEN jsonb_typeof(c.current_value) = 'object' THEN kv.value
-                  WHEN jsonb_typeof(c.current_value) = 'array' THEN arr.value
+                  WHEN c.jsonb_value IS JSON OBJECT THEN kv.value
+                  WHEN c.jsonb_value IS JSON ARRAY THEN arr.value
+              END,
+              CASE
+                  WHEN c.jsonb_value IS JSON OBJECT THEN trim('"' from kv.value::text)
+                  WHEN c.jsonb_value IS JSON ARRAY THEN trim('"' from arr.value::text)
               END,
               c.level + 1
           FROM
               cte c
           CROSS JOIN LATERAL jsonb_each(
               CASE
-                  WHEN jsonb_typeof(c.current_value) = 'array' THEN '{"_":null}'::jsonb
-                  ELSE c.current_value 
+                  WHEN c.jsonb_value IS JSON OBJECT THEN c.jsonb_value
+                  ELSE '{"_":null}'::jsonb
               END
           ) AS kv (key, value)
           CROSS JOIN LATERAL jsonb_array_elements(
               CASE
-                  WHEN jsonb_typeof(c.current_value) = 'object' THEN '[null]'::jsonb
-                  ELSE c.current_value 
+                  WHEN c.jsonb_value IS JSON ARRAY THEN c.jsonb_value
+                  ELSE '[null]'::jsonb
               END
           ) WITH ORDINALITY arr(value, index)
           WHERE
-              jsonb_typeof(c.current_value) = 'object' OR jsonb_typeof(c.current_value) = 'array'
+              c.jsonb_value IS JSON OBJECT OR c.jsonb_value IS JSON ARRAY
         )
     )
     SELECT * FROM cte 
