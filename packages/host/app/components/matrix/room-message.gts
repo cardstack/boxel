@@ -3,7 +3,8 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+
+import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -17,6 +18,7 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -25,7 +27,6 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
-import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
@@ -112,9 +113,9 @@ export default class RoomMessage extends Component<Signature> {
             {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
           </Button>
           <ApplyButton
-            @state={{this.applyButtonState}}
+            @state={{this.commandState}}
             {{on 'click' (perform this.patchCard)}}
-            data-test-command-apply={{this.applyButtonState}}
+            data-test-command-apply={{this.commandState}}
           />
         </div>
         {{#if this.isDisplayingCode}}
@@ -215,11 +216,11 @@ export default class RoomMessage extends Component<Signature> {
   };
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
 
   @tracked private isDisplayingCode = false;
   @tracked private patchCardError: { id: string; error: unknown } | undefined;
-  @tracked private applyButtonState: ApplyButtonState = 'ready';
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -285,19 +286,28 @@ export default class RoomMessage extends Component<Signature> {
       return;
     }
     let { id, patch } = this.args.message.command.payload;
+    let { eventId } = this.args.message.command;
     this.patchCardError = undefined;
     try {
-      this.applyButtonState = 'applying';
+      this.matrixService.commandState.set(eventId, 'applying');
       await this.operatorModeStateService.patchCard.perform(
         id,
         patch.attributes,
       );
-      this.applyButtonState = 'applied';
+      this.matrixService.commandState.set(eventId, 'applied');
     } catch (e) {
       this.patchCardError = { id, error: e };
-      this.applyButtonState = 'failed';
+      this.matrixService.commandState.set(eventId, 'failed');
     }
   });
+
+  @cached
+  private get commandState() {
+    let status = this.matrixService.commandState.get(
+      this.args.message.command.eventId,
+    );
+    return status ?? 'ready';
+  }
 
   private get previewPatchCode() {
     let { commandType, payload } = this.args.message.command;

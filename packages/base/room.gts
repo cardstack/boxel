@@ -243,6 +243,7 @@ class CommandType extends FieldDef {
 
 // Subclass, add a validator that checks the fields required?
 class PatchField extends FieldDef {
+  @field eventId = contains(StringField);
   @field commandType = contains(CommandType);
   @field payload = contains(PatchObjectField);
 }
@@ -559,6 +560,7 @@ export class RoomField extends FieldDef {
             ...cardArgs,
             formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
             command: new PatchField({
+              eventId: event_id,
               commandType: command.type,
               payload: command,
             }),

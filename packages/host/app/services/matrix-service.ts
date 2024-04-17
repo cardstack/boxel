@@ -53,6 +53,7 @@ import type {
   CardFragmentContent,
 } from 'https://cardstack.com/base/room';
 
+import { type ApplyButtonState } from '../components/ai-assistant/apply-button';
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
@@ -74,6 +75,9 @@ export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
 };
+
+export type CommandState = ApplyButtonState;
+
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
@@ -88,6 +92,7 @@ export default class MatrixService extends Service {
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   pendingMessages: TrackedMap<string, MessageField | undefined> =
     new TrackedMap();
+  commandState: TrackedMap<string, CommandState> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];

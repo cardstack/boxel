@@ -9,7 +9,10 @@ import { clearAllRealmSessions } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
+import {
+  OperatorModeContext,
+  type CommandState,
+} from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type { RoomField, MessageField } from 'https://cardstack.com/base/room';
@@ -80,6 +83,7 @@ function generateMockMatrixService(
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     pendingMessages: TrackedMap<string, MessageField> = new TrackedMap();
+    commandState: TrackedMap<string, CommandState> = new TrackedMap();
 
     async start(_auth?: any) {}
 

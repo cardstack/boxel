@@ -748,7 +748,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Fadhlan');
 
       let roomId = await openAiAssistant();
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
         state_key: 'state',
@@ -783,6 +783,126 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-patch-card-idle]');
 
       assert.dom('[data-test-person]').hasText('Dave');
+    });
+
+    test('it maintains status of apply buttons during a session when switching between rooms', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person="Fadhlan"]');
+      await matrixService.createAndJoinRoom('room1', 'test room 1');
+      await matrixService.createAndJoinRoom('room2', 'test room 2');
+      await addRoomEvent(matrixService, {
+        event_id: 'room1-event1',
+        room_id: 'room1',
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Changing first name to Evie',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Evie' } },
+            },
+          }),
+        },
+      });
+      await addRoomEvent(matrixService, {
+        event_id: 'room1-event2',
+        room_id: 'room1',
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Changing first name to Jackie',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Jackie' } },
+            },
+          }),
+        },
+      });
+      await addRoomEvent(matrixService, {
+        event_id: 'room2-event1',
+        room_id: 'room2',
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Incorrect command',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { pet: null } },
+            },
+          }),
+        },
+      });
+
+      await click('[data-test-open-ai-assistant]');
+      await waitFor('[data-test-room-name="test room 1"]');
+      await waitFor('[data-test-message-idx="1"] [data-test-command-apply]');
+      await click('[data-test-message-idx="1"] [data-test-command-apply]');
+      await waitFor('[data-test-patch-card-idle]');
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+        .exists();
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
+        .exists();
+
+      await click('[data-test-past-sessions-button]');
+      await click(`[data-test-enter-room="room2"]`);
+      await waitFor('[data-test-room-name="test room 2"]');
+      await waitFor('[data-test-command-apply]');
+      await click('[data-test-command-apply]');
+      await waitFor('[data-test-patch-card-idle]');
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="failed"]')
+        .exists();
+
+      // reopen ai assistant panel
+      await click('[data-test-close-ai-assistant]');
+      await waitFor('[data-test-ai-assistant-panel]', { count: 0 });
+      await click('[data-test-open-ai-assistant]');
+      await waitFor('[data-test-ai-assistant-panel]');
+
+      await click('[data-test-past-sessions-button]');
+      await click(`[data-test-enter-room="room1"]`);
+      await waitFor('[data-test-room-name="test room 1"]');
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+        .exists();
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
+        .exists();
+
+      await click('[data-test-past-sessions-button]');
+      await click(`[data-test-enter-room="room2"]`);
+      await waitFor('[data-test-room-name="test room 2"]');
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="failed"]')
+        .exists();
     });
 
     test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
@@ -1045,7 +1165,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-person="Fadhlan"]');
 
       let roomId = await openAiAssistant();
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
         state_key: 'state',
@@ -1065,7 +1185,7 @@ module('Integration | operator-mode', function (hooks) {
           }),
         },
       });
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event2',
         room_id: roomId,
         state_key: 'state',
@@ -1085,7 +1205,7 @@ module('Integration | operator-mode', function (hooks) {
           }),
         },
       });
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event3',
         room_id: roomId,
         state_key: 'state',
@@ -1400,7 +1520,7 @@ module('Integration | operator-mode', function (hooks) {
           }),
         );
         await sendMessageDeferred.promise;
-        addRoomEvent(matrixService, {
+        await addRoomEvent(matrixService, {
           event_id: 'event1',
           room_id: roomId,
           state_key: 'state',
@@ -1598,7 +1718,7 @@ module('Integration | operator-mode', function (hooks) {
       );
       let roomId = await openAiAssistant();
 
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
         state_key: 'state',

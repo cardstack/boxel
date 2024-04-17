@@ -21,6 +21,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       @size='small'
       class='apply-button'
       {{setCssVar boxel-button-text-color='var(--boxel-dark)'}}
+      data-test-apply-state={{@state}}
       ...attributes
     >
       Apply
