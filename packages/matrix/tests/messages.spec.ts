@@ -70,7 +70,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
   });
 
-  test.skip(`it can load all events back to beginning of timeline for timelines that truncated`, async ({
+  test(`it can load all events back to beginning of timeline for timelines that truncated`, async ({
     page,
   }) => {
     // generally the matrix server paginates after 10 messages
@@ -92,7 +92,7 @@ test.describe('Room messages', () => {
     );
   });
 
-  test.skip(`it can send a markdown message`, async ({ page }) => {
+  test(`it can send a markdown message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'message with _style_');
@@ -107,9 +107,7 @@ test.describe('Room messages', () => {
     ).toContainText('style');
   });
 
-  test.skip(`it can create a room specific pending message`, async ({
-    page,
-  }) => {
+  test(`it can create a room specific pending message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Hello');
@@ -143,7 +141,7 @@ test.describe('Room messages', () => {
     ).toHaveValue('room 2 message');
   });
 
-  test.skip('can add a card to a markdown message', async ({ page }) => {
+  test('can add a card to a markdown message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
@@ -176,7 +174,7 @@ test.describe('Room messages', () => {
     ).toContainText('my');
   });
 
-  test.skip('can add a card that is over 65K to a message (i.e. split card into multiple matrix events)', async ({
+  test('can add a card that is over 65K to a message (i.e. split card into multiple matrix events)', async ({
     page,
   }) => {
     const testCard = `${testHost}/big-card`; // this is a 153KB card
@@ -219,7 +217,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.skip('it can strip out base64 image fields from cards sent in messages', async ({
+  test('it can strip out base64 image fields from cards sent in messages', async ({
     page,
   }) => {
     const testCard = `${testHost}/mango-puppy`; // this is a 153KB card
@@ -253,7 +251,7 @@ test.describe('Room messages', () => {
     expect(serializeCard.data.attributes.picture).toBeUndefined();
   });
 
-  test.skip(`it does include patch function in message event when top-most card is writable and context is shared`, async ({
+  test(`it does include patch function in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -312,7 +310,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.skip(`it does not include patch function in message event for an open card that is not attached`, async ({
+  test(`it does not include patch function in message event for an open card that is not attached`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -337,7 +335,7 @@ test.describe('Room messages', () => {
     expect(boxelMessageData.context.functions).toMatchObject([]);
   });
 
-  test.skip(`it does not include patch function in message event when top-most card is read-only`, async ({
+  test(`it does not include patch function in message event when top-most card is read-only`, async ({
     page,
   }) => {
     // the base realm is a read-only realm
@@ -360,7 +358,7 @@ test.describe('Room messages', () => {
     expect(boxelMessageData.context.functions).toMatchObject([]);
   });
 
-  test.skip('can send only a card as a message', async ({ page }) => {
+  test('can send only a card as a message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
@@ -373,9 +371,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.skip('can send cards with types unsupported by matrix', async ({
-    page,
-  }) => {
+  test('can send cards with types unsupported by matrix', async ({ page }) => {
     const testCard = `${testHost}/type-examples`;
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
@@ -390,7 +386,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.skip('can remove a card from a pending message', async ({ page }) => {
+  test('can remove a card from a pending message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     await login(page, 'user1', 'pass');
@@ -446,7 +442,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.skip('can render multiple cards in a room', async ({ page }) => {
+  test('can render multiple cards in a room', async ({ page }) => {
     // the loader deadlocking issue would otherwise prevent this
 
     const testCard1 = `${testHost}/hassan`;
@@ -481,7 +477,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message1, message2]);
   });
 
-  test.skip('can send multiple cards in a message', async ({ page }) => {
+  test('can send multiple cards in a message', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     const message = {
@@ -511,7 +507,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message]);
   });
 
-  test.skip('attached cards are not duplicated', async ({ page }) => {
+  test('attached cards are not duplicated', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     const testCard3 = `${testHost}/type-examples`;
@@ -538,7 +534,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.skip('displays view all pill if attached card more than 4', async ({
+  test('displays view all pill if attached card more than 4', async ({
     page,
   }) => {
     const testCard1 = `${testHost}/hassan`;
@@ -568,7 +564,7 @@ test.describe('Room messages', () => {
     await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(5);
   });
 
-  test.skip('displays auto-attached card', async ({ page }) => {
+  test('displays auto-attached card', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
 
@@ -624,7 +620,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.skip('does not auto attach index card', async ({ page }) => {
+  test('does not auto attach index card', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
 
     await login(page, 'user1', 'pass');
@@ -670,7 +666,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.skip('can remove auto-attached card', async ({ page }) => {
+  test('can remove auto-attached card', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     const testCard3 = `${testHost}/type-examples`;
@@ -720,7 +716,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.skip('it can send the prompts on new-session room as chat message on click', async ({
+  test('it can send the prompts on new-session room as chat message on click', async ({
     page,
   }) => {
     const prompt = {
@@ -738,16 +734,12 @@ test.describe('Room messages', () => {
     await assertMessages(page, [prompt]);
   });
 
-  test.skip('sends message when no card open in the stack', async ({
+  test('sends message when no card open in the stack', async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
-    await page
-      .locator('[data-test-stack-card] [data-test-close-button]')
-      .click();
-    await page
-      .locator('[data-test-message-field]')
-      .fill('Sending message with no card open');
+    await page.locator('[data-test-stack-card] [data-test-close-button]').click();
+    await page.locator('[data-test-message-field]').fill('Sending message with no card open');
     await page.locator('[data-test-send-message-btn]').click();
 
     await assertMessages(page, [
@@ -759,9 +751,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test.skip('attaches a card in a coversation multiple times', async ({
-    page,
-  }) => {
+  test('attaches a card in a coversation multiple times', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
 
     await login(page, 'user1', 'pass');
@@ -772,39 +762,36 @@ test.describe('Room messages', () => {
       await selectCardFromCatalog(page, testCard);
       await page.locator('[data-test-send-message-btn]').click();
     }
-
+    
     await assertMessages(page, [
       {
         from: 'user1',
         message: 'Message - 1',
-        cards: [{ id: testCard, title: 'Hassan' }],
+        cards: [
+          { id: testCard, title: 'Hassan' },
+        ],
       },
       {
         from: 'user1',
         message: 'Message - 2',
-        cards: [{ id: testCard, title: 'Hassan' }],
+        cards: [
+          { id: testCard, title: 'Hassan' },
+        ],
       },
       {
         from: 'user1',
         message: 'Message - 3',
-        cards: [{ id: testCard, title: 'Hassan' }],
+        cards: [
+          { id: testCard, title: 'Hassan' },
+        ],
       },
     ]);
 
-    // There should only be one card fragments event for multiple message events
+    // There should only be one card fragments event for multiple message events 
     // if the card remains unchanged and is attached multiple times.
     let events = await getRoomEvents();
-    let messageEvents = events.filter(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === 'org.boxel.message',
-    );
-    let cardFragmentEvents = events.filter(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === 'org.boxel.cardFragment' &&
-        !e.content.data.nextFragment,
-    );
+    let messageEvents = events.filter(e => e.type === 'm.room.message' && e.content.msgtype === 'org.boxel.message');
+    let cardFragmentEvents = events.filter(e => e.type === 'm.room.message' && e.content.msgtype === 'org.boxel.cardFragment' && !e.content.data.nextFragment);
     expect(messageEvents.length).toEqual(3);
     expect(cardFragmentEvents.length).toEqual(1);
 
@@ -814,69 +801,54 @@ test.describe('Room messages', () => {
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testCard}"]`,
       )
       .click();
-    await page
-      .locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`)
-      .click();
-    await page
-      .locator('[data-test-field="firstName"] [data-test-boxel-input]')
-      .fill('Updated Name');
-    await page
-      .locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`)
-      .click();
+    await page.locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`).click();
+    await page.locator('[data-test-field="firstName"] [data-test-boxel-input]').fill('Updated Name');
+    await page.locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`).click();
 
-    await page
-      .locator('[data-test-message-field]')
-      .fill(`Message with updated card`);
+    await page.locator('[data-test-message-field]').fill(`Message with updated card`);
     await page.locator('[data-test-send-message-btn]').click();
 
     await assertMessages(page, [
       {
         from: 'user1',
         message: 'Message - 1',
-        cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
+        cards: [
+          { id: testCard, title: 'Updated Name Abdel-Rahman' },
+        ],
       },
       {
         from: 'user1',
         message: 'Message - 2',
-        cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
+        cards: [
+          { id: testCard, title: 'Updated Name Abdel-Rahman' },
+        ],
       },
       {
         from: 'user1',
         message: 'Message - 3',
-        cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
+        cards: [
+          { id: testCard, title: 'Updated Name Abdel-Rahman' },
+        ],
       },
       {
         from: 'user1',
         message: 'Message with updated card',
-        cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
+        cards: [
+          { id: testCard, title: 'Updated Name Abdel-Rahman' },
+        ],
       },
     ]);
 
     // There must be a new card fragments event because the card has been updated.
     events = await getRoomEvents();
-    messageEvents = events.filter(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === 'org.boxel.message',
-    );
-    cardFragmentEvents = events.filter(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === 'org.boxel.cardFragment' &&
-        !e.content.data.nextFragment,
-    );
+    messageEvents = events.filter(e => e.type === 'm.room.message' && e.content.msgtype === 'org.boxel.message');
+    cardFragmentEvents = events.filter(e => e.type === 'm.room.message' && e.content.msgtype === 'org.boxel.cardFragment' && !e.content.data.nextFragment);
     expect(messageEvents.length).toEqual(4);
     expect(cardFragmentEvents.length).toEqual(2);
 
     // Revert updates
-    await page
-      .locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`)
-      .click();
-    await page
-      .locator('[data-test-field="firstName"] [data-test-boxel-input]')
-      .fill('Hassan');
-    await page
-      .locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`)
-      .click();
+    await page.locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`).click();
+    await page.locator('[data-test-field="firstName"] [data-test-boxel-input]').fill('Hassan');
+    await page.locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`).click();
   });
 });
