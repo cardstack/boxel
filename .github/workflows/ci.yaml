@@ -233,6 +233,7 @@ jobs:
     permissions:
       contents: write
       checks: write
+      statuses: write
 
     outputs:
       timestamp: ${{ steps.timestampid.outputs.timestamp }}
