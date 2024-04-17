@@ -2200,6 +2200,14 @@ module('Realm Server serving from root', function (hooks) {
                 kind: 'file',
               },
             },
+            'query-test-cards.gts': {
+              links: {
+                related: `${testRealmHref}query-test-cards.gts`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
             'unused-card.gts': {
               links: {
                 related: `${testRealmHref}unused-card.gts`,
