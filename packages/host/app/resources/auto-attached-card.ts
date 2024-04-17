@@ -19,6 +19,7 @@ export class AutoAttachment extends Resource<Args> {
     const { lastTopMostCard, attachedCards } = named;
     if (lastTopMostCard === undefined) {
       this.card = undefined;
+      this.lastCard = undefined;
       return;
     }
     if (
