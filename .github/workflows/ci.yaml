@@ -257,7 +257,7 @@ jobs:
       - run: ls -l all-blob-reports
 
       - name: Merge blobs into one single report
-        run: npx playwright merge-reports --reporter html ./all-blob-reports
+        run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
 
       # - name: Upload merged report as artifact
       #   if: always()
