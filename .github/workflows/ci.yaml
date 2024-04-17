@@ -230,6 +230,9 @@ jobs:
     needs: matrix-client-test
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+
     outputs:
       timestamp: ${{ steps.timestampid.outputs.timestamp }}
 
