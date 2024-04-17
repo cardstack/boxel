@@ -75,4 +75,59 @@ exports.up = (pgm) => {
     $$
     LANGUAGE PLPGSQL;
   `);
+
+  pgm.sql(`
+    CREATE OR REPLACE FUNCTION jsonb_tree(data JSONB, root_path TEXT DEFAULT NULL)
+    RETURNS TABLE (fullkey TEXT, text_value JSONB, level INT) AS
+    $$
+    WITH RECURSIVE cte AS (
+        SELECT
+            (
+              CASE
+                WHEN root_path IS NULL THEN '$'
+                ELSE root_path
+              END
+            ) AS current_key,
+            (CASE
+              WHEN root_path IS NULL THEN data
+              ELSE data #> string_to_array(substring(root_path from '\.(.*)'), '.')
+            END) AS current_value,
+            1 AS level
+
+        UNION ALL
+
+        (
+          SELECT
+              CASE
+                  WHEN jsonb_typeof(c.current_value) = 'object' THEN c.current_key || '.' || key
+                  WHEN jsonb_typeof(c.current_value) = 'array' THEN c.current_key || '[' || (index - 1)::TEXT || ']'
+                  ELSE c.current_key
+              END,
+              CASE
+                  WHEN jsonb_typeof(c.current_value) = 'object' THEN kv.value
+                  WHEN jsonb_typeof(c.current_value) = 'array' THEN arr.value
+              END,
+              c.level + 1
+          FROM
+              cte c
+          CROSS JOIN LATERAL jsonb_each(
+              CASE
+                  WHEN jsonb_typeof(c.current_value) = 'array' THEN '{"_":null}'::jsonb
+                  ELSE c.current_value 
+              END
+          ) AS kv (key, value)
+          CROSS JOIN LATERAL jsonb_array_elements(
+              CASE
+                  WHEN jsonb_typeof(c.current_value) = 'object' THEN '[null]'::jsonb
+                  ELSE c.current_value 
+              END
+          ) WITH ORDINALITY arr(value, index)
+          WHERE
+              jsonb_typeof(c.current_value) = 'object' OR jsonb_typeof(c.current_value) = 'array'
+        )
+    )
+    SELECT * FROM cte 
+    $$
+    LANGUAGE SQL;
+  `);
 };
