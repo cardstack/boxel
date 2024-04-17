@@ -170,159 +170,8 @@ export class ProductImages extends GlimmerComponent<ProductImagesSignature> {
   </template>
 }
 
-interface ProductDetailSignature {
-  Element: HTMLDivElement;
-  Args: {
-    model: Partial<Product>;
-    fields: FieldsTypeFor<Product>;
-  };
-}
-
-export class ProductDetail extends GlimmerComponent<ProductDetailSignature> {
-  get leadTimeDays() {
-    return this.args.model.leadTimeDays || 0;
-  }
-
-  get deliveryWindowDays() {
-    return this.args.model.deliveryWindowDays || 0;
-  }
-
-  <template>
-    <div ...attributes>
-      <h2>Item Details</h2>
-      <div class='details'>
-        <@fields.details />
-      </div>
-      <h2>Shipping and return policies</h2>
-      <div class='policies'>
-        <div>
-          🗓️ Order today, get by
-          {{expectedArrivalDescription
-            this.leadTimeDays
-            this.deliveryWindowDays
-          }}
-        </div>
-        {{#if @model.isReturnable}}
-          <div>
-            ⮐ Free returns within 30 days
-          </div>
-        {{else}}
-          <div>⮐ Returns &amp; exchanges not accepted</div>
-        {{/if}}
-        <div>
-          {{#if (eq @model.shippingCost.amount 0)}}
-            🚚 Free shipping
-          {{else}}
-            🚚 Cost to ship:
-            <MonetaryAmountAtom @model={{@model.shippingCost}} />
-          {{/if}}
-        </div>
-      </div>
-    </div>
-    <style>
-      h2 {
-        margin-top: 0;
-        font-size: 1.1em;
-      }
-      .policies {
-        line-height: 2;
-      }
-    </style>
-  </template>
-}
-
-class Isolated extends Component<typeof Product> {
-  @tracked activeImage = this.args.model.images?.[0];
-
-  @action updateActiveImage(image: string) {
-    this.activeImage = image;
-  }
-
-  <template>
-    <div class='product'>
-      <div class='decorative-header'></div>
-      <div class='left-container'>
-        <ProductImages
-          @images={{@model.images}}
-          @activeImage={{this.activeImage}}
-          @onSelectImage={{this.updateActiveImage}}
-          class='images'
-        />
-        <ProductDetail
-          @model={{@model}}
-          @fields={{@fields}}
-          class='details-container'
-        />
-      </div>
-      <div class='right-container'>
-        <div class='seller-container'>
-          <span class='seller'>
-            {{@model.seller.title}}
-          </span>
-        </div>
-        <h1 class='title'>{{@model.title}}</h1>
-        <div class='price'>
-          <MonetaryAmountAtom @model={{@model.unitPrice}} />
-        </div>
-        <button>
-          Add to cart
-        </button>
-      </div>
-    </div>
-    <style>
-      .product {
-        display: grid;
-        grid-template-columns: 50% 50%;
-        width: 100%;
-      }
-      .decorative-header {
-        background-image: url(https://i.imgur.com/PQuDAEo.jpg);
-        height: var(--boxel-sp-xxl);
-        grid-column: 1 / span 2;
-        margin-bottom: var(--boxel-sp);
-      }
-      .images {
-        margin: 0 var(--boxel-sp);
-      }
-      .details-container {
-        background: var(--boxel-200);
-        border-radius: 16px;
-        margin: var(--boxel-sp);
-        padding: var(--boxel-sp);
-      }
-      .seller {
-        font-size: 1.1em;
-        margin-right: var(--boxel-sp);
-      }
-      .title,
-      .price {
-        font-size: 1.8em;
-        font-weight: 600;
-      }
-      .price {
-        color: green;
-      }
-      button {
-        margin-top: 10px;
-        border-radius: 20px;
-        background: black;
-        color: white;
-        font-weight: 500;
-        font-size: 14px;
-        padding: 7px 24px;
-        border: 0;
-      }
-      div[data-test-compound-field-format='atom'] {
-        display: inline-block;
-      }
-    </style>
-  </template>
-}
-
 export class Product extends CardDef {
   static displayName = 'Product';
-
-  // use title field for product title
 
   @field images = containsMany(StringField);
   @field seller = linksTo(SellerCard);
@@ -338,11 +187,134 @@ export class Product extends CardDef {
     },
   });
 
+  static isolated = class Isolated extends Component<typeof Product> {
+    @tracked activeImage = this.args.model.images?.[0];
+
+    @action updateActiveImage(image: string) {
+      this.activeImage = image;
+    }
+
+    <template>
+      <div class='product'>
+        <div class='decorative-header'></div>
+        <div class='left-container'>
+          <ProductImages
+            @images={{@model.images}}
+            @activeImage={{this.activeImage}}
+            @onSelectImage={{this.updateActiveImage}}
+            class='images'
+          />
+          <div class='details-container'>
+            <h2>Item Details</h2>
+            <div class='details'>
+              <@fields.details />
+            </div>
+            <h2>Shipping and return policies</h2>
+            <div class='policies'>
+              <div>
+                🗓️ Order today, get by
+                {{expectedArrivalDescription
+                  this.leadTimeDays
+                  this.deliveryWindowDays
+                }}
+              </div>
+              {{#if @model.isReturnable}}
+                <div>
+                  ⮐ Free returns within 30 days
+                </div>
+              {{else}}
+                <div>⮐ Returns &amp; exchanges not accepted</div>
+              {{/if}}
+              <div>
+                {{#if (eq @model.shippingCost.amount 0)}}
+                  🚚 Free shipping
+                {{else}}
+                  🚚 Cost to ship:
+                  <MonetaryAmountAtom @model={{@model.shippingCost}} />
+                {{/if}}
+              </div>
+            </div>
+          </div>
+            @model={{@model}}
+            @fields={{@fields}}
+            '
+          />
+        </div>
+        <div class='right-container'>
+          <div class='seller-container'>
+            <span class='seller'>
+              {{@model.seller.title}}
+            </span>
+          </div>
+          <h1 class='title'>{{@model.title}}</h1>
+          <div class='price'>
+            <MonetaryAmountAtom @model={{@model.unitPrice}} />
+          </div>
+          <button>
+            Add to cart
+          </button>
+        </div>
+      </div>
+      <style>
+        .product {
+          display: grid;
+          grid-template-columns: 50% 50%;
+          width: 100%;
+        }
+        .decorative-header {
+          background-image: url(https://i.imgur.com/PQuDAEo.jpg);
+          height: var(--boxel-sp-xxl);
+          grid-column: 1 / span 2;
+          margin-bottom: var(--boxel-sp);
+        }
+        .images {
+          margin: 0 var(--boxel-sp);
+        }
+        .details-container {
+          background: var(--boxel-200);
+          border-radius: 16px;
+          margin: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+        .seller {
+          font-size: 1.1em;
+          margin-right: var(--boxel-sp);
+        }
+        .title,
+        .price {
+          font-size: 1.8em;
+          font-weight: 600;
+        }
+        .price {
+          color: green;
+        }
+        button {
+          margin-top: 10px;
+          border-radius: 20px;
+          background: black;
+          color: white;
+          font-weight: 500;
+          font-size: 14px;
+          padding: 7px 24px;
+          border: 0;
+        }
+        div[data-test-compound-field-format='atom'] {
+          display: inline-block;
+        }
+        h2 {
+          margin-top: 0;
+          font-size: 1.1em;
+        }
+      .policies {
+        line-height: 2;
+      }
+      </style>
+    </template>
+  };
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <EmbeddedProductComponent @model={{@model}} />
     </template>
   };
-
-  static isolated = Isolated;
 }
