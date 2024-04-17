@@ -171,26 +171,23 @@ export function getRelevantCards(
   return sortedCards;
 }
 
-export function getFunctions(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-) {
+export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
   // Just get the users messages
   const userMessages = history.filter((event) => event.sender !== aiBotUserId);
   // Get the last message
   if (userMessages.length === 0) {
-    // If the user has sent no messages, there are no relevant functions to return
+    // If the user has sent no messages, there are no relevant tools to return
     return [];
   }
   const lastMessage = userMessages[userMessages.length - 1];
   if (
     lastMessage.type === 'm.room.message' &&
     lastMessage.content.msgtype === 'org.boxel.message' &&
-    lastMessage.content.data?.context?.functions
+    lastMessage.content.data?.context?.tools
   ) {
-    return lastMessage.content.data.context.functions;
+    return lastMessage.content.data.context.tools;
   } else {
-    // If it's a different message type, or there are no functions, return an empty array
+    // If it's a different message type, or there are no tools, return an empty array
     return [];
   }
 }
@@ -266,7 +263,7 @@ export function getStartOfConversation(
 export function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  functions: any[] = [],
+  tools: any[] = [],
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -304,7 +301,7 @@ export function getModifyPrompt(
   for (let card of getRelevantCards(history, aiBotUserId)) {
     systemMessage += `Full data: ${JSON.stringify(card)}`;
   }
-  if (functions.length == 0) {
+  if (tools.length == 0) {
     systemMessage +=
       'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached';
   }

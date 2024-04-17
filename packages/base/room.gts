@@ -551,9 +551,10 @@ export class RoomField extends FieldDef {
           // We only handle patches for now
           let command = event.content.data.command;
           if (command.type !== 'patch') {
-            throw new Error(
+            console.log(
               `cannot handle commands in room with type ${command.type}`,
             );
+            continue;
           }
           messageField = new MessageField({
             ...cardArgs,
@@ -807,10 +808,13 @@ export interface CardMessageContent {
     attachedCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
-      functions: {
-        name: string;
-        description: string;
-        parameters: Schema;
+      tools: {
+        type: 'function';
+        function: {
+          name: string;
+          description: string;
+          parameters: Schema;
+        };
       }[];
       submode: string | undefined;
     };

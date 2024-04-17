@@ -13,7 +13,7 @@ import {
   constructHistory,
   getModifyPrompt,
   cleanContent,
-  getFunctions,
+  getTools,
   getStartOfConversation,
   shouldSetRoomTitle,
   type OpenAIPromptMessage,
@@ -98,7 +98,7 @@ async function sendOption(
 ) {
   log.info('sending option', patch);
   const id = patch['card_id'];
-  const body = patch['description'];
+  const body = patch['description'] || "Here's the change:";
   let messageObject = {
     body: body,
     msgtype: 'org.boxel.command',
@@ -125,9 +125,9 @@ async function sendOption(
 }
 
 function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
-  let functions = getFunctions(history, aiBotUsername);
-  let messages = getModifyPrompt(history, aiBotUsername, functions);
-  if (functions.length === 0) {
+  let tools = getTools(history, aiBotUsername);
+  let messages = getModifyPrompt(history, aiBotUsername, tools);
+  if (tools.length === 0) {
     return openai.beta.chat.completions.stream({
       model: 'gpt-4-turbo',
       messages: messages,
@@ -136,8 +136,8 @@ function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
     return openai.beta.chat.completions.stream({
       model: 'gpt-4-turbo',
       messages: messages,
-      functions: functions,
-      function_call: 'auto',
+      tools: tools,
+      tool_choice: 'auto',
     });
   }
 }
@@ -361,6 +361,7 @@ Common issues are:
 
       let unsent = 0;
       let sentCommands = 0;
+      let thinkingMessageReplaced = false;
       const runner = getResponse(history, aiBotUserId)
         .on('content', async (_delta, snapshot) => {
           unsent += 1;
@@ -373,37 +374,44 @@ Common issues are:
               initialMessage.event_id,
             );
           }
+          thinkingMessageReplaced = true;
         })
-        .on('functionCall', async (functionCall) => {
-          console.log('Function call', functionCall);
-          let args;
-          try {
-            args = JSON.parse(functionCall.arguments);
-          } catch (error) {
-            Sentry.captureException(error);
-            return await sendError(
-              client,
-              room,
-              error,
-              initialMessage.event_id,
-            );
+        // Messages can have both content and tool calls
+        // We handle tool calls here
+        .on('message', async (msg) => {
+          if (msg.role === 'assistant') {
+            for (const toolCall of msg.tool_calls || []) {
+              const functionCall = toolCall.function;
+              console.log('Function call', toolCall);
+              let args;
+              try {
+                args = JSON.parse(functionCall.arguments);
+              } catch (error) {
+                Sentry.captureException(error);
+                return await sendError(
+                  client,
+                  room,
+                  error,
+                  thinkingMessageReplaced ? undefined : initialMessage.event_id,
+                );
+              }
+              if (functionCall.name === 'patchCard') {
+                sentCommands += 1;
+                await sendOption(
+                  client,
+                  room,
+                  args,
+                  thinkingMessageReplaced ? undefined : initialMessage.event_id,
+                );
+                thinkingMessageReplaced = true;
+              }
+            }
           }
-          if (functionCall.name === 'patchCard') {
-            sentCommands += 1;
-            return await sendOption(
-              client,
-              room,
-              args,
-              initialMessage.event_id,
-            );
-          }
-          return;
         })
         .on('error', async (error: OpenAIError) => {
           Sentry.captureException(error);
           return await sendError(client, room, error, initialMessage.event_id);
         });
-
       // We also need to catch the error when getting the final content
       let finalContent = await runner.finalContent().catch(async (error) => {
         return await sendError(client, room, error, initialMessage.event_id);
