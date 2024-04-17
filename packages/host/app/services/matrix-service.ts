@@ -85,7 +85,7 @@ export default class MatrixService extends Service {
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
-  cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
+  cardsToSend: Map<string, CardDef[] | undefined> = new Map();
   pendingMessages: TrackedMap<string, MessageField | undefined> =
     new TrackedMap();
   flushTimeline: Promise<void> | undefined;
