@@ -274,6 +274,9 @@ jobs:
           path: playwright-report
           retention-days: 14
 
+      - run: ls -l
+      - run: ls -l playwright-report
+
       - name: Push to Github Pages
         uses: peaceiris/actions-gh-pages@v3.9.3
         with:
