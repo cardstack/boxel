@@ -453,7 +453,7 @@ export class IndexerDBClient {
   //   SELECT card_url, pristine_doc
   //   FROM
   //     indexed_cards,
-  //   CROSS JOIN LATERAL json_each(types, '$') as types0_each,
+  //   CROSS JOIN LATERAL jsonb_array_each(types) as types0_each,
   //     -- This json_tree was derived by this handler:
   //   CROSS JOIN LATERAL jsonb_tree(search_doc, '$.friends') as friends1_tree
   //   WHERE
