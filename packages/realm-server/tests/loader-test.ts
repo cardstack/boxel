@@ -25,7 +25,7 @@ module('loader', function (hooks) {
 
   shimExternals(virtualNetwork);
 
-  setupBaseRealmServer(hooks, loader, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -33,7 +33,6 @@ module('loader', function (hooks) {
 
     testRealmServer = (
       await runTestRealmServer(
-        loader,
         virtualNetwork,
         dir.name,
         undefined,
@@ -77,7 +76,6 @@ module('loader', function (hooks) {
   test('supports import.meta', async function (assert) {
     let loader = virtualNetwork.createLoader();
     let realm = await createRealm(
-      loader,
       dir.name,
       {
         'foo.js': `
@@ -86,6 +84,8 @@ module('loader', function (hooks) {
         `,
       },
       'http://example.com/',
+      undefined,
+      virtualNetwork,
     );
     loader.registerURLHandler(realm.maybeHandle.bind(realm));
     await realm.ready;

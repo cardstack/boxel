@@ -510,7 +510,6 @@ async function setupTestRealm({
     {
       url: realmURL,
       adapter,
-      loader,
       indexRunner: async (optsId) => {
         let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
         await localIndexer.configureRunner(
@@ -525,6 +524,7 @@ async function setupTestRealm({
       matrix: testMatrix,
       permissions,
       realmSecretSeed: testRealmSecretSeed,
+      virtualNetwork,
     },
     { deferStartUp: true },
   );

@@ -84,7 +84,7 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
-import type { ResponseWithNodeStream } from './virtual-network';
+import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 export type RealmInfo = {
   name: string;
@@ -265,23 +265,23 @@ export class Realm {
     {
       url,
       adapter,
-      loader,
       indexRunner,
       runnerOptsMgr,
       getIndexHTML,
       matrix,
       realmSecretSeed,
       permissions,
+      virtualNetwork,
     }: {
       url: string;
       adapter: RealmAdapter;
-      loader: Loader;
       indexRunner: IndexRunner;
       runnerOptsMgr: RunnerOptionsManager;
       getIndexHTML: () => Promise<string>;
       matrix: { url: URL; username: string; password: string };
       permissions: RealmPermissions;
       realmSecretSeed: string;
+      virtualNetwork: VirtualNetwork;
     },
     opts?: Options,
   ) {
@@ -292,6 +292,7 @@ export class Realm {
     this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
+    let loader = virtualNetwork.createLoader();
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
