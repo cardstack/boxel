@@ -175,7 +175,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get context() {
     return {
-      renderedIn: this as Component<any>,
       cardComponentModifier: this.cardTracker.trackElement,
       actions: this.args.publicAPI,
     };

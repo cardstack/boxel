@@ -116,7 +116,6 @@ export interface CardContext {
       };
     };
   }>;
-  renderedIn?: Component<any>;
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {
