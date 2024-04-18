@@ -307,7 +307,6 @@ export default class Room extends Component<Signature> {
   }
 
   private get canSend() {
-    console.log(this.room?.messages.find((m) => this.isPendingMessage(m)));
     return (
       !this.doSendMessage.isRunning &&
       Boolean(
@@ -315,7 +314,7 @@ export default class Room extends Component<Signature> {
           this.cardsToAttach?.length ||
           this.autoAttachedCard,
       ) &&
-      this.room &&
+      !!this.room &&
       !this.room.messages.some((m) => this.isPendingMessage(m))
     );
   }
