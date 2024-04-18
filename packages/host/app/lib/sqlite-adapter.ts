@@ -167,8 +167,14 @@ export default class SQLiteAdapter implements DBAdapter {
       })
       .replace(/ANY_VALUE\(([^)]*)\)/g, '$1')
       .replace(/CROSS JOIN LATERAL/g, 'CROSS JOIN')
-      .replace(/jsonb_array_each\(/g, 'json_each(')
+      .replace(/jsonb_array_elements_text\(/g, 'json_each(')
       .replace(/jsonb_tree\(/g, 'json_tree(')
+      .replace(/([^\s]+\s[^\s]+)_array_element/g, (match, group) => {
+        if (group.startsWith('as ')) {
+          return match;
+        }
+        return `${match}.value`;
+      })
       .replace(/\.text_value/g, '.value')
       .replace(/\.jsonb_value/g, '.value')
       .replace(/= 'null'::jsonb/g, 'IS NULL')

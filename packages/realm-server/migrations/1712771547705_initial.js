@@ -61,22 +61,6 @@ exports.up = (pgm) => {
   pgm.sql('ALTER TABLE jobs SET UNLOGGED');
 
   pgm.sql(`
-    CREATE OR REPLACE FUNCTION jsonb_array_each(data JSONB)
-    RETURNS TABLE (index_text INTEGER, text_value TEXT) AS
-    $$
-    BEGIN
-      RETURN QUERY
-      SELECT
-        index::INTEGER,
-        value::TEXT
-      FROM
-        jsonb_array_elements_text(data) WITH ORDINALITY AS arr(value, index);
-    END;
-    $$
-    LANGUAGE PLPGSQL;
-  `);
-
-  pgm.sql(`
     CREATE OR REPLACE FUNCTION jsonb_tree(data JSONB, root_path TEXT DEFAULT NULL)
     RETURNS TABLE (fullkey TEXT, jsonb_value JSONB, text_value TEXT, level INT) AS
     $$

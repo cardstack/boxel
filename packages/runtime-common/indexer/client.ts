@@ -171,10 +171,9 @@ export class IndexerDBClient {
       `SELECT card_url
        FROM
          indexed_cards as i
-       CROSS JOIN LATERAL jsonb_array_each(i.deps) as deps_each
+       CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
-       WHERE 
-         deps_each.text_value =`,
+       WHERE deps_array_element =`,
       param(cardId),
       'AND',
       ...realmVersionExpression({ useWorkInProgressIndex: true }),
@@ -453,13 +452,13 @@ export class IndexerDBClient {
   //   SELECT card_url, pristine_doc
   //   FROM
   //     indexed_cards,
-  //   CROSS JOIN LATERAL jsonb_array_each(types) as types0_each,
+  //   CROSS JOIN LATERAL jsonb_array_elements_text(types) as types0_array_element
   //     -- This json_tree was derived by this handler:
   //   CROSS JOIN LATERAL jsonb_tree(search_doc, '$.friends') as friends1_tree
   //   WHERE
   //     ( ( is_deleted = FALSE OR is_deleted IS NULL ) )
   //     AND (
-  //       ( types0_each.text_value = $1 )
+  //       ( types0_array_element = $1 )
   //       AND (
   //         ( friends1_tree.text_value = $2 )
   //         AND
@@ -728,7 +727,7 @@ export class IndexerDBClient {
           let key = `tree_${column}_${path}`;
           let { name } = tableValuedFunctions.get(key) ?? {};
           if (!name) {
-            name = `${field}${nonce++}_${element.kind.split('-').pop()!}`;
+            name = `${field}${nonce++}_tree`;
             let absolutePath = path === '$' ? '$' : `$.${path}`;
 
             tableValuedFunctions.set(key, {
@@ -742,14 +741,14 @@ export class IndexerDBClient {
           let key = `each_${column}`;
           let { name } = tableValuedFunctions.get(key) ?? {};
           if (!name) {
-            name = `${column}${nonce++}_${element.kind.split('-').pop()!}`;
+            name = `${column}${nonce++}_array_element`;
 
             tableValuedFunctions.set(key, {
               name,
-              fn: `jsonb_array_each(${column}) as ${name}`,
+              fn: `jsonb_array_elements_text(${column}) as ${name}`,
             });
           }
-          return `${name}.text_value`;
+          return name;
         } else {
           throw assertNever(element);
         }
