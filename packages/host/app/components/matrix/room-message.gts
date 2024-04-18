@@ -3,8 +3,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-
-import { tracked, cached } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -34,6 +33,7 @@ import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    roomId: string;
     message: MessageField;
     index?: number;
     monacoSDK: MonacoSDK;
@@ -113,9 +113,17 @@ export default class RoomMessage extends Component<Signature> {
             {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
           </Button>
           <ApplyButton
-            @state={{this.commandState}}
+            @state={{if
+              this.patchCard.isRunning
+              'applying'
+              @message.command.commandStatus
+            }}
             {{on 'click' (perform this.patchCard)}}
-            data-test-command-apply={{this.commandState}}
+            data-test-command-apply={{if
+              this.patchCard.isRunning
+              'applying'
+              @message.command.commandStatus
+            }}
           />
         </div>
         {{#if this.isDisplayingCode}}
@@ -285,29 +293,23 @@ export default class RoomMessage extends Component<Signature> {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
-    let { id, patch } = this.args.message.command.payload;
-    let { eventId } = this.args.message.command;
+    let { payload, eventId } = this.args.message.command;
     this.patchCardError = undefined;
     try {
-      this.matrixService.commandState.set(eventId, 'applying');
       await this.operatorModeStateService.patchCard.perform(
-        id,
-        patch.attributes,
+        payload.id,
+        payload.patch.attributes,
       );
-      this.matrixService.commandState.set(eventId, 'applied');
+      await this.matrixService.updateCommandStatus(
+        this.args.roomId,
+        'applied',
+        this.args.message.command.payload,
+        eventId,
+      );
     } catch (e) {
-      this.patchCardError = { id, error: e };
-      this.matrixService.commandState.set(eventId, 'failed');
+      this.patchCardError = { id: payload.id, error: e };
     }
   });
-
-  @cached
-  private get commandState() {
-    let status = this.matrixService.commandState.get(
-      this.args.message.command.eventId,
-    );
-    return status ?? 'ready';
-  }
 
   private get previewPatchCode() {
     let { commandType, payload } = this.args.message.command;

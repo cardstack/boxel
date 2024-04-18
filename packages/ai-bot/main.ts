@@ -112,6 +112,7 @@ async function sendOption(
           attributes: patch['attributes'],
         },
         eventId: eventToUpdate,
+        status: 'ready',
       },
     },
   };

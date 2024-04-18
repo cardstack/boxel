@@ -241,11 +241,18 @@ class CommandType extends FieldDef {
   static [primitive]: 'patch';
 }
 
+export type CommandStatus = 'ready' | 'applied' | 'failed';
+
+class CommandStatusField extends FieldDef {
+  static [primitive]: CommandStatus;
+}
+
 // Subclass, add a validator that checks the fields required?
 class PatchField extends FieldDef {
-  @field eventId = contains(StringField);
   @field commandType = contains(CommandType);
   @field payload = contains(PatchObjectField);
+  @field eventId = contains(StringField);
+  @field commandStatus = contains(CommandStatusField);
 }
 
 // A map from a hash of roomId + card document to the first card fragment event id.
@@ -563,6 +570,7 @@ export class RoomField extends FieldDef {
               eventId: event_id,
               commandType: command.type,
               payload: command,
+              commandStatus: command.status ?? 'ready',
             }),
             isStreamingFinished: true,
           });
@@ -754,24 +762,31 @@ interface MessageEvent extends BaseMatrixEvent {
 
 interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: {
-    data: {
-      command: any;
-    };
-    'm.relates_to'?: {
-      rel_type: string;
-      event_id: string;
-    };
-    msgtype: 'org.boxel.command';
-    format: 'org.matrix.custom.html';
-    body: string;
-    formatted_body: string;
-  };
+  content: CommandMessageContent;
   unsigned: {
     age: number;
     transaction_id: string;
     prev_content?: any;
     prev_sender?: string;
+  };
+}
+
+export interface CommandMessageContent {
+  'm.relates_to'?: {
+    rel_type: string;
+    event_id: string;
+  };
+  msgtype: 'org.boxel.command';
+  format: 'org.matrix.custom.html';
+  body: string;
+  formatted_body: string;
+  data: {
+    command: {
+      type: 'patch';
+      payload: PatchObject;
+      eventId: string;
+      status: CommandStatus;
+    };
   };
 }
 

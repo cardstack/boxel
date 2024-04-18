@@ -51,9 +51,10 @@ import type {
   MessageField,
   CardMessageContent,
   CardFragmentContent,
+  CommandStatus,
+  CommandMessageContent,
 } from 'https://cardstack.com/base/room';
 
-import { type ApplyButtonState } from '../components/ai-assistant/apply-button';
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
@@ -76,8 +77,6 @@ export type OperatorModeContext = {
   openCardIds: string[];
 };
 
-export type CommandState = ApplyButtonState;
-
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
@@ -92,7 +91,6 @@ export default class MatrixService extends Service {
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   pendingMessages: TrackedMap<string, MessageField | undefined> =
     new TrackedMap();
-  commandState: TrackedMap<string, CommandState> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
@@ -364,7 +362,7 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent | CardFragmentContent,
+    content: CardMessageContent | CardFragmentContent | CommandMessageContent,
   ) {
     if (content.data) {
       const encodedContent = {
@@ -374,6 +372,37 @@ export default class MatrixService extends Service {
       return await this.client.sendEvent(roomId, eventType, encodedContent);
     } else {
       return await this.client.sendEvent(roomId, eventType, content);
+    }
+  }
+
+  async updateCommandStatus(
+    roomId: string,
+    status: CommandStatus,
+    payload: any,
+    eventId: string,
+  ) {
+    let content: CommandMessageContent = {
+      msgtype: 'org.boxel.command',
+      format: 'org.matrix.custom.html',
+      body: '',
+      formatted_body: '',
+      data: {
+        command: {
+          type: 'patch',
+          payload,
+          eventId,
+          status,
+        },
+      },
+    };
+    try {
+      return await this.sendEvent(roomId, 'm.room.message', content);
+    } catch (e) {
+      throw new Error(
+        `Error sending command status: ${
+          'message' in (e as Error) ? (e as Error).message : e
+        }`,
+      );
     }
   }
 

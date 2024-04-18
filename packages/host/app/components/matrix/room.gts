@@ -44,6 +44,7 @@ export default class Room extends Component<Signature> {
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
+              @roomId={{@roomId}}
               @message={{message}}
               @index={{i}}
               @monacoSDK={{@monacoSDK}}
@@ -56,6 +57,7 @@ export default class Room extends Component<Signature> {
           {{/each}}
           {{#if this.pendingMessage}}
             <RoomMessage
+              @roomId={{@roomId}}
               @message={{this.pendingMessage}}
               @monacoSDK={{@monacoSDK}}
               @isStreaming={{false}}
