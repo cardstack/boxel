@@ -316,7 +316,7 @@ export default class Room extends Component<Signature> {
           this.autoAttachedCard,
       ) &&
       this.room &&
-      !this.room.messages.find((m) => this.isPendingMessage(m))
+      !this.room.messages.some((m) => this.isPendingMessage(m))
     );
   }
 
