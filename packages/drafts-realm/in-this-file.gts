@@ -4,7 +4,7 @@ import {
   CardDef,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 
 export const exportedVar = 'exported var';
 
@@ -33,7 +33,7 @@ class LocalCard extends CardDef {
 
 export class ExportedCard extends CardDef {
   static displayName = 'exported card';
-  @field someString = contains(StringCard);
+  @field someString = contains(StringField);
 }
 
 export class ExportedCardInheritLocalCard extends LocalCard {
@@ -45,7 +45,7 @@ class LocalField extends FieldDef {
 }
 export class ExportedField extends FieldDef {
   static displayName = 'exported field';
-  @field someString = contains(StringCard);
+  @field someString = contains(StringField);
 }
 
 export class ExportedFieldInheritLocalField extends LocalField {

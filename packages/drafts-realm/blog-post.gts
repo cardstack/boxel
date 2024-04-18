@@ -1,4 +1,4 @@
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import MarkdownCard from 'https://cardstack.com/base/markdown';
 import {
   CardDef,
@@ -11,8 +11,8 @@ import { Author } from './author';
 
 export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
-  @field title = contains(StringCard);
-  @field slug = contains(StringCard);
+  @field title = contains(StringField);
+  @field slug = contains(StringField);
   @field body = contains(MarkdownCard);
   @field authorBio = linksTo(Author);
   static embedded = class Embedded extends Component<typeof this> {

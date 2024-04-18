@@ -5,14 +5,14 @@ import {
   Component,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 
 import { Person } from './person';
 
 export class Pet extends CardDef {
-  @field firstName = contains(StringCard);
+  @field firstName = contains(StringField);
   @field owner = linksTo(Person);
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Pet) {
       return this.firstName;
     },

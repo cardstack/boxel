@@ -6,12 +6,12 @@ import {
   Component,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 
 export class Person extends CardDef {
   static displayName = 'Person';
-  @field firstName = contains(StringCard);
-  @field title = contains(StringCard, {
+  @field firstName = contains(StringField);
+  @field title = contains(StringField, {
     computeVia: function (this: Person) {
       return this.firstName;
     },
@@ -34,7 +34,7 @@ function _toPrimitive(t, r) { if ("object" != typeof t || !t) return t; var e = 
 function _applyDecoratedDescriptor(target, property, decorators, descriptor, context) { var desc = {}; Object.keys(descriptor).forEach(function (key) { desc[key] = descriptor[key]; }); desc.enumerable = !!desc.enumerable; desc.configurable = !!desc.configurable; if ('value' in desc || desc.initializer) { desc.writable = true; } desc = decorators.slice().reverse().reduce(function (desc, decorator) { return decorator(target, property, desc) || desc; }, desc); if (context && desc.initializer !== void 0) { desc.value = desc.initializer ? desc.initializer.call(context) : void 0; desc.initializer = undefined; } if (desc.initializer === void 0) { Object.defineProperty(target, property, desc); desc = null; } return desc; }
 function _initializerWarningHelper(descriptor, context) { throw new Error('Decorating class property failed. Please ensure that ' + 'transform-class-properties is enabled and runs after the decorators transform.'); }
 import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import { createTemplateFactory } from \"@ember/template-factory\";
 export let Person = (_class = (_class2 = class Person extends CardDef {
   constructor(...args) {
@@ -58,14 +58,14 @@ export let Person = (_class = (_class2 = class Person extends CardDef {
   enumerable: true,
   writable: true,
   initializer: function () {
-    return contains(StringCard);
+    return contains(StringField);
   }
 }), _descriptor2 = _applyDecoratedDescriptor(_class.prototype, \"title\", [field], {
   configurable: true,
   enumerable: true,
   writable: true,
   initializer: function () {
-    return contains(StringCard, {
+    return contains(StringField, {
       computeVia: function () {
         return this.firstName;
       }

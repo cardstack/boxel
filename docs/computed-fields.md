@@ -4,10 +4,10 @@ In addition to linking to or containing card fields, a card can have a “comput
 
 ```typescript
 export class Person extends CardDef {
-  @field firstName = contains(StringCard);
-  @field lastName = contains(StringCard);
+  @field firstName = contains(StringField);
+  @field lastName = contains(StringField);
 
-  @field fullName = contains(StringCard, {
+  @field fullName = contains(StringField, {
     computeVia: function (this: Person) {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     }
@@ -18,7 +18,7 @@ export class Person extends CardDef {
 You can also specify the name of the computation function on the class as a string instead of inlining it:
 
 ```typescript
-@field fullName = contains(StringCard, { computeVia: 'getFullName' });
+@field fullName = contains(StringField, { computeVia: 'getFullName' });
 
 getFullName() {
   return `${this.firstName} ${this.lastName}`;
@@ -42,7 +42,7 @@ Computed fields are eagerly evaluated, they do not need to be consumed for `comp
 The calculation can be async:
 
 ```typescript
-@field slowName = contains(StringCard, {
+@field slowName = contains(StringField, {
   computeVia: async function () {
     await new Promise((resolve) => setTimeout(resolve, 10));
     return this.firstName;

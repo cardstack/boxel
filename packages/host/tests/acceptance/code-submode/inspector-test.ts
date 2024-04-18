@@ -84,20 +84,20 @@ const indexCardSource = `
 
 const personCardSource = `
   import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
     static displayName = 'Person';
-    @field firstName = contains(StringCard);
-    @field lastName = contains(StringCard);
-    @field title = contains(StringCard, {
+    @field firstName = contains(StringField);
+    @field lastName = contains(StringField);
+    @field title = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
     @field friends = linksToMany(Friend);
-    @field address = containsMany(StringCard);
+    @field address = containsMany(StringField);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <div data-test-person>
@@ -119,12 +119,12 @@ const personCardSource = `
 `;
 const petCardSource = `
   import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
 
   export class Pet extends CardDef {
     static displayName = 'Pet';
-    @field name = contains(StringCard);
-    @field title = contains(StringCard, {
+    @field name = contains(StringField);
+    @field title = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -145,12 +145,12 @@ const employeeCardSource = `
     field,
     Component,
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
   import { Person } from './person';
 
   export class Employee extends Person {
     static displayName = 'Employee';
-    @field department = contains(StringCard);
+    @field department = contains(StringField);
 
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -169,7 +169,7 @@ const inThisFileSource = `
     CardDef,
     FieldDef,
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -191,7 +191,7 @@ const inThisFileSource = `
 
   export class ExportedCard extends CardDef {
     static displayName = 'exported card';
-    @field someString = contains(StringCard);
+    @field someString = contains(StringField);
   }
 
   export class ExportedCardInheritLocalCard extends LocalCard {
@@ -203,7 +203,7 @@ const inThisFileSource = `
   }
   export class ExportedField extends FieldDef {
     static displayName = 'exported field';
-    @field someString = contains(StringCard);
+    @field someString = contains(StringField);
   }
 
   export class ExportedFieldInheritLocalField extends LocalField {
@@ -219,13 +219,13 @@ const inThisFileSource = `
 
 const friendCardSource = `
   import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
-    @field name = contains(StringCard);
+    @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
-    @field title = contains(StringCard, {
+    @field title = contains(StringField, {
       computeVia: function (this: Person) {
         return name;
       },
@@ -255,26 +255,26 @@ const exportsSource = `
     CardDef,
     FieldDef
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
 
   export class AncestorCard1 extends CardDef {
     static displayName = 'AncestorCard1';
-    @field name = contains(StringCard);
+    @field name = contains(StringField);
   }
 
   export class AncestorCard2 extends CardDef {
     static displayName = 'AncestorCard2';
-    @field name = contains(StringCard);
+    @field name = contains(StringField);
   }
 
   export class AncestorCard3 extends CardDef {
     static displayName = 'AncestorCard3';
-    @field name = contains(StringCard);
+    @field name = contains(StringField);
   }
 
   export class AncestorField1 extends FieldDef {
     static displayName = 'AncestorField1';
-    @field name = contains(StringCard);
+    @field name = contains(StringField);
   }
 `;
 const specialExportsSource = `
@@ -283,16 +283,16 @@ const specialExportsSource = `
     field,
     CardDef
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
 
   class AncestorCard extends CardDef {
     static displayName = 'Ancestor';
-    @field name = contains(StringCard);
+    @field name = contains(StringField);
   }
 
   export default class DefaultAncestorCard extends CardDef {
     static displayName = 'DefaultAncestor';
-    @field name = contains(StringCard);
+    @field name = contains(StringField);
   }
 
   export { AncestorCard as RenamedAncestorCard}
@@ -346,12 +346,12 @@ const reExportSource = `
     BaseDef as BDef,
     contains,
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
   import NumberCard from 'https://cardstack.com/base/number';
 
   export const exportedVar = 'exported var';
 
-  export { StringCard as StrCard };
+  export { StringField as StrCard };
 
   export { FieldDef as FDef, CardDef, contains, BDef };
 
@@ -1524,7 +1524,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
-    let elementName = 'StrCard (StringCard) field';
+    let elementName = 'StrCard (StringField) field';
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
@@ -1534,7 +1534,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
-      'StrCard (StringCard) field',
+      'StrCard (StringField) field',
       'FDef (FieldDef) field',
       'CardDef card',
       'BDef base',

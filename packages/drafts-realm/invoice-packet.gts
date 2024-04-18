@@ -10,7 +10,7 @@ import {
 import DateCard from 'https://cardstack.com/base/date';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
 import NumberCard from 'https://cardstack.com/base/number';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Vendor } from './vendor';
 import { formatUSD, balanceInCurrency } from './currency-format';
@@ -21,13 +21,13 @@ import GlimmerComponent from '@glimmer/component';
 
 class Details extends FieldDef {
   static displayName = 'Details';
-  @field invoiceNo = contains(StringCard);
+  @field invoiceNo = contains(StringField);
   @field invoiceDate = contains(DateCard);
   @field dueDate = contains(DateCard);
-  @field terms = contains(StringCard);
-  @field invoiceDocument = contains(StringCard);
+  @field terms = contains(StringField);
+  @field invoiceDocument = contains(StringField);
   @field memo = contains(TextAreaCard);
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Details) {
       return `Invoice ${this.invoiceNo}`;
     },
@@ -123,10 +123,10 @@ class DetailsFieldsContainer extends GlimmerComponent<GenericContainerSignature>
 
 class LineItem extends FieldDef {
   static displayName = 'LineItem';
-  @field name = contains(StringCard);
+  @field name = contains(StringField);
   @field quantity = contains(NumberCard);
   @field amount = contains(NumberCard);
-  @field description = contains(StringCard);
+  @field description = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -203,10 +203,10 @@ class LineItem extends FieldDef {
 class Note extends FieldDef {
   static displayName = 'Note';
   @field text = contains(TextAreaCard);
-  @field authorName = contains(StringCard); /* computed */
-  @field authorImage = contains(StringCard); /* computed */
+  @field authorName = contains(StringField); /* computed */
+  @field authorImage = contains(StringField); /* computed */
   @field timestamp = contains(DatetimeCard); /* computed */
-  @field authorImageHref = contains(StringCard, {
+  @field authorImageHref = contains(StringField, {
     computeVia: function (this: Note) {
       return new URL(this.authorImage, import.meta.url).href;
     },

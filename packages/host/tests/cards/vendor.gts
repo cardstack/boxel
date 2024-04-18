@@ -4,17 +4,17 @@ import {
   CardDef,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 
 import { PaymentMethod } from './payment-method';
 
 export class Vendor extends CardDef {
-  @field name = contains(StringCard);
+  @field name = contains(StringField);
   @field paymentMethods = containsMany(PaymentMethod);
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Vendor) {
       return this.name;
     },
   });
-  @field description = contains(StringCard, { computeVia: () => 'Vendor' });
+  @field description = contains(StringField, { computeVia: () => 'Vendor' });
 }

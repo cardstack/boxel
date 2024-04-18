@@ -6,22 +6,22 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import NumberCard from 'https://cardstack.com/base/number';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 export class Pet extends CardDef {
   static displayName = 'Pet';
-  @field firstName = contains(StringCard);
-  @field favoriteToy = contains(StringCard);
-  @field favoriteTreat = contains(StringCard);
+  @field firstName = contains(StringField);
+  @field favoriteToy = contains(StringField);
+  @field favoriteTreat = contains(StringField);
   @field cutenessRating = contains(NumberCard);
   @field sleepsOnTheCouch = contains(BooleanCard);
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Pet) {
       return this.firstName;
     },
   });
-  @field description = contains(StringCard, {
+  @field description = contains(StringField, {
     computeVia: function (this: Pet) {
       return `${this.firstName} the Pet`;
     },

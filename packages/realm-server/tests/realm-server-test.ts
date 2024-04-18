@@ -1127,11 +1127,11 @@ module('Realm Server', function (hooks) {
                 .post('/test-card.gts')
                 .set('Accept', 'application/vnd.card+source').send(`
                 import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-                import StringCard from 'https://cardstack.com/base/string';
+                import StringField from 'https://cardstack.com/base/string';
 
                 export class TestCard extends CardDef {
-                  @field field1 = contains(StringCard);
-                  @field field2 = contains(StringCard);
+                  @field field1 = contains(StringField);
+                  @field field2 = contains(StringField);
                 }
               `);
             },
@@ -1194,11 +1194,11 @@ module('Realm Server', function (hooks) {
                 .post('/test-card.gts')
                 .set('Accept', 'application/vnd.card+source').send(`
                 import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-                import StringCard from 'https://cardstack.com/base/string';
+                import StringField from 'https://cardstack.com/base/string';
 
                 export class TestCard extends CardDef {
-                  @field field1 = contains(StringCard);
-                  @field field2a = contains(StringCard); // rename field2 -> field2a
+                  @field field1 = contains(StringField);
+                  @field field2a = contains(StringField); // rename field2 -> field2a
                 }
               `);
             },

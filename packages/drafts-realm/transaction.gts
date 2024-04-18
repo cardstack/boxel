@@ -6,7 +6,7 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 import BigIntegerCard from 'https://cardstack.com/base/big-integer';
@@ -16,17 +16,17 @@ import EthereumAddressCard from 'https://cardstack.com/base/ethereum-address';
 
 export class Transaction extends CardDef {
   static displayName = 'Transaction';
-  @field transactionHash = contains(StringCard);
+  @field transactionHash = contains(StringField);
   @field status = contains(BooleanCard);
-  @field blockHash = contains(StringCard);
+  @field blockHash = contains(StringField);
   @field blockNumber = contains(NumberCard);
   @field from = contains(EthereumAddressCard);
   @field to = contains(EthereumAddressCard);
-  @field memo = contains(StringCard);
+  @field memo = contains(StringField);
   @field chain = linksTo(Chain);
   @field gasUsed = contains(BigIntegerCard);
   @field effectiveGasPrice = contains(BigIntegerCard);
-  @field blockExplorerLink = contains(StringCard, {
+  @field blockExplorerLink = contains(StringField, {
     computeVia: function (this: Transaction) {
       if (!this.chain) {
         return;
@@ -34,7 +34,7 @@ export class Transaction extends CardDef {
       return `${this.chain.blockExplorer}/tx/${this.transactionHash}`;
     },
   });
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Transaction) {
       if (!this.transactionHash) {
         return;

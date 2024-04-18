@@ -3,12 +3,12 @@ import {
   field,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import { Person } from './person';
 
 export class Employee extends Person {
   static displayName = 'Employee';
-  @field department = contains(StringCard);
+  @field department = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <@fields.firstName /> from <em><@fields.department /></em>

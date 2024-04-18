@@ -7,13 +7,13 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
 import NumberCard from 'https://cardstack.com/base/number';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 
 import { PersonField } from './person';
 
 export class Post extends CardDef {
-  @field title = contains(StringCard);
-  @field description = contains(StringCard);
+  @field title = contains(StringField);
+  @field description = contains(StringField);
   @field author = contains(PersonField);
   @field views = contains(NumberCard);
   @field createdAt = contains(DatetimeCard);
@@ -28,8 +28,8 @@ export class Post extends CardDef {
 }
 
 export class PostField extends FieldDef {
-  @field title = contains(StringCard);
-  @field description = contains(StringCard);
+  @field title = contains(StringField);
+  @field description = contains(StringField);
   @field author = contains(PersonField);
   @field views = contains(NumberCard);
   @field createdAt = contains(DatetimeCard);

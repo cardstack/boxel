@@ -4,7 +4,7 @@ import {
   CardDef,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import NumberCard from 'https://cardstack.com/base/number';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -21,7 +21,7 @@ let BLOCK_EXPLORER_URLS: Record<number, string> = {
 
 export class Chain extends CardDef {
   static displayName = 'Chain';
-  @field name = contains(StringCard); // dropdown
+  @field name = contains(StringField); // dropdown
   @field chainId = contains(NumberCard, {
     computeVia: function (this: Chain) {
       if (!this.name) {
@@ -30,7 +30,7 @@ export class Chain extends CardDef {
       return CHAIN_IDS[this.name];
     },
   });
-  @field blockExplorer = contains(StringCard, {
+  @field blockExplorer = contains(StringField, {
     computeVia: function (this: Chain) {
       if (!this.name) {
         return;
@@ -38,7 +38,7 @@ export class Chain extends CardDef {
       return BLOCK_EXPLORER_URLS[CHAIN_IDS[this.name]];
     },
   });
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Chain) {
       return this.name;
     },

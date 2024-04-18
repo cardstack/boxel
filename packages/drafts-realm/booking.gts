@@ -6,18 +6,18 @@ import {
   Component,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import DateTimeCard from 'https://cardstack.com/base/datetime';
 import { Person } from './person';
 
 export class Booking extends CardDef {
   static displayName = 'Booking';
-  @field title = contains(StringCard);
-  @field venue = contains(StringCard);
+  @field title = contains(StringField);
+  @field venue = contains(StringField);
   @field startTime = contains(DateTimeCard);
   @field endTime = contains(DateTimeCard);
   @field hosts = linksToMany(Person);
-  @field sponsors = containsMany(StringCard);
+  @field sponsors = containsMany(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

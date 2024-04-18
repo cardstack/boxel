@@ -7,7 +7,7 @@ import {
   Component,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -18,12 +18,12 @@ import GlimmerComponent from '@glimmer/component';
 
 class VendorDetails extends FieldDef {
   static displayName = 'Vendor';
-  @field name = contains(StringCard); // required
+  @field name = contains(StringField); // required
   @field description = contains(TextAreaCard);
-  @field logoURL = contains(StringCard); // url format
-  @field email = contains(StringCard); // email format
-  @field cardXYZ = contains(StringCard);
-  @field logoHref = contains(StringCard, {
+  @field logoURL = contains(StringField); // url format
+  @field email = contains(StringField); // email format
+  @field cardXYZ = contains(StringField);
+  @field logoHref = contains(StringField, {
     computeVia: function (this: VendorDetails) {
       if (!this.logoURL) {
         return null;
@@ -31,7 +31,7 @@ class VendorDetails extends FieldDef {
       return new URL(this.logoURL, this[relativeTo]).href;
     },
   });
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: VendorDetails) {
       return this.name;
     },
@@ -58,14 +58,14 @@ class VendorDetails extends FieldDef {
 
 class Contact extends FieldDef {
   static displayName = 'Contact';
-  @field fullName = contains(StringCard);
-  @field preferredName = contains(StringCard);
-  @field jobTitle = contains(StringCard);
-  @field email = contains(StringCard); // email format
-  @field phone = contains(StringCard); // phone number format
-  @field cardXYZ = contains(StringCard);
+  @field fullName = contains(StringField);
+  @field preferredName = contains(StringField);
+  @field jobTitle = contains(StringField);
+  @field email = contains(StringField); // email format
+  @field phone = contains(StringField); // phone number format
+  @field cardXYZ = contains(StringField);
   @field notes = contains(TextAreaCard);
-  @field imageURL = contains(StringCard);
+  @field imageURL = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -88,8 +88,8 @@ class Contact extends FieldDef {
 
 class ContactMethod extends FieldDef {
   static displayName = 'ContactMethod';
-  @field platform = contains(StringCard); // Dropdown (Telegram, Discord, Facebook, LinkedIn, Twitter)
-  @field username = contains(StringCard);
+  @field platform = contains(StringField); // Dropdown (Telegram, Discord, Facebook, LinkedIn, Twitter)
+  @field username = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <@fields.platform />: <@fields.username />
