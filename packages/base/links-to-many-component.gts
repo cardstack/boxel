@@ -105,8 +105,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 <IconButton
                   @variant='primary'
                   @icon={{IconX}}
-                  @width='14px'
-                  @height='14px'
+                  @width='10px'
+                  @height='10px'
                   class='remove-item-button'
                   {{on 'click' (fn this.remove i)}}
                   aria-label='Remove'
@@ -119,8 +119,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           <AddButton
             class='add-new'
             @variant='pill'
-            @iconWidth='16px'
-            @iconHeight='16px'
+            @iconWidth='12px'
+            @iconHeight='12px'
             {{on 'click' this.add}}
             data-test-add-new
           >

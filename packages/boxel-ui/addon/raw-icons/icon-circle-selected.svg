@@ -1,5 +1,4 @@
-<svg viewBox="0 0 50 50"
-  xmlns="http://www.w3.org/2000/svg">
-  <circle cx="25" cy="25" r="20" fill="var(--icon-color, #000)" stroke="var(--icon-color, #000)" stroke-width="var(--icon-stroke-width, 5)" stroke-linecap="round" stroke-linejoin="round" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="2.5 2.5 45 45">
+  <circle cx="25" cy="25" r="20" fill="var(--icon-color, #000)" stroke="var(--icon-color, #000)" stroke-width="var(--icon-stroke-width, 5)" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="25" cy="25" r="8" fill="var(--icon-fill-color, #FFF)"/>
 </svg>

@@ -32,8 +32,8 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     >
       {{#unless @hideIcon}}
         <IconPlus
-          width={{if @iconWidth @iconWidth '20px'}}
-          height={{if @iconHeight @iconHeight '20px'}}
+          width={{if @iconWidth @iconWidth '18px'}}
+          height={{if @iconHeight @iconHeight '18px'}}
         />
       {{/unless}}
       {{yield}}
