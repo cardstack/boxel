@@ -1412,7 +1412,7 @@ module('Integration | operator-mode', function (hooks) {
               totalParts: 1,
             }),
           },
-          origin_server_ts: Date.now(),
+          origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
           unsigned: {
             age: 105,
             transaction_id: '1',
@@ -1438,7 +1438,7 @@ module('Integration | operator-mode', function (hooks) {
               attachedCardsEventIds: [cardFragmentEvent.event_id],
             }),
           },
-          origin_server_ts: Date.now(),
+          origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
           unsigned: {
             age: 105,
             transaction_id: '1',
