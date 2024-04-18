@@ -1,21 +1,17 @@
 import { module, test } from 'qunit';
-
+import { prepareTestDB } from './helpers';
 import { IndexerDBClient } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
-// eslint-disable-next-line ember/no-test-import-export
+import PgAdapter from '../pg-adapter';
 import indexerTests from '@cardstack/runtime-common/tests/indexer-test';
 
-import ENV from '@cardstack/host/config/environment';
-import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
-
-let { sqlSchema } = ENV;
-
-module('Unit | indexer', function (hooks) {
-  let adapter: SQLiteAdapter;
+module('indexer db client', function (hooks) {
+  let adapter: PgAdapter;
   let client: IndexerDBClient;
 
   hooks.beforeEach(async function () {
-    adapter = new SQLiteAdapter(sqlSchema);
+    prepareTestDB();
+    adapter = new PgAdapter();
     client = new IndexerDBClient(adapter);
     await client.ready();
   });

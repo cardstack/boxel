@@ -435,8 +435,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     <:trigger>
                       <IconButton
                         @icon={{IconPencil}}
-                        @width='24px'
-                        @height='24px'
+                        @width='20px'
+                        @height='20px'
                         class='icon-button'
                         aria-label='Edit'
                         {{on 'click' (fn @publicAPI.editCard this.card)}}
@@ -452,8 +452,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     <:trigger>
                       <IconButton
                         @icon={{IconPencil}}
-                        @width='24px'
-                        @height='24px'
+                        @width='20px'
+                        @height='20px'
                         class='icon-save'
                         aria-label='Finish Editing'
                         {{on 'click' (fn @publicAPI.saveCard this.card true)}}
@@ -498,8 +498,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 <:trigger>
                   <IconButton
                     @icon={{IconX}}
-                    @width='24px'
-                    @height='24px'
+                    @width='16px'
+                    @height='16px'
                     class='icon-button'
                     aria-label='Close'
                     {{on 'click' (fn @close @item)}}

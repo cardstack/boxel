@@ -125,8 +125,6 @@ export default class PastSessionItem extends Component<Signature> {
       }
       .menu :deep(.boxel-menu__item:nth-child(2) svg) {
         --icon-stroke-width: 0.5px;
-        width: 20px;
-        height: 20px;
       }
     </style>
   </template>
