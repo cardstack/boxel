@@ -419,6 +419,9 @@ export default class MatrixService extends Service {
                     type: 'string',
                     const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
                   },
+                  description: {
+                    type: 'string',
+                  },
                   attributes: patchSpec,
                 },
                 required: ['card_id', 'attributes', 'description'],
