@@ -27,10 +27,8 @@ flowchart
     PostgresMigrations-->PostgresQueue
     JobQueueFacade-->SQLiteIndexerImplementation
     SQLiteIndexerImplementation-->PostgresIndexerImplementation
-    PostgresInfra-->PostgresIndexerImplementation
     TestHelperForIndexedCardTablePopulation-->SQLiteQueryEngineImplementation
     SQLiteQueryEngineImplementation-->PostgresQueryEngineImplementation
-    PostgresInfra-->PostgresQueryEngineImplementation
     SQLiteIndexerImplementation-->IndexInvalidation
     SQLiteIndexerImplementation-->UseSQLiteIndexerInHostTests
     PostgresIndexerImplementation-->UsePostgresIndexerInRealmServer
