@@ -184,8 +184,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2] # FIXME restore to 2?
-        shardTotal: [2]
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
