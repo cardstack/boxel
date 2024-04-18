@@ -110,6 +110,9 @@ export async function updateRoomEvent(
   event: Event,
   oldEventId: string,
 ) {
+  if (event.content?.data && typeof event.content.data === 'string') {
+    event.content.data = JSON.parse(event.content.data);
+  }
   let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
   eventId = eventId ?? stateKey; // room state may not necessary have an event ID
   if (!eventId) {
