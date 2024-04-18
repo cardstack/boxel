@@ -16,6 +16,8 @@ import { type IndexRunner } from '@cardstack/runtime-common/search-index';
 import { RealmServer } from '../../server';
 import { Server } from 'http';
 
+export * from '@cardstack/runtime-common/helpers/indexer';
+
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
 const testMatrix = {

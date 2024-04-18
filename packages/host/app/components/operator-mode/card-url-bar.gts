@@ -64,7 +64,7 @@ export default class CardURLBar extends Component<Signature> {
         </RealmInfoProvider>
       </div>
       <div class='input'>
-        <IconGlobe width='22px' height='22px' />
+        <IconGlobe width='18px' height='18px' />
         <BoxelInput
           class='url-input'
           @value={{this.urlBar.url}}
