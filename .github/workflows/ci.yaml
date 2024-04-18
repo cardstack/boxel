@@ -209,7 +209,7 @@ jobs:
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
-      - run: ls -l packages/matrix/blob-report
+
       - name: Upload blob report to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -258,9 +258,6 @@ jobs:
           pattern: blob-report-*
           merge-multiple: true
 
-      - run: ls -l
-      - run: ls -l all-blob-reports
-
       - name: Merge blobs into one single report
         run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
 
@@ -278,9 +275,6 @@ jobs:
           name: html-report--attempt-${{ github.run_attempt }}
           path: playwright-report
           retention-days: 14
-
-      - run: ls -l
-      - run: ls -l playwright-report
 
       - name: Push to Github Pages
         uses: peaceiris/actions-gh-pages@v4.0.0
