@@ -457,7 +457,7 @@ export default class MatrixService extends Service {
       body: body || '',
       format: 'org.matrix.custom.html',
       formatted_body: html,
-      clientGeneratedId: clientGeneratedId,
+      clientGeneratedId,
       data: {
         attachedCardsEventIds,
         context: {
