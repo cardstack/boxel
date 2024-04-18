@@ -61,8 +61,8 @@ export default class NewFileButton extends Component<Signature> {
       }
       .new-file-button-icon {
         --icon-color: var(--boxel-light);
-        flex-shrink: 0;
-        margin-right: var(--boxel-sp-5xs);
+        flex-shrink: 1;
+        margin-right: var(--boxel-sp-xxxs);
       }
     </style>
   </template>

@@ -61,12 +61,13 @@ export default class CardPill extends Component<CardPillSignature> {
     </Pill>
     <style>
       .remove-button {
-        --boxel-icon-button-width: 25px;
+        --boxel-icon-button-width: 12px;
         --boxel-icon-button-height: 25px;
         display: flex;
         align-items: center;
         justify-content: center;
         outline: 0;
+        margin-right: var(--boxel-sp-5xs);
       }
       .remove-button:focus:not(:disabled),
       .remove-button:hover:not(:disabled) {
