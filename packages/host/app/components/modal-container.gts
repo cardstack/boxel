@@ -1,5 +1,4 @@
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import {
@@ -16,7 +15,6 @@ interface Signature {
   Args: {
     title: string;
     onClose: () => void;
-    zIndex?: number;
     size?: 'small' | 'medium' | 'large';
     centered?: boolean;
     cardContainerClass?: string;
@@ -44,8 +42,6 @@ export default class ModalContainer extends Component<Signature> {
       @isOpen={{this.isOpen}}
       @onClose={{@onClose}}
       @centered={{@centered}}
-      @zIndex={{@zIndex}}
-      style={{this.styleString}}
       ...attributes
     >
       <CardContainer
@@ -162,8 +158,4 @@ export default class ModalContainer extends Component<Signature> {
       }
     </style>
   </template>
-
-  get styleString() {
-    return htmlSafe(`z-index: ${this.args.zIndex ?? 20}`);
-  }
 }

@@ -256,7 +256,7 @@ export default class SubmodeLayout extends Component<Signature> {
         margin-right: 0;
         background-color: var(--boxel-ai-purple);
         box-shadow: var(--boxel-deep-box-shadow);
-        z-index: calc(var(--boxel-modal-z-index) - 1);
+        z-index: calc(var(--boxel-modal-z-index) - 2);
       }
 
       .ai-assistant-panel {
