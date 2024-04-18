@@ -378,9 +378,6 @@ export default class MatrixService extends Service {
     clientGeneratedId: string,
     context?: OperatorModeContext,
   ): Promise<void> {
-    this.messagesToSend.set(roomId, undefined);
-    this.cardsToSend.set(roomId, undefined);
-
     let html = markdownToHtml(body);
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];

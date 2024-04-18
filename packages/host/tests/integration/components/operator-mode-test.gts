@@ -33,6 +33,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { CardDef } from '../../../../drafts-realm/re-export';
 import {
   percySnapshot,
   testRealmURL,
@@ -1389,10 +1390,37 @@ module('Integration | operator-mode', function (hooks) {
       matrixService.sendMessage = async function (
         roomId: string,
         body: string,
-        _attachedCards: [],
+        attachedCards: CardDef[],
         _clientGeneratedId: string,
         _context?: any,
       ) {
+        let serializedCard = cardApi.serializeCard(attachedCards[0]);
+        let cardFragmentEvent = {
+          event_id: 'test-card-fragment-event-id',
+          room_id: roomId,
+          state_key: 'state',
+          type: 'm.room.message',
+          sender: matrixService.userId!,
+          content: {
+            msgtype: 'org.boxel.cardFragment' as const,
+            format: 'org.boxel.card' as const,
+            body: `card fragment 1 of 1`,
+            formatted_body: `card fragment 1 of 1`,
+            data: JSON.stringify({
+              cardFragment: JSON.stringify(serializedCard),
+              index: 0,
+              totalParts: 1,
+            }),
+          },
+          origin_server_ts: Date.now(),
+          unsigned: {
+            age: 105,
+            transaction_id: '1',
+          },
+          status: null,
+        };
+        await addRoomEvent(this, cardFragmentEvent);
+
         clientGeneratedId = _clientGeneratedId;
         event = {
           event_id: 'test-event-id',
@@ -1406,6 +1434,9 @@ module('Integration | operator-mode', function (hooks) {
             formatted_body: body,
             format: 'org.matrix.custom.html',
             clientGeneratedId,
+            data: JSON.stringify({
+              attachedCardsEventIds: [cardFragmentEvent.event_id],
+            }),
           },
           origin_server_ts: Date.now(),
           unsigned: {
