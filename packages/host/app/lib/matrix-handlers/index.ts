@@ -9,10 +9,8 @@ import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
-  CardMessageContent,
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
-  MessageField,
 } from 'https://cardstack.com/base/room';
 
 import type LoaderService from '../../services/loader-service';
@@ -35,21 +33,19 @@ export interface RoomMeta {
   name?: string;
 }
 
-export type Event = Partial<IEvent>;
+export type Event = Partial<IEvent> & { status: MatrixSDK.EventStatus | null };
 
 export interface EventSendingContext {
   rooms: Map<string, Promise<RoomField>>;
   cardAPI: typeof CardAPI;
   loaderService: LoaderService;
-  getPendingMessage: (roomId: string) => MessageField | undefined;
-  removePendingMessage: (roomId: string) => void;
 }
 
 export interface Context extends EventSendingContext {
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
-  timelineQueue: MatrixEvent[];
+  timelineQueue: { event: MatrixEvent; oldEventId?: string }[];
   client: MatrixClient;
   matrixSDK: typeof MatrixSDK;
   handleMessage?: (
@@ -106,16 +102,39 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       ...(resolvedRoom.events ?? []),
       event as unknown as DiscreteMatrixEvent,
     ];
+  }
+}
 
-    let pendingMessage = context.getPendingMessage(resolvedRoom.roomId);
-    if (
-      pendingMessage &&
-      event.type === 'm.room.message' &&
-      event.content?.msgtype === 'org.boxel.message' &&
-      (event.content as CardMessageContent).clientGeneratedId ===
-        pendingMessage.clientGeneratedId
-    ) {
-      context.removePendingMessage(resolvedRoom.roomId);
-    }
+export async function updateRoomEvent(
+  context: EventSendingContext,
+  event: Event,
+  oldEventId: string,
+) {
+  let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
+  eventId = eventId ?? stateKey; // room state may not necessary have an event ID
+  if (!eventId) {
+    throw new Error(
+      `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`,
+    );
+  }
+  if (!roomId) {
+    throw new Error(
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
+    );
+  }
+  let room = context.rooms.get(roomId);
+  if (!room) {
+    throw new Error(
+      `bug: unknown room for event ${JSON.stringify(event, null, 2)}`,
+    );
+  }
+  let resolvedRoom = await room;
+  let oldEventIndex = resolvedRoom.events.findIndex(
+    (e) => e.event_id === oldEventId,
+  );
+  if (oldEventIndex >= 0) {
+    resolvedRoom.events[oldEventIndex] =
+      event as unknown as DiscreteMatrixEvent;
+    resolvedRoom.events = [...resolvedRoom.events];
   }
 }

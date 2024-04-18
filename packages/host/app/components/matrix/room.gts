@@ -6,6 +6,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -40,12 +42,13 @@ export default class Room extends Component<Signature> {
       data-test-room-name={{this.room.name}}
       data-test-room={{this.room.roomId}}
     >
-      {{#if this.hasMessages}}
+      {{#if this.room.messages}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
               @message={{message}}
               @index={{i}}
+              @isPending={{this.isPendingMessage message}}
               @monacoSDK={{@monacoSDK}}
               @isStreaming={{this.isMessageStreaming message i}}
               @currentEditor={{this.currentMonacoContainer}}
@@ -54,28 +57,6 @@ export default class Room extends Component<Signature> {
               data-test-message-idx={{i}}
             />
           {{/each}}
-          {{#if this.pendingMessage}}
-            <RoomMessage
-              @message={{this.pendingMessage}}
-              @monacoSDK={{@monacoSDK}}
-              @isStreaming={{false}}
-              @isPending={{true}}
-              @currentEditor={{this.currentMonacoContainer}}
-              @setCurrentEditor={{this.setCurrentMonacoContainer}}
-              data-test-message-idx={{this.pendingMessage.clientGeneratedId}}
-            />
-          {{/if}}
-          {{#if this.messageFailedToSend}}
-            <RoomMessage
-              @message={{this.messageFailedToSend}}
-              @monacoSDK={{@monacoSDK}}
-              @isStreaming={{false}}
-              @currentEditor={{this.currentMonacoContainer}}
-              @setCurrentEditor={{this.setCurrentMonacoContainer}}
-              @retryAction={{this.resendFailedMessage}}
-              data-test-message-idx={{this.messageFailedToSend.clientGeneratedId}}
-            />
-          {{/if}}
         </AiAssistantConversation>
       {{else}}
         <NewSession @sendPrompt={{this.sendPrompt}} />
@@ -164,16 +145,9 @@ export default class Room extends Component<Signature> {
     await this.roomResource.loading;
   });
 
-  private get hasMessages() {
-    return (
-      (this.room && this.room.messages.length > 0) ||
-      this.pendingMessage ||
-      this.messageFailedToSend
-    );
-  }
-
   private get room() {
-    return this.roomResource.room;
+    let room = this.roomResource.room;
+    return room;
   }
 
   private doWhenRoomChanges = restartableTask(async () => {
@@ -186,14 +160,6 @@ export default class Room extends Component<Signature> {
 
   private get cardsToAttach() {
     return this.matrixService.cardsToSend.get(this.args.roomId);
-  }
-
-  private get pendingMessage() {
-    return this.matrixService.getPendingMessage(this.args.roomId);
-  }
-
-  private get messageFailedToSend() {
-    return this.matrixService.getMessageFailedToSend(this.args.roomId);
   }
 
   @action resendLastMessage() {
@@ -217,22 +183,10 @@ export default class Room extends Component<Signature> {
       .map((resource) => resource.card)
       .filter((card) => card !== undefined) as CardDef[];
 
-    this.doSendMessage.perform(myLastMessage.message, attachedCards);
-  }
-
-  @action resendFailedMessage() {
-    if (!this.messageFailedToSend) {
-      throw new Error(
-        'Bug: should not be able to resend if there is no message failed to send',
-      );
-    }
-    let attachedCards = (this.messageFailedToSend.attachedResources || [])
-      .map((resource) => resource.card)
-      .filter((card) => card !== undefined) as CardDef[];
     this.doSendMessage.perform(
-      this.messageFailedToSend.message,
+      myLastMessage.message,
       attachedCards,
-      this.messageFailedToSend.clientGeneratedId,
+      myLastMessage.clientGeneratedId,
     );
   }
 
@@ -293,7 +247,7 @@ export default class Room extends Component<Signature> {
     async (
       message: string | undefined,
       cards?: CardDef[],
-      clientGeneratedId?: string,
+      clientGeneratedId: string = uuidv4(),
     ) => {
       this.matrixService.messagesToSend.set(this.args.roomId, undefined);
       this.matrixService.cardsToSend.set(this.args.roomId, undefined);
@@ -308,8 +262,8 @@ export default class Room extends Component<Signature> {
         this.args.roomId,
         message,
         cards,
-        context,
         clientGeneratedId,
+        context,
       );
     },
   );
@@ -353,13 +307,16 @@ export default class Room extends Component<Signature> {
   }
 
   private get canSend() {
+    console.log(this.room?.messages.find((m) => this.isPendingMessage(m)));
     return (
       !this.doSendMessage.isRunning &&
       Boolean(
         this.messageToSend ||
           this.cardsToAttach?.length ||
           this.autoAttachedCard,
-      )
+      ) &&
+      this.room &&
+      !this.room.messages.find((m) => this.isPendingMessage(m))
     );
   }
 
@@ -372,6 +329,10 @@ export default class Room extends Component<Signature> {
 
   @action private setCurrentMonacoContainer(index: number | undefined) {
     this.currentMonacoContainer = index;
+  }
+
+  private isPendingMessage(message: MessageField) {
+    return message.status === 'sending' || message.status === 'queued';
   }
 }
 

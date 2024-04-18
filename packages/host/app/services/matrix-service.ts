@@ -17,8 +17,6 @@ import {
 } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
-import { v4 as uuidv4 } from 'uuid';
-
 import {
   type LooseSingleCardDocument,
   markdownToHtml,
@@ -48,7 +46,6 @@ import * as RoomModule from 'https://cardstack.com/base/room';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
-  MessageField,
   CardMessageContent,
   CardFragmentContent,
 } from 'https://cardstack.com/base/room';
@@ -86,14 +83,10 @@ export default class MatrixService extends Service {
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
-  private pendingMessages: TrackedMap<string, MessageField | undefined> =
-    new TrackedMap();
-  private messagesFailedToSend: TrackedMap<string, MessageField | undefined> =
-    new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
-  timelineQueue: MatrixEvent[] = [];
+  timelineQueue: { event: MatrixEvent; oldEventId?: string }[] = [];
   #ready: Promise<void>;
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
@@ -135,6 +128,10 @@ export default class MatrixService extends Service {
         Membership.onMembership(this),
       ],
       [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
+      [
+        this.matrixSDK.RoomEvent.LocalEchoUpdated,
+        Timeline.onUpdateEventStatus(this),
+      ],
     ];
   });
 
@@ -378,162 +375,101 @@ export default class MatrixService extends Service {
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
+    clientGeneratedId: string,
     context?: OperatorModeContext,
-    clientGeneratedId?: string, // used to resend failed messages
   ): Promise<void> {
-    try {
-      this.messagesToSend.set(roomId, undefined);
-      this.cardsToSend.set(roomId, undefined);
-      await this.setPendingMessage(
-        roomId,
-        body,
-        attachedCards,
-        clientGeneratedId,
+    this.messagesToSend.set(roomId, undefined);
+    this.cardsToSend.set(roomId, undefined);
+
+    let html = markdownToHtml(body);
+    let functions = [];
+    let serializedAttachedCards: LooseSingleCardDocument[] = [];
+    let attachedOpenCards: CardDef[] = [];
+    let submode = context?.submode;
+    if (submode === 'interact') {
+      let mappings = await basicMappings(this.loaderService.loader);
+      // Open cards are attached automatically
+      // If they are not attached, the user is not allowing us to
+      // modify them
+      attachedOpenCards = attachedCards.filter((c) =>
+        (context?.openCardIds ?? []).includes(c.id),
       );
-      if (
-        clientGeneratedId &&
-        this.messagesFailedToSend.get(roomId)?.clientGeneratedId ===
-          clientGeneratedId
-      ) {
-        this.messagesFailedToSend.set(roomId, undefined);
-      }
-
-      let html = markdownToHtml(body);
-      let functions = [];
-      let serializedAttachedCards: LooseSingleCardDocument[] = [];
-      let attachedOpenCards: CardDef[] = [];
-      let submode = context?.submode;
-      if (submode === 'interact') {
-        let mappings = await basicMappings(this.loaderService.loader);
-        // Open cards are attached automatically
-        // If they are not attached, the user is not allowing us to
-        // modify them
-        attachedOpenCards = attachedCards.filter((c) =>
-          (context?.openCardIds ?? []).includes(c.id),
+      // Generate function calls for patching currently open cards permitted for modification
+      for (let attachedOpenCard of attachedOpenCards) {
+        let patchSpec = generateCardPatchCallSpecification(
+          attachedOpenCard.constructor as typeof CardDef,
+          this.cardAPI,
+          mappings,
         );
-        // Generate function calls for patching currently open cards permitted for modification
-        for (let attachedOpenCard of attachedOpenCards) {
-          let patchSpec = generateCardPatchCallSpecification(
-            attachedOpenCard.constructor as typeof CardDef,
-            this.cardAPI,
-            mappings,
-          );
-          let realmSession = getRealmSession(this, {
-            card: () => attachedOpenCard,
-          });
-          await realmSession.loaded;
-          if (realmSession.canWrite) {
-            functions.push({
-              name: 'patchCard',
-              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-              parameters: {
-                type: 'object',
-                properties: {
-                  description: {
-                    type: 'string',
-                  },
-                  card_id: {
-                    type: 'string',
-                    const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-                  },
-                  attributes: patchSpec,
+        let realmSession = getRealmSession(this, {
+          card: () => attachedOpenCard,
+        });
+        await realmSession.loaded;
+        if (realmSession.canWrite) {
+          functions.push({
+            name: 'patchCard',
+            description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
                 },
-                required: ['card_id', 'attributes', 'description'],
+                card_id: {
+                  type: 'string',
+                  const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+                },
+                attributes: patchSpec,
               },
-            });
-          }
+              required: ['card_id', 'attributes', 'description'],
+            },
+          });
         }
       }
-
-      if (attachedCards?.length) {
-        serializedAttachedCards = await Promise.all(
-          attachedCards.map(async (card) => {
-            let { Base64ImageField } = await loaderFor(card).import<{
-              Base64ImageField: typeof Base64ImageFieldType;
-            }>(`${baseRealm.url}base64-image`);
-            return await this.cardService.serializeCard(card, {
-              omitFields: [Base64ImageField],
-            });
-          }),
-        );
-      }
-
-      let roomModule = await this.getRoomModule();
-      let attachedCardsEventIds: string[] = [];
-      if (serializedAttachedCards.length > 0) {
-        for (let attachedCard of serializedAttachedCards) {
-          let eventId = roomModule.getEventIdForCard(roomId, attachedCard);
-          if (!eventId) {
-            let responses = await this.sendCardFragments(roomId, attachedCard);
-            eventId = responses[0].event_id; // we only care about the first fragment
-          }
-
-          attachedCardsEventIds.push(eventId);
-        }
-      }
-
-      await this.sendEvent(roomId, 'm.room.message', {
-        msgtype: 'org.boxel.message',
-        body: body || '',
-        format: 'org.matrix.custom.html',
-        formatted_body: html,
-        clientGeneratedId: this.pendingMessages.get(roomId)?.clientGeneratedId,
-        data: {
-          attachedCardsEventIds,
-          context: {
-            openCardIds: attachedOpenCards.map((c) => c.id),
-            functions,
-            submode,
-          },
-        },
-      } as CardMessageContent);
-    } catch (_e) {
-      let message = this.pendingMessages.get(roomId);
-      if (!message) {
-        throw new Error('bug: message must be pending if it failed to send');
-      }
-      message.errorMessage = 'Failed to send';
-      this.messagesFailedToSend.set(roomId, message);
-      this.pendingMessages.set(roomId, undefined);
     }
-  }
 
-  getMessageFailedToSend(roomId: string) {
-    return this.messagesFailedToSend.get(roomId);
-  }
+    if (attachedCards?.length) {
+      serializedAttachedCards = await Promise.all(
+        attachedCards.map(async (card) => {
+          let { Base64ImageField } = await loaderFor(card).import<{
+            Base64ImageField: typeof Base64ImageFieldType;
+          }>(`${baseRealm.url}base64-image`);
+          return await this.cardService.serializeCard(card, {
+            omitFields: [Base64ImageField],
+          });
+        }),
+      );
+    }
 
-  getPendingMessage(roomId: string) {
-    return this.pendingMessages.get(roomId);
-  }
-
-  removePendingMessage(roomId: string) {
-    return this.pendingMessages.set(roomId, undefined);
-  }
-
-  private async setPendingMessage(
-    roomId: string,
-    body: string | undefined,
-    attachedCards: CardDef[] = [],
-    clientGeneratedId: string = uuidv4(),
-  ) {
     let roomModule = await this.getRoomModule();
-    let roomMember = new roomModule.RoomMemberField({
-      id: this.userId,
-      userId: this.userId,
-      roomId: roomId,
-    });
-    this.pendingMessages.set(
-      roomId,
-      new roomModule.MessageField({
-        author: roomMember,
-        message: body,
-        formattedMessage: markdownToHtml(body),
-        created: new Date().getTime(),
-        clientGeneratedId,
-        transactionId: null,
-        attachedCardIds: attachedCards?.map((c) => c.id) || [],
-      }),
-    );
+    let attachedCardsEventIds: string[] = [];
+    if (serializedAttachedCards.length > 0) {
+      for (let attachedCard of serializedAttachedCards) {
+        let eventId = roomModule.getEventIdForCard(roomId, attachedCard);
+        if (!eventId) {
+          let responses = await this.sendCardFragments(roomId, attachedCard);
+          eventId = responses[0].event_id; // we only care about the first fragment
+        }
+
+        attachedCardsEventIds.push(eventId);
+      }
+    }
+
+    await this.sendEvent(roomId, 'm.room.message', {
+      msgtype: 'org.boxel.message',
+      body: body || '',
+      format: 'org.matrix.custom.html',
+      formatted_body: html,
+      clientGeneratedId: clientGeneratedId,
+      data: {
+        attachedCardsEventIds,
+        context: {
+          openCardIds: attachedOpenCards.map((c) => c.id),
+          functions,
+          submode,
+        },
+      },
+    } as CardMessageContent);
   }
 
   private async sendCardFragments(
@@ -570,9 +506,15 @@ export default class MatrixService extends Service {
     let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
     for (let roomId of joinedRooms) {
       let stateEvents = await this.client.roomState(roomId);
-      await Promise.all(stateEvents.map((event) => addRoomEvent(this, event)));
+      await Promise.all(
+        stateEvents.map((event) =>
+          addRoomEvent(this, { ...event, status: null }),
+        ),
+      );
       let messages = await this.allRoomMessages(roomId);
-      await Promise.all(messages.map((event) => addRoomEvent(this, event)));
+      await Promise.all(
+        messages.map((event) => addRoomEvent(this, { ...event, status: null })),
+      );
     }
   }
 
