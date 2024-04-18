@@ -23,6 +23,7 @@ import { cached } from '@glimmer/tracking';
 import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
 import { md5 } from 'super-fast-md5';
+import { EventStatus } from 'matrix-js-sdk';
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -147,7 +148,7 @@ type MessageFieldArgs = {
   command: string | null;
   isStreamingFinished?: boolean;
   clientGeneratedId?: string | null;
-  status: EventStatus;
+  status: EventStatus | null;
 };
 
 type AttachedCardResource = {
@@ -660,15 +661,6 @@ export class RoomField extends FieldDef {
   };
 }
 
-type EventStatus =
-  | 'not_sent'
-  | 'encrypting'
-  | 'sending'
-  | 'queued'
-  | 'sent'
-  | 'cancelled'
-  | null;
-
 interface BaseMatrixEvent {
   sender: string;
   origin_server_ts: number;
@@ -679,7 +671,7 @@ interface BaseMatrixEvent {
     prev_content?: any;
     prev_sender?: string;
   };
-  status: EventStatus;
+  status: EventStatus | null;
 }
 
 interface RoomStateEvent extends BaseMatrixEvent {
