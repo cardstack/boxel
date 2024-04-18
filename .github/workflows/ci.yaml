@@ -216,7 +216,7 @@ jobs:
         with:
           name: blob-report-${{ matrix.shardIndex }}
           path: packages/matrix/blob-report
-          retention-days: 90
+          retention-days: 1
       # - uses: actions/upload-artifact@v3
       #   if: always()
       #   with:
