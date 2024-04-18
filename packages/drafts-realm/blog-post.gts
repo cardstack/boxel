@@ -13,6 +13,7 @@ export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
   @field title = contains(StringCard);
   @field slug = contains(StringCard);
+  @field metaKeywords = contains(StringCard);
   @field body = contains(MarkdownCard);
   @field authorBio = linksTo(Author);
   static embedded = class Embedded extends Component<typeof this> {

@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "The Art of Cooking with Olive Oil (EVOO)",
+      "slug": "cooking-with-evoo-olive-oil",
+      "metaKeywords": "Olive Oil, EVOO, Cooking, Healthy Fats, Mediterranean Diet",
+      "body": "Olive oil, particularly Extra Virgin Olive Oil (EVOO), a vital component of the Mediterranean diet, is celebrated not only for its health benefits but also for its ability to enhance the flavor of food. Its high content of monounsaturated fats and antioxidants makes it a healthier choice over other fats and oils. Whether drizzled over a salad or used to sauté vegetables, EVOO adds a depth of flavor that is subtle yet distinct.\n\nWhen cooking with EVOO, it's important to consider the smoke point - the temperature at which the oil begins to smoke and degrade. For high-heat cooking, such as frying or searing, opting for EVOO might not be suitable as it has a lower smoke point compared to other grades of olive oil. Instead, using refined olive oil or light olive oil, which can withstand higher temperatures, is advisable.\n\nIntegrating EVOO into your daily cooking routine can be as simple as replacing butter with EVOO in your mashed potatoes or using it in your baking as a substitute for other oils. Its versatility makes it an essential pantry staple and exploring its variety in terms of flavor, ranging from fruity to grassy undertones, can elevate simple dishes to gourmet levels.",
+      "description": "Explore the benefits and versatility of cooking with EVOO, an essential Extra Virgin Olive Oil, and a staple in kitchens around the world.",
+      "thumbnailURL": "https://i.imgur.com/HeYV02C.jpeg"
+    },
+    "relationships": {
+      "authorBio": {
+        "links": {
+          "self": "../Author/1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-post",
+        "name": "BlogPost"
+      }
+    }
+  }
+}
