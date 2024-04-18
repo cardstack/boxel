@@ -267,6 +267,10 @@ jobs:
         shell: bash
         run: echo "PLAYWRIGHT_REPORT_URL=https://cardstack.github.io/boxel/${{ steps.timestampid.outputs.timestamp }}/" >> $GITHUB_ENV
 
+      - name: Sleep to wait for Pages deployment
+        shell: bash
+        run: sleep 60s
+
       - name: Add status with link to Playwright report
         shell: bash
         env:
