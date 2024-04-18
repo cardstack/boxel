@@ -177,6 +177,22 @@ module('query', function (hooks) {
     });
   });
 
+  test(`can use 'eq' to match against number type`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      client,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
+  test(`can use 'eq' to match against boolean type`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      client,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
   test('can filter eq from a code ref query value', async function (assert) {
     await runSharedTest(queryTests, assert, {
       client,

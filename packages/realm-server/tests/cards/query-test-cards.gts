@@ -10,6 +10,8 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import DateField from 'https://cardstack.com/base/date';
+import NumberField from 'https://cardstack.com/base/number';
+import BooleanField from 'https://cardstack.com/base/boolean';
 
 export class Address extends FieldDef {
   @field street = contains(StringField);
@@ -22,6 +24,8 @@ export class Person extends CardDef {
   @field address = contains(Address);
   @field bestFriend = linksTo(() => Person);
   @field friends = linksToMany(() => Person);
+  @field age = contains(NumberField);
+  @field isHairy = contains(BooleanField);
 }
 
 export class FancyPerson extends Person {

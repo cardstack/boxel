@@ -259,6 +259,143 @@ const tests = {
     assert.deepEqual(getIds(cards), [ringo.id], 'results are correct');
   },
 
+  "can use 'eq' to match against number type": async (
+    assert,
+    { client, loader, testCards },
+  ) => {
+    let { mango, vangogh } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            age: 4,
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            age: 8,
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await client.search(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          eq: { age: 4 },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+  },
+
+  "can use 'eq' to match against boolean type": async (
+    assert,
+    { client, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(client, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            isHairy: false,
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            isHairy: true,
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            isHairy: null,
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    {
+      let { cards, meta } = await client.search(
+        new URL(testRealmURL),
+        {
+          filter: {
+            on: type,
+            eq: { isHairy: false },
+          },
+        },
+        loader,
+      );
+
+      assert.strictEqual(
+        meta.page.total,
+        1,
+        'the total results meta is correct',
+      );
+      assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+    }
+    {
+      let { cards, meta } = await client.search(
+        new URL(testRealmURL),
+        {
+          filter: {
+            on: type,
+            eq: { isHairy: true },
+          },
+        },
+        loader,
+      );
+
+      assert.strictEqual(
+        meta.page.total,
+        1,
+        'the total results meta is correct',
+      );
+      assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
+    }
+    {
+      let { cards, meta } = await client.search(
+        new URL(testRealmURL),
+        {
+          filter: {
+            on: type,
+            eq: { isHairy: null },
+          },
+        },
+        loader,
+      );
+
+      assert.strictEqual(
+        meta.page.total,
+        1,
+        'the total results meta is correct',
+      );
+      assert.deepEqual(getIds(cards), [ringo.id], 'results are correct');
+    }
+  },
+
   'can filter eq from a code ref query value': async (
     assert,
     { client, loader, testCards },

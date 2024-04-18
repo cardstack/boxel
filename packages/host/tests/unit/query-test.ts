@@ -22,6 +22,8 @@ import { testRealmURL, p } from '../helpers';
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
 let date: typeof import('https://cardstack.com/base/date');
+let number: typeof import('https://cardstack.com/base/number');
+let boolean: typeof import('https://cardstack.com/base/boolean');
 let codeRef: typeof import('https://cardstack.com/base/code-ref');
 let { sqlSchema, resolvedBaseRealmURL } = ENV;
 
@@ -43,6 +45,8 @@ module('Unit | query', function (hooks) {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     date = await loader.import(`${baseRealm.url}date`);
+    number = await loader.import(`${baseRealm.url}number`);
+    boolean = await loader.import(`${baseRealm.url}boolean`);
     codeRef = await loader.import(`${baseRealm.url}code-ref`);
 
     let {
@@ -58,6 +62,8 @@ module('Unit | query', function (hooks) {
     let { default: StringField } = string;
     let { default: CodeRefField } = codeRef;
     let { default: DateField } = date;
+    let { default: NumberField } = number;
+    let { default: BooleanField } = boolean;
     class Address extends FieldDef {
       @field street = contains(StringField);
       @field city = contains(StringField);
@@ -68,6 +74,8 @@ module('Unit | query', function (hooks) {
       @field address = contains(Address);
       @field bestFriend = linksTo(() => Person);
       @field friends = linksToMany(() => Person);
+      @field age = contains(NumberField);
+      @field isHairy = contains(BooleanField);
     }
     class FancyPerson extends Person {
       @field favoriteColor = contains(StringField);
@@ -217,6 +225,22 @@ module('Unit | query', function (hooks) {
   });
 
   test(`can use 'eq' to find 'null' values`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      client,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`can use 'eq' to match against number type`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      client,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`can use 'eq' to match against boolean type`, async function (assert) {
     await runSharedTest(queryTests, assert, {
       client,
       loader,
