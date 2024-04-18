@@ -1515,7 +1515,7 @@ module('Integration | operator-mode', function (hooks) {
             format: 'org.matrix.custom.html',
             clientGeneratedId,
           },
-          origin_server_ts: Date.now(),
+          origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
           unsigned: {
             age: 105,
             transaction_id: '1',
