@@ -10,7 +10,7 @@ export interface Queue {
   hasStarted: boolean;
   // postgres needs time to initialize, so we only start our queue after
   // postgres is running
-  start: () => void;
+  start: () => Promise<void>;
   destroy: () => Promise<void>;
   register: <A, T>(category: string, handler: (arg: A) => Promise<T>) => void;
   publish: <T>(
@@ -27,7 +27,7 @@ export interface JobNotifier {
 
 export class Job<T> {
   constructor(
-    public uuid: string,
+    public id: number,
     private notifier: Deferred<T>,
   ) {}
   get done(): Promise<T> {

@@ -1,17 +1,18 @@
 import { module, test } from 'qunit';
+import { prepareTestDB } from './helpers';
+
+import PgQueue from '../pg-queue';
 
 import { type Queue } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
-// eslint-disable-next-line ember/no-test-import-export
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
 
-import { BrowserQueue } from '@cardstack/host/lib/browser-queue';
-
-module('Unit | queue | browser implementation', function (hooks) {
+module('queue', function (hooks) {
   let queue: Queue;
 
   hooks.beforeEach(async function () {
-    queue = new BrowserQueue();
+    prepareTestDB();
+    queue = new PgQueue();
     await queue.start();
   });
 
