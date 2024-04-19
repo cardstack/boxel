@@ -90,6 +90,9 @@ export default class AiAssistantChatInput extends Component<Signature> {
         background-color: var(--boxel-300);
         pointer-events: none;
       }
+      .send-button :deep(svg) {
+        padding-top: var(--boxel-sp-5xs);
+      }
     </style>
   </template>
 

@@ -167,6 +167,11 @@ export default class RoomMessage extends Component<Signature> {
       .room-message {
         --ai-assistant-message-padding: var(--boxel-sp);
       }
+      .is-pending .view-code-button,
+      .is-error .view-code-button {
+        background: var(--boxel-200);
+        color: var(--boxel-500);
+      }
       .patch-button-bar {
         display: flex;
         justify-content: flex-end;

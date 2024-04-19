@@ -144,18 +144,25 @@ function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
   }
 }
 
+function getErrorMessage(error: any): string {
+  if (error instanceof OpenAIError) {
+    return `OpenAI error: ${error.name} - ${error.message}`;
+  }
+  if (typeof error === 'string') {
+    return `Unknown error: ${error}`;
+  }
+  return `Unknown error`;
+}
+
 async function sendError(
   client: MatrixClient,
   room: Room,
   error: any,
   eventToUpdate: string | undefined,
 ) {
-  if (error instanceof OpenAIError) {
-    log.error(`OpenAI error: ${error.name} - ${error.message}`);
-  } else {
-    log.error(`Unknown error: ${error}`);
-  }
   try {
+    let errorMessage = getErrorMessage(error);
+    log.error(errorMessage);
     await sendMessage(
       client,
       room,
@@ -163,7 +170,7 @@ async function sendError(
       eventToUpdate,
       {
         isStreamingFinished: true,
-        errorMessage: error.message,
+        errorMessage,
       },
     );
   } catch (e) {
@@ -229,8 +236,13 @@ async function handleDebugCommands(
       eventBody.split('debug:title:set:')[1],
     );
   } else if (eventBody.startsWith('debug:boom')) {
-    await sendMessage(client, room, `Throwing an unhandled error`, undefined);
-    throw new Error('Boom');
+    await sendError(
+      client,
+      room,
+      `Boom! Throwing an unhandled error`,
+      undefined,
+    );
+    throw new Error('Boom!');
   }
   // Use GPT to set the room title
   else if (eventBody.startsWith('debug:title:create')) {

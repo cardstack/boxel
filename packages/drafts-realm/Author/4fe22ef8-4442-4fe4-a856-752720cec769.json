@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Snoo",
+      "lastName": null,
+      "photo": null,
+      "body": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../author",
+        "name": "Author"
+      }
+    }
+  }
+}

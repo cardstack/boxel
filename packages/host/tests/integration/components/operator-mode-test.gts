@@ -13,6 +13,7 @@ import {
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
+import { EventStatus } from 'matrix-js-sdk';
 import { module, test, skip } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -23,14 +24,16 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
+import {
+  addRoomEvent,
+  updateRoomEvent,
+} from '@cardstack/host/lib/matrix-handlers';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
+import { CardDef } from '../../../../drafts-realm/re-export';
 import {
   percySnapshot,
   testRealmURL,
@@ -52,7 +55,6 @@ import {
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
-let room: typeof import('https://cardstack.com/base/room');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (
   cardURL?: string,
@@ -92,7 +94,6 @@ module('Integration | operator-mode', function (hooks) {
     localStorage.removeItem('aiPanelCurrentRoomId');
     localStorage.removeItem('aiPanelNewSessionId');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
-    room = await loader.import(`${baseRealm.url}room`);
     matrixService = this.owner.lookup(
       'service:matrixService',
     ) as MockMatrixService;
@@ -770,6 +771,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
 
       await waitFor('[data-test-command-apply]');
@@ -817,6 +819,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
       await addRoomEvent(matrixService, {
         event_id: 'room1-event2',
@@ -837,6 +840,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
       await addRoomEvent(matrixService, {
         event_id: 'room2-event1',
@@ -857,6 +861,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
 
       await click('[data-test-open-ai-assistant]');
@@ -944,6 +949,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
 
       await waitFor('[data-test-command-apply="ready"]');
@@ -1012,6 +1018,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({ command: payload }),
         },
+        status: null,
       });
 
       await waitFor('[data-test-view-code-button]');
@@ -1071,6 +1078,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
       await waitFor('[data-test-command-apply="ready"]');
       await click('[data-test-command-apply]');
@@ -1101,6 +1109,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
       await waitFor('[data-test-command-apply]');
       await click('[data-test-command-apply]');
@@ -1138,6 +1147,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
       await waitFor('[data-test-command-apply="ready"]');
       await click('[data-test-command-apply]');
@@ -1184,6 +1194,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
       await addRoomEvent(matrixService, {
         event_id: 'event2',
@@ -1204,6 +1215,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
       await addRoomEvent(matrixService, {
         event_id: 'event3',
@@ -1224,6 +1236,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
 
       await waitFor('[data-test-command-apply="ready"]', { count: 3 });
@@ -1296,6 +1309,7 @@ module('Integration | operator-mode', function (hooks) {
             }),
           }),
         },
+        status: null,
       });
       await addRoomEvent(matrixService, {
         event_id: 'event2',
@@ -1311,6 +1325,7 @@ module('Integration | operator-mode', function (hooks) {
             attachedCardsEventIds: ['event1'],
           }),
         },
+        status: null,
       });
 
       await waitFor('[data-test-card-error]');
@@ -1471,6 +1486,7 @@ module('Integration | operator-mode', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
+        status: null,
       });
       await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
       assert.dom('[data-test-message-idx="0"] h1').containsText('Beagles');
@@ -1491,49 +1507,68 @@ module('Integration | operator-mode', function (hooks) {
         },
       );
 
-      let sendMessageDeferred = new Deferred<void>();
       let originalSendMessage = matrixService.sendMessage;
+      let clientGeneratedId = '';
+      let event: any;
       matrixService.sendMessage = async function (
         roomId: string,
         body: string,
-        attachedCards: [],
+        attachedCards: CardDef[],
+        _clientGeneratedId: string,
         _context?: any,
       ) {
-        matrixService.messagesToSend.set(roomId, undefined);
-        matrixService.cardsToSend.set(roomId, undefined);
-        let roomMember = new room.RoomMemberField({
-          id: this.userId,
-          userId: this.userId,
-          roomId: roomId,
-        });
-        let clientGeneratedId = 'client-generated-id';
-        this.pendingMessages.set(
-          roomId,
-          new room.MessageField({
-            author: roomMember,
-            message: body,
-            formattedMessage: body ?? '',
-            created: new Date(1709652566421).getTime(),
-            clientGeneratedId,
-            transactionId: null,
-            attachedCardIds: attachedCards?.map((c: CardDef) => c.id) || [],
-          }),
-        );
-        await sendMessageDeferred.promise;
-        await addRoomEvent(matrixService, {
-          event_id: 'event1',
+        let serializedCard = cardApi.serializeCard(attachedCards[0]);
+        let cardFragmentEvent = {
+          event_id: 'test-card-fragment-event-id',
           room_id: roomId,
           state_key: 'state',
           type: 'm.room.message',
-          origin_server_ts: 1709652566421,
+          sender: matrixService.userId!,
+          content: {
+            msgtype: 'org.boxel.cardFragment' as const,
+            format: 'org.boxel.card' as const,
+            body: `card fragment 1 of 1`,
+            formatted_body: `card fragment 1 of 1`,
+            data: JSON.stringify({
+              cardFragment: JSON.stringify(serializedCard),
+              index: 0,
+              totalParts: 1,
+            }),
+          },
+          origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+          unsigned: {
+            age: 105,
+            transaction_id: '1',
+          },
+          status: null,
+        };
+        await addRoomEvent(this, cardFragmentEvent);
+
+        clientGeneratedId = _clientGeneratedId;
+        event = {
+          event_id: 'test-event-id',
+          room_id: roomId,
+          state_key: 'state',
+          type: 'm.room.message',
+          sender: matrixService.userId!,
           content: {
             body,
             msgtype: 'org.boxel.message',
             formatted_body: body,
             format: 'org.matrix.custom.html',
             clientGeneratedId,
+            data: JSON.stringify({
+              attachedCardsEventIds: [cardFragmentEvent.event_id],
+            }),
           },
-        });
+          origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+          unsigned: {
+            age: 105,
+            transaction_id: '1',
+          },
+          status: EventStatus.SENDING,
+        };
+        await addRoomEvent(this, event);
       };
       await openAiAssistant();
 
@@ -1545,11 +1580,16 @@ module('Integration | operator-mode', function (hooks) {
 
       assert.dom('[data-test-message-field]').hasValue('');
       assert.dom('[data-test-send-message-btn]').isDisabled();
-      assert.dom('[data-test-ai-assistant-message]').exists();
+      assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
       assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
       await percySnapshot(assert);
 
-      sendMessageDeferred.fulfill();
+      let newEvent = {
+        ...event,
+        event_id: 'updated-event-id',
+        status: EventStatus.SENT,
+      };
+      await updateRoomEvent(matrixService, newEvent, event.event_id);
       await waitUntil(
         () =>
           !(
@@ -1558,7 +1598,104 @@ module('Integration | operator-mode', function (hooks) {
             ) as HTMLButtonElement
           ).disabled,
       );
-      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-sending');
+      assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
+      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-pending');
+      matrixService.sendMessage = originalSendMessage;
+    });
+
+    test('displays retry button for message that failed to send', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      let originalSendMessage = matrixService.sendMessage;
+      let clientGeneratedId = '';
+      let event: any;
+      matrixService.sendMessage = async function (
+        roomId: string,
+        body: string,
+        _attachedCards: [],
+        _clientGeneratedId: string,
+        _context?: any,
+      ) {
+        clientGeneratedId = _clientGeneratedId;
+        event = {
+          event_id: 'test-event-id',
+          room_id: roomId,
+          state_key: 'state',
+          type: 'm.room.message',
+          sender: matrixService.userId!,
+          content: {
+            body,
+            msgtype: 'org.boxel.message',
+            formatted_body: body,
+            format: 'org.matrix.custom.html',
+            clientGeneratedId,
+          },
+          origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+          unsigned: {
+            age: 105,
+            transaction_id: '1',
+          },
+          status: EventStatus.SENDING,
+        };
+        await addRoomEvent(this, event);
+      };
+      await openAiAssistant();
+
+      await fillIn('[data-test-message-field]', 'Test Message');
+      assert.dom('[data-test-message-field]').hasValue('Test Message');
+      assert.dom('[data-test-send-message-btn]').isEnabled();
+      assert.dom('[data-test-ai-assistant-message]').doesNotExist();
+      await click('[data-test-send-message-btn]');
+
+      assert.dom('[data-test-message-field]').hasValue('');
+      assert.dom('[data-test-send-message-btn]').isDisabled();
+      assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
+      assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
+
+      let newEvent = {
+        ...event,
+        event_id: 'updated-event-id',
+        status: EventStatus.NOT_SENT,
+      };
+      await updateRoomEvent(matrixService, newEvent, event.event_id);
+      await waitUntil(
+        () =>
+          !(
+            document.querySelector(
+              '[data-test-send-message-btn]',
+            ) as HTMLButtonElement
+          ).disabled,
+      );
+      assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
+      assert.dom('[data-test-ai-assistant-message]').hasClass('is-error');
+      assert.dom('[data-test-card-error]').containsText('Failed to send');
+      assert.dom('[data-test-ai-bot-retry-button]').exists();
+      await percySnapshot(assert);
+
+      matrixService.sendMessage = async function (
+        _roomId: string,
+        _body: string,
+        _attachedCards: [],
+        _clientGeneratedId: string,
+        _context?: any,
+      ) {
+        event = {
+          ...event,
+          status: null,
+        };
+        await addRoomEvent(this, event);
+      };
+      await click('[data-test-ai-bot-retry-button]');
+      assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
+      assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-error');
       matrixService.sendMessage = originalSendMessage;
     });
 
@@ -1591,6 +1728,7 @@ module('Integration | operator-mode', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
+        status: null,
       });
 
       await addRoomEvent(matrixService, {
@@ -1611,6 +1749,7 @@ module('Integration | operator-mode', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
+        status: null,
       });
 
       await addRoomEvent(matrixService, {
@@ -1630,6 +1769,7 @@ module('Integration | operator-mode', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
+        status: null,
       });
 
       await addRoomEvent(matrixService, {
@@ -1649,6 +1789,7 @@ module('Integration | operator-mode', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
+        status: null,
       });
 
       await waitFor('[data-test-message-idx="3"]');
@@ -1689,6 +1830,7 @@ module('Integration | operator-mode', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
+        status: null,
       });
 
       await waitFor('[data-test-message-idx="3"]');
@@ -1740,6 +1882,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
         },
+        status: null,
       });
 
       await waitFor('[data-test-message-idx="0"]');
@@ -1780,6 +1923,7 @@ module('Integration | operator-mode', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
+        status: null,
       });
 
       await addRoomEvent(matrixService, {
@@ -1802,6 +1946,7 @@ module('Integration | operator-mode', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
+        status: null,
       });
 
       await addRoomEvent(matrixService, {
@@ -1821,6 +1966,7 @@ module('Integration | operator-mode', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
+        status: null,
       });
 
       await addRoomEvent(matrixService, {
@@ -1843,6 +1989,7 @@ module('Integration | operator-mode', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
+        status: null,
       });
 
       await waitFor('[data-test-message-idx="0"]');

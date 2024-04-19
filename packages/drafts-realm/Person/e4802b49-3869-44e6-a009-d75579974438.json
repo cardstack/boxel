@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Jackie",
+      "lastName": "Aguilar",
+      "isCool": false,
+      "isHuman": false,
+      "address": {
+        "streetAddress": null,
+        "city": null,
+        "region": null,
+        "postalCode": null,
+        "poBoxNumber": null,
+        "country": null
+      },
+      "trips": {},
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "pet": {
+        "links": {
+          "self": null
+        }
+      },
+      "trips.countriesVisited": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../person",
+        "name": "Person"
+      }
+    }
+  }
+}

@@ -17,8 +17,6 @@ import {
 } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
-import { v4 as uuidv4 } from 'uuid';
-
 import {
   type LooseSingleCardDocument,
   markdownToHtml,
@@ -48,7 +46,6 @@ import * as RoomModule from 'https://cardstack.com/base/room';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
-  MessageField,
   CardMessageContent,
   CardFragmentContent,
   CommandStatus,
@@ -89,12 +86,10 @@ export default class MatrixService extends Service {
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
-  pendingMessages: TrackedMap<string, MessageField | undefined> =
-    new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
-  timelineQueue: MatrixEvent[] = [];
+  timelineQueue: { event: MatrixEvent; oldEventId?: string }[] = [];
   #ready: Promise<void>;
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
@@ -136,6 +131,10 @@ export default class MatrixService extends Service {
         Membership.onMembership(this),
       ],
       [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
+      [
+        this.matrixSDK.RoomEvent.LocalEchoUpdated,
+        Timeline.onUpdateEventStatus(this),
+      ],
     ];
   });
 
@@ -410,12 +409,9 @@ export default class MatrixService extends Service {
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
+    clientGeneratedId: string,
     context?: OperatorModeContext,
   ): Promise<void> {
-    this.messagesToSend.set(roomId, undefined);
-    this.cardsToSend.set(roomId, undefined);
-    await this.setPendingMessage(roomId, body, attachedCards);
-
     let html = markdownToHtml(body);
     let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
@@ -495,7 +491,7 @@ export default class MatrixService extends Service {
       body: body || '',
       format: 'org.matrix.custom.html',
       formatted_body: html,
-      clientGeneratedId: this.pendingMessages.get(roomId)?.clientGeneratedId,
+      clientGeneratedId,
       data: {
         attachedCardsEventIds,
         context: {
@@ -505,32 +501,6 @@ export default class MatrixService extends Service {
         },
       },
     } as CardMessageContent);
-  }
-
-  private async setPendingMessage(
-    roomId: string,
-    body: string | undefined,
-    attachedCards: CardDef[] = [],
-  ) {
-    let roomModule = await this.getRoomModule();
-    let roomMember = new roomModule.RoomMemberField({
-      id: this.userId,
-      userId: this.userId,
-      roomId: roomId,
-    });
-    let clientGeneratedId = uuidv4();
-    this.pendingMessages.set(
-      roomId,
-      new roomModule.MessageField({
-        author: roomMember,
-        message: body,
-        formattedMessage: markdownToHtml(body),
-        created: new Date().getTime(),
-        clientGeneratedId,
-        transactionId: null,
-        attachedCardIds: attachedCards?.map((c) => c.id) || [],
-      }),
-    );
   }
 
   private async sendCardFragments(
@@ -567,9 +537,15 @@ export default class MatrixService extends Service {
     let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
     for (let roomId of joinedRooms) {
       let stateEvents = await this.client.roomState(roomId);
-      await Promise.all(stateEvents.map((event) => addRoomEvent(this, event)));
+      await Promise.all(
+        stateEvents.map((event) =>
+          addRoomEvent(this, { ...event, status: null }),
+        ),
+      );
       let messages = await this.allRoomMessages(roomId);
-      await Promise.all(messages.map((event) => addRoomEvent(this, event)));
+      await Promise.all(
+        messages.map((event) => addRoomEvent(this, { ...event, status: null })),
+      );
     }
   }
 
