@@ -52,7 +52,7 @@ async function drainTimeline(context: Context) {
         ...event.event,
         status: event.status,
         content: event.getContent() || undefined,
-        error: event.error,
+        error: event.error ?? undefined,
       },
       oldEventId,
     );
