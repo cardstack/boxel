@@ -764,6 +764,7 @@ async function maybeHandleScopedCSSRequest(req: Request) {
   }
 }
 
+// TODO: rename back to simulateFetch (it's not just redirection)
 export async function followRedirections(
   request: Request,
   result: Response,

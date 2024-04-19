@@ -141,9 +141,6 @@ export async function showSearchResult(realmName: string, id: string) {
     await click(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`);
   }
 }
-export interface Dir {
-  [name: string]: string | Dir;
-}
 
 export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
@@ -500,7 +497,7 @@ async function setupTestRealm({
         waiter.endAsync(token);
       }
 
-      return realm.maybeHandle(req);
+      return realm.maybeHandle(req); // this is probably reduntant
     });
   }
 
@@ -528,9 +525,9 @@ async function setupTestRealm({
     },
     { deferStartUp: true },
   );
-  virtualNetwork.mount(realm.maybeHandle);
+  virtualNetwork.mount(realm.maybeHandle); // todo should this be external handle?
 
-  await adapter.setContents(contents, realm.loader);
+  await adapter.setContents(contents);
   await realm.start();
 
   return { realm, adapter };
