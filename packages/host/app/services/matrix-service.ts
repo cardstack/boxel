@@ -49,7 +49,8 @@ import type {
   CardMessageContent,
   CardFragmentContent,
   CommandStatus,
-  CommandMessageContent,
+  CommandStatusUpdateContent,
+  PatchObject,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -361,7 +362,10 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent | CardFragmentContent | CommandMessageContent,
+    content:
+      | CardMessageContent
+      | CardFragmentContent
+      | CommandStatusUpdateContent,
   ) {
     if (content.data) {
       const encodedContent = {
@@ -376,11 +380,11 @@ export default class MatrixService extends Service {
 
   async updateCommandStatus(
     roomId: string,
-    status: CommandStatus,
-    payload: any,
     eventId: string,
+    payload: PatchObject,
+    status: CommandStatus,
   ) {
-    let content: CommandMessageContent = {
+    let content: CommandStatusUpdateContent = {
       msgtype: 'org.boxel.command',
       format: 'org.matrix.custom.html',
       body: '',
@@ -389,9 +393,13 @@ export default class MatrixService extends Service {
         command: {
           type: 'patch',
           payload,
-          eventId,
           status,
+          eventId,
         },
+      },
+      'm.relates_to': {
+        event_id: eventId,
+        rel_type: 'm.replace',
       },
     };
     try {

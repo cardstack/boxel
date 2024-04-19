@@ -233,7 +233,7 @@ type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
 type JSONObject = { [x: string]: JSONValue };
 
-type PatchObject = { patch: { attributes: JSONObject }; id: string };
+export type PatchObject = { patch: { attributes: JSONObject }; id: string };
 
 class PatchObjectField extends FieldDef {
   static [primitive]: PatchObject;
@@ -806,6 +806,36 @@ export interface CommandMessageContent {
   };
 }
 
+interface CommandStatusEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: CommandStatusUpdateContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
+export interface CommandStatusUpdateContent {
+  'm.relates_to': {
+    rel_type: string;
+    event_id: string;
+  };
+  msgtype: 'org.boxel.command';
+  format: 'org.matrix.custom.html';
+  body: string;
+  formatted_body: string;
+  data: {
+    command: {
+      type: 'patch';
+      payload: PatchObject;
+      eventId: string;
+      status: CommandStatus;
+    };
+  };
+}
+
 interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CardMessageContent | CardFragmentContent;
@@ -874,6 +904,7 @@ export type MatrixEvent =
   | RoomPowerLevels
   | MessageEvent
   | CommandEvent
+  | CommandStatusEvent
   | CardMessageEvent
   | RoomNameEvent
   | RoomTopicEvent

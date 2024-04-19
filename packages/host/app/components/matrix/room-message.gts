@@ -307,9 +307,9 @@ export default class RoomMessage extends Component<Signature> {
       );
       await this.matrixService.updateCommandStatus(
         this.args.roomId,
-        'applied',
-        this.args.message.command.payload,
         eventId,
+        payload,
+        'applied',
       );
     } catch (e) {
       this.patchCardError = { id: payload.id, error: e };
