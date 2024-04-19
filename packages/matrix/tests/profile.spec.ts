@@ -72,7 +72,7 @@ test.describe('Profile', () => {
     ).toBeDisabled();
   });
 
-  test.skip('it can change email in settings', async ({ page }) => {
+  test('it can change email in settings', async ({ page }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
@@ -154,7 +154,7 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-new-email]')).toHaveCount(0);
   });
 
-  test.skip('it can handle incorrect password when changing email', async ({
+  test('it can handle incorrect password when changing email', async ({
     page,
   }) => {
     await gotoProfileSettings(page);
@@ -183,7 +183,7 @@ test.describe('Profile', () => {
     ).toHaveCount(0);
   });
 
-  test.skip('it can handle setting email to an already existing email when changing email', async ({
+  test('it can handle setting email to an already existing email when changing email', async ({
     page,
   }) => {
     await gotoProfileSettings(page);
@@ -211,7 +211,7 @@ test.describe('Profile', () => {
     ).toHaveCount(0);
   });
 
-  test.skip('it can resend email verification message', async ({ page }) => {
+  test('it can resend email verification message', async ({ page }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
@@ -238,7 +238,7 @@ test.describe('Profile', () => {
     });
   });
 
-  test.skip('it can cancel email verification', async ({ page }) => {
+  test('it can cancel email verification', async ({ page }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
@@ -262,7 +262,7 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-new-email]')).toHaveCount(0);
   });
 
-  test.skip('it can cancel password confirmation when changing email', async ({
+  test('it can cancel password confirmation when changing email', async ({
     page,
   }) => {
     await gotoProfileSettings(page);
@@ -287,7 +287,7 @@ test.describe('Profile', () => {
     );
   });
 
-  test.skip('it can cancel changing an email', async ({ page }) => {
+  test('it can cancel changing an email', async ({ page }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
@@ -304,7 +304,7 @@ test.describe('Profile', () => {
     );
   });
 
-  test.skip('it can change password in settings', async ({ page }) => {
+  test('it can change password in settings', async ({ page }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       'user1@localhost',
@@ -347,7 +347,7 @@ test.describe('Profile', () => {
     await assertLoggedIn(page);
   });
 
-  test.skip('It shows an error when new password does not meet the requirement', async ({
+  test('It shows an error when new password does not meet the requirement', async ({
     page,
   }) => {
     await gotoProfileSettings(page);
@@ -427,7 +427,7 @@ test.describe('Profile', () => {
     await assertLoggedIn(page);
   });
 
-  test.skip('It shows an error when current password is invalid', async ({
+  test('It shows an error when current password is invalid', async ({
     page,
   }) => {
     await gotoProfileSettings(page);
