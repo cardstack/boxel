@@ -271,7 +271,7 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1
 
-      - run: aws s3 sync ./playwright-report s3://cardstack-boxel-matrix-playwright-reports-staging/${{ steps.timestampid.outputs.timestamp }}
+      - run: aws s3 sync ./playwright-report s3://cardstack-boxel-matrix-playwright-reports-staging/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}
 
       # - name: Push to Github Pages
       #   uses: peaceiris/actions-gh-pages@v4.0.0
@@ -282,7 +282,7 @@ jobs:
 
       - name: Store Playwright report URL
         shell: bash
-        run: echo "PLAYWRIGHT_REPORT_URL=https://boxel-matrix-playwright-reports.stack.cards/${{ steps.timestampid.outputs.timestamp }}/index.html" >> $GITHUB_ENV
+        run: echo "PLAYWRIGHT_REPORT_URL=https://boxel-matrix-playwright-reports.stack.cards/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}/index.html" >> $GITHUB_ENV
 
       - name: Sleep to wait for Pages deployment
         shell: bash
