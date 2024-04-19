@@ -58,8 +58,8 @@ exports.up = (pgm) => {
     },
     result: 'jsonb',
   });
-  pgm.createType('queue_statuses', ['idle', 'working']);
   pgm.sql('ALTER TABLE jobs SET UNLOGGED');
+  pgm.createType('queue_statuses', ['idle', 'working']);
   pgm.createTable('queues', {
     queue_name: {
       type: 'varchar',

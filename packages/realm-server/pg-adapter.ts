@@ -92,7 +92,7 @@ export default class PgAdapter implements DBAdapter {
     await client.connect();
     try {
       client.on('notification', (n) => {
-        log.trace(`heard pg notification for channel %s`, n.channel);
+        log.debug(`heard pg notification for channel %s`, n.channel);
         handler(n);
       });
       await client.query(`LISTEN ${safeName(channel)}`);
@@ -111,7 +111,7 @@ export default class PgAdapter implements DBAdapter {
     let client = await this.pool.connect();
     let query = async (expression: Expression) => {
       let sql = expressionToSql(expression);
-      log.trace('search: %s trace: %j', sql.text, sql.values);
+      log.debug('search: %s trace: %j', sql.text, sql.values);
       let { rows } = await client.query(sql);
       return rows;
     };

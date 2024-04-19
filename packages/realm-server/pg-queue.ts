@@ -200,7 +200,7 @@ export default class PgQueue implements Queue {
     let queue = optsWithDefaults.queueName;
     {
       let rows = await this.query([
-        'select queue_name, category from queues where',
+        'select * from queues where',
         ...every([
           ['queue_name =', param(queue)],
           ['category =', param(category)],
@@ -277,7 +277,7 @@ export default class PgQueue implements Queue {
         log.debug(`draining queues`);
         await query(['BEGIN']);
         let jobs = (await query([
-          // find the queue with the oldest job that isn't running, locking it
+          // find the queue with the oldest job that isn't running and lock it.
           // SKIP LOCKED means we won't see any jobs that are already running.
           `select * from jobs where status='unfulfilled' order by created_at limit 1 for update skip locked`,
         ])) as unknown as JobsTable[];
@@ -287,21 +287,21 @@ export default class PgQueue implements Queue {
           return;
         }
         let firstJob = jobs[0];
+        // when you have multiple queue clients, you also need to skip lock on
+        // queue/categories that are also not idle as a job may have been
+        // added immediately after the skip lock above runs (so it's not
+        // locked) by a different queue client--we need to lock on a higher
+        // order entity: the queue itself. Note that the previous hub v2
+        // implementation locked all the jobs for the oldest unfulfilled job.
+        // however, this resulted in a concurrency issue in that the
+        // 'unfulfilled' status includes work not yet started as well as work
+        // not yet completed. so if the oldest job is a job that happens to be
+        // running, then we'll continue to look for work in that queue until
+        // the running job has completed. this will starve other queues that
+        // happen to have unstarted work that is newer than the job that is
+        // currently running. This approach fixes that issue, and our tests
+        // prove that.
         let idleQueues = (await query([
-          // when you have multiple queue clients, you also need to skip lock on
-          // queue/categories that are also not idle as a job may have been
-          // added immediately after the skip lock above runs (so it's not
-          // locked) by a different queue client--we need to lock on a higher
-          // order entity: the queue itself. Note that the previous hub v2
-          // implementation locked all the jobs for the oldest unfulfilled job.
-          // however, this resulted in a concurrency issue in that the
-          // 'unfulfilled' status includes work not yet started as well as work
-          // not yet completed. so if the oldest job is a job that happens to be
-          // running, then we'll continue to look for work in that queue until
-          // the running job has completed. this will starve other queues that
-          // happen to have unstarted work that is newer than the job that is
-          // currently running. This approach fixes that issue, and our tests
-          // prove that.
           'select * from queues where',
           ...every([
             ['queue_name =', param(firstJob.queue)],
