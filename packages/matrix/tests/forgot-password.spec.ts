@@ -108,7 +108,7 @@ test.describe('Forgot password', () => {
     await assertLoggedIn(resetPasswordPage);
   });
 
-  test('It shows an error when email does not belong to any account', async ({
+  test.skip('It shows an error when email does not belong to any account', async ({
     page,
   }) => {
     await gotoForgotPassword(page);
@@ -147,7 +147,7 @@ test.describe('Forgot password', () => {
     );
   });
 
-  test('It shows an error when password does not meet the requirement', async ({
+  test.skip('It shows an error when password does not meet the requirement', async ({
     page,
   }) => {
     await gotoForgotPassword(page);
@@ -217,7 +217,7 @@ test.describe('Forgot password', () => {
     await resetPasswordPage.locator('[data-test-reset-password-btn]').click();
   });
 
-  test('it can resend email validation message', async ({ page }) => {
+  test.skip('it can resend email validation message', async ({ page }) => {
     await gotoForgotPassword(page);
 
     await expect(

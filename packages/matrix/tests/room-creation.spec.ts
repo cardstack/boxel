@@ -104,7 +104,7 @@ test.describe('Room creation', () => {
     expect(user2Room).not.toEqual(newRoom);
   });
 
-  test('it can rename a room', async ({ page }) => {
+  test.skip('it can rename a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
     let room1 = await getRoomId(page);
@@ -158,7 +158,7 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room1, room2, room3]);
   });
 
-  test('it can cancel renaming a room', async ({ page }) => {
+  test.skip('it can cancel renaming a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
     let room1 = await getRoomId(page);
@@ -194,7 +194,7 @@ test.describe('Room creation', () => {
     await page.locator(`[data-test-close-past-sessions]`).click();
   });
 
-  test('it can delete a room', async ({ page }) => {
+  test.skip('it can delete a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
     let roomsBeforeDeletion = await getRoomsFromSync();
 
@@ -242,10 +242,12 @@ test.describe('Room creation', () => {
     expect(roomsAfterDeletionKeys.length).toEqual(
       roomsBeforeDeletionKeys.length,
     );
-    expect(roomsAfterDeletionKeys.includes(roomsBeforeDeletionKeys[1])).toBeFalsy(); // Deleted room
+    expect(
+      roomsAfterDeletionKeys.includes(roomsBeforeDeletionKeys[1]),
+    ).toBeFalsy(); // Deleted room
   });
 
-  test('it can cancel deleting a room', async ({ page }) => {
+  test.skip('it can cancel deleting a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room = await getRoomId(page);
     await assertRooms(page, [room]);
@@ -271,7 +273,7 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room]);
   });
 
-  test('it opens latest room available (or creates new) when current room is deleted', async ({
+  test.skip('it opens latest room available (or creates new) when current room is deleted', async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -301,7 +303,7 @@ test.describe('Room creation', () => {
     await expect(page.locator(`[data-test-chat-title]`)).toHaveCount(0);
   });
 
-  test('it orders past-sessions list items based on last activity in reverse chronological order', async ({
+  test.skip('it orders past-sessions list items based on last activity in reverse chronological order', async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');

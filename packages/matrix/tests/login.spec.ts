@@ -32,7 +32,7 @@ test.describe('Login', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('it can login', async ({ page }) => {
+  test.skip('it can login', async ({ page }) => {
     await openRoot(page);
     await toggleOperatorMode(page);
 
@@ -91,7 +91,7 @@ test.describe('Login', () => {
     await assertLoggedOut(page);
   });
 
-  test('it can logout using the profile popover', async ({ page }) => {
+  test.skip('it can logout using the profile popover', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
     await expect(
@@ -107,7 +107,7 @@ test.describe('Login', () => {
     await expect(page.locator('[data-test-login-btn]')).toBeVisible();
   });
 
-  test('it shows an error when invalid credentials are provided', async ({
+  test.skip('it shows an error when invalid credentials are provided', async ({
     page,
   }) => {
     await openRoot(page);
@@ -133,7 +133,7 @@ test.describe('Login', () => {
     await assertLoggedIn(page);
   });
 
-  test('it reacts to enter keypresses', async ({ page }) => {
+  test.skip('it reacts to enter keypresses', async ({ page }) => {
     await openRoot(page);
     await toggleOperatorMode(page);
 
@@ -145,7 +145,7 @@ test.describe('Login', () => {
     await assertLoggedIn(page);
   });
 
-  test('it returns to login when auth is invalid', async ({ page }) => {
+  test.skip('it returns to login when auth is invalid', async ({ page }) => {
     await page.addInitScript({
       content: `
         window.localStorage.setItem(

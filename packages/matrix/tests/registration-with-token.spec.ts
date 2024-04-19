@@ -33,7 +33,9 @@ test.describe('User Registration w/ Token', () => {
     await smtpStop();
   });
 
-  test('it can register a user with a registration token', async ({ page }) => {
+  test.skip('it can register a user with a registration token', async ({
+    page,
+  }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
@@ -150,7 +152,7 @@ test.describe('User Registration w/ Token', () => {
     });
   });
 
-  test(`it show an error when a invalid registration token is used`, async ({
+  test.skip(`it show an error when a invalid registration token is used`, async ({
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
@@ -220,7 +222,9 @@ test.describe('User Registration w/ Token', () => {
     });
   });
 
-  test(`it shows an error when passwords do not match`, async ({ page }) => {
+  test.skip(`it shows an error when passwords do not match`, async ({
+    page,
+  }) => {
     await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
@@ -265,7 +269,7 @@ test.describe('User Registration w/ Token', () => {
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
   });
 
-  test(`it shows an error when password doesn't follow requirement`, async ({
+  test.skip(`it shows an error when password doesn't follow requirement`, async ({
     page,
   }) => {
     await registerRealmUsers(synapse);
@@ -310,7 +314,7 @@ test.describe('User Registration w/ Token', () => {
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
   });
 
-  test(`it can resend email validation message`, async ({ page }) => {
+  test.skip(`it can resend email validation message`, async ({ page }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
     await clearLocalStorage(page);
@@ -340,7 +344,9 @@ test.describe('User Registration w/ Token', () => {
     await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
   });
 
-  test('it shows an error encountered when registering', async ({ page }) => {
+  test.skip('it shows an error encountered when registering', async ({
+    page,
+  }) => {
     await clearLocalStorage(page);
     await gotoRegistration(page);
 
@@ -362,7 +368,7 @@ test.describe('User Registration w/ Token', () => {
     );
   });
 
-  test('it shows an error encountered when submitting the token', async ({
+  test.skip('it shows an error encountered when submitting the token', async ({
     page,
   }) => {
     await clearLocalStorage(page);

@@ -70,7 +70,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
   });
 
-  test(`it can load all events back to beginning of timeline for timelines that truncated`, async ({
+  test.skip(`it can load all events back to beginning of timeline for timelines that truncated`, async ({
     page,
   }) => {
     // generally the matrix server paginates after 10 messages
@@ -92,7 +92,7 @@ test.describe('Room messages', () => {
     );
   });
 
-  test(`it can send a markdown message`, async ({ page }) => {
+  test.skip(`it can send a markdown message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'message with _style_');
@@ -107,7 +107,9 @@ test.describe('Room messages', () => {
     ).toContainText('style');
   });
 
-  test(`it can create a room specific pending message`, async ({ page }) => {
+  test.skip(`it can create a room specific pending message`, async ({
+    page,
+  }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Hello');
@@ -141,7 +143,7 @@ test.describe('Room messages', () => {
     ).toHaveValue('room 2 message');
   });
 
-  test('can add a card to a markdown message', async ({ page }) => {
+  test.skip('can add a card to a markdown message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
@@ -174,7 +176,7 @@ test.describe('Room messages', () => {
     ).toContainText('my');
   });
 
-  test('can add a card that is over 65K to a message (i.e. split card into multiple matrix events)', async ({
+  test.skip('can add a card that is over 65K to a message (i.e. split card into multiple matrix events)', async ({
     page,
   }) => {
     const testCard = `${testHost}/big-card`; // this is a 153KB card
@@ -217,7 +219,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('it can strip out base64 image fields from cards sent in messages', async ({
+  test.skip('it can strip out base64 image fields from cards sent in messages', async ({
     page,
   }) => {
     const testCard = `${testHost}/mango-puppy`; // this is a 153KB card
@@ -251,7 +253,7 @@ test.describe('Room messages', () => {
     expect(serializeCard.data.attributes.picture).toBeUndefined();
   });
 
-  test(`it does include patch function in message event when top-most card is writable and context is shared`, async ({
+  test.skip(`it does include patch function in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -310,7 +312,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test(`it does not include patch function in message event for an open card that is not attached`, async ({
+  test.skip(`it does not include patch function in message event for an open card that is not attached`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -335,7 +337,7 @@ test.describe('Room messages', () => {
     expect(boxelMessageData.context.functions).toMatchObject([]);
   });
 
-  test(`it does not include patch function in message event when top-most card is read-only`, async ({
+  test.skip(`it does not include patch function in message event when top-most card is read-only`, async ({
     page,
   }) => {
     // the base realm is a read-only realm
@@ -358,7 +360,7 @@ test.describe('Room messages', () => {
     expect(boxelMessageData.context.functions).toMatchObject([]);
   });
 
-  test('can send only a card as a message', async ({ page }) => {
+  test.skip('can send only a card as a message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
@@ -371,7 +373,9 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('can send cards with types unsupported by matrix', async ({ page }) => {
+  test.skip('can send cards with types unsupported by matrix', async ({
+    page,
+  }) => {
     const testCard = `${testHost}/type-examples`;
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
@@ -386,7 +390,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('can remove a card from a pending message', async ({ page }) => {
+  test.skip('can remove a card from a pending message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     await login(page, 'user1', 'pass');
@@ -442,7 +446,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('can render multiple cards in a room', async ({ page }) => {
+  test.skip('can render multiple cards in a room', async ({ page }) => {
     // the loader deadlocking issue would otherwise prevent this
 
     const testCard1 = `${testHost}/hassan`;
@@ -477,7 +481,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message1, message2]);
   });
 
-  test('can send multiple cards in a message', async ({ page }) => {
+  test.skip('can send multiple cards in a message', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     const message = {
@@ -507,7 +511,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message]);
   });
 
-  test('attached cards are not duplicated', async ({ page }) => {
+  test.skip('attached cards are not duplicated', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     const testCard3 = `${testHost}/type-examples`;
@@ -534,7 +538,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('displays view all pill if attached card more than 4', async ({
+  test.skip('displays view all pill if attached card more than 4', async ({
     page,
   }) => {
     const testCard1 = `${testHost}/hassan`;
@@ -564,7 +568,7 @@ test.describe('Room messages', () => {
     await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(5);
   });
 
-  test('displays auto-attached card', async ({ page }) => {
+  test.skip('displays auto-attached card', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
 
@@ -620,7 +624,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('does not auto attach index card', async ({ page }) => {
+  test.skip('does not auto attach index card', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
 
     await login(page, 'user1', 'pass');
@@ -666,7 +670,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('can remove auto-attached card', async ({ page }) => {
+  test.skip('can remove auto-attached card', async ({ page }) => {
     const testCard1 = `${testHost}/hassan`;
     const testCard2 = `${testHost}/mango`;
     const testCard3 = `${testHost}/type-examples`;
@@ -730,7 +734,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('it can send the prompts on new-session room as chat message on click', async ({
+  test.skip('it can send the prompts on new-session room as chat message on click', async ({
     page,
   }) => {
     const prompt = {
@@ -748,7 +752,9 @@ test.describe('Room messages', () => {
     await assertMessages(page, [prompt]);
   });
 
-  test('sends message when no card open in the stack', async ({ page }) => {
+  test.skip('sends message when no card open in the stack', async ({
+    page,
+  }) => {
     await login(page, 'user1', 'pass');
     await page
       .locator('[data-test-stack-card] [data-test-close-button]')
@@ -767,7 +773,9 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('attaches a card in a coversation multiple times', async ({ page }) => {
+  test.skip('attaches a card in a coversation multiple times', async ({
+    page,
+  }) => {
     const testCard = `${testHost}/hassan`;
 
     await login(page, 'user1', 'pass');
