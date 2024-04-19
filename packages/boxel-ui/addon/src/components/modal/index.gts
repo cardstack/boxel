@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import setBodyClass from 'ember-set-body-class/helpers/set-body-class';
 
 import cssVar from '../../helpers/css-var.ts';
-import { bool, eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '../../helpers/truth-helpers.ts';
 
 interface Signature {
   Args: {
@@ -16,7 +16,6 @@ interface Signature {
     layer?: 'urgent';
     onClose: () => void;
     size?: 'x-small' | 'small' | 'medium' | 'large' | 'full-screen';
-    zIndex?: number;
   };
   Blocks: {
     default: [];
@@ -37,13 +36,9 @@ export default class Modal extends Component<Signature> {
       <div
         style={{cssVar
           boxel-modal-z-index=(if
-            (bool @zIndex)
-            @zIndex
-            (if
-              (eq @layer 'urgent')
-              'var(--boxel-layer-modal-urgent)'
-              'var(--boxel-layer-modal-default)'
-            )
+            (eq @layer 'urgent')
+            'var(--boxel-layer-modal-urgent)'
+            'var(--boxel-layer-modal-default)'
           )
         }}
       >

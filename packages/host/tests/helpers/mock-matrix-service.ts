@@ -12,7 +12,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import type { RoomField, MessageField } from 'https://cardstack.com/base/room';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
@@ -79,7 +79,6 @@ function generateMockMatrixService(
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
-    pendingMessages: TrackedMap<string, MessageField> = new TrackedMap();
 
     async start(_auth?: any) {}
 
@@ -131,7 +130,8 @@ function generateMockMatrixService(
     async sendMessage(
       roomId: string,
       body: string | undefined,
-      _cards?: CardDef[],
+      _cards: CardDef[],
+      clientGeneratedId: string,
       _context?: OperatorModeContext,
     ) {
       let event = {
@@ -150,6 +150,8 @@ function generateMockMatrixService(
           age: 105,
           transaction_id: '1',
         },
+        status: null,
+        clientGeneratedId,
       };
       await addRoomEvent(this, event);
     }
@@ -173,6 +175,7 @@ function generateMockMatrixService(
         room_id: roomId,
         type: 'm.room.name',
         content: { name: name ?? roomId },
+        status: null,
       });
 
       await addRoomEvent(this, {
@@ -184,6 +187,7 @@ function generateMockMatrixService(
           creator: '@testuser:staging',
           room_version: '0',
         },
+        status: null,
       });
 
       await addRoomEvent(this, {
@@ -199,6 +203,7 @@ function generateMockMatrixService(
           membershipTs: Date.now(),
           membershipInitiator: '@testuser:staging',
         },
+        status: null,
       });
 
       await addRoomEvent(this, {
@@ -211,6 +216,7 @@ function generateMockMatrixService(
           displayname: 'aibot',
           membership: 'invite',
         },
+        status: null,
       });
 
       return roomId;

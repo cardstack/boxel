@@ -17,6 +17,7 @@
     "ember-css-url": "^1.0.0",
     "ember-modifier": "^3.2.1",
     "ethers": "^6.6.2",
+    "matrix-js-sdk": "^31.0.0",
     "super-fast-md5": "^1.0.1",
     "tracked-built-ins": "^2.0.1"
   },

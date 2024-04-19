@@ -142,9 +142,7 @@ jobs:
       - name: Fail if generated icons have been changed without underlying raw icon changing
         run: git diff --exit-code
 
-  # FIXME RESTORE!
   host-test:
-    if: false
     name: Host Tests
     runs-on: ubuntu-latest
     concurrency:
@@ -225,6 +223,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
+      id-token: write
       contents: write
       checks: write
       statuses: write
@@ -256,20 +255,26 @@ jobs:
           path: playwright-report
           retention-days: 14
 
-      - name: Push to Github Pages
-        uses: peaceiris/actions-gh-pages@v4.0.0
+      - name: Set up env
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
+          echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-matrix-playwright-reports" >> $GITHUB_ENV
+          echo "AWS_S3_BUCKET=cardstack-boxel-matrix-playwright-reports-staging" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./playwright-report
-          destination_dir: ${{ steps.timestampid.outputs.timestamp }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Publish consolidated report to S3
+        run: aws s3 sync ./playwright-report s3://cardstack-boxel-matrix-playwright-reports-staging/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}
 
       - name: Store Playwright report URL
         shell: bash
-        run: echo "PLAYWRIGHT_REPORT_URL=https://cardstack.github.io/boxel/${{ steps.timestampid.outputs.timestamp }}/" >> $GITHUB_ENV
-
-      - name: Sleep to wait for Pages deployment
-        shell: bash
-        run: sleep 60s
+        run: echo "PLAYWRIGHT_REPORT_URL=https://boxel-matrix-playwright-reports.stack.cards/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}/index.html" >> $GITHUB_ENV
 
       - name: Add status with link to Playwright report
         shell: bash
@@ -283,7 +288,7 @@ jobs:
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
-            -d '{"context":"Playwright report","description":"available when deployment completes","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
+            -d '{"context":"Playwright report","description":"","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
 
   realm-server-test:
     name: Realm Server Tests

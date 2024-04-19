@@ -13,6 +13,7 @@ import {
 export default class SQLiteAdapter implements DBAdapter {
   private _sqlite: typeof SQLiteWorker | undefined;
   private _dbId: string | undefined;
+  private primaryKeys = new Map<string, string>();
 
   // TODO: one difference that I'm seeing is that it looks like "json_each" is
   // actually similar to "json_each_text" in postgres. i think we might need to
@@ -56,11 +57,25 @@ export default class SQLiteAdapter implements DBAdapter {
         );
         throw e;
       }
+
+      let pks = (await this.execute(
+        `
+        SELECT m.name AS table_name,
+        GROUP_CONCAT(p.name, ', ') AS primary_keys
+        FROM sqlite_master AS m
+        JOIN pragma_table_info(m.name) AS p ON m.type = 'table'
+        WHERE p.pk > 0
+        GROUP BY m.name;
+        `,
+      )) as { table_name: string; primary_keys: string }[];
+      for (let { table_name, primary_keys } of pks) {
+        this.primaryKeys.set(table_name, primary_keys);
+      }
     }
   }
 
   async execute(sql: string, opts?: ExecuteOptions) {
-    return await this.query(sql, opts);
+    return await this.query(this.adjustSQL(sql), opts);
   }
 
   async close() {
@@ -136,6 +151,34 @@ export default class SQLiteAdapter implements DBAdapter {
     }
 
     return results;
+  }
+
+  private adjustSQL(sql: string): string {
+    return sql
+      .replace(/ON CONFLICT ON CONSTRAINT (\w*)\b/, (_, constraint) => {
+        let tableName = constraint.replace(/_pkey$/, '');
+        let pkColumns = this.primaryKeys.get(tableName);
+        if (!pkColumns) {
+          throw new Error(
+            `could not determine primary key columns for constraint '${constraint}'`,
+          );
+        }
+        return `ON CONFLICT (${pkColumns})`;
+      })
+      .replace(/ANY_VALUE\(([^)]*)\)/g, '$1')
+      .replace(/CROSS JOIN LATERAL/g, 'CROSS JOIN')
+      .replace(/jsonb_array_elements_text\(/g, 'json_each(')
+      .replace(/jsonb_tree\(/g, 'json_tree(')
+      .replace(/([^\s]+\s[^\s]+)_array_element/g, (match, group) => {
+        if (group.startsWith('as ')) {
+          return match;
+        }
+        return `${match}.value`;
+      })
+      .replace(/\.text_value/g, '.value')
+      .replace(/\.jsonb_value/g, '.value')
+      .replace(/= 'null'::jsonb/g, 'IS NULL')
+      .replace(/COLLATE "POSIX"/g, '');
   }
 }
 

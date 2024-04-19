@@ -17,13 +17,13 @@ import {
   type Expression,
   type IndexedCardsTable,
   type RealmVersionsTable,
-} from '@cardstack/runtime-common';
+} from '../index';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { testRealmURL } from './const';
 
-let defaultIndexEntry = {
+const defaultIndexEntry = {
   realm_version: 1,
   realm_url: testRealmURL,
 };
