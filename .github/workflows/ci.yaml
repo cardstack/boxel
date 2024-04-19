@@ -273,13 +273,6 @@ jobs:
 
       - run: aws s3 sync ./playwright-report s3://cardstack-boxel-matrix-playwright-reports-staging/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}
 
-      # - name: Push to Github Pages
-      #   uses: peaceiris/actions-gh-pages@v4.0.0
-      #   with:
-      #     github_token: ${{ secrets.GITHUB_TOKEN }}
-      #     publish_dir: ./playwright-report
-      #     destination_dir: ${{ steps.timestampid.outputs.timestamp }}
-
       - name: Store Playwright report URL
         shell: bash
         run: echo "PLAYWRIGHT_REPORT_URL=https://boxel-matrix-playwright-reports.stack.cards/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}/index.html" >> $GITHUB_ENV
