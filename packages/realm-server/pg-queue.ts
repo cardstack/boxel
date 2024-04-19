@@ -22,8 +22,8 @@ interface JobsTable {
   category: string;
   args: Record<string, any>;
   status: 'unfulfilled' | 'resolved' | 'rejected';
-  created_at: number;
-  finished_at: number;
+  created_at: Date;
+  finished_at: Date;
   queue: string;
   result: Record<string, any>;
 }
