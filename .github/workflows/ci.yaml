@@ -261,10 +261,6 @@ jobs:
           echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
           echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-matrix-playwright-reports" >> $GITHUB_ENV
           echo "AWS_S3_BUCKET=cardstack-boxel-matrix-playwright-reports-staging" >> $GITHUB_ENV
-          else
-            echo "unrecognized environment"
-            exit 1;
-          fi
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
