@@ -401,8 +401,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         await waitFor('[data-test-save-idle]');
       },
     });
-
-    let fileRef = await adapter.openFile('Person/john-with-bad-pet-link.json');
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    let fileRef = await adapter.openFile(
+      'Person/john-with-bad-pet-link.json',
+      loader,
+    );
     if (!fileRef) {
       throw new Error('file not found');
     }
@@ -760,8 +764,9 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         await waitFor('[data-test-save-idle]');
       },
     });
-
-    let fileRef = await adapter.openFile('pet.gts');
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    let fileRef = await adapter.openFile('pet.gts', loader);
     if (!fileRef) {
       throw new Error('file not found');
     }

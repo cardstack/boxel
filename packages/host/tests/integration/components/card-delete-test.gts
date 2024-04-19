@@ -25,10 +25,10 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupServerSentEvents,
+  TestRealmAdapter,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -205,7 +205,7 @@ module('Integration | card-delete', function (hooks) {
         </template>
       },
     );
-    let fileRef = await adapter.openFile('Pet/mango.json');
+    let fileRef = await adapter.openFile('Pet/mango.json', loader);
     assert.ok(fileRef, 'card instance exists in file system');
     await waitFor(
       `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
@@ -236,7 +236,7 @@ module('Integration | card-delete', function (hooks) {
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
         ).length === 1,
     );
-    let notFound = await adapter.openFile('Pet/mango.json');
+    let notFound = await adapter.openFile('Pet/mango.json', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
@@ -251,7 +251,7 @@ module('Integration | card-delete', function (hooks) {
         </template>
       },
     );
-    let fileRef = await adapter.openFile('Pet/mango.json');
+    let fileRef = await adapter.openFile('Pet/mango.json', loader);
     assert.ok(fileRef, 'card instance exists in file system');
     await waitFor(
       `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
@@ -271,7 +271,7 @@ module('Integration | card-delete', function (hooks) {
           '[data-test-delete-modal="${testRealmURL}Pet/mango"]',
         ),
     );
-    fileRef = await adapter.openFile('Pet/mango.json');
+    fileRef = await adapter.openFile('Pet/mango.json', loader);
     assert.ok(fileRef, 'card instance exists in file system');
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
@@ -299,7 +299,7 @@ module('Integration | card-delete', function (hooks) {
         </template>
       },
     );
-    let fileRef = await adapter.openFile('Pet/mango.json');
+    let fileRef = await adapter.openFile('Pet/mango.json', loader);
     assert.ok(fileRef, 'card instance exists in file system');
     await this.expectEvents({
       assert,
@@ -334,7 +334,7 @@ module('Integration | card-delete', function (hooks) {
         `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
       )
       .doesNotExist('stack item removed');
-    let notFound = await adapter.openFile('Pet/mango.json');
+    let notFound = await adapter.openFile('Pet/mango.json', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
@@ -361,7 +361,7 @@ module('Integration | card-delete', function (hooks) {
         </template>
       },
     );
-    let fileRef = await adapter.openFile('Pet/mango.json');
+    let fileRef = await adapter.openFile('Pet/mango.json', loader);
     assert.ok(fileRef, 'card instance exists in file system');
     await this.expectEvents({
       assert,
@@ -399,7 +399,7 @@ module('Integration | card-delete', function (hooks) {
         `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
       )
       .doesNotExist('stack item removed');
-    let notFound = await adapter.openFile('Pet/mango.json');
+    let notFound = await adapter.openFile('Pet/mango.json', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
@@ -426,7 +426,7 @@ module('Integration | card-delete', function (hooks) {
         </template>
       },
     );
-    let fileRef = await adapter.openFile('Pet/mango.json');
+    let fileRef = await adapter.openFile('Pet/mango.json', loader);
     assert.ok(fileRef, 'card instance exists in file system');
     await this.expectEvents({
       assert,
@@ -472,7 +472,7 @@ module('Integration | card-delete', function (hooks) {
         `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
       )
       .doesNotExist('stack item removed');
-    let notFound = await adapter.openFile('Pet/mango.json');
+    let notFound = await adapter.openFile('Pet/mango.json', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
@@ -499,7 +499,7 @@ module('Integration | card-delete', function (hooks) {
         </template>
       },
     );
-    let fileRef = await adapter.openFile('Pet/mango.json');
+    let fileRef = await adapter.openFile('Pet/mango.json', loader);
     assert.ok(fileRef, 'card instance exists in file system');
     await this.expectEvents({
       assert,
@@ -535,7 +535,7 @@ module('Integration | card-delete', function (hooks) {
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         ).length === 1,
     );
-    let notFound = await adapter.openFile('Pet/mango.json');
+    let notFound = await adapter.openFile('Pet/mango.json', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
@@ -562,7 +562,7 @@ module('Integration | card-delete', function (hooks) {
         </template>
       },
     );
-    let fileRef = await adapter.openFile('Pet/mango.json');
+    let fileRef = await adapter.openFile('Pet/mango.json', loader);
     assert.ok(fileRef, 'card instance exists in file system');
     await this.expectEvents({
       assert,
@@ -606,7 +606,7 @@ module('Integration | card-delete', function (hooks) {
         `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
       )
       .doesNotExist('stack item removed');
-    let notFound = await adapter.openFile('Pet/mango.json');
+    let notFound = await adapter.openFile('Pet/mango.json', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
@@ -638,7 +638,7 @@ module('Integration | card-delete', function (hooks) {
         </template>
       },
     );
-    let fileRef = await adapter.openFile('Pet/mango.json');
+    let fileRef = await adapter.openFile('Pet/mango.json', loader);
     assert.ok(fileRef, 'card instance exists in file system');
     await this.expectEvents({
       assert,
@@ -670,7 +670,7 @@ module('Integration | card-delete', function (hooks) {
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
         ).length === 1,
     );
-    let notFound = await adapter.openFile('Pet/mango.json');
+    let notFound = await adapter.openFile('Pet/mango.json', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
     await focus(`[data-test-search-field]`);
     assert
@@ -701,7 +701,7 @@ module('Integration | card-delete', function (hooks) {
         </template>
       },
     );
-    let fileRef = await adapter.openFile('Pet/mango.json');
+    let fileRef = await adapter.openFile('Pet/mango.json', loader);
     assert.ok(fileRef, 'card instance exists in file system');
     await this.expectEvents({
       assert,
@@ -740,7 +740,7 @@ module('Integration | card-delete', function (hooks) {
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
         ).length === 1,
     );
-    let notFound = await adapter.openFile('Pet/mango.json');
+    let notFound = await adapter.openFile('Pet/mango.json', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
     assert
       .dom('[data-test-copy-button]')

@@ -117,7 +117,7 @@ export interface RealmAdapter {
     },
   ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void>;
 
-  openFile(path: LocalPath): Promise<FileRef | undefined>;
+  openFile(path: LocalPath, loader?: Loader): Promise<FileRef | undefined>;
 
   exists(path: LocalPath): Promise<boolean>;
 
@@ -1206,6 +1206,7 @@ export class Realm {
       path,
       this.#adapter.openFile.bind(this.#adapter),
       fallbackExtensions,
+      this.loader,
     );
   }
 
@@ -1428,6 +1429,7 @@ export class Realm {
       return undefined;
     }
     let entries: { name: string; kind: Kind; path: LocalPath }[] = [];
+
     for await (let entry of this.#adapter.readdir(path)) {
       let innerPath = join(path, entry.name);
       let innerURL =
@@ -1462,6 +1464,7 @@ export class Realm {
 
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
+    debugger;
     let localPath: LocalPath = this.paths.local(request.url);
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
@@ -1508,11 +1511,13 @@ export class Realm {
   private async readFileAsText(
     path: LocalPath,
     opts: { withFallbacks?: true } = {},
+    loader?: Loader,
   ): Promise<{ content: string; lastModified: number } | undefined> {
     return readFileAsText(
       path,
       this.#adapter.openFile.bind(this.#adapter),
       opts,
+      loader,
     );
   }
 
@@ -1533,7 +1538,11 @@ export class Realm {
   private async realmInfo(_request: Request): Promise<Response> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig = await this.readFileAsText(localPath);
+    let realmConfig = await this.readFileAsText(
+      localPath,
+      undefined,
+      this.loader,
+    );
     let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,

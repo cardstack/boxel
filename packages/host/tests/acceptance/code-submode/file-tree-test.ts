@@ -451,6 +451,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
     await waitFor('[data-test-file]');
+
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
   });
 

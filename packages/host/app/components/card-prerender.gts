@@ -9,7 +9,7 @@ import {
   restartableTask,
 } from 'ember-concurrency';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { Loader, baseRealm } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import {
   type EntrySetter,
@@ -174,11 +174,13 @@ export default class CardPrerender extends Component {
     function readFileAsText(
       path: LocalPath,
       opts?: { withFallbacks?: true },
+      loader?: Loader,
     ): Promise<{ content: string; lastModified: number } | undefined> {
       return _readFileAsText(
         path,
         self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
         opts,
+        loader,
       );
     }
 

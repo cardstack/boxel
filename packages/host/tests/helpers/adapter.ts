@@ -17,7 +17,17 @@ import {
 
 import { WebMessageStream, messageCloseHandler } from './stream';
 
-import { Dir, createJWT, testRealmURL } from '.';
+import { createJWT, testRealmURL } from '.';
+
+interface Dir {
+  kind: 'directory';
+  contents: { [name: string]: File | Dir };
+}
+
+interface File {
+  kind: 'file';
+  content: string | object;
+}
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -31,68 +41,24 @@ interface TestAdapterContents {
 let shimmedModuleIndicator = '// this file is shimmed';
 
 export class TestRealmAdapter implements RealmAdapter {
-  #files: Dir = {};
+  #files: Dir = { kind: 'directory', contents: {} };
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
   #subscriber: ((message: UpdateEventData) => void) | undefined;
-  #contents: TestAdapterContents = {};
 
-  constructor(realmURL = new URL(testRealmURL)) {
+  constructor(contents: TestAdapterContents, realmURL = new URL(testRealmURL)) {
     this.#paths = new RealmPaths(realmURL);
-  }
-
-  async setContents(contents: TestAdapterContents, loader: Loader) {
     let now = Date.now();
-    let realmURL = this.#paths.url;
-    this.#contents = contents;
 
-    let cardApi = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
-
-    for (const [path, value] of Object.entries(contents)) {
-      if (path.endsWith('.json') && cardApi.isCard(value)) {
-        value.id = `${realmURL}${path.replace(/\.json$/, '')}`;
-        cardApi.setCardAsSavedForTest(value);
-      }
-    }
-
-    for (const [path, mod] of Object.entries(contents)) {
-      if (path.endsWith('.gts') && typeof mod !== 'string') {
-        let moduleURLString = `${realmURL}${path.replace(/\.gts$/, '')}`;
-        loader.shimModule(moduleURLString, mod as object);
-      }
-    } // This is needed so that we can serialize in the next step
-
-    for (const [path, value] of Object.entries(contents)) {
-      if (path.endsWith('.json') && cardApi.isCard(value)) {
-        let doc = cardApi.serializeCard(value);
-        contents[path] = doc;
-      }
-    }
-
-    let flatFiles: Record<string, string> = {};
-    for (const [path, value] of Object.entries(contents)) {
-      if (path.endsWith('.gts') && typeof value !== 'string') {
-        flatFiles[path] = shimmedModuleIndicator;
-      } else if (typeof value === 'string') {
-        flatFiles[path] = value;
-      } else {
-        flatFiles[path] = JSON.stringify(value);
-      }
-    }
-
-    for (let [path, content] of Object.entries(flatFiles)) {
+    for (let [path, content] of Object.entries(contents)) {
       let segments = path.split('/');
       let last = segments.pop()!;
       let dir = this.#traverse(segments, 'directory');
-      if (typeof dir === 'string') {
+      if (dir.kind === 'file') {
         throw new Error(`tried to use file as directory`);
       }
       this.#lastModified.set(this.#paths.fileURL(path).href, now);
-      if (typeof content === 'string') {
-        dir[last] = content;
-      } else {
-        dir[last] = JSON.stringify(content);
-      }
+      dir.contents[last] = { kind: 'file', content };
     }
   }
 
@@ -133,11 +99,11 @@ export class TestRealmAdapter implements RealmAdapter {
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
     let dir =
       path === '' ? this.#files : this.#traverse(path.split('/'), 'directory');
-    for (let [name, content] of Object.entries(dir)) {
+    for (let [name, content] of Object.entries((dir as Dir).contents)) {
       yield {
         name,
         path: path === '' ? name : `${path}/${name}`,
-        kind: typeof content === 'string' ? 'file' : 'directory',
+        kind: content.kind,
       };
     }
   }
@@ -172,7 +138,10 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
-  async openFile(path: LocalPath): Promise<FileRef | undefined> {
+  async openFile(
+    path: LocalPath,
+    loader: Loader,
+  ): Promise<FileRef | undefined> {
     let content;
     try {
       content = this.#traverse(path.split('/'), 'file');
@@ -182,18 +151,47 @@ export class TestRealmAdapter implements RealmAdapter {
       }
       throw err;
     }
-    if (typeof content !== 'string') {
+    if (content.kind === 'directory') {
       return undefined;
+    }
+
+    let value = content.content;
+
+    let fileRefContent = '';
+
+    if (path.endsWith('.json')) {
+      let cardApi = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      if (cardApi.isCard(value)) {
+        value.id = `${this.#paths.url}${path.replace(/\.json$/, '')}`;
+        cardApi.setCardAsSavedForTest(value);
+        let doc = cardApi.serializeCard(value);
+        fileRefContent = JSON.stringify(doc);
+      } else {
+        fileRefContent =
+          typeof value === 'string' ? value : JSON.stringify(value);
+      }
+    } else if (path.endsWith('.gts')) {
+      if (typeof value === 'string') {
+        fileRefContent = value;
+      } else {
+        let moduleURLString = `${this.#paths.url}${path.replace(/\.gts$/, '')}`;
+
+        loader.shimModule(moduleURLString, value as object);
+
+        fileRefContent = shimmedModuleIndicator;
+      }
+    } else {
+      fileRefContent = value as string;
     }
 
     let fileRef: FileRef = {
       path,
-      content,
+      content: fileRefContent,
       lastModified: this.#lastModified.get(this.#paths.fileURL(path).href)!,
     };
 
-    if (content === shimmedModuleIndicator) {
-      fileRef[Symbol.for('shimmed-module')] = this.#contents[path] as object;
+    if (fileRefContent === shimmedModuleIndicator) {
+      fileRef[Symbol.for('shimmed-module')] = value as object;
     }
 
     return fileRef;
@@ -206,20 +204,23 @@ export class TestRealmAdapter implements RealmAdapter {
     let segments = path.split('/');
     let name = segments.pop()!;
     let dir = this.#traverse(segments, 'directory');
-    if (typeof dir === 'string') {
+    if (dir.kind === 'file') {
       throw new Error(`treated file as a directory`);
     }
-    if (typeof dir[name] === 'object') {
+    if (dir.contents[name]?.kind === 'directory') {
       throw new Error(
         `cannot write file over an existing directory at ${path}`,
       );
     }
 
-    let type = dir[name] ? 'updated' : 'added';
-    dir[name] =
-      typeof contents === 'string'
-        ? contents
-        : JSON.stringify(contents, null, 2);
+    let type = dir.contents[name] ? 'updated' : 'added';
+    dir.contents[name] = {
+      kind: 'file',
+      content:
+        typeof contents === 'string'
+          ? contents
+          : JSON.stringify(contents, null, 2),
+    };
     let lastModified = Date.now();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
 
@@ -238,10 +239,10 @@ export class TestRealmAdapter implements RealmAdapter {
     let segments = path.split('/');
     let name = segments.pop()!;
     let dir = this.#traverse(segments, 'directory');
-    if (typeof dir === 'string') {
+    if (dir.kind === 'file') {
       throw new Error(`tried to use file as directory`);
     }
-    delete dir[name];
+    delete dir.contents[name];
     this.postUpdateEvent({ removed: path });
   }
 
@@ -249,29 +250,29 @@ export class TestRealmAdapter implements RealmAdapter {
     segments: string[],
     targetKind: Kind,
     originalPath = segments.join('/'),
-  ): string | Dir {
-    let dir: Dir | string = this.#files;
+  ): File | Dir {
+    let dir: Dir | File = this.#files;
     while (segments.length > 0) {
-      if (typeof dir === 'string') {
+      if (dir.kind === 'file') {
         throw new Error(`tried to use file as directory`);
       }
       let name = segments.shift()!;
       if (name === '') {
         return dir;
       }
-      if (dir[name] === undefined) {
+      if (dir.contents[name] === undefined) {
         if (
           segments.length > 0 ||
           (segments.length === 0 && targetKind === 'directory')
         ) {
-          dir[name] = {};
+          dir.contents[name] = { kind: 'directory', contents: {} };
         } else if (segments.length === 0 && targetKind === 'file') {
           let err = new Error(`${originalPath} not found`);
           err.name = 'NotFoundError'; // duck type to the same as what the FileSystem API looks like
           throw err;
         }
       }
-      dir = dir[name];
+      dir = dir.contents[name];
     }
     return dir;
   }

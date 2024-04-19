@@ -3558,7 +3558,7 @@ module('Integration | operator-mode', function (hooks) {
     let paths = Array.from(savedCards).map(
       (url) => url.substring(testRealmURL.length) + '.json',
     );
-    let fileRef = await testRealmAdapter.openFile(paths[0]);
+    let fileRef = await testRealmAdapter.openFile(paths[0], loader);
     assert.deepEqual(
       JSON.parse(fileRef!.content as string),
       {
@@ -3623,7 +3623,7 @@ module('Integration | operator-mode', function (hooks) {
     let paths = ids.map((url) => url.substring(testRealmURL.length) + '.json');
     let path = paths.find((p) => p.includes('Pet/'));
     let id = ids.find((p) => p.includes('Pet/'));
-    let fileRef = await testRealmAdapter.openFile(path!);
+    let fileRef = await testRealmAdapter.openFile(path!, loader);
     assert.deepEqual(
       JSON.parse(fileRef!.content as string),
       {

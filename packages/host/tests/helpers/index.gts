@@ -504,34 +504,26 @@ async function setupTestRealm({
     });
   }
 
-  let adapter = new TestRealmAdapter(new URL(realmURL));
+  let adapter = new TestRealmAdapter(contents, new URL(realmURL));
 
-  realm = new Realm(
-    {
-      url: realmURL,
-      adapter,
-      indexRunner: async (optsId) => {
-        let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
-        await localIndexer.configureRunner(
-          registerRunner,
-          entrySetter,
-          adapter,
-        );
-      },
-      runnerOptsMgr,
-      getIndexHTML: async () =>
-        `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
-      matrix: testMatrix,
-      permissions,
-      realmSecretSeed: testRealmSecretSeed,
-      virtualNetwork,
+  realm = new Realm({
+    url: realmURL,
+    adapter,
+    indexRunner: async (optsId) => {
+      let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
+      await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
     },
-    { deferStartUp: true },
-  );
+    runnerOptsMgr,
+    getIndexHTML: async () =>
+      `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
+    matrix: testMatrix,
+    permissions,
+    realmSecretSeed: testRealmSecretSeed,
+    virtualNetwork,
+  });
   virtualNetwork.mount(realm.maybeHandle);
 
-  await adapter.setContents(contents, realm.loader);
-  await realm.start();
+  await realm.ready;
 
   return { realm, adapter };
 }
