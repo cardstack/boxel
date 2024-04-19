@@ -272,6 +272,8 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1
 
+      - run: aws s3 sync ./playwright-report s3://cardstack-boxel-matrix-playwright-reports-staging/${{ steps.timestampid.outputs.timestamp }}
+
       # - name: Push to Github Pages
       #   uses: peaceiris/actions-gh-pages@v4.0.0
       #   with:
