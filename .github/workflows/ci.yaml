@@ -288,7 +288,7 @@ jobs:
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
-            -d '{"context":"Playwright report","description":"","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
+            -d '{"context":"Matrix Playwright tests report","description":"","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
 
   realm-server-test:
     name: Realm Server Tests
