@@ -776,7 +776,7 @@ interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
-interface CommandEvent extends BaseMatrixEvent {
+export interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CommandMessageContent;
   unsigned: {

@@ -49,8 +49,8 @@ import type {
   CardMessageContent,
   CardFragmentContent,
   CommandStatus,
-  CommandStatusUpdateContent,
-  PatchObject,
+  CommandMessageContent,
+  CommandEvent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -362,10 +362,7 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content:
-      | CardMessageContent
-      | CardFragmentContent
-      | CommandStatusUpdateContent,
+    content: CardMessageContent | CardFragmentContent | CommandMessageContent,
   ) {
     if (content.data) {
       const encodedContent = {
@@ -381,20 +378,38 @@ export default class MatrixService extends Service {
   async updateCommandStatus(
     roomId: string,
     eventId: string,
-    payload: PatchObject,
     status: CommandStatus,
   ) {
-    let content: CommandStatusUpdateContent = {
-      msgtype: 'org.boxel.command',
-      format: 'org.matrix.custom.html',
-      body: '',
-      formatted_body: '',
+    let messages = await this.allRoomMessages(roomId);
+    let message = messages.find((m) => {
+      if (
+        m.type === 'm.room.message' &&
+        m.content.msgtype === 'org.boxel.command' &&
+        'm.relates_to' in m.content
+      ) {
+        let relatesTo = m.content['m.relates_to'];
+        return (
+          relatesTo?.['rel_type'] === 'm.replace' &&
+          relatesTo['event_id'] === eventId
+        );
+      }
+      return;
+    });
+    if (!message) {
+      throw new Error(`Could not find message with event ID ${eventId}`);
+    }
+
+    let m = message as CommandEvent;
+    let data =
+      typeof m.content.data === 'string'
+        ? JSON.parse(m.content.data)
+        : m.content.data;
+    let content = {
+      ...m.content,
       data: {
         command: {
-          type: 'patch',
-          payload,
+          ...data.command,
           status,
-          eventId,
         },
       },
       'm.relates_to': {
