@@ -284,10 +284,6 @@ jobs:
         shell: bash
         run: echo "PLAYWRIGHT_REPORT_URL=https://boxel-matrix-playwright-reports.stack.cards/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}/index.html" >> $GITHUB_ENV
 
-      - name: Sleep to wait for Pages deployment
-        shell: bash
-        run: sleep 60s
-
       - name: Add status with link to Playwright report
         shell: bash
         env:
@@ -300,7 +296,7 @@ jobs:
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
-            -d '{"context":"Playwright report","description":"available when deployment completes","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
+            -d '{"context":"Playwright report","description":"","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
 
   realm-server-test:
     name: Realm Server Tests
