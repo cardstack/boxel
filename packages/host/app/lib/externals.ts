@@ -20,6 +20,7 @@ import * as emberResources from 'ember-resources';
 import * as ethers from 'ethers';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
+import * as matrixJsSDK from 'matrix-js-sdk';
 import * as superFastMD5 from 'super-fast-md5';
 import * as tracked from 'tracked-built-ins';
 
@@ -70,4 +71,5 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     default: class {},
   });
   virtualNetwork.shimModule('super-fast-md5', superFastMD5);
+  virtualNetwork.shimModule('matrix-js-sdk', matrixJsSDK);
 }

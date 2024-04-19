@@ -30,7 +30,9 @@ async function drainMembership(context: Context) {
   context.roomMembershipQueue = [];
 
   await Promise.all(
-    events.map(({ event: { event } }) => addRoomEvent(context, event)),
+    events.map(({ event: { event, status } }) =>
+      addRoomEvent(context, { ...event, status }),
+    ),
   );
 
   // For rooms that we have been invited to we are unable to get the full
@@ -78,6 +80,7 @@ async function drainMembership(context: Context) {
                 ...e.event,
                 // annoyingly these events have been stripped of their id's
                 event_id: `${roomId}_${eventType}_${e.localTimestamp}`,
+                status: e.status,
               }))
               .map((event) => addRoomEvent(context, event)),
           );
