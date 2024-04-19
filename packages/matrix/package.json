@@ -29,7 +29,7 @@
     "register-test-admin": "MATRIX_IS_ADMIN=TRUE MATRIX_USERNAME=admin MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-test-admin-and-token": "pnpm register-test-admin && ts-node --transpileOnly ./scripts/register-test-token.ts",
     "register-all": "pnpm register-test-admin-and-token && pnpm register-realm-users && pnpm register-bot-user",
-    "test": "./scripts/test.sh all",
+    "test": "./scripts/test.sh",
     "test:group": "./scripts/test.sh",
     "wait": "sleep 10000000",
     "lint": "glint",
