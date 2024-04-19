@@ -27,7 +27,7 @@ export interface JobNotifier {
 
 export class Job<T> {
   constructor(
-    public id: number,
+    readonly id: number,
     private notifier: Deferred<T>,
   ) {}
   get done(): Promise<T> {
