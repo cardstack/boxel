@@ -254,6 +254,24 @@ jobs:
           path: playwright-report
           retention-days: 14
 
+      - name: Set up env
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
+          echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-matrix-playwright-reports" >> $GITHUB_ENV
+          echo "AWS_S3_BUCKET=cardstack-boxel-matrix-playwright-reports-staging" >> $GITHUB_ENV
+          else
+            echo "unrecognized environment"
+            exit 1;
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
       # - name: Push to Github Pages
       #   uses: peaceiris/actions-gh-pages@v4.0.0
       #   with:
