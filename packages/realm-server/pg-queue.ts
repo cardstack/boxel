@@ -7,6 +7,7 @@ import {
   separatedByCommas,
   addExplicitParens,
   any,
+  every,
   query,
   logger,
   asExpressions,
@@ -26,6 +27,12 @@ interface JobsTable {
   finished_at: Date;
   queue: string;
   result: Record<string, any>;
+}
+
+interface QueueTable {
+  queue_name: string;
+  category: string;
+  status: 'idle' | 'working';
 }
 
 export interface QueueOpts {
@@ -62,11 +69,11 @@ class WorkLoop {
   }
 
   async shutDown(): Promise<void> {
-    log.trace(`[workloop %s] shutting down`, this.label);
+    log.debug(`[workloop %s] shutting down`, this.label);
     this._shuttingDown = true;
     this.wake();
     await this.runnerPromise;
-    log.trace(`[workloop %s] completed shutdown`, this.label);
+    log.debug(`[workloop %s] completed shutdown`, this.label);
   }
 
   get shuttingDown(): boolean {
@@ -85,7 +92,7 @@ class WorkLoop {
   }
 
   wake() {
-    log.trace(`[workloop %s] waking up`, this.label);
+    log.debug(`[workloop %s] waking up`, this.label);
     this.waker.resolve();
   }
 
@@ -96,9 +103,9 @@ class WorkLoop {
     let timerPromise = new Promise((resolve) => {
       this.timeout = setTimeout(resolve, this.pollInterval);
     });
-    log.trace(`[workloop %s] entering promise race`, this.label);
+    log.debug(`[workloop %s] entering promise race`, this.label);
     await Promise.race([this.waker.promise, timerPromise]);
-    log.trace(`[workloop] leaving promise race`, this.label);
+    log.debug(`[workloop] leaving promise race`, this.label);
     if (this.timeout != null) {
       clearTimeout(this.timeout);
     }
@@ -147,18 +154,18 @@ export default class PgQueue implements Queue {
   private async drainNotifications(loop: WorkLoop) {
     while (!loop.shuttingDown) {
       let waitingIds = [...this.notifiers.keys()];
-      log.trace('jobs waiting for notification: %s', waitingIds);
+      log.debug('jobs waiting for notification: %s', waitingIds);
       let result = (await this.query([
         `select id, status, result from jobs where status != 'unfulfilled' and (`,
         ...any(waitingIds.map((id) => [`id=`, param(id)])),
         `)`,
       ] as Expression)) as Pick<JobsTable, 'id' | 'status' | 'result'>[];
       if (result.length === 0) {
-        log.trace(`no jobs to notify`);
+        log.debug(`no jobs to notify`);
         return;
       }
       for (let row of result) {
-        log.trace(
+        log.debug(
           `notifying caller that job %s finished with %s`,
           row.id,
           row.status,
@@ -190,24 +197,49 @@ export default class PgQueue implements Queue {
     opts: QueueOpts = {},
   ): Promise<Job<T>> {
     let optsWithDefaults = Object.assign({}, defaultQueueOpts, opts);
-    let { nameExpressions, valueExpressions } = asExpressions({
-      args,
-      queue: optsWithDefaults.queueName,
-      category,
-    });
-    let [{ id: jobId }] = (await this.query([
-      'insert into jobs',
-      ...addExplicitParens(separatedByCommas(nameExpressions)),
-      'values',
-      ...addExplicitParens(separatedByCommas(valueExpressions)),
-      'returning id',
-    ] as Expression)) as Pick<JobsTable, 'id'>[];
-    log.trace(`%s created, notify jobs`, jobId);
-    await this.query([`NOTIFY jobs`]);
-    let notifier = new Deferred<T>();
-    let job = new Job(jobId, notifier);
-    this.addNotifier(jobId, notifier);
-    return job;
+    let queue = optsWithDefaults.queueName;
+    {
+      let rows = await this.query([
+        'select queue_name, category from queues where',
+        ...every([
+          ['queue_name =', param(queue)],
+          ['category =', param(category)],
+        ]),
+      ] as Expression);
+      if (rows.length === 0) {
+        let { nameExpressions, valueExpressions } = asExpressions({
+          queue_name: queue,
+          category,
+          status: 'idle',
+        } as QueueTable);
+        await this.query([
+          'insert into queues',
+          ...addExplicitParens(separatedByCommas(nameExpressions)),
+          'values',
+          ...addExplicitParens(separatedByCommas(valueExpressions)),
+        ] as Expression);
+      }
+    }
+    {
+      let { nameExpressions, valueExpressions } = asExpressions({
+        args,
+        queue,
+        category,
+      } as JobsTable);
+      let [{ id: jobId }] = (await this.query([
+        'insert into jobs',
+        ...addExplicitParens(separatedByCommas(nameExpressions)),
+        'values',
+        ...addExplicitParens(separatedByCommas(valueExpressions)),
+        'returning id',
+      ] as Expression)) as Pick<JobsTable, 'id'>[];
+      log.debug(`%s created, notify jobs`, jobId);
+      await this.query([`NOTIFY jobs`]);
+      let notifier = new Deferred<T>();
+      let job = new Job(jobId, notifier);
+      this.addNotifier(jobId, notifier);
+      return job;
+    }
   }
 
   // Services can register async function handlers that are invoked when a job is kicked off
@@ -242,21 +274,59 @@ export default class PgQueue implements Queue {
   private async drainQueues(workLoop: WorkLoop) {
     await this.pgClient.withConnection(async ({ query }) => {
       while (!workLoop.shuttingDown) {
-        log.trace(`draining queues`);
+        log.debug(`draining queues`);
         await query(['BEGIN']);
         let jobs = (await query([
-          // find the queue with the oldest job that isn't running, and return
-          // all jobs on that queue, locking them. SKIP LOCKED means we won't
-          // see any jobs that are already running.
-          `select * from jobs where status='unfulfilled' and queue=(select queue from jobs where status='unfulfilled' order by created_at limit 1) for update skip locked`,
+          // find the queue with the oldest job that isn't running, locking it
+          // SKIP LOCKED means we won't see any jobs that are already running.
+          `select * from jobs where status='unfulfilled' order by created_at limit 1 for update skip locked`,
         ])) as unknown as JobsTable[];
         if (jobs.length === 0) {
-          log.trace(`found no work`);
+          log.debug(`found no work`);
           await query(['ROLLBACK']);
           return;
         }
         let firstJob = jobs[0];
-        log.trace(
+        let idleQueues = (await query([
+          // when you have multiple queue clients, you also need to skip lock on
+          // queue/categories that are also not idle as a job may have been
+          // added immediately after the skip lock above runs (so it's not
+          // locked) by a different queue client--we need to lock on a higher
+          // order entity: the queue itself. Note that the previous hub v2
+          // implementation locked all the jobs for the oldest unfulfilled job.
+          // however, this resulted in a concurrency issue in that the
+          // 'unfulfilled' status includes work not yet started as well as work
+          // not yet completed. so if the oldest job is a job that happens to be
+          // running, then we'll continue to look for work in that queue until
+          // the running job has completed. this will starve other queues that
+          // happen to have unstarted work that is newer than the job that is
+          // currently running. This approach fixes that issue, and our tests
+          // prove that.
+          'select * from queues where',
+          ...every([
+            ['queue_name =', param(firstJob.queue)],
+            ['category =', param(firstJob.category)],
+            ['status =', param('idle')],
+          ]),
+          'for update skip locked',
+        ] as Expression)) as unknown as QueueTable[];
+        if (idleQueues.length === 0) {
+          log.debug(
+            `queue/category for job ${firstJob.id}, '${firstJob.queue}/${firstJob.category}' is not idle`,
+          );
+          await query(['ROLLBACK']);
+          return;
+        }
+        await query([
+          'update queues set status =',
+          param('working'),
+          'where',
+          ...every([
+            ['queue_name =', param(firstJob.queue)],
+            ['category =', param(firstJob.category)],
+          ]),
+        ] as Expression);
+        log.debug(
           `claimed queue %s which has %s unfulfilled jobs`,
           firstJob.queue,
           jobs.length,
@@ -271,14 +341,14 @@ export default class PgQueue implements Queue {
         let newStatus: string;
         let result: PgPrimitive;
         try {
-          log.trace(`running %s`, coalescedIds);
+          log.debug(`running %s`, coalescedIds);
           result = await this.runJob(firstJob.category, firstJob.args);
           newStatus = 'resolved';
         } catch (err) {
           result = serializableError(err);
           newStatus = 'rejected';
         }
-        log.trace(`finished %s as %s`, coalescedIds, newStatus);
+        log.debug(`finished %s as %s`, coalescedIds, newStatus);
         await query([
           `update jobs set result=`,
           param(result),
@@ -287,11 +357,20 @@ export default class PgQueue implements Queue {
           `, finished_at=now() where `,
           ...any(coalescedIds.map((id) => [`id=`, param(id)])),
         ] as Expression);
+        await query([
+          'update queues set status =',
+          param('idle'),
+          'where',
+          ...every([
+            ['queue_name =', param(firstJob.queue)],
+            ['category =', param(firstJob.category)],
+          ]),
+        ] as Expression);
         // NOTIFY takes effect when the transaction actually commits. If it
         // doesn't commit, no notification goes out.
         await query([`NOTIFY jobs_finished`]);
         await query(['COMMIT']);
-        log.trace(`committed job completions, notified jobs_finished`);
+        log.debug(`committed job completions, notified jobs_finished`);
       }
     });
   }

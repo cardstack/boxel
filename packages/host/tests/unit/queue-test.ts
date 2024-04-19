@@ -26,4 +26,8 @@ module('Unit | queue | browser implementation', function (hooks) {
   test(`a job can throw an exception`, async function (assert) {
     await runSharedTest(queueTests, assert, { queue });
   });
+
+  test('jobs are processed serially within a particular queue', async function (assert) {
+    await runSharedTest(queueTests, assert, { queue });
+  });
 });

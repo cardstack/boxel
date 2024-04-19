@@ -38,6 +38,52 @@ const tests = Object.freeze({
       assert.ok(false, `expected 'nonErrorJob' to be fulfilled`);
     }
   },
+
+  'jobs are processed serially within a particular queue': async (
+    assert,
+    { queue },
+  ) => {
+    assert.expect(8);
+    let startedCount = 0;
+    let completedCount = 0;
+    let count = async (expectedStartedCount: number) => {
+      assert.strictEqual(
+        startedCount,
+        expectedStartedCount,
+        `the expected started count before job run, ${expectedStartedCount}, is correct`,
+      );
+      assert.strictEqual(
+        completedCount,
+        expectedStartedCount,
+        `the expected completed count before job run, ${expectedStartedCount}, is correct`,
+      );
+      startedCount++;
+      await new Promise((r) => setTimeout(r, 500));
+      completedCount++;
+      assert.strictEqual(
+        startedCount,
+        expectedStartedCount + 1,
+        `the expected started count after job run, ${expectedStartedCount}, is correct`,
+      );
+      assert.strictEqual(
+        completedCount,
+        expectedStartedCount + 1,
+        `the expected completed count after job run, ${
+          expectedStartedCount + 1
+        }, is correct`,
+      );
+    };
+
+    queue.register('count', count);
+    let job1 = await queue.publish('count', 0, {
+      queueName: 'serial-queue',
+    });
+    let job2 = await queue.publish('count', 1, {
+      queueName: 'serial-queue',
+    });
+
+    await Promise.all([job2.done, job1.done]);
+  },
 } as SharedTests<{ queue: Queue }>);
 
 export default tests;
