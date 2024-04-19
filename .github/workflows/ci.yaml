@@ -271,6 +271,7 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1
 
+      - name: Publish consolidated report to S3
       - run: aws s3 sync ./playwright-report s3://cardstack-boxel-matrix-playwright-reports-staging/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}
 
       - name: Store Playwright report URL
