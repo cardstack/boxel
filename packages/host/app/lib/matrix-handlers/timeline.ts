@@ -1,5 +1,5 @@
 import debounce from 'lodash/debounce';
-import { type MatrixEvent } from 'matrix-js-sdk';
+import { Room, type MatrixEvent } from 'matrix-js-sdk';
 
 import {
   type CardMessageContent,
@@ -9,11 +9,26 @@ import {
 
 import { eventDebounceMs } from '../matrix-utils';
 
-import { type Context, type Event, addRoomEvent } from './index';
+import {
+  type Context,
+  type Event,
+  addRoomEvent,
+  updateRoomEvent,
+} from './index';
 
 export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {
-    context.timelineQueue.push(e);
+    context.timelineQueue.push({ event: e });
+    debouncedTimelineDrain(context);
+  };
+}
+
+export function onUpdateEventStatus(context: Context) {
+  return (e: MatrixEvent, _room: Room, maybeOldEventId?: unknown) => {
+    if (typeof maybeOldEventId !== 'string' || !e.status) {
+      return;
+    }
+    context.timelineQueue.push({ event: e, oldEventId: maybeOldEventId });
     debouncedTimelineDrain(context);
   };
 }
@@ -29,17 +44,26 @@ async function drainTimeline(context: Context) {
   context.flushTimeline = new Promise((res) => (eventsDrained = res));
   let events = [...context.timelineQueue];
   context.timelineQueue = [];
-  for (let event of events) {
+  for (let { event, oldEventId } of events) {
     await context.client.decryptEventIfNeeded(event);
-    await processDecryptedEvent(context, {
-      ...event.event,
-      content: event.getContent() || undefined,
-    });
+    await processDecryptedEvent(
+      context,
+      {
+        ...event.event,
+        status: event.status,
+        content: event.getContent() || undefined,
+      },
+      oldEventId,
+    );
   }
   eventsDrained!();
 }
 
-async function processDecryptedEvent(context: Context, event: Event) {
+async function processDecryptedEvent(
+  context: Context,
+  event: Event,
+  oldEventId?: string,
+) {
   let { room_id: roomId } = event;
   if (!roomId) {
     throw new Error(
@@ -89,13 +113,13 @@ async function processDecryptedEvent(context: Context, event: Event) {
         let currentFragmentId: string | undefined = attachedCardEventId;
         do {
           let fragmentEvent = roomField.events.find(
-            (e) => e.event_id === currentFragmentId,
+            (e: DiscreteMatrixEvent) => e.event_id === currentFragmentId,
           );
           let fragmentData: CardFragmentContent['data'];
           if (!fragmentEvent) {
             fragmentEvent = (await context.client.fetchRoomEvent(
               roomId,
-              currentFragmentId,
+              currentFragmentId ?? '',
             )) as DiscreteMatrixEvent;
             if (
               fragmentEvent.type !== 'm.room.message' ||
@@ -107,7 +131,7 @@ async function processDecryptedEvent(context: Context, event: Event) {
                 )}`,
               );
             }
-            await addRoomEvent(context, fragmentEvent);
+            await addRoomEvent(context, { ...fragmentEvent, status: null });
             fragmentData = (
               typeof fragmentEvent.content.data === 'string'
                 ? JSON.parse((fragmentEvent.content as any).data)
@@ -131,7 +155,11 @@ async function processDecryptedEvent(context: Context, event: Event) {
       }
     }
   }
-  await addRoomEvent(context, event);
+  if (oldEventId) {
+    await updateRoomEvent(context, event, oldEventId);
+  } else {
+    await addRoomEvent(context, event);
+  }
 
   if (room.oldState.paginationToken != null) {
     // we need to scroll back to capture any room events fired before this one
