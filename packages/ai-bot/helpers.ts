@@ -161,6 +161,11 @@ export function getLastUserMessage(
 ) {
   let lastMessage: DiscreteMatrixEvent | null = null;
   for (let event of history) {
+    // console.log('event: ', event);
+    // if (event.content.data?.role === 'tool') {
+    //   console.log('Skipping');
+    //   continue;
+    // }
     if (event.type === 'm.room.message' && event.sender !== aiBotUserId) {
       lastMessage = event;
     }

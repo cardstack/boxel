@@ -126,6 +126,7 @@ async function sendOption(
 
 function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
   let functions = getFunctions(history, aiBotUsername);
+  console.log('functions that are callable: ', functions);
   let messages = getModifyPrompt(history, aiBotUsername);
   if (functions.length === 0) {
     return openai.beta.chat.completions.stream({

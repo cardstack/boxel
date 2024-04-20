@@ -369,6 +369,7 @@ export default class MatrixService extends Service {
         role: 'tool',
         functionCall: functionCall,
         result: result,
+        context: await this.aiService.aiContext([]),
       },
     } as CardMessageContent);
   }

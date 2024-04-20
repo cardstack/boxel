@@ -44,11 +44,13 @@ export default class AiService extends Service {
       .topMostStackItems()
       .filter((stackItem) => attachedCardIds.includes(stackItem.card.id)) // Filter out any open cards that are not attached
       .map((stackItem) => stackItem.card.id);
-
     if (this.aiCard) {
       //try and get the system prompt and functions from it
-      functions = this.aiCard.aiContext?.aiFunctions || [];
-      systemPrompt = this.aiCard.aiContext?.systemPrompt || '';
+      let aiContext = await this.aiCard.aiContext(
+        this.specGenerator.bind(this),
+      );
+      functions = aiContext.aiFunctions || [];
+      systemPrompt = aiContext.systemPrompt || '';
     } else if (this.operatorModeStateService.state.submode == 'interact') {
       let attachedOpenCards = attachedCards.filter((c) =>
         attachedOpenCardIds.includes(c.id),
@@ -108,6 +110,22 @@ export default class AiService extends Service {
         this.matrixService.sendToolUse(roomId, functionCall, result);
       }
     }
+  }
+
+  private async specGenerator(card) {
+    console.log('specGenerator', card.constructor.name);
+    console.log('specGenerator: this', this);
+    console.log('specGenerator: this.loaderService', this.loaderService);
+    let mappings = await basicMappings(this.loaderService.loader);
+    let cardAPI = await this.cardService.getAPI(this.loaderService.loader);
+    // Generate function calls for patching currently open cards permitted for modification
+
+    let patchSpec = generateCardPatchCallSpecification(
+      card.constructor as typeof CardDef,
+      cardAPI,
+      mappings,
+    );
+    return patchSpec;
   }
 
   private async getPatchFunctions(attachedOpenCards: CardDef[] = []) {

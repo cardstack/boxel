@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": "{\n  \"name\": \"Nick Hawes\",\n  \"phone\": {\n    \"country\": 44,\n    \"area\": 1865,\n    \"number\": 288728\n  },\n  \"description\": \"Contact information for Nick Hawes, including email address: nickh@robots.ox.ac.uk.\"\n}",
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "chosenType": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../remote_query",
+        "name": "RemoteQuery"
+      }
+    }
+  }
+}
