@@ -38,10 +38,6 @@ export default class BoxelSelectUsage extends Component {
   declare boxelSelectCurrentColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'boxel-select__dropdown' })
   declare boxelSelectSelectedColor: CSSVariableInfo;
-  @cssVariable({ cssClassName: 'boxel-select__dropdown' })
-  declare boxelSelectBelowTransitioningInAnimation: CSSVariableInfo;
-  @cssVariable({ cssClassName: 'boxel-select__dropdown' })
-  declare boxelSelectAboveTransitioningInAnimation: CSSVariableInfo;
 
   @action onSelectItem(item: Country | null): void {
     this.selectedItem = item;
@@ -153,22 +149,6 @@ export default class BoxelSelectUsage extends Component {
           @defaultValue={{this.boxelSelectSelectedColor.defaults}}
           @value={{this.boxelSelectSelectedColor.value}}
           @onInput={{this.boxelSelectSelectedColor.update}}
-        />
-        <Css.Basic
-          @name='boxel-select-below-transitioning-in-animation'
-          @type='transition'
-          @description='Animation for dropdown appearing below. On close animation is reversed'
-          @defaultValue={{this.boxelSelectBelowTransitioningInAnimation.defaults}}
-          @value={{this.boxelSelectBelowTransitioningInAnimation.value}}
-          @onInput={{this.boxelSelectBelowTransitioningInAnimation.update}}
-        />
-        <Css.Basic
-          @name='boxel-select-above-transitioning-in-animation'
-          @type='transition'
-          @description='Animation for dropdown appearing above. On close animation is reversed'
-          @defaultValue={{this.boxelSelectAboveTransitioningInAnimation.defaults}}
-          @value={{this.boxelSelectAboveTransitioningInAnimation.value}}
-          @onInput={{this.boxelSelectAboveTransitioningInAnimation.update}}
         />
       </:cssVars>
     </FreestyleUsage>
