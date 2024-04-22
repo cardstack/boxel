@@ -173,7 +173,7 @@ export class SearchIndex {
     runner: IndexRunner,
     runnerOptsManager: RunnerOptionsManager,
   ) {
-    if ((globalThis as any).__enablePgIndexer) {
+    if ((globalThis as any).__enablePgIndexer?.()) {
       console.debug(`search index is using db index`);
     }
     this.#realm = realm;
