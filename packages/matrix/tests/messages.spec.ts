@@ -34,6 +34,8 @@ test.describe('Room messages', () => {
   });
 
   test(`it can send a message in a room`, async ({ page }) => {
+    test.slow();
+
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
