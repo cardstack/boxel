@@ -103,6 +103,7 @@ export async function synapseStart(
   stopExisting = true,
 ): Promise<SynapseInstance> {
   if (stopExisting) {
+    console.log('in synapseStart, stopping existing');
     // Stop the main server if it's running
     let stopPromises = [dockerStop({ containerId: 'boxel-synapse' })];
     for (const [id, _synapse] of synapses) {
