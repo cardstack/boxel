@@ -59,6 +59,26 @@ exports.up = (pgm) => {
     result: 'jsonb',
   });
   pgm.sql('ALTER TABLE jobs SET UNLOGGED');
+  pgm.createType('queue_statuses', ['idle', 'working']);
+  pgm.createTable('queues', {
+    queue_name: {
+      type: 'varchar',
+      notNull: true,
+    },
+    category: {
+      type: 'varchar',
+      notNull: true,
+    },
+    status: {
+      type: 'queue_statuses',
+      default: 'idle',
+      notNull: true,
+    },
+  });
+  pgm.sql('ALTER TABLE queues SET UNLOGGED');
+  pgm.addConstraint('queues', 'working_queues_pkey', {
+    primaryKey: ['queue_name', 'category'],
+  });
 
   pgm.sql(`
     CREATE OR REPLACE FUNCTION jsonb_tree(data JSONB, root_path TEXT DEFAULT NULL)
