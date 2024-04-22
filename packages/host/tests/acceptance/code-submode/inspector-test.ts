@@ -17,13 +17,13 @@ import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, Loader } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
+import LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
@@ -396,6 +396,7 @@ const localInheritSource = `
 `;
 
 let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
+let loader: Loader;
 
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
@@ -417,18 +418,16 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     window.localStorage.removeItem('recent-files');
     realmPermissions = { [testRealmURL]: ['read', 'write'] };
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
-      loader,
       contents: realmAFiles,
       realmURL: testRealmURL2,
     });
     ({ realm, adapter } = await setupAcceptanceTestRealm({
-      loader,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
@@ -1020,7 +1019,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       'the deleted card has been removed from recent files',
     );
 
-    let notFound = await adapter.openFile('Pet/vangogh.json');
+    let notFound = await adapter.openFile('Pet/vangogh.json', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
@@ -1171,7 +1170,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       'the deleted card has been removed from recent files',
     );
 
-    let notFound = await adapter.openFile('pet.gts');
+    let notFound = await adapter.openFile('pet.gts', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
@@ -1224,7 +1223,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       'the deleted card has been removed from recent files',
     );
 
-    let notFound = await adapter.openFile('pet.gts');
+    let notFound = await adapter.openFile('pet.gts', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
@@ -1246,7 +1245,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click('[data-test-confirm-delete-button]');
     await waitFor('[data-test-empty-code-mode]');
 
-    let notFound = await adapter.openFile('readme.md');
+    let notFound = await adapter.openFile('readme.md', loader);
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });

@@ -80,7 +80,6 @@ module('Acceptance | permissioned realm tests', function (hooks) {
     }
 
     await setupAcceptanceTestRealm({
-      loader,
       contents: {
         'index.gts': { Index },
         'person.gts': { Person },

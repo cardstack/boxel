@@ -70,11 +70,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
     );
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-
     ({ realm, adapter } = await setupAcceptanceTestRealm({
-      loader,
       contents: {
         'pet.gts': `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";

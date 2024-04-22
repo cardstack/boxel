@@ -575,7 +575,7 @@ module('Integration | realm', function (hooks) {
         },
       ],
     });
-    let fileRef = await adapter.openFile(`Pet/${id}.json`, loader, loader);
+    let fileRef = await adapter.openFile(`Pet/${id}.json`, loader);
     if (!fileRef) {
       throw new Error('file not found');
     }
@@ -695,7 +695,7 @@ module('Integration | realm', function (hooks) {
         adapter.lastModified.get(`${testRealmURL}dir/card.json`),
         'lastModified is correct',
       );
-      let fileRef = await adapter.openFile('dir/card.json', loader, loader);
+      let fileRef = await adapter.openFile('dir/card.json', loader);
       if (!fileRef) {
         throw new Error('file not found');
       }
@@ -856,7 +856,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let fileRef = await adapter.openFile('ski-trip.json', loader, loader);
+    let fileRef = await adapter.openFile('ski-trip.json', loader);
     if (!fileRef) {
       throw new Error('file not found');
     }

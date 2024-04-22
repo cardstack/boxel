@@ -6,7 +6,7 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, Loader } from '@cardstack/runtime-common';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
@@ -212,6 +212,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   }
 
   let adapter: TestRealmAdapter;
+  let loader: Loader;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -231,10 +232,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       [testRealmURL]: ['read', 'write'],
       [testRealmURL2]: ['read', 'write'],
     };
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     await setupAcceptanceTestRealm({
-      loader,
       contents: filesB,
       realmURL: testRealmURL2,
       onFetch: async (req: Request) => {
@@ -247,7 +247,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       },
     });
     ({ adapter } = await setupAcceptanceTestRealm({
-      loader,
       contents: files,
     }));
   });
@@ -1054,7 +1053,7 @@ export class TestCard extends CardDef {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
 
-    let file = await adapter.openFile('test-dir/test-card.gts');
+    let file = await adapter.openFile('test-dir/test-card.gts', loader);
     assert.strictEqual(
       file?.content,
       expectedSrc,
@@ -1107,7 +1106,7 @@ export class TestCard extends CardDef {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
 
-    let file = await adapter.openFile('test-card.gts');
+    let file = await adapter.openFile('test-card.gts', loader);
     assert.strictEqual(
       file?.content,
       expectedSrc,
@@ -1160,7 +1159,7 @@ export class TestCard extends CardDef {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
 
-    let file = await adapter.openFile('test-card.gts');
+    let file = await adapter.openFile('test-card.gts', loader);
     assert.strictEqual(
       file?.content,
       expectedSrc,

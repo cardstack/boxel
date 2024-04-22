@@ -77,7 +77,7 @@ export class DirectoryResource extends Resource<Args> {
       return;
     }
     let entries = await this.getEntries(this.directoryURL);
-    debugger;
+
     entries.sort((a, b) => {
       // need to re-insert the leading and trailing /'s in order to get a sort
       // that can organize the paths correctly
@@ -95,7 +95,7 @@ export class DirectoryResource extends Resource<Args> {
     });
     if (!response.ok) {
       // the server takes a moment to become ready do be tolerant of errors at boot
-      debugger;
+
       log.error(
         `Could not get directory listing ${url}, status ${response.status}: ${
           response.statusText

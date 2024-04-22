@@ -7,8 +7,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import {
   percySnapshot,
   setupLocalIndexing,
@@ -187,13 +185,9 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   hooks.beforeEach(async function () {
     window.localStorage.removeItem('recent-files');
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
-      loader,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,

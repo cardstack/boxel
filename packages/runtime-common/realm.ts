@@ -1464,7 +1464,6 @@ export class Realm {
 
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
-    debugger;
     let localPath: LocalPath = this.paths.local(request.url);
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);

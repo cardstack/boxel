@@ -399,13 +399,11 @@ interface RealmContents {
     | string;
 }
 export async function setupAcceptanceTestRealm({
-  loader,
   contents,
   realmURL,
   onFetch,
   permissions,
 }: {
-  loader: Loader;
   contents: RealmContents;
   realmURL?: string;
   onFetch?: (req: Request) => Promise<{
@@ -415,7 +413,6 @@ export async function setupAcceptanceTestRealm({
   permissions?: RealmPermissions;
 }) {
   return await setupTestRealm({
-    loader,
     contents,
     realmURL,
     onFetch,
@@ -425,7 +422,6 @@ export async function setupAcceptanceTestRealm({
 }
 
 export async function setupIntegrationTestRealm({
-  loader,
   contents,
   realmURL,
   onFetch,
@@ -439,7 +435,6 @@ export async function setupIntegrationTestRealm({
   }>;
 }) {
   return await setupTestRealm({
-    loader,
     contents,
     realmURL,
     onFetch,
@@ -455,7 +450,6 @@ async function setupTestRealm({
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
 }: {
-  loader: Loader;
   contents: RealmContents;
   realmURL?: string;
   onFetch?: (req: Request) => Promise<{
