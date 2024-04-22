@@ -1,18 +1,13 @@
-import { type IndexerDBClient, type DBAdapter } from '../index';
+import { parse } from 'date-fns';
 
-export interface SharedTests {
-  [testName: string]: (
-    assert: Assert,
-    client: IndexerDBClient,
-    adapter: DBAdapter,
-  ) => Promise<void>;
+export interface SharedTests<T> {
+  [testName: string]: (assert: Assert, args: T) => Promise<void>;
 }
 
-export async function runSharedTest(
-  tests: SharedTests,
+export async function runSharedTest<T>(
+  tests: SharedTests<T>,
   assert: Assert,
-  client: IndexerDBClient,
-  adapter: DBAdapter,
+  args: T,
 ) {
   let testName = (assert as any).test.testName as keyof typeof tests;
   let test = tests[testName];
@@ -21,5 +16,9 @@ export async function runSharedTest(
       `Could not find test "${testName}" in the shared tests module`,
     );
   }
-  await test(assert, client, adapter);
+  await test(assert, args);
+}
+
+export function p(dateString: string): Date {
+  return parse(dateString, 'yyyy-MM-dd', new Date());
 }

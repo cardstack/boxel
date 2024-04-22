@@ -14,9 +14,8 @@ const testRealmURL2 = `http://test-realm/test2/`;
 
 const tests = Object.freeze({
   'can perform invalidations for an index entry': async (
-    assert: Assert,
-    client: IndexerDBClient,
-    adapter: DBAdapter,
+    assert,
+    { client, adapter },
   ) => {
     await setupIndex(
       client,
@@ -138,9 +137,8 @@ const tests = Object.freeze({
   },
 
   'does not create invalidation record for non-JSON invalidation': async (
-    assert: Assert,
-    client: IndexerDBClient,
-    adapter: DBAdapter,
+    assert,
+    { client, adapter },
   ) => {
     await setupIndex(
       client,
@@ -161,9 +159,8 @@ const tests = Object.freeze({
   },
 
   'only invalidates latest version of content': async (
-    assert: Assert,
-    client: IndexerDBClient,
-    adapter: DBAdapter,
+    assert,
+    { client, adapter },
   ) => {
     await setupIndex(
       client,
@@ -233,9 +230,8 @@ const tests = Object.freeze({
   },
 
   'can prevent concurrent batch invalidations from colliding': async (
-    assert: Assert,
-    client: IndexerDBClient,
-    _adapter: DBAdapter,
+    assert,
+    { client },
   ) => {
     await setupIndex(
       client,
@@ -281,7 +277,7 @@ const tests = Object.freeze({
   },
 
   'can prevent concurrent batch invalidations from colliding when making new generation':
-    async (assert: Assert, client: IndexerDBClient, _adapter: DBAdapter) => {
+    async (assert, { client }) => {
       await setupIndex(
         client,
         [{ realm_url: testRealmURL, current_version: 1 }],
@@ -313,11 +309,7 @@ const tests = Object.freeze({
       }
     },
 
-  'can update an index entry': async (
-    assert: Assert,
-    client: IndexerDBClient,
-    adapter: DBAdapter,
-  ) => {
+  'can update an index entry': async (assert, { client, adapter }) => {
     await setupIndex(
       client,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -498,11 +490,7 @@ const tests = Object.freeze({
     );
   },
 
-  'can remove an index entry': async (
-    assert: Assert,
-    client: IndexerDBClient,
-    adapter: DBAdapter,
-  ) => {
+  'can remove an index entry': async (assert, { client, adapter }) => {
     await setupIndex(
       client,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -578,9 +566,8 @@ const tests = Object.freeze({
   },
 
   'can create a new generation of index entries': async (
-    assert: Assert,
-    client: IndexerDBClient,
-    adapter: DBAdapter,
+    assert,
+    { client, adapter },
   ) => {
     await setupIndex(
       client,
@@ -725,11 +712,7 @@ const tests = Object.freeze({
     );
   },
 
-  'can get "production" index entry': async (
-    assert: Assert,
-    client: IndexerDBClient,
-    _adapter: DBAdapter,
-  ) => {
+  'can get "production" index entry': async (assert, { client }) => {
     await setupIndex(
       client,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -804,11 +787,7 @@ const tests = Object.freeze({
     });
   },
 
-  'can get work in progress index entry': async (
-    assert: Assert,
-    client: IndexerDBClient,
-    _adapter: DBAdapter,
-  ) => {
+  'can get work in progress index entry': async (assert, { client }) => {
     await setupIndex(
       client,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -889,9 +868,8 @@ const tests = Object.freeze({
   },
 
   'returns undefined when getting a deleted entry': async (
-    assert: Assert,
-    client: IndexerDBClient,
-    _adapter: DBAdapter,
+    assert,
+    { client },
   ) => {
     await setupIndex(
       client,
@@ -909,6 +887,6 @@ const tests = Object.freeze({
     let entry = await client.getIndexEntry(new URL(`${testRealmURL}1`));
     assert.strictEqual(entry, undefined, 'deleted entries return undefined');
   },
-} as SharedTests);
+} as SharedTests<{ client: IndexerDBClient; adapter: DBAdapter }>);
 
 export default tests;

@@ -61,18 +61,62 @@ exports.up = (pgm) => {
   pgm.sql('ALTER TABLE jobs SET UNLOGGED');
 
   pgm.sql(`
-    CREATE OR REPLACE FUNCTION jsonb_array_each(data JSONB)
-    RETURNS TABLE (index_text TEXT, text_value TEXT) AS
+    CREATE OR REPLACE FUNCTION jsonb_tree(data JSONB, root_path TEXT DEFAULT NULL)
+    RETURNS TABLE (fullkey TEXT, jsonb_value JSONB, text_value TEXT, level INT) AS
     $$
-    BEGIN
-      RETURN QUERY
-      SELECT
-        index::TEXT,
-        value::TEXT
-      FROM
-        jsonb_array_elements_text(data) WITH ORDINALITY AS arr(value, index);
-    END;
+    WITH RECURSIVE cte AS (
+        SELECT
+            (
+              CASE
+                WHEN root_path IS NULL THEN '$'
+                ELSE root_path
+              END
+            ) AS current_key,
+            (CASE
+              WHEN root_path IS NULL THEN data
+              ELSE data #> string_to_array(substring(root_path from 3), '.') -- trim off leading '$.'
+            END) AS jsonb_value,
+            null AS text_value,
+            1 AS level
+
+        UNION ALL
+
+        (
+          SELECT
+              CASE
+                  WHEN c.jsonb_value IS JSON OBJECT THEN c.current_key || '.' || key
+                  WHEN c.jsonb_value IS JSON ARRAY THEN c.current_key || '[' || (index - 1)::TEXT || ']'
+                  ELSE c.current_key
+              END,
+              CASE
+                  WHEN c.jsonb_value IS JSON OBJECT THEN kv.value
+                  WHEN c.jsonb_value IS JSON ARRAY THEN arr.value
+              END,
+              CASE
+                  WHEN c.jsonb_value IS JSON OBJECT THEN trim('"' from kv.value::text)
+                  WHEN c.jsonb_value IS JSON ARRAY THEN trim('"' from arr.value::text)
+              END,
+              c.level + 1
+          FROM
+              cte c
+          CROSS JOIN LATERAL jsonb_each(
+              CASE
+                  WHEN c.jsonb_value IS JSON OBJECT THEN c.jsonb_value
+                  ELSE '{"_":null}'::jsonb
+              END
+          ) AS kv (key, value)
+          CROSS JOIN LATERAL jsonb_array_elements(
+              CASE
+                  WHEN c.jsonb_value IS JSON ARRAY THEN c.jsonb_value
+                  ELSE '[null]'::jsonb
+              END
+          ) WITH ORDINALITY arr(value, index)
+          WHERE
+              c.jsonb_value IS JSON OBJECT OR c.jsonb_value IS JSON ARRAY
+        )
+    )
+    SELECT * FROM cte 
     $$
-    LANGUAGE PLPGSQL;
+    LANGUAGE SQL;
   `);
 };

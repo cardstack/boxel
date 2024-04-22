@@ -4,8 +4,6 @@ import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
-import { parse } from 'date-fns';
-
 import ms from 'ms';
 
 import {
@@ -55,6 +53,7 @@ import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
+export * from '@cardstack/runtime-common/helpers';
 export * from '@cardstack/runtime-common/helpers/indexer';
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
@@ -78,10 +77,6 @@ export function trimCardContainer(text: string) {
     /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>/g,
     '$1',
   );
-}
-
-export function p(dateString: string): Date {
-  return parse(dateString, 'yyyy-MM-dd', new Date());
 }
 
 export function getMonacoContent(): string {
