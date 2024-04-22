@@ -173,9 +173,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         z-index: 2;
       }
 
-      .boxel-input-group__select-accessory :deep(.boxel-select),
-      .boxel-input-group__select-accessory
-        :deep(.boxel-select--selected .boxel-select__item) {
+      .boxel-input-group__select-accessory :deep(.boxel-select) {
         font: var(--boxel-button-font, var(--boxel-font-sm));
         font-weight: 600;
         padding: var(
@@ -189,11 +187,6 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         :deep(.boxel-select .ember-power-select-placeholder) {
         font: var(--boxel-button-font, var(--boxel-font-sm));
         font-weight: 600;
-      }
-
-      .boxel-input-group__select-accessory
-        :deep(.boxel-select--selected .boxel-select__item) {
-        padding: 0;
       }
 
       .boxel-input-group__select-accessory
