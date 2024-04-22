@@ -161,6 +161,26 @@ export async function synapseStart(
     ],
   });
 
+  // Await Synapse healthcheck
+  console.log(
+    `Synapse version`,
+    await dockerExec({
+      containerId: synapseId,
+      params: [
+        'curl',
+        '--connect-timeout',
+        '30',
+        '--retry',
+        '30',
+        '--retry-delay',
+        '1',
+        '--retry-all-errors',
+        '--silent',
+        `http://localhost:8008/_synapse/admin/v1/server_version`,
+      ],
+    }),
+  );
+
   const synapse: SynapseInstance = { synapseId, ...synCfg };
   synapses.set(synapseId, synapse);
   return synapse;

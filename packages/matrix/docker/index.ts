@@ -43,8 +43,8 @@ export function dockerRun(args: {
 export function dockerExec(args: {
   containerId: string;
   params: string[];
-}): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
+}): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     childProcess.execFile(
       'docker',
       ['exec', args.containerId, ...args.params],
@@ -56,7 +56,7 @@ export function dockerExec(args: {
           reject(err);
           return;
         }
-        resolve();
+        resolve(stdout);
       },
     );
   });
