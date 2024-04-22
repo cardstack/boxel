@@ -68,6 +68,8 @@ test.describe('Room creation', () => {
   test('it does not create a new room when another new room is available', async ({
     page,
   }) => {
+    test.slow(); // FIXME remove?
+
     await login(page, 'user1', 'pass');
 
     let room = await getRoomId(page); // Automatically created room
