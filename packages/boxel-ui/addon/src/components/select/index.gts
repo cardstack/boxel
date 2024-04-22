@@ -20,7 +20,7 @@ interface Signature<ItemT = any> {
 
 const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
   <PowerSelect
-    class={{cn 'boxel-select' boxel-select--selected=@selected}}
+    class={{'boxel-select'}}
     @options={{@options}}
     @searchField={{@searchField}}
     @selected={{@selected}}
