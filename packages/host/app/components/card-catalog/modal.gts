@@ -30,7 +30,7 @@ import type { Query, Filter } from '@cardstack/runtime-common/query';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { getCard } from '../../resources/card-resource';
 import { getSearchResults, Search } from '../../resources/search';
@@ -51,9 +51,7 @@ import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 
 interface Signature {
-  Args: {
-    context?: CardContext;
-  };
+  Args: {};
 }
 
 export interface RealmCards {
@@ -136,7 +134,6 @@ export default class CardCatalogModal extends Component<Signature> {
               }}
               @select={{this.selectCard}}
               @selectedCard={{this.state.selectedCard}}
-              @context={{@context}}
             />
           {{/if}}
         </:content>

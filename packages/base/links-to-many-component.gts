@@ -21,9 +21,11 @@ import {
   baseCardRef,
   identifyCard,
   getPlural,
+  CardContextName,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { consume } from 'ember-provide-consume-context';
 
 interface Signature {
   Args: {
@@ -35,11 +37,12 @@ interface Signature {
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
     ): typeof BaseDef;
-    context?: CardContext;
   };
 }
 
 class LinksToManyEditor extends GlimmerComponent<Signature> {
+  @consume(CardContextName) declare cardContext: CardContext;
+
   <template>
     <div data-test-links-to-many={{@field.name}}>
       {{#if (eq @format 'edit')}}
@@ -53,7 +56,6 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                     'embedded'
                     boxedElement
                     @field
-                    @context
                   )
                   as |Item|
                 }}
@@ -94,7 +96,6 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 'atom'
                 boxedElement
                 @field
-                @context
               )
               as |Item|
             }}
@@ -209,7 +210,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       {
         offerToCreate: { ref: type, relativeTo: undefined },
         multiSelect: true,
-        createNewCard: this.args.context?.actions?.createCard,
+        createNewCard: this.cardContext?.actions?.createCard,
       },
     );
     if (chosenCard) {
@@ -231,7 +232,6 @@ export function getLinksToManyComponent({
   format,
   field,
   cardTypeFor,
-  context,
 }: {
   model: Box<CardDef>;
   arrayField: Box<CardDef[]>;
@@ -241,7 +241,6 @@ export function getLinksToManyComponent({
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
-  context?: CardContext;
 }): BoxComponent {
   if (format === 'edit' || format === 'atom') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {
@@ -252,17 +251,10 @@ export function getLinksToManyComponent({
           @field={{field}}
           @format={{format}}
           @cardTypeFor={{cardTypeFor}}
-          @context={{context}}
         />
       </template>
     };
   } else {
-    return getPluralViewComponent(
-      arrayField,
-      field,
-      format,
-      cardTypeFor,
-      context,
-    );
+    return getPluralViewComponent(arrayField, field, format, cardTypeFor);
   }
 }

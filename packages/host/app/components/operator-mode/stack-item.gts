@@ -18,6 +18,7 @@ import {
   waitForProperty,
 } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
+import { provide } from 'ember-provide-consume-context';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { TrackedArray } from 'tracked-built-ins';
@@ -45,6 +46,7 @@ import {
 import {
   type Actions,
   cardTypeDisplayName,
+  CardContextName,
   Deferred,
 } from '@cardstack/runtime-common';
 
@@ -173,6 +175,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.index + 1 < this.args.stackItems.length;
   }
 
+  @provide(CardContextName)
+  // @ts-expect-error noUnusedLocals
   private get context() {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
@@ -527,11 +531,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             {{ContentElement onSetup=this.setupContentEl}}
             data-test-stack-item-content
           >
-            <Preview
-              @card={{this.card}}
-              @format={{@item.format}}
-              @context={{this.context}}
-            />
+            <Preview @card={{this.card}} @format={{@item.format}} />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @publicAPI={{@publicAPI}}

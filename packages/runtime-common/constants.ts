@@ -20,3 +20,5 @@ export const isField = Symbol('cardstack-field');
 export const primitive = Symbol('cardstack-primitive');
 
 export const aiBotUsername = 'aibot';
+
+export const CardContextName = 'card-context';

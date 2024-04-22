@@ -22,6 +22,7 @@ import {
   isNotLoadedError,
   isNotReadyError,
   CardError,
+  CardContextName,
   NotLoaded,
   NotReady,
   getField,
@@ -283,11 +284,7 @@ export interface Field<
   ): Promise<any>;
   emptyValue(instance: BaseDef): any;
   validate(instance: BaseDef, value: any): void;
-  component(
-    model: Box<BaseDef>,
-    defaultFormat: Format,
-    context?: CardContext,
-  ): BoxComponent;
+  component(model: Box<BaseDef>, defaultFormat: Format): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
   queryMatcher(
@@ -753,12 +750,8 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     );
   }
 
-  component(
-    model: Box<BaseDef>,
-    format: Format,
-    context?: CardContext,
-  ): BoxComponent {
-    return fieldComponent(this, model, format, context);
+  component(model: Box<BaseDef>, format: Format): BoxComponent {
+    return fieldComponent(this, model, format);
   }
 }
 
@@ -1049,18 +1042,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return fieldInstance;
   }
 
-  component(
-    model: Box<CardDef>,
-    format: Format,
-    context?: CardContext,
-  ): BoxComponent {
+  component(model: Box<CardDef>, format: Format): BoxComponent {
     if (format === 'edit' && !this.computeVia) {
       let innerModel = model.field(
         this.name as keyof BaseDef,
       ) as unknown as Box<CardDef | null>;
-      return getLinksToEditor(innerModel, this, context);
+      return getLinksToEditor(innerModel, this);
     }
-    return fieldComponent(this, model, format, context);
+    return fieldComponent(this, model, format);
   }
 }
 
@@ -1435,11 +1424,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     return fieldInstances;
   }
 
-  component(
-    model: Box<CardDef>,
-    format: Format,
-    context?: CardContext,
-  ): BoxComponent {
+  component(model: Box<CardDef>, format: Format): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
       fieldName,
@@ -1462,7 +1447,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       field: this,
       format: renderFormat ?? format,
       cardTypeFor,
-      context,
     });
   }
 }
@@ -1471,7 +1455,6 @@ function fieldComponent(
   field: Field<typeof BaseDef>,
   model: Box<BaseDef>,
   defaultFormat: Format,
-  context?: CardContext,
 ): BoxComponent {
   let fieldName = field.name as keyof BaseDef;
   let card: typeof BaseDef;
@@ -1482,7 +1465,7 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof BaseDef) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<BaseDef>;
-  return getBoxComponent(card, defaultFormat, innerModel, field, context);
+  return getBoxComponent(card, defaultFormat, innerModel, field);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -1660,13 +1643,8 @@ export class BaseDef {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(
-    card: BaseDef,
-    format: Format,
-    field?: Field,
-    context?: CardContext,
-  ) {
-    return getComponent(card, format, field, context);
+  static getComponent(card: BaseDef, format: Format, field?: Field) {
+    return getComponent(card, format, field);
   }
 
   static assignInitialFieldValue(
@@ -2738,7 +2716,6 @@ export function getComponent(
   model: BaseDef,
   format: Format,
   field?: Field,
-  context?: CardContext,
 ): BoxComponent {
   let box = Box.create(model);
   let boxComponent = getBoxComponent(
@@ -2746,7 +2723,6 @@ export function getComponent(
     format,
     box,
     field,
-    context,
   );
   return boxComponent;
 }
@@ -3100,4 +3076,10 @@ type ElementType<T> = T extends (infer V)[] ? V : never;
 
 function makeRelativeURL(maybeURL: string, opts?: SerializeOpts): string {
   return opts?.maybeRelativeURL ? opts.maybeRelativeURL(maybeURL) : maybeURL;
+}
+
+declare module 'ember-provide-consume-context/context-registry' {
+  export default interface ContextRegistry {
+    [CardContextName]: CardContext;
+  }
 }
