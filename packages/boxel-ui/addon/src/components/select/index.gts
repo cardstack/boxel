@@ -58,30 +58,6 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     .boxel-select:after {
       display: none;
     }
-
-    @keyframes drop-fade-below {
-      0% {
-        opacity: 0;
-        transform: translateY(-20px);
-      }
-
-      100% {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes drop-fade-above {
-      0% {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-
-      100% {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
   </style>
   <style>
     :global(.boxel-select__dropdown) {
