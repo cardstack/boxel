@@ -153,13 +153,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         ...attributes
         as |item|
       >
-        {{#if (has-block)}}
-          hi
-          {{yield item}}
-        {{else}}
-          what
-          <div>{{item}}</div>
-        {{/if}}
+        <div>{{item}}</div>
       </BoxelSelect>
     </div>
     <style>
@@ -188,7 +182,6 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         font: var(--boxel-button-font, var(--boxel-font-sm));
         font-weight: 600;
       }
-
       .boxel-input-group__select-accessory
         :deep([aria-expanded='true'] .ember-power-select-status-icon) {
         transform: rotate(180deg);
