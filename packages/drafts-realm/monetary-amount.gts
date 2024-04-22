@@ -10,7 +10,6 @@ import { Currency } from './asset';
 import { action } from '@ember/object';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
 import { getLiveCards } from '@cardstack/runtime-common';
-import { cn } from '@cardstack/boxel-ui/helpers';
 import { guidFor } from '@ember/object/internals';
 import GlimmerComponent from '@glimmer/component';
 
