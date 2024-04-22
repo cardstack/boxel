@@ -68,8 +68,8 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
    }}
   <style>
     :global(.boxel-select__dropdown) {
-      --boxel-select-current-color: var(--boxel-light-100);
-      --boxel-select-selected-color: var(--boxel-highlight);
+      --boxel-select-current-color: var(--boxel-highlight);
+      --boxel-select-selected-color: var(--boxel-light-100);
       --boxel-select-below-transitioning-in-animation: drop-fade-below
         var(--boxel-transition);
       --boxel-select-below-transitioning-out-animation: var(
