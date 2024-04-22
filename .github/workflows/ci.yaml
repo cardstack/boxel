@@ -176,12 +176,14 @@ jobs:
         with:
           junit_files: junit/host.xml
 
-  matrix-client-test-1:
-    name: Matrix Client Tests - Group 1
+  matrix-client-test:
+    name: Matrix Client Tests
     runs-on: ubuntu-latest
-    concurrency:
-      group: matrix-client-test-1-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
@@ -203,50 +205,90 @@ jobs:
         run: pnpm start:without-matrix &
         working-directory: packages/realm-server
       - name: Run Playwright tests
-        run: pnpm test:group group1
+        run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
-      - uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: playwright-report
-          path: packages/matrix/playwright-report/
-          retention-days: 30
 
-  matrix-client-test-2:
-    name: Matrix Client Tests - Group 2
+      - name: Upload blob report to GitHub Actions Artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shardIndex }}
+          path: packages/matrix/blob-report
+          retention-days: 1
+
+  matrix-client-merge-reports-and-publish:
+    name: Merge Matrix reports and publish
+    if: always()
+    needs: matrix-client-test
     runs-on: ubuntu-latest
-    concurrency:
-      group: matrix-client-test-2-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
+
+    permissions:
+      id-token: write
+      contents: write
+      checks: write
+      statuses: write
+
+    outputs:
+      timestamp: ${{ steps.timestampid.outputs.timestamp }}
+
     steps:
+      - name: Create a timestamp as a directory to store reports in
+        id: timestampid
+        run: echo "timestamp=$(date --utc +%Y%m%d_%H%M%SZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps
-        working-directory: packages/matrix
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
-      - name: Build boxel-motion
-        run: pnpm build
-        working-directory: packages/boxel-motion/addon
-      - name: Build host dist/ for fastboot
-        run: pnpm build
-        env:
-          NODE_OPTIONS: --max_old_space_size=4096
-        working-directory: packages/host
-      - name: Start realm servers
-        run: pnpm start:without-matrix &
-        working-directory: packages/realm-server
-      - name: Run Playwright tests
-        run: pnpm test:group group2
-        working-directory: packages/matrix
-      - uses: actions/upload-artifact@v3
-        if: always()
+
+      - name: Download blob reports from GitHub Actions Artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: playwright-report
-          path: packages/matrix/playwright-report/
-          retention-days: 30
+          path: all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge blobs into one single report
+        run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-report--attempt-${{ github.run_attempt }}
+          path: playwright-report
+          retention-days: 14
+
+      - name: Set up env
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
+          echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-matrix-playwright-reports" >> $GITHUB_ENV
+          echo "AWS_S3_BUCKET=cardstack-boxel-matrix-playwright-reports-staging" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Publish consolidated report to S3
+        run: aws s3 sync ./playwright-report s3://cardstack-boxel-matrix-playwright-reports-staging/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}
+
+      - name: Store Playwright report URL
+        shell: bash
+        run: echo "PLAYWRIGHT_REPORT_URL=https://boxel-matrix-playwright-reports.stack.cards/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}/index.html" >> $GITHUB_ENV
+
+      - name: Add status with link to Playwright report
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          curl \
+            -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
+            -d '{"context":"Matrix Playwright tests report","description":"","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
 
   realm-server-test:
     name: Realm Server Tests
