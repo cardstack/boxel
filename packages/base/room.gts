@@ -284,7 +284,7 @@ export class MessageField extends FieldDef {
   // to verify whether the message is already sent or not.
   @field clientGeneratedId = contains(StringField);
   @field status = contains(StringField);
-  @field isRetryAble = contains(BooleanField, {
+  @field isRetryable = contains(BooleanField, {
     computeVia: function (this: MessageField) {
       return this.errorMessage !== ErrorMessage['M_TOO_LARGE'];
     },

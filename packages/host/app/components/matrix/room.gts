@@ -129,7 +129,7 @@ export default class Room extends Component<Signature> {
   }
 
   maybeRetryAction = (messageIndex: number, message: MessageField) => {
-    if (this.isLastMessage(messageIndex) && message.isRetryAble) {
+    if (this.isLastMessage(messageIndex) && message.isRetryable) {
       return this.resendLastMessage;
     }
     return undefined;
