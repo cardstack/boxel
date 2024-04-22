@@ -500,10 +500,35 @@ export class RoomField extends FieldDef {
         }
         let event_id = event.event_id;
         let update = false;
-        if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-          event_id = event.content['m.relates_to'].event_id;
+        let relatesTo = event.content['m.relates_to'];
+        if (relatesTo?.rel_type === 'm.replace') {
+          event_id = relatesTo.event_id;
           update = true;
         }
+        // if (event.type === 'm.reaction') {
+        //   if (
+        //     event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        //     cache.has(event.content['m.relates_to'].event_id)
+        //   ) {
+        //     let r = event.content['m.relates_to'];
+
+        //     let ev = this.events.find((e) => {
+        //       let res =
+        //         'm.relates_to' in e.content &&
+        //         e.content['m.relates_to']?.['rel_type'] === 'm.replace' &&
+        //         e.content['m.relates_to']['event_id'] === r.event_id;
+        //       return res;
+        //     });
+
+        //     // let message = cache.get(r.event_id);
+        //     if (ev) {
+        //       event = ev as CommandEvent;
+        //       event.content.data.command.status = r.key as CommandStatus;
+        //       debugger;
+        //     }
+        //   }
+        // }
+
         if (cache.has(event_id) && !update) {
           continue;
         }
@@ -610,9 +635,10 @@ export class RoomField extends FieldDef {
 
       // this sort should hopefully be very optimized since events will
       // be close to chronological order
-      return [...cache.values()].sort(
+      let messages = [...cache.values()].sort(
         (a, b) => a.created.getTime() - b.created.getTime(),
       );
+      return messages;
     },
   });
 
@@ -806,33 +832,16 @@ export interface CommandMessageContent {
   };
 }
 
-interface CommandStatusEvent extends BaseMatrixEvent {
-  type: 'm.room.message';
-  content: CommandStatusUpdateContent;
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
-  };
+interface ReactionEvent extends BaseMatrixEvent {
+  type: 'm.reaction';
+  content: ReactionEventContent;
 }
 
-export interface CommandStatusUpdateContent {
+export interface ReactionEventContent {
   'm.relates_to': {
-    rel_type: string;
     event_id: string;
-  };
-  msgtype: 'org.boxel.command';
-  format: 'org.matrix.custom.html';
-  body: string;
-  formatted_body: string;
-  data: {
-    command: {
-      type: 'patch';
-      payload: PatchObject;
-      eventId: string;
-      status: CommandStatus;
-    };
+    key: string;
+    rel_type: 'm.annotation';
   };
 }
 
@@ -904,7 +913,7 @@ export type MatrixEvent =
   | RoomPowerLevels
   | MessageEvent
   | CommandEvent
-  | CommandStatusEvent
+  | ReactionEvent
   | CardMessageEvent
   | RoomNameEvent
   | RoomTopicEvent

@@ -337,16 +337,6 @@ Common issues are:
       if (toStartOfTimeline) {
         return; // don't print paginated results
       }
-      let eventContent = event.getContent();
-      if (
-        event.getType() === 'm.room.message' &&
-        eventContent.msgtype === 'org.boxel.command' &&
-        'm.relates_to' in eventContent &&
-        eventContent['m.relates_to']?.rel_type === 'm.replace'
-      ) {
-        log.info('Received command replace event', event);
-        return;
-      }
       if (event.getType() !== 'm.room.message') {
         return; // only print messages
       }

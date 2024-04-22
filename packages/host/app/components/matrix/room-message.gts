@@ -23,7 +23,10 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type MessageField } from 'https://cardstack.com/base/room';
+import {
+  type MessageField,
+  type CommandStatus,
+} from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
@@ -50,6 +53,12 @@ export default class RoomMessage extends Component<Signature> {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
+    if (this.args.message.command?.eventId) {
+      this.getCommandStatus.perform(
+        this.args.roomId,
+        this.args.message.command.eventId,
+      );
+    }
   }
 
   @tracked streamingTimeout = false;
@@ -113,11 +122,7 @@ export default class RoomMessage extends Component<Signature> {
             {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
           </Button>
           <ApplyButton
-            @state={{if
-              this.patchCard.isRunning
-              'applying'
-              @message.command.commandStatus
-            }}
+            @state={{if this.patchCard.isRunning 'applying' this.commandStatus}}
             {{on 'click' (perform this.patchCard)}}
             data-test-command-apply={{if
               this.patchCard.isRunning
@@ -234,6 +239,7 @@ export default class RoomMessage extends Component<Signature> {
 
   @tracked private isDisplayingCode = false;
   @tracked private patchCardError: { id: string; error: unknown } | undefined;
+  @tracked private commandStatus: CommandStatus = 'ready';
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -312,6 +318,11 @@ export default class RoomMessage extends Component<Signature> {
       );
     } catch (e) {
       this.patchCardError = { id: payload.id, error: e };
+      await this.matrixService.updateCommandStatus(
+        this.args.roomId,
+        eventId,
+        'failed',
+      );
     }
   });
 
@@ -319,6 +330,13 @@ export default class RoomMessage extends Component<Signature> {
     let { commandType, payload } = this.args.message.command;
     return JSON.stringify({ commandType, payload }, null, 2);
   }
+
+  private getCommandStatus = task(async (roomId: string, eventId: string) => {
+    this.commandStatus = await this.matrixService.getCommandStatus(
+      roomId,
+      eventId,
+    );
+  });
 
   @action private viewCodeToggle() {
     this.isDisplayingCode = !this.isDisplayingCode;

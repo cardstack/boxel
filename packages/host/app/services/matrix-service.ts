@@ -49,8 +49,7 @@ import type {
   CardMessageContent,
   CardFragmentContent,
   CommandStatus,
-  CommandMessageContent,
-  CommandEvent,
+  ReactionEventContent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -362,9 +361,9 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent | CardFragmentContent | CommandMessageContent,
+    content: CardMessageContent | CardFragmentContent | ReactionEventContent,
   ) {
-    if (content.data) {
+    if ('data' in content) {
       const encodedContent = {
         ...content,
         data: JSON.stringify(content.data),
@@ -380,45 +379,15 @@ export default class MatrixService extends Service {
     eventId: string,
     status: CommandStatus,
   ) {
-    let messages = await this.allRoomMessages(roomId);
-    let message = messages.find((m) => {
-      if (
-        m.type === 'm.room.message' &&
-        m.content.msgtype === 'org.boxel.command' &&
-        'm.relates_to' in m.content
-      ) {
-        let relatesTo = m.content['m.relates_to'];
-        return (
-          relatesTo?.['rel_type'] === 'm.replace' &&
-          relatesTo['event_id'] === eventId
-        );
-      }
-      return;
-    });
-    if (!message) {
-      throw new Error(`Could not find message with event ID ${eventId}`);
-    }
-
-    let m = message as CommandEvent;
-    let data =
-      typeof m.content.data === 'string'
-        ? JSON.parse(m.content.data)
-        : m.content.data;
-    let content = {
-      ...m.content,
-      data: {
-        command: {
-          ...data.command,
-          status,
-        },
-      },
+    let content: ReactionEventContent = {
       'm.relates_to': {
         event_id: eventId,
-        rel_type: 'm.replace',
+        key: status,
+        rel_type: 'm.annotation' as MatrixSDK.RelationType.Annotation,
       },
     };
     try {
-      return await this.sendEvent(roomId, 'm.room.message', content);
+      return await this.sendEvent(roomId, 'm.reaction', content);
     } catch (e) {
       throw new Error(
         `Error sending command status: ${
@@ -426,6 +395,31 @@ export default class MatrixService extends Service {
         }`,
       );
     }
+  }
+
+  async getCommandStatus(
+    roomId: string,
+    eventId: string,
+  ): Promise<CommandStatus> {
+    let room = await this.rooms.get(roomId);
+    if (!room) {
+      throw new Error(`Room ${roomId} not found`);
+    }
+    let event = room.events.find((e) => {
+      let ev =
+        e.type === 'm.reaction' &&
+        e.content['m.relates_to']?.event_id === eventId &&
+        e.content['m.relates_to']?.rel_type === 'm.annotation';
+      return ev;
+    });
+
+    if (!event) {
+      throw new Error(`Event ${eventId} not found in room ${roomId}`);
+    }
+
+    let status = (event.content as ReactionEventContent)['m.relates_to']
+      .key as CommandStatus;
+    return status;
   }
 
   async sendMessage(
