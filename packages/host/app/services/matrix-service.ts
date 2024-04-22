@@ -264,7 +264,8 @@ export default class MatrixService extends Service {
       this.bindEventListeners();
 
       try {
-        await this._client.startClient();
+        // FIMXE remove probably
+        await this._client.startClient({ pollTimeout: 10000 });
         await this.initializeRooms();
       } catch (e) {
         console.log('Error starting Matrix client', e);
