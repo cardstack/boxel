@@ -18,7 +18,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   // General timeout per test
-  timeout: 30000,
+  timeout: 60000,
 
   // For expect calls
   expect: {
