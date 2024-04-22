@@ -29,7 +29,7 @@ export default class BoxelSelectUsage extends Component {
   @tracked placeholder = 'Select Item';
   @tracked verticalPosition = 'auto' as const;
 
-  @tracked renderInPlace = true;
+  @tracked renderInPlace = false;
   @tracked disabled = false;
   @tracked searchField = '';
   @tracked searchEnabled = false;
@@ -116,7 +116,7 @@ export default class BoxelSelectUsage extends Component {
         />
         <Args.Bool
           @name='renderInPlace'
-          @defaultValue={{true}}
+          @defaultValue={{false}}
           @value={{this.renderInPlace}}
           @onInput={{fn (mut this.renderInPlace)}}
           @description='When passed true, the content will render next to the trigger instead of being placed in the root of the body'
