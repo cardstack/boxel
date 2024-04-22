@@ -100,7 +100,7 @@ class Edit extends Component<typeof MonetaryAmount> {
           @onChange={{this.setCurrency}}
           @dropdownClass='input-selectable-currency-amount__dropdown'
           @verticalPosition='below'
-          as |item itemCssClass|
+          as |item|
         >
           <div
             data-test-currency={{item.symbol}}
