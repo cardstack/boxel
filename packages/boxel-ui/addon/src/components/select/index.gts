@@ -51,97 +51,6 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       gap: var(--boxel-sp-sm);
       padding-right: var(--boxel-sp);
     }
-    .boxel-select__dropdown {
-      --boxel-select-current-color: var(--boxel-light-100);
-      --boxel-select-selected-color: var(--boxel-highlight);
-      --boxel-select-below-transitioning-in-animation: drop-fade-below
-        var(--boxel-transition);
-      --boxel-select-below-transitioning-out-animation: var(
-          --boxel-select-below-transitioning-in-animation
-        )
-        reverse;
-      --boxel-select-above-transitioning-in-animation: drop-fade-above
-        var(--boxel-transition);
-      --boxel-select-above-transitioning-out-animation: var(
-          --boxel-select-above-transitioning-in-animation
-        )
-        reverse;
-
-      box-shadow: var(--boxel-box-shadow);
-      border-radius: var(--boxel-form-control-border-radius);
-    }
-
-    .boxel-select__dropdown :deep(ul) {
-      list-style: none;
-      padding: 0;
-      overflow: auto;
-    }
-
-    .boxel-select__dropdown
-      :deep(.ember-power-select-option[aria-selected='true']) {
-      background-color: var(--boxel-select-selected-color);
-    }
-
-    .boxel-select__dropdown
-      :deep(.ember-power-select-option[aria-current='true']) {
-      background-color: var(--boxel-select-current-color);
-    }
-
-    /* stylelint-disable-next-line max-line-length */
-    .boxel-select__dropdown
-      :deep(
-        .ember-power-select-option:hover:not([aria-disabled='true']):not(
-            .ember-power-select-option--no-matches-message
-          )
-      ) {
-      cursor: pointer;
-    }
-
-    .boxel-select__dropdown :deep(.ember-power-select-search) {
-      padding: 4px;
-    }
-
-    .boxel-select__dropdown :deep(.ember-power-select-search-input) {
-      border: 1px solid #aaa;
-      border-radius: 0;
-      width: 100%;
-      font-size: inherit;
-      line-height: inherit;
-      padding: 0 5px;
-    }
-
-    .boxel-select__dropdown :deep(.ember-power-select-search-input:focus) {
-      border: 1px solid var(--boxel-outline-color);
-      box-shadow: var(--boxel-box-shadow-hover);
-      outline: var(--boxel-outline);
-    }
-
-    .boxel-select__dropdown
-      :deep(.ember-power-select-option--no-matches-message) {
-      padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
-    }
-
-    .boxel-select__item {
-      font-weight: 600;
-      font-size: var(--boxel-font-size-sm);
-      padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
-    }
-
-    .boxel-select__dropdown.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-in {
-      animation: var(--boxel-select-below-transitioning-in-animation);
-    }
-
-    .boxel-select__dropdown.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-out {
-      animation: var(--boxel-select-below-transitioning-out-animation);
-    }
-
-    .boxel-select__dropdown.ember-basic-dropdown-content--above.ember-basic-dropdown--transitioning-in {
-      animation: var(--boxel-select-above-transitioning-in-animation);
-    }
-
-    .boxel-select__dropdown.ember-basic-dropdown-content--above.ember-basic-dropdown--transitioning-out {
-      animation: var(--boxel-select-above-transitioning-out-animation);
-    }
 
     .boxel-select :deep(.ember-power-select-status-icon) {
       position: relative;
@@ -172,6 +81,56 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
         opacity: 1;
         transform: translateY(0);
       }
+    }
+  </style>
+  <style>
+    :global(.boxel-select__dropdown) {
+      --boxel-select-current-color: var(--boxel-light-100);
+      --boxel-select-selected-color: var(--boxel-highlight);
+      --boxel-select-below-transitioning-in-animation: drop-fade-below
+        var(--boxel-transition);
+      --boxel-select-below-transitioning-out-animation: var(
+          --boxel-select-below-transitioning-in-animation
+        )
+        reverse;
+      --boxel-select-above-transitioning-in-animation: drop-fade-above
+        var(--boxel-transition);
+      --boxel-select-above-transitioning-out-animation: var(
+          --boxel-select-above-transitioning-in-animation
+        )
+        reverse;
+
+      box-shadow: var(--boxel-box-shadow);
+      border-radius: var(--boxel-form-control-border-radius);
+    }
+    :global(.boxel-select__dropdown ul) {
+      list-style: none;
+      padding: 0;
+      overflow: auto;
+    }
+    :global(
+        .boxel-select__dropdown .ember-power-select-option[aria-selected='true']
+      ) {
+      background-color: var(--boxel-select-selected-color);
+    }
+
+    :global(
+        .boxel-select__dropdown .ember-power-select-option[aria-current='true']
+      ) {
+      background-color: var(--boxel-select-current-color);
+      color: black;
+    }
+
+    :global(.boxel-select__dropdown .ember-power-select-search-input:focus) {
+      border: 1px solid var(--boxel-outline-color);
+      box-shadow: var(--boxel-box-shadow-hover);
+      outline: var(--boxel-outline);
+    }
+
+    :global(
+        .boxel-select__dropdown .ember-power-select-option--no-matches-message
+      ) {
+      padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
     }
   </style>
 </template>;
