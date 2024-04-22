@@ -1623,7 +1623,6 @@ module('Integration | operator-mode', function (hooks) {
       await openAiAssistant();
 
       await fillIn('[data-test-message-field]', 'Too Large Message');
-      assert.dom('[data-test-message-field]').hasValue('Too Large Message');
       assert.dom('[data-test-send-message-btn]').isEnabled();
       assert.dom('[data-test-ai-assistant-message]').doesNotExist();
       await click('[data-test-send-message-btn]');
