@@ -17,6 +17,7 @@ import {
   Deferred,
   type RealmInfo,
   type TokenClaims,
+  type Indexer,
 } from '@cardstack/runtime-common';
 
 import {
@@ -36,7 +37,10 @@ import {
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
 
+import ENV from '@cardstack/host/config/environment';
 import CardPrerender from '@cardstack/host/components/card-prerender';
+import { BrowserQueue } from '@cardstack/host/lib/browser-queue';
+import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
@@ -59,6 +63,7 @@ export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';
 export * from '@cardstack/runtime-common/helpers/indexer';
 
+const { sqlSchema } = ENV;
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -179,6 +184,7 @@ async function makeRenderer() {
 class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
+  #indexer: Indexer | undefined;
   #entrySetter: EntrySetter | undefined;
   #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
   #incremental:
@@ -203,6 +209,8 @@ class MockLocalIndexer extends Service {
     registerRunner: RunnerRegistration,
     entrySetter: EntrySetter,
     adapter: RealmAdapter,
+    // TODO make this required after feature flag is removed
+    indexer?: Indexer,
   ) {
     if (!this.#fromScratch || !this.#incremental) {
       throw new Error(
@@ -211,6 +219,7 @@ class MockLocalIndexer extends Service {
     }
     this.#entrySetter = entrySetter;
     this.#adapter = adapter;
+    this.#indexer = indexer;
     await registerRunner(
       this.#fromScratch.bind(this),
       this.#incremental.bind(this),
@@ -227,6 +236,12 @@ class MockLocalIndexer extends Service {
       throw new Error(`adapter has not been set on MockLocalIndexer`);
     }
     return this.#adapter;
+  }
+  get indexer() {
+    if (!this.#indexer) {
+      throw new Error(`indexer has not been set on MockLocalIndexer`);
+    }
+    return this.#indexer;
   }
 }
 
@@ -538,8 +553,14 @@ async function setupTestRealm({
     adapter,
     loader,
     indexRunner: async (optsId) => {
-      let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
-      await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
+      let { registerRunner, entrySetter, indexer } =
+        runnerOptsMgr.getOptions(optsId);
+      await localIndexer.configureRunner(
+        registerRunner,
+        entrySetter,
+        adapter,
+        indexer,
+      );
     },
     runnerOptsMgr,
     getIndexHTML: async () =>
@@ -547,6 +568,12 @@ async function setupTestRealm({
     matrix: testMatrix,
     permissions,
     realmSecretSeed: testRealmSecretSeed,
+    ...((globalThis as any).__enablePgIndexer?.()
+      ? {
+          dbAdapter: new SQLiteAdapter(sqlSchema),
+          queue: new BrowserQueue(),
+        }
+      : {}),
   });
 
   virtualNetwork.mount(realm.maybeHandle);

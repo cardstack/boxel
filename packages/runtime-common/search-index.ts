@@ -4,7 +4,10 @@ import {
   internalKeyFor,
   maxLinkDepth,
   maybeURL,
+  Indexer,
   type LooseCardResource,
+  type DBAdapter,
+  type Queue,
 } from '.';
 import { Kind, Realm } from './realm';
 import { LocalPath, RealmPaths } from './paths';
@@ -74,6 +77,8 @@ export interface RunnerOpts {
   reader: Reader;
   entrySetter: EntrySetter;
   registerRunner: RunnerRegistration;
+  // TODO make this required after feature flag is removed
+  indexer?: Indexer;
 }
 export type IndexRunner = (optsId: number) => Promise<void>;
 
@@ -151,6 +156,10 @@ export class SearchIndex {
   runnerOptsMgr: RunnerOptionsManager;
   #reader: Reader;
   #index: CurrentIndex;
+  // TODO make this required after we remove the feature flag
+  #indexer: Indexer | undefined;
+  // TODO make this required after we remove the feature flag
+  #queue: Queue | undefined;
   #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
   #incremental:
     | ((
@@ -161,21 +170,38 @@ export class SearchIndex {
       ) => Promise<RunState>)
     | undefined;
 
-  constructor(
-    realm: Realm,
+  constructor({
+    realm,
+    readdir,
+    readFileAsText,
+    runner,
+    runnerOptsManager,
+    dbAdapter,
+    queue,
+  }: {
+    realm: Realm;
     readdir: (
       path: string,
-    ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
+    ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
     readFileAsText: (
       path: LocalPath,
       opts?: { withFallbacks?: true },
-    ) => Promise<{ content: string; lastModified: number } | undefined>,
-    runner: IndexRunner,
-    runnerOptsManager: RunnerOptionsManager,
-  ) {
-    if ((globalThis as any).__enablePgIndexer?.()) {
+    ) => Promise<{ content: string; lastModified: number } | undefined>;
+    runner: IndexRunner;
+    runnerOptsManager: RunnerOptionsManager;
+    dbAdapter?: DBAdapter;
+    queue?: Queue;
+  }) {
+    if (this.isDbIndexerEnabled) {
       console.debug(`search index is using db index`);
+      if (!dbAdapter) {
+        throw new Error(
+          `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
+        );
+      }
+      this.#indexer = new Indexer(dbAdapter);
     }
+    this.#queue = queue;
     this.#realm = realm;
     this.#reader = { readdir, readFileAsText };
     this.runnerOptsMgr = runnerOptsManager;
@@ -195,6 +221,28 @@ export class SearchIndex {
     };
   }
 
+  private get isDbIndexerEnabled() {
+    return Boolean((globalThis as any).__enablePgIndexer?.());
+  }
+
+  // TODO we can get rid of this after the feature flag is removed. this is just
+  // some type sugar so we don't have to check to see if the indexer exists
+  // since ultimately it will be required.
+  private get indexer() {
+    if (!this.#indexer) {
+      throw new Error(`Indexer is missing`);
+    }
+    return this.#indexer;
+  }
+
+  // TODO remove after feature flag, same reason as above
+  private get queue() {
+    if (!this.#queue) {
+      throw new Error(`Queue is missing`);
+    }
+    return this.#queue;
+  }
+
   get stats() {
     return this.#index.stats;
   }
@@ -208,6 +256,10 @@ export class SearchIndex {
   }
 
   async run() {
+    if (this.isDbIndexerEnabled) {
+      await this.queue.start();
+      await this.indexer.ready();
+    }
     await this.setupRunner(async () => {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
@@ -232,6 +284,7 @@ export class SearchIndex {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
       }
+      // TODO this should be published into the queue
       let current = await this.#incremental(
         this.#index,
         url,
@@ -253,6 +306,8 @@ export class SearchIndex {
     });
   }
 
+  // TODO I think we can break this out into a different module specifically a
+  // queue handler for incremental and fromScratch indexing
   private async setupRunner(start: () => Promise<void>) {
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch: this.loader.fetch.bind(this.loader),
@@ -265,6 +320,11 @@ export class SearchIndex {
         this.#incremental = incremental;
         await start();
       },
+      ...(this.isDbIndexerEnabled
+        ? {
+            indexer: this.indexer,
+          }
+        : {}),
     });
     await this.#runner(optsId);
     this.runnerOptsMgr.removeOptions(optsId);

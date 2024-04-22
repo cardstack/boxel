@@ -16,6 +16,7 @@ import {
   trimExecutableExtension,
   hasExecutableExtension,
   SupportedMimeType,
+  Indexer,
   type CodeRef,
   type RealmInfo,
 } from '@cardstack/runtime-common';
@@ -70,6 +71,8 @@ export class CurrentRun {
   #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
+  // TODO make this required after feature flag removed
+  #indexer: Indexer | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
   #ignoreMapContents: URLMap<string>;
@@ -87,6 +90,7 @@ export class CurrentRun {
   constructor({
     realmURL,
     reader,
+    indexer,
     instances = new URLMap(),
     modules = new Map(),
     ignoreMap = new URLMap(),
@@ -97,6 +101,7 @@ export class CurrentRun {
   }: {
     realmURL: URL;
     reader: Reader;
+    indexer?: Indexer;
     instances?: URLMap<SearchEntryWithErrors>;
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
@@ -105,9 +110,10 @@ export class CurrentRun {
     entrySetter: EntrySetter;
     renderCard: RenderCard;
   }) {
-    if ((globalThis as any).__enablePgIndexer?.()) {
-      log.debug(`current-run is using db index`);
+    if (this.isDbIndexerEnabled) {
+      log.info(`current-run is using db index`);
     }
+    this.#indexer = indexer;
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
     this.#realmURL = realmURL;
@@ -138,6 +144,7 @@ export class CurrentRun {
     loader,
     entrySetter,
     renderCard,
+    indexer,
     onInvalidation,
   }: {
     url: URL;
@@ -147,6 +154,7 @@ export class CurrentRun {
     loader: Loader;
     entrySetter: EntrySetter;
     renderCard: RenderCard;
+    indexer?: Indexer;
     onInvalidation?: (invalidatedURLs: URL[]) => void;
   }) {
     let start = Date.now();
@@ -169,6 +177,7 @@ export class CurrentRun {
     let current = new this({
       realmURL: prev.realmURL,
       reader,
+      indexer,
       instances,
       modules,
       ignoreMap,
@@ -197,6 +206,20 @@ export class CurrentRun {
       onInvalidation(urls);
     }
     return current;
+  }
+
+  private get isDbIndexerEnabled() {
+    return Boolean((globalThis as any).__enablePgIndexer?.());
+  }
+
+  // TODO we can get rid of this after the feature flag is removed. this is just
+  // some type sugar so we don't have to check to see if the indexer exists
+  // since ultimately it will be required.
+  private get indexer() {
+    if (!this.#indexer) {
+      throw new Error(`Indexer is missing`);
+    }
+    return this.#indexer;
   }
 
   get instances() {

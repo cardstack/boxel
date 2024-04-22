@@ -9,7 +9,7 @@ import {
   restartableTask,
 } from 'ember-concurrency';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, type Indexer } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import {
   type EntrySetter,
@@ -119,13 +119,14 @@ export default class CardPrerender extends Component {
   });
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
-    let { reader, entrySetter } = this.getRunnerParams();
+    let { reader, entrySetter, indexer } = this.getRunnerParams();
     await this.resetLoaderInFastboot.perform();
     let current = await CurrentRun.fromScratch(
       new CurrentRun({
         realmURL,
         loader: this.loaderService.loader,
         reader,
+        indexer,
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
       }),
@@ -141,13 +142,14 @@ export default class CardPrerender extends Component {
       operation: 'delete' | 'update',
       onInvalidation?: (invalidatedURLs: URL[]) => void,
     ) => {
-      let { reader, entrySetter } = this.getRunnerParams();
+      let { reader, entrySetter, indexer } = this.getRunnerParams();
       await this.resetLoaderInFastboot.perform();
       let current = await CurrentRun.incremental({
         url,
         operation,
         prev,
         reader,
+        indexer,
         loader: this.loaderService.loader,
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
@@ -169,6 +171,7 @@ export default class CardPrerender extends Component {
   private getRunnerParams(): {
     reader: Reader;
     entrySetter: EntrySetter;
+    indexer?: Indexer;
   } {
     let self = this;
     function readFileAsText(
@@ -200,6 +203,7 @@ export default class CardPrerender extends Component {
           readFileAsText,
         },
         entrySetter: this.localIndexer.setEntry.bind(this.localIndexer),
+        indexer: this.localIndexer.indexer,
       };
     }
   }

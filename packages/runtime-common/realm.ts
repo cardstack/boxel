@@ -30,6 +30,8 @@ import {
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
+  type DBAdapter,
+  type Queue,
 } from './index';
 import merge from 'lodash/merge';
 import flatMap from 'lodash/flatMap';
@@ -271,6 +273,8 @@ export class Realm {
       matrix,
       realmSecretSeed,
       permissions,
+      dbAdapter,
+      queue,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -281,6 +285,8 @@ export class Realm {
       matrix: { url: URL; username: string; password: string };
       permissions: RealmPermissions;
       realmSecretSeed: string;
+      dbAdapter?: DBAdapter;
+      queue?: Queue;
     },
     opts?: Options,
   ) {
@@ -294,13 +300,15 @@ export class Realm {
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
-    this.#searchIndex = new SearchIndex(
-      this,
-      this.#adapter.readdir.bind(this.#adapter),
-      this.readFileAsText.bind(this),
-      indexRunner,
-      runnerOptsMgr,
-    );
+    this.#searchIndex = new SearchIndex({
+      realm: this,
+      readdir: this.#adapter.readdir.bind(this.#adapter),
+      readFileAsText: this.readFileAsText.bind(this),
+      runner: indexRunner,
+      runnerOptsManager: runnerOptsMgr,
+      dbAdapter,
+      queue,
+    });
 
     this.#router = new Router(new URL(url))
       .post('/', SupportedMimeType.CardJson, this.createCard.bind(this))
