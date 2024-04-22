@@ -45,9 +45,7 @@ const defaultQueueOpts: Required<QueueOpts> = Object.freeze({
 
 // Tracks a job that should loop with a timeout and an interruptible sleep.
 class WorkLoop {
-  private internalWaker:
-    | { resolve: () => void; promise: Promise<void> }
-    | undefined;
+  private internalWaker: Deferred<void> | undefined;
   private timeout: NodeJS.Timeout | undefined;
   private _shuttingDown = false;
   private runnerPromise: Promise<void> | undefined;
@@ -82,18 +80,14 @@ class WorkLoop {
 
   private get waker() {
     if (!this.internalWaker) {
-      let resolve!: () => void;
-      let promise = new Promise((r) => {
-        resolve = r;
-      }) as Promise<void>;
-      this.internalWaker = { promise, resolve };
+      this.internalWaker = new Deferred();
     }
     return this.internalWaker;
   }
 
   wake() {
     log.debug(`[workloop %s] waking up`, this.label);
-    this.waker.resolve();
+    this.waker.fulfill();
   }
 
   async sleep() {
@@ -156,7 +150,7 @@ export default class PgQueue implements Queue {
       let waitingIds = [...this.notifiers.keys()];
       log.debug('jobs waiting for notification: %s', waitingIds);
       let result = (await this.query([
-        `select id, status, result from jobs where status != 'unfulfilled' and (`,
+        `SELECT id, status, result FROM jobs WHERE status != 'unfulfilled' AND (`,
         ...any(waitingIds.map((id) => [`id=`, param(id)])),
         `)`,
       ] as Expression)) as Pick<JobsTable, 'id' | 'status' | 'result'>[];
@@ -200,7 +194,7 @@ export default class PgQueue implements Queue {
     let queue = optsWithDefaults.queueName;
     {
       let rows = await this.query([
-        'select * from queues where',
+        'SELECT * FROM queues WHERE',
         ...every([
           ['queue_name =', param(queue)],
           ['category =', param(category)],
@@ -213,9 +207,9 @@ export default class PgQueue implements Queue {
           status: 'idle',
         } as QueueTable);
         await this.query([
-          'insert into queues',
+          'INSERT INTO queues',
           ...addExplicitParens(separatedByCommas(nameExpressions)),
-          'values',
+          'VALUES',
           ...addExplicitParens(separatedByCommas(valueExpressions)),
         ] as Expression);
       }
@@ -227,11 +221,11 @@ export default class PgQueue implements Queue {
         category,
       } as JobsTable);
       let [{ id: jobId }] = (await this.query([
-        'insert into jobs',
+        'INSERT INTO JOBS',
         ...addExplicitParens(separatedByCommas(nameExpressions)),
-        'values',
+        'VALUES',
         ...addExplicitParens(separatedByCommas(valueExpressions)),
-        'returning id',
+        'RETURNING id',
       ] as Expression)) as Pick<JobsTable, 'id'>[];
       log.debug(`%s created, notify jobs`, jobId);
       await this.query([`NOTIFY jobs`]);
@@ -242,7 +236,6 @@ export default class PgQueue implements Queue {
     }
   }
 
-  // Services can register async function handlers that are invoked when a job is kicked off
   register<A, T>(category: string, handler: (arg: A) => Promise<T>) {
     this.handlers.set(category, handler);
   }
@@ -279,7 +272,7 @@ export default class PgQueue implements Queue {
         let jobs = (await query([
           // find the queue with the oldest job that isn't running and lock it.
           // SKIP LOCKED means we won't see any jobs that are already running.
-          `select * from jobs where status='unfulfilled' order by created_at limit 1 for update skip locked`,
+          `SELECT * FROM jobs WHERE status='unfulfilled' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`,
         ])) as unknown as JobsTable[];
         if (jobs.length === 0) {
           log.debug(`found no work`);
@@ -302,13 +295,13 @@ export default class PgQueue implements Queue {
         // currently running. This approach fixes that issue, and our tests
         // prove that.
         let idleQueues = (await query([
-          'select * from queues where',
+          'SELECT * FROM queues WHERE',
           ...every([
             ['queue_name =', param(firstJob.queue)],
             ['category =', param(firstJob.category)],
             ['status =', param('idle')],
           ]),
-          'for update skip locked',
+          'FOR UPDATE SKIP LOCKED',
         ] as Expression)) as unknown as QueueTable[];
         if (idleQueues.length === 0) {
           log.debug(
@@ -318,9 +311,9 @@ export default class PgQueue implements Queue {
           return;
         }
         await query([
-          'update queues set status =',
+          'UPDATE queues SET status =',
           param('working'),
-          'where',
+          'WHERE',
           ...every([
             ['queue_name =', param(firstJob.queue)],
             ['category =', param(firstJob.category)],
@@ -350,17 +343,17 @@ export default class PgQueue implements Queue {
         }
         log.debug(`finished %s as %s`, coalescedIds, newStatus);
         await query([
-          `update jobs set result=`,
+          `UPDATE jobs SET result=`,
           param(result),
           ', status=',
           param(newStatus),
-          `, finished_at=now() where `,
+          `, finished_at=now() WHERE `,
           ...any(coalescedIds.map((id) => [`id=`, param(id)])),
         ] as Expression);
         await query([
-          'update queues set status =',
+          'UPDATE queues SET status =',
           param('idle'),
-          'where',
+          'WHERE',
           ...every([
             ['queue_name =', param(firstJob.queue)],
             ['category =', param(firstJob.category)],
