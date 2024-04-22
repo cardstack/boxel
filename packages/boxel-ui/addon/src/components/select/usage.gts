@@ -49,8 +49,9 @@ export default class BoxelSelectUsage extends Component {
 
   <template>
     <style
+      unscoped
     >
-          :global(.boxel-select-usage) {
+          .boxel-select-usage {
             --boxel-select-current-color: {{this.boxelSelectCurrentColor.value}};
             --boxel-select-selected-color: {{this.boxelSelectSelectedColor.value}};
             --boxel-select-below-transitioning-in-animation: {{this.boxelSelectBelowTransitioningInAnimation.value}};
