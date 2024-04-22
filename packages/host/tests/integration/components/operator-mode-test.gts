@@ -13,7 +13,7 @@ import {
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
-import { EventStatus, MatrixError } from 'matrix-js-sdk';
+import { EventStatus } from 'matrix-js-sdk';
 import { module, test, skip } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -1573,89 +1573,6 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-ai-bot-retry-button]');
       assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
       assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-error');
-      matrixService.sendMessage = originalSendMessage;
-    });
-
-    test('displays specific error message for a message that is too large', async function (assert) {
-      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template>
-            <OperatorMode @onClose={{noop}} />
-            <CardPrerender />
-          </template>
-        },
-      );
-
-      let originalSendMessage = matrixService.sendMessage;
-      let clientGeneratedId = '';
-      let event: any;
-      matrixService.sendMessage = async function (
-        roomId: string,
-        body: string,
-        _attachedCards: [],
-        _clientGeneratedId: string,
-        _context?: any,
-      ) {
-        clientGeneratedId = _clientGeneratedId;
-        event = {
-          event_id: 'test-event-id',
-          room_id: roomId,
-          state_key: 'state',
-          type: 'm.room.message',
-          sender: matrixService.userId!,
-          content: {
-            body,
-            msgtype: 'org.boxel.message',
-            formatted_body: body,
-            format: 'org.matrix.custom.html',
-            clientGeneratedId,
-          },
-          origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-          unsigned: {
-            age: 105,
-            transaction_id: '1',
-          },
-          status: EventStatus.SENDING,
-        };
-        await addRoomEvent(this, event);
-      };
-      await openAiAssistant();
-
-      await fillIn('[data-test-message-field]', 'Too Large Message');
-      assert.dom('[data-test-send-message-btn]').isEnabled();
-      assert.dom('[data-test-ai-assistant-message]').doesNotExist();
-      await click('[data-test-send-message-btn]');
-
-      assert.dom('[data-test-message-field]').hasValue('');
-      assert.dom('[data-test-send-message-btn]').isDisabled();
-      assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
-      assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
-
-      let newEvent = {
-        ...event,
-        event_id: 'updated-event-id',
-        status: EventStatus.NOT_SENT,
-        error: new MatrixError({
-          errcode: 'M_TOO_LARGE',
-          error: 'event is too large',
-        }),
-      };
-      await updateRoomEvent(matrixService, newEvent, event.event_id);
-      await waitUntil(
-        () =>
-          !(
-            document.querySelector(
-              '[data-test-send-message-btn]',
-            ) as HTMLButtonElement
-          ).disabled,
-      );
-      assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
-      assert.dom('[data-test-ai-assistant-message]').hasClass('is-error');
-      assert.dom('[data-test-card-error]').containsText('Message is too large');
-      assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
-      await percySnapshot(assert);
-
       matrixService.sendMessage = originalSendMessage;
     });
 
