@@ -53,9 +53,9 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 {{#let
                   (getBoxComponent
                     (this.args.cardTypeFor @field boxedElement)
-                    'embedded'
                     boxedElement
                     @field
+                    'embedded'
                   )
                   as |Item|
                 }}
@@ -93,9 +93,9 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
             {{#let
               (getBoxComponent
                 (this.args.cardTypeFor @field boxedElement)
-                'atom'
                 boxedElement
                 @field
+                'atom'
               )
               as |Item|
             }}

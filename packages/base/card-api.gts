@@ -1465,7 +1465,7 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof BaseDef) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<BaseDef>;
-  return getBoxComponent(card, defaultFormat, innerModel, field);
+  return getBoxComponent(card, innerModel, field, defaultFormat);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -2720,9 +2720,9 @@ export function getComponent(
   let box = Box.create(model);
   let boxComponent = getBoxComponent(
     model.constructor as BaseDefConstructor,
-    format,
     box,
     field,
+    format,
   );
   return boxComponent;
 }

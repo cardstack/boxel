@@ -111,9 +111,9 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       .constructor as typeof BaseDef;
     return getBoxComponent(
       card,
-      'embedded',
       this.args.model as Box<BaseDef>,
       this.args.field,
+      'embedded',
     );
   }
 

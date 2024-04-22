@@ -62,9 +62,9 @@ const componentCache = initSharedState(
 
 export function getBoxComponent(
   card: typeof BaseDef,
-  defaultFormat: Format,
   model: Box<BaseDef>,
   field: Field | undefined,
+  defaultFormat: Format,
 ): BoxComponent {
   let stable = componentCache.get(model);
   if (stable) {
@@ -320,7 +320,7 @@ export function getPluralViewComponent(
 ): BoxComponent {
   let getComponents = () =>
     model.children.map((child) =>
-      getBoxComponent(cardTypeFor(field, child), format, child, field),
+      getBoxComponent(cardTypeFor(field, child), child, field, format),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
   let pluralViewComponent: TemplateOnlyComponent<BoxComponentSignature> =
     <template>
