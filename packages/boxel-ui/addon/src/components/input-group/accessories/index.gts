@@ -156,7 +156,11 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         ...attributes
         as |item|
       >
-        <div>{{item}}</div>
+        {{#if (has-block)}}
+          {{yield item}}
+        {{else}}
+          <div>{{item}}</div>
+        {{/if}}
       </BoxelSelect>
     </div>
     <style>
