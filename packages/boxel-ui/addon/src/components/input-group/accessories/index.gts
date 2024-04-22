@@ -140,7 +140,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
     >
       <BoxelSelect
         @disabled={{@disabled}}
-        @dropdownClass={{@dropdownClass}}
+        @dropdownClass={{cn 'boxel-select__dropdown-accesories' @dropdownClass}}
         @placeholder={{@placeholder}}
         @options={{@options}}
         @searchField={{@searchField}}
@@ -148,13 +148,16 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         @selected={{@selected}}
         @onChange={{@onChange}}
         @onBlur={{@onBlur}}
+        @renderInPlace={{true}}
         data-test-boxel-input-group-select-accessory-trigger
         ...attributes
         as |item|
       >
         {{#if (has-block)}}
+          hi
           {{yield item}}
         {{else}}
+          what
           <div>{{item}}</div>
         {{/if}}
       </BoxelSelect>
@@ -176,11 +179,8 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       .boxel-input-group__select-accessory :deep(.boxel-select) {
         font: var(--boxel-button-font, var(--boxel-font-sm));
         font-weight: 600;
-        padding: var(
-          --boxel-button-padding,
-          var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
-            var(--boxel-sp-xs)
-        );
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
+          var(--boxel-sp-xs);
       }
 
       .boxel-input-group__select-accessory
@@ -202,6 +202,14 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
 
       .boxel-input-group--invalid .boxel-input-group__select-accessory {
         border-color: var(--boxel-error-100);
+      }
+    </style>
+    <style>
+      :global(.boxel-select__dropdown-accesories ul) {
+        font: var(--boxel-button-font, var(--boxel-font-sm));
+        font-weight: 600;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
+          var(--boxel-sp-xs);
       }
     </style>
   </template>;
