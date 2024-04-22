@@ -13,7 +13,7 @@ export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
 interface Signature<ItemT = any> {
   Args: BoxelSelectArgs<ItemT>;
   Blocks: {
-    default: [ItemT, string];
+    default: [ItemT];
   };
   Element: HTMLElement;
 }
@@ -40,7 +40,7 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     ...attributes
     as |item|
   >
-    {{yield item 'boxel-select__item'}}
+    {{yield item}}
   </PowerSelect>
   <style>
     .boxel-select {
