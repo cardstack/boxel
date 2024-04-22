@@ -1,4 +1,3 @@
-import { A } from '@ember/array';
 import { array, fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -11,16 +10,26 @@ import {
 
 import BoxelSelect from './index.gts';
 
-export default class BoxelSelectUsage extends Component {
-  @tracked items = A(
-    [...new Array(10)].map((_, idx) => `Item - ${idx}`),
-  ) as Array<any>;
+interface Country {
+  name: string;
+}
 
-  @tracked selectedItem: string | null = null;
+export default class BoxelSelectUsage extends Component {
+  @tracked items = [
+    { name: 'United States' },
+    { name: 'Spain' },
+    { name: 'Portugal' },
+    { name: 'Russia' },
+    { name: 'Latvia' },
+    { name: 'Brazil' },
+    { name: 'United Kingdom' },
+  ] as Array<Country>;
+
+  @tracked selectedItem: Country | null = null;
   @tracked placeholder = 'Select Item';
   @tracked verticalPosition = 'auto' as const;
 
-  @tracked renderInPlace = false;
+  @tracked renderInPlace = true;
   @tracked disabled = false;
   @tracked searchField = '';
   @tracked searchEnabled = false;
@@ -34,23 +43,23 @@ export default class BoxelSelectUsage extends Component {
   @cssVariable({ cssClassName: 'boxel-select__dropdown' })
   declare boxelSelectAboveTransitioningInAnimation: CSSVariableInfo;
 
-  @action onSelectItem(item: string | null): void {
+  @action onSelectItem(item: Country | null): void {
     this.selectedItem = item;
   }
 
   <template>
-    <FreestyleUsage @name='Select'>
-      <:example>
-        <style
-          unscoped
-        >
-          .boxel-select-usage-dropdown {
+    <style
+    >
+          :global(.boxel-select-usage) {
             --boxel-select-current-color: {{this.boxelSelectCurrentColor.value}};
             --boxel-select-selected-color: {{this.boxelSelectSelectedColor.value}};
             --boxel-select-below-transitioning-in-animation: {{this.boxelSelectBelowTransitioningInAnimation.value}};
             --boxel-select-above-transitioning-in-animation: {{this.boxelSelectAboveTransitioningInAnimation.value}};
           }
         </style>
+    <FreestyleUsage @name='Select'>
+      <:example>
+
         <BoxelSelect
           @placeholder={{this.placeholder}}
           @searchEnabled={{this.searchEnabled}}
@@ -61,11 +70,11 @@ export default class BoxelSelectUsage extends Component {
           @verticalPosition={{this.verticalPosition}}
           @renderInPlace={{this.renderInPlace}}
           @disabled={{this.disabled}}
-          @dropdownClass='boxel-select-usage-dropdown'
-          aria-label='Select an item'
-          as |item itemCssClass|
+          @dropdownClass='boxel-select-usage'
+          aria-label={{this.placeholder}}
+          as |item|
         >
-          <div class={{itemCssClass}}>{{item}}</div>
+          <div>{{item.name}}</div>
         </BoxelSelect>
       </:example>
       <:api as |Args|>
@@ -74,7 +83,7 @@ export default class BoxelSelectUsage extends Component {
           @description='An array of items, to be listed on dropdown'
           @required={{true}}
           @items={{this.items}}
-          @onChange={{fn (mut this.items)}}
+          @onChange={{this.onSelectItem}}
         />
         <Args.Action
           @name='onChange'
@@ -90,15 +99,34 @@ export default class BoxelSelectUsage extends Component {
           @name='item'
           @description='Item to be presented on dropdown'
         />
-        <Args.Yield
-          @name='itemCssClass'
-          @description='Class to be set on item wrapper to add default styles'
-        />
         <Args.String
           @name='placeholder'
           @description='Placeholder for trigger component'
           @value={{this.placeholder}}
           @onInput={{fn (mut this.placeholder)}}
+        />
+
+        <Args.String
+          @name='verticalPosition'
+          @defaultValue='auto'
+          @value={{this.verticalPosition}}
+          @options={{array 'auto' 'above' 'below'}}
+          @onInput={{fn (mut this.verticalPosition)}}
+          @description='The vertical positioning strategy of the content'
+        />
+        <Args.Bool
+          @name='renderInPlace'
+          @defaultValue={{true}}
+          @value={{this.renderInPlace}}
+          @onInput={{fn (mut this.renderInPlace)}}
+          @description='When passed true, the content will render next to the trigger instead of being placed in the root of the body'
+        />
+        <Args.Bool
+          @name='disabled'
+          @defaultValue={{false}}
+          @value={{this.disabled}}
+          @onInput={{fn (mut this.disabled)}}
+          @description='When truthy the component cannot be interacted'
         />
         <Args.Bool
           @name='searchEnabled'
@@ -107,41 +135,9 @@ export default class BoxelSelectUsage extends Component {
           @onInput={{fn (mut this.searchEnabled)}}
         />
         <Args.String
-          @name='verticalPosition'
-          @defaults='auto'
-          @options={{array 'auto' 'above' 'below'}}
-          @onInput={{fn (mut this.verticalPosition)}}
-          @description='The vertical positioning strategy of the content'
-        />
-        <Args.Bool
-          @name='renderInPlace'
-          @defaults={{false}}
-          @onInput={{fn (mut this.renderInPlace)}}
-          @description='When passed true, the content will render next to the trigger instead of being placed in the root of the body'
-        />
-        <Args.Bool
-          @name='disabled'
-          @defaults={{false}}
-          @onInput={{fn (mut this.disabled)}}
-          @description='When truthy the component cannot be interacted'
-        />
-        <Args.String
           @name='searchField'
           @onInput={{fn (mut this.searchField)}}
-          @description='Tells the component what property of the options should be used to filter
-'
-        />
-        <Args.String
-          @name='dropdownClass'
-          @description='Class to be applied to the dropdown only'
-        />
-        <Args.Object
-          @name='triggerComponent'
-          @description='The component to rended as content instead of the default trigger component'
-        />
-        <Args.Object
-          @name='selectedItemComponent'
-          @description='The component to render to customize just the selected item of the trigger'
+          @description='Tells the component what property of the options should be used to filter'
         />
       </:api>
       <:cssVars as |Css|>
