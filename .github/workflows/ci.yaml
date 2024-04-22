@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [ci/playwright-report-status-on-main] # FIXME restore
+    branches: [main]
+  pull_request:
 
 permissions:
   checks: write
