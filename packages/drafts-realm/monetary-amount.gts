@@ -104,10 +104,7 @@ class Edit extends Component<typeof MonetaryAmount> {
         >
           <div
             data-test-currency={{item.symbol}}
-            class={{cn
-              'input-selectable-currency-amount__dropdown-item'
-              itemCssClass
-            }}
+            class='input-selectable-currency-amount__dropdown-item'
             title={{item.name}}
           >
             {{#if item.logoURL}}
