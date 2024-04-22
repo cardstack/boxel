@@ -281,7 +281,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           curl \
             -X POST \
