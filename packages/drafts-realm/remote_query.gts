@@ -24,15 +24,42 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
+import { restartableTask } from 'ember-concurrency';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
+import {
+  chooseCard,
+  catalogEntryRef,
+  cardTypeDisplayName,
+  isCardInstance,
+} from '@cardstack/runtime-common';
+// @ts-ignore no types
+import cssUrl from 'ember-css-url';
+import { type CatalogEntry } from './catalog-entry';
+
 // So we want 3 cards
 // One is a helper for finding items and building a list of things to buy
 // The second is a helper for filling in a card
 
+async function getCatalogEntries() {
+  let catalogEntries = getCards({
+    filter: {
+      type: {
+        module: `https://cardstack.com/base/catalog-entry`,
+        name: 'CatalogEntry',
+      },
+    },
+  });
+  await catalogEntries.loaded;
+  console.log('Catalog Entries', catalogEntries.instances);
+  return catalogEntries.instances.filter(
+    (x) => !x.isField && !(x.ref.name == 'CardDef'),
+  );
+}
 
 export class RemoteQuery extends CardDef {
   static displayName = 'Remote Query';
-  @field status = contains(StringCard);
-  @field chosenType = linksTo(CardDef);
+  @field chosenCardType = contains(StringCard);
+  @field resultData = contains(StringCard);
 
   get aiCardFunctions() {
     return [];
@@ -43,14 +70,17 @@ export class RemoteQuery extends CardDef {
     const systemPrompt = `You convert from remote data sources, images and text, to structured data that can fill in data types called "cards". You must identify what type of content the user is sharing with you as well as what structure best should represent it.
       You are fully capable of accessing information from images and urls, but you must use the extractFromURL tool to do so. You may need to call this multiple times to get what you need. Never tell the user you cannot access something remotely, use this tool.
       You must find the correct type of card (Data type) to fill in, use the findCardTypes tool to do so.
-      You must fill in the data using 
+      You must fill in the data using the field types in as much detail as possible. The goal is structured data extraction.
 
-      Your usual sequence will be
-      * query URL for information and data
-      * find card (data) types that best represent the data
-      * Select the card type that best matches the data 
-      * (optionally - search again to get more required information from the URL)
-      * fill in the card with the data you have extracted
+      Your sequence will be
+      1. query URL for information and data
+      2. find card (data) types that best represent the data
+      3. Select the card type that best matches the data 
+      4. (optionally - search again to get more required information from the URL)
+      5. fill in the card with the data you have extracted
+
+      You must call the functions provided to achieve these, you MUST call a function with each message.
+      NEVER just return structured data or a description to the user, ALWAYS call a function to interact.
     `;
     const extractFromURL = {
       type: 'function',
@@ -114,14 +144,17 @@ export class RemoteQuery extends CardDef {
     };
 
     // Initial state, no status
-    if (!this.status) {
+    if (!this.chosenCardType) {
       return {
         aiFunctions: [extractFromURL, findCardTypes, selectCardType],
         systemPrompt,
       };
     } else {
       // We have a status, we are in the process of filling in a card
-      const fillCard = await this.getCardParams(this.status, specGenerator);
+      const fillCard = await this.getCardParams(
+        this.chosenCardType,
+        specGenerator,
+      );
       console.log('Fill Card', fillCard);
       return {
         aiFunctions: [extractFromURL, fillCard],
@@ -149,31 +182,15 @@ export class RemoteQuery extends CardDef {
     }
   }
 
-  async getCatalogEntries() {
-    let catalogEntries = getCards({
-      filter: {
-        type: {
-          module: `https://cardstack.com/base/catalog-entry`,
-          name: 'CatalogEntry',
-        },
-      },
-    });
-    await catalogEntries.loaded;
-    console.log('Catalog Entries', catalogEntries.instances);
-    return catalogEntries.instances.filter(
-      (x) => !x.isField && !(x.ref.name == 'CardDef'),
-    );
-  }
-
   async findCardTypes(args) {
-    let cardNames = (await this.getCatalogEntries()).map(
+    let cardNames = (await getCatalogEntries()).map(
       (x) => `${x.ref.name} : ${x.ref.description}`,
     );
     return cardNames;
   }
 
   async getCardParams(cardName, specGenerator) {
-    let catalogEntries = await this.getCatalogEntries();
+    let catalogEntries = await getCatalogEntries();
     let selected = catalogEntries.find((x) => x.ref.name == cardName);
     let example = selected.demo;
 
@@ -192,12 +209,92 @@ export class RemoteQuery extends CardDef {
   }
 
   async fillCard(args) {
-    this.status = JSON.stringify(args, null, 2);
+    this.resultData = JSON.stringify(args, null, 2);
   }
 
   async selectCardType(args) {
     let { type } = args;
-    this.status = type;
+    this.chosenCardType = type;
     return 'set selected card type as ' + type;
   }
+  // boxel template for isolated mode
+
+  static isolated = class Isolated extends Component<typeof RemoteQuery> {
+    private createCard = restartableTask(async () => {
+      let catalogEntries = await getCatalogEntries();
+      console.log('got catalog entries', catalogEntries);
+      let selected = catalogEntries.find(
+        (x) => x.ref.name == this.args.model.chosenCardType,
+      );
+      console.log('This?', this, this.args, this.args.model);
+      console.log(
+        'Selected card, ',
+        selected,
+        'was looking for',
+        this.args.model.chosenCardType,
+      );
+      let card = await this.args.context?.actions?.createCard?.(
+        selected.ref,
+        new URL(selected.id),
+        {
+          realmURL: this.args.model[realmURL],
+          doc: {
+            data: {
+              attributes: JSON.parse(this.args.model.resultData),
+              meta: {
+                adoptsFrom: selected.ref,
+                realmURL: this.args.model[realmURL],
+              },
+            },
+          },
+        },
+      );
+      console.log(card, card.id);
+    });
+
+    @action
+    createNew() {
+      this.createCard.perform();
+    }
+    <template>
+      <div>
+        <h1>Create cards from remote data</h1>
+        <p>
+          This card is used to extract data from remote sources and fill in a
+          card with the data.
+        </p>
+        <p>
+          <strong>Instructions:</strong>
+          <ol>
+            <li>Clear any data and set this card as the one used in the
+              assistant.</li>
+            <li>Start a new chat and paste in the URL of an image or document</li>
+            <li>Click apply on the messages it sends back</li>
+            <li>Once it's chosen a type of card that will be filled in</li>
+            <li>The assistant should then try and get the data in the correct
+              structure</li>
+            <li>Click the add button to create a new card with the data</li>
+          </ol>
+        </p>
+      </div>
+      <div>
+        <h2>Chosen type:</h2>
+        <@fields.chosenCardType />
+        <h2>Resulting data:</h2>
+        <@fields.resultData />
+      </div>
+      {{#if @context.actions.createCard}}
+        <div class='add-button'>
+          <Tooltip @placement='left' @offset={{6}}>
+            <:trigger>
+              <AddButton {{on 'click' this.createNew}} />
+            </:trigger>
+            <:content>
+              Create the new card
+            </:content>
+          </Tooltip>
+        </div>
+      {{/if}}
+    </template>
+  };
 }
