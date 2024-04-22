@@ -3,9 +3,9 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { tracked, cached } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { modifier } from 'ember-modifier';
 
@@ -26,7 +26,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
-import type { ApplyButtonState } from '../ai-assistant/apply-button';
+import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
@@ -52,7 +52,7 @@ export default class RoomMessage extends Component<Signature> {
 
     this.checkStreamingTimeout.perform();
     if (this.args.message.command?.eventId) {
-      this.getCommandStatus.perform(
+      this.getApplyState.perform(
         this.args.roomId,
         this.args.message.command.eventId,
       );
@@ -233,7 +233,7 @@ export default class RoomMessage extends Component<Signature> {
 
   @tracked private isDisplayingCode = false;
   @tracked private patchCardError: { id: string; error: unknown } | undefined;
-  @tracked private _commandStatus: Partial<ApplyButtonState> = 'ready';
+  @tracked private _applyButtonState: ApplyButtonState = 'ready';
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -325,16 +325,17 @@ export default class RoomMessage extends Component<Signature> {
     return JSON.stringify({ commandType, payload }, null, 2);
   }
 
-  private getCommandStatus = task(async (roomId: string, eventId: string) => {
-    this._commandStatus = (await this.matrixService.getReactionKeyForEvent(
-      roomId,
-      eventId,
-    )) as Partial<ApplyButtonState>;
-  });
+  private getApplyState = restartableTask(
+    async (roomId: string, eventId: string) => {
+      this._applyButtonState = (await this.matrixService.getReactionKeyForEvent(
+        roomId,
+        eventId,
+      )) as Partial<ApplyButtonState>;
+    },
+  );
 
-  @cached
   private get applyButtonState() {
-    return this.patchCard.isRunning ? 'applying' : this._commandStatus;
+    return this.patchCard.isRunning ? 'applying' : this._applyButtonState;
   }
 
   @action private viewCodeToggle() {

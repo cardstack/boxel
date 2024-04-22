@@ -233,7 +233,7 @@ type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
 type JSONObject = { [x: string]: JSONValue };
 
-export type PatchObject = { patch: { attributes: JSONObject }; id: string };
+type PatchObject = { patch: { attributes: JSONObject }; id: string };
 
 class PatchObjectField extends FieldDef {
   static [primitive]: PatchObject;
@@ -493,9 +493,8 @@ export class RoomField extends FieldDef {
         }
         let event_id = event.event_id;
         let update = false;
-        let relatesTo = event.content['m.relates_to'];
-        if (relatesTo?.rel_type === 'm.replace') {
-          event_id = relatesTo.event_id;
+        if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+          event_id = event.content['m.relates_to'].event_id;
           update = true;
         }
         if (cache.has(event_id) && !update) {
@@ -603,10 +602,9 @@ export class RoomField extends FieldDef {
 
       // this sort should hopefully be very optimized since events will
       // be close to chronological order
-      let messages = [...cache.values()].sort(
+      return [...cache.values()].sort(
         (a, b) => a.created.getTime() - b.created.getTime(),
       );
-      return messages;
     },
   });
 
@@ -770,7 +768,7 @@ interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
-export interface CommandEvent extends BaseMatrixEvent {
+interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CommandMessageContent;
   unsigned: {
@@ -781,7 +779,7 @@ export interface CommandEvent extends BaseMatrixEvent {
   };
 }
 
-export interface CommandMessageContent {
+interface CommandMessageContent {
   'm.relates_to'?: {
     rel_type: string;
     event_id: string;
@@ -799,7 +797,7 @@ export interface CommandMessageContent {
   };
 }
 
-export interface ReactionEvent extends BaseMatrixEvent {
+interface ReactionEvent extends BaseMatrixEvent {
   type: 'm.reaction';
   content: ReactionEventContent;
 }
@@ -810,6 +808,10 @@ export interface ReactionEventContent {
     key: string;
     rel_type: 'm.annotation';
   };
+}
+
+export function isReactionEvent(event: MatrixEvent): event is ReactionEvent {
+  return event.type === 'm.reaction';
 }
 
 interface CardMessageEvent extends BaseMatrixEvent {
@@ -887,7 +889,3 @@ export type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent;
-
-export function isReactionEvent(event: MatrixEvent): event is ReactionEvent {
-  return event.type === 'm.reaction';
-}
