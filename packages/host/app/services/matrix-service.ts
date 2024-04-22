@@ -48,7 +48,6 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
   CardFragmentContent,
-  CommandStatus,
   ReactionEventContent,
 } from 'https://cardstack.com/base/room';
 
@@ -374,52 +373,39 @@ export default class MatrixService extends Service {
     }
   }
 
-  async updateCommandStatus(
-    roomId: string,
-    eventId: string,
-    status: CommandStatus,
-  ) {
+  async sendReactionEvent(roomId: string, eventId: string, status: string) {
     let content: ReactionEventContent = {
       'm.relates_to': {
         event_id: eventId,
         key: status,
-        rel_type: 'm.annotation' as MatrixSDK.RelationType.Annotation,
+        rel_type: 'm.annotation',
       },
     };
     try {
       return await this.sendEvent(roomId, 'm.reaction', content);
     } catch (e) {
       throw new Error(
-        `Error sending command status: ${
+        `Error sending reaction event: ${
           'message' in (e as Error) ? (e as Error).message : e
         }`,
       );
     }
   }
 
-  async getCommandStatus(
-    roomId: string,
-    eventId: string,
-  ): Promise<CommandStatus> {
+  async getReactionKeyForEvent(roomId: string, eventId: string) {
     let room = await this.rooms.get(roomId);
     if (!room) {
       throw new Error(`Room ${roomId} not found`);
     }
-    let event = room.events.find((e) => {
-      let ev =
-        e.type === 'm.reaction' &&
-        e.content['m.relates_to']?.event_id === eventId &&
-        e.content['m.relates_to']?.rel_type === 'm.annotation';
-      return ev;
-    });
+    let event = room.events
+      .filter(RoomModule.isReactionEvent)
+      .find((e) => e.content['m.relates_to'].event_id === eventId);
 
     if (!event) {
-      throw new Error(`Event ${eventId} not found in room ${roomId}`);
+      throw new Error(`ReactionEvent not found for event ${eventId}`);
     }
 
-    let status = (event.content as ReactionEventContent)['m.relates_to']
-      .key as CommandStatus;
-    return status;
+    return event.content['m.relates_to'].key;
   }
 
   async sendMessage(

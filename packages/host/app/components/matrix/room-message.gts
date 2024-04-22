@@ -3,7 +3,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -23,12 +23,10 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import {
-  type MessageField,
-  type CommandStatus,
-} from 'https://cardstack.com/base/room';
+import { type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
+import type { ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
@@ -122,13 +120,9 @@ export default class RoomMessage extends Component<Signature> {
             {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
           </Button>
           <ApplyButton
-            @state={{if this.patchCard.isRunning 'applying' this.commandStatus}}
+            @state={{this.applyButtonState}}
             {{on 'click' (perform this.patchCard)}}
-            data-test-command-apply={{if
-              this.patchCard.isRunning
-              'applying'
-              @message.command.commandStatus
-            }}
+            data-test-command-apply={{this.applyButtonState}}
           />
         </div>
         {{#if this.isDisplayingCode}}
@@ -239,7 +233,7 @@ export default class RoomMessage extends Component<Signature> {
 
   @tracked private isDisplayingCode = false;
   @tracked private patchCardError: { id: string; error: unknown } | undefined;
-  @tracked private commandStatus: CommandStatus = 'ready';
+  @tracked private _commandStatus: Partial<ApplyButtonState> = 'ready';
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -311,14 +305,14 @@ export default class RoomMessage extends Component<Signature> {
         payload.id,
         payload.patch.attributes,
       );
-      await this.matrixService.updateCommandStatus(
+      await this.matrixService.sendReactionEvent(
         this.args.roomId,
         eventId,
         'applied',
       );
     } catch (e) {
       this.patchCardError = { id: payload.id, error: e };
-      await this.matrixService.updateCommandStatus(
+      await this.matrixService.sendReactionEvent(
         this.args.roomId,
         eventId,
         'failed',
@@ -332,11 +326,16 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private getCommandStatus = task(async (roomId: string, eventId: string) => {
-    this.commandStatus = await this.matrixService.getCommandStatus(
+    this._commandStatus = (await this.matrixService.getReactionKeyForEvent(
       roomId,
       eventId,
-    );
+    )) as Partial<ApplyButtonState>;
   });
+
+  @cached
+  private get applyButtonState() {
+    return this.patchCard.isRunning ? 'applying' : this._commandStatus;
+  }
 
   @action private viewCodeToggle() {
     this.isDisplayingCode = !this.isDisplayingCode;

@@ -243,18 +243,11 @@ class CommandType extends FieldDef {
   static [primitive]: 'patch';
 }
 
-export type CommandStatus = 'ready' | 'applied' | 'failed';
-
-class CommandStatusField extends FieldDef {
-  static [primitive]: CommandStatus;
-}
-
 // Subclass, add a validator that checks the fields required?
 class PatchField extends FieldDef {
   @field commandType = contains(CommandType);
   @field payload = contains(PatchObjectField);
   @field eventId = contains(StringField);
-  @field commandStatus = contains(CommandStatusField);
 }
 
 // A map from a hash of roomId + card document to the first card fragment event id.
@@ -505,30 +498,6 @@ export class RoomField extends FieldDef {
           event_id = relatesTo.event_id;
           update = true;
         }
-        // if (event.type === 'm.reaction') {
-        //   if (
-        //     event.content['m.relates_to']?.rel_type === 'm.annotation' &&
-        //     cache.has(event.content['m.relates_to'].event_id)
-        //   ) {
-        //     let r = event.content['m.relates_to'];
-
-        //     let ev = this.events.find((e) => {
-        //       let res =
-        //         'm.relates_to' in e.content &&
-        //         e.content['m.relates_to']?.['rel_type'] === 'm.replace' &&
-        //         e.content['m.relates_to']['event_id'] === r.event_id;
-        //       return res;
-        //     });
-
-        //     // let message = cache.get(r.event_id);
-        //     if (ev) {
-        //       event = ev as CommandEvent;
-        //       event.content.data.command.status = r.key as CommandStatus;
-        //       debugger;
-        //     }
-        //   }
-        // }
-
         if (cache.has(event_id) && !update) {
           continue;
         }
@@ -603,7 +572,6 @@ export class RoomField extends FieldDef {
               eventId: event_id,
               commandType: command.type,
               payload: command,
-              commandStatus: command.status ?? 'ready',
             }),
             isStreamingFinished: true,
           });
@@ -827,12 +795,11 @@ export interface CommandMessageContent {
       type: 'patch';
       payload: PatchObject;
       eventId: string;
-      status: CommandStatus;
     };
   };
 }
 
-interface ReactionEvent extends BaseMatrixEvent {
+export interface ReactionEvent extends BaseMatrixEvent {
   type: 'm.reaction';
   content: ReactionEventContent;
 }
@@ -920,3 +887,7 @@ export type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent;
+
+export function isReactionEvent(event: MatrixEvent): event is ReactionEvent {
+  return event.type === 'm.reaction';
+}
