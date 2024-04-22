@@ -140,7 +140,10 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
     >
       <BoxelSelect
         @disabled={{@disabled}}
-        @dropdownClass={{cn 'boxel-select__dropdown-accesories' @dropdownClass}}
+        @dropdownClass={{cn
+          'boxel-input-group__select-accessory__dropdown'
+          @dropdownClass
+        }}
         @placeholder={{@placeholder}}
         @options={{@options}}
         @searchField={{@searchField}}
@@ -198,7 +201,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       }
     </style>
     <style>
-      :global(.boxel-select__dropdown-accesories ul) {
+      :global(.boxel-input-group__select-accessory__dropdown ul) {
         font: var(--boxel-button-font, var(--boxel-font-sm));
         font-weight: 600;
         padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
