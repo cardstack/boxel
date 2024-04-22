@@ -125,6 +125,7 @@ export default class BoxelSelectUsage extends Component {
         />
         <Args.Bool
           @name='searchEnabled'
+          @defaultValue={{false}}
           @description='True to show a search box at the top of the list of items'
           @value={{this.searchEnabled}}
           @onInput={{fn (mut this.searchEnabled)}}
