@@ -121,7 +121,7 @@ export const Text: TemplateOnlyComponent<TextSignature> = <template>
 interface SelectAccessorySignature<ItemT = any> {
   Args: BoxelSelectArgs<ItemT>;
   Blocks: {
-    default: [ItemT, string];
+    default: [ItemT];
   };
   Element: HTMLElement;
 }
@@ -150,12 +150,12 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         @onBlur={{@onBlur}}
         data-test-boxel-input-group-select-accessory-trigger
         ...attributes
-        as |item itemCssClass|
+        as |item|
       >
         {{#if (has-block)}}
-          {{yield item itemCssClass}}
+          {{yield item}}
         {{else}}
-          <div class={{itemCssClass}}>{{item}}</div>
+          <div>{{item}}</div>
         {{/if}}
       </BoxelSelect>
     </div>
