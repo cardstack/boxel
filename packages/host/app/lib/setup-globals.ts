@@ -12,4 +12,6 @@ import ENV from '@cardstack/host/config/environment';
 // we use globalThis for this particular feature flag so that we can control it
 // within a fastboot context as well
 (globalThis as any).__enablePgIndexer =
-  (globalThis as any).__enablePgIndexer ?? ENV.featureFlags?.['pg-indexer'];
+  typeof (globalThis as any).__enablePgIndexer === 'function'
+    ? (globalThis as any).__enablePgIndexer
+    : () => ENV.featureFlags?.['pg-indexer'];
