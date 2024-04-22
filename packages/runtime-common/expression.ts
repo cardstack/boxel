@@ -3,7 +3,7 @@ import isPlainObject from 'lodash/isPlainObject';
 import stringify from 'safe-stable-stringify';
 import flattenDeep from 'lodash/flattenDeep';
 
-import { CodeRef } from '../index';
+import { type CodeRef, type DBAdapter, type TypeCoercion } from './index';
 
 export type Expression = (string | Param | TableValuedEach | TableValuedTree)[];
 
@@ -265,4 +265,109 @@ export function upsert(
     'DO UPDATE SET',
     ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
   ] as Expression;
+}
+
+export const tableValuedFunctionsPlaceholder = '__TABLE_VALUED_FUNCTIONS__';
+
+export async function query(
+  dbAdapter: DBAdapter,
+  query: Expression,
+  coerceTypes?: TypeCoercion,
+) {
+  let sql = await expressionToSql(query);
+  return await dbAdapter.execute(sql.text, {
+    coerceTypes,
+    bind: sql.values,
+  });
+}
+
+export function expressionToSql(query: Expression) {
+  let values: PgPrimitive[] = [];
+  let nonce = 0;
+  let tableValuedFunctions = new Map<
+    string,
+    {
+      name: string;
+      fn: string;
+    }
+  >();
+  let text = query
+    .map((element) => {
+      if (isParam(element)) {
+        values.push(element.param);
+        return `$${values.length}`;
+      } else if (typeof element === 'string') {
+        return element;
+      } else if (element.kind === 'table-valued-tree') {
+        let { column, path, treeColumn } = element;
+        let field = trimBrackets(
+          path === '$' ? column : path.split('.').pop()!,
+        );
+        let key = `tree_${column}_${path}`;
+        let { name } = tableValuedFunctions.get(key) ?? {};
+        if (!name) {
+          name = `${field}${nonce++}_tree`;
+          let absolutePath = path === '$' ? '$' : `$.${path}`;
+
+          tableValuedFunctions.set(key, {
+            name,
+            fn: `jsonb_tree(${column}, '${absolutePath}') as ${name}`,
+          });
+        }
+        return `${name}.${treeColumn}`;
+      } else if (element.kind === 'table-valued-each') {
+        let { column } = element;
+        let key = `each_${column}`;
+        let { name } = tableValuedFunctions.get(key) ?? {};
+        if (!name) {
+          name = `${column}${nonce++}_array_element`;
+
+          tableValuedFunctions.set(key, {
+            name,
+            fn: `jsonb_array_elements_text(${column}) as ${name}`,
+          });
+        }
+        return name;
+      } else {
+        throw assertNever(element);
+      }
+    })
+    .join(' ');
+
+  if (tableValuedFunctions.size > 0) {
+    text = replace(
+      text,
+      tableValuedFunctionsPlaceholder,
+      `${[...tableValuedFunctions.values()]
+        .map((fn) => `CROSS JOIN LATERAL ${fn.fn}`)
+        .join(' ')}`,
+    );
+  } else {
+    text = replace(text, tableValuedFunctionsPlaceholder, '');
+  }
+  return {
+    text,
+    values,
+  };
+}
+
+function trimBrackets(pathTraveled: string) {
+  return pathTraveled.replace(/\[\]/g, '');
+}
+
+// i'm slicing up the text as opposed to using a 'String.replace()' since
+// the ()'s in the SQL query are treated like regex matches when using
+// String.replace()
+function replace(text: string, placeholder: string, replacement: string) {
+  let index = text.indexOf(placeholder);
+  if (index === -1) {
+    return text;
+  }
+  return `${text.substring(0, index)}${replacement}${text.substring(
+    index + placeholder.length,
+  )}`;
+}
+
+function assertNever(value: never) {
+  return new Error(`should never happen ${value}`);
 }

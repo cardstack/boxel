@@ -1,7 +1,5 @@
 import debounce from 'lodash/debounce';
 
-import { v4 as uuidv4 } from 'uuid';
-
 import {
   type Queue,
   type PgPrimitive,
@@ -9,16 +7,18 @@ import {
   Deferred,
 } from '@cardstack/runtime-common';
 
+let id = 0;
+
 export class BrowserQueue implements Queue {
   #isDestroyed = false;
   #hasStarted = false;
   #flush: Promise<void> | undefined;
 
   // no need for "onAfterJob--that's just the Job.done promise
-  constructor(private onBeforeJob?: (jobId: string) => void) {}
+  constructor(private onBeforeJob?: (jobId: number) => void) {}
 
   private jobs: {
-    jobId: string;
+    jobId: number;
     category: string;
     arg: PgPrimitive;
     notifier: Deferred<any>;
@@ -37,7 +37,7 @@ export class BrowserQueue implements Queue {
     await this.#flush;
   }
 
-  start() {
+  async start() {
     this.#hasStarted = true;
   }
 
@@ -59,7 +59,7 @@ export class BrowserQueue implements Queue {
     if (this.isDestroyed) {
       throw new Error(`Cannot publish job on a destroyed Queue`);
     }
-    let jobId = uuidv4();
+    let jobId = ++id;
     let notifier = new Deferred<T>();
     let job = new Job(jobId, notifier);
     this.jobs.push({

@@ -1,7 +1,7 @@
 import format from 'date-fns/format';
 import {
   baseRealm,
-  IndexerDBClient,
+  Indexer,
   internalKeyFor,
   type CodeRef,
   type LooseCardResource,
@@ -19,15 +19,15 @@ interface TestCards {
   [name: string]: CardDef;
 }
 
-const tests = {
+const tests = Object.freeze({
   'can get all cards with empty filter': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, paper } = testCards;
-    await setupIndex(client, [mango, vangogh, paper]);
+    await setupIndex(indexer, [mango, vangogh, paper]);
 
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {},
       loader,
@@ -46,26 +46,26 @@ const tests = {
 
   'deleted cards are not included in results': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, paper } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       { card: mango, data: { is_deleted: false } },
       { card: vangogh, data: { is_deleted: null } },
       { card: paper, data: { is_deleted: true } },
     ]);
 
-    let { meta } = await client.search(new URL(testRealmURL), {}, loader);
+    let { meta } = await indexer.search(new URL(testRealmURL), {}, loader);
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
   },
 
-  'can filter by type': async (assert, { client, loader, testCards }) => {
+  'can filter by type': async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, paper } = testCards;
 
-    await setupIndex(client, [mango, vangogh, paper]);
+    await setupIndex(indexer, [mango, vangogh, paper]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       { filter: { type } },
       loader,
@@ -79,9 +79,9 @@ const tests = {
     );
   },
 
-  "can filter using 'eq'": async (assert, { client, loader, testCards }) => {
+  "can filter using 'eq'": async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, paper } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       { card: mango, data: { search_doc: { name: 'Mango' } } },
       { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
       // this card's "name" field doesn't match our filter since our filter
@@ -90,7 +90,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -107,10 +107,10 @@ const tests = {
 
   "can filter using 'eq' thru nested fields": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -150,7 +150,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -171,10 +171,10 @@ const tests = {
 
   "can use 'eq' to match multiple fields": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -196,7 +196,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -213,10 +213,10 @@ const tests = {
 
   "can use 'eq' to find 'null' values": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -244,7 +244,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -261,10 +261,10 @@ const tests = {
 
   "can use 'eq' to match against number type": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -286,7 +286,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -303,10 +303,10 @@ const tests = {
 
   "can use 'eq' to match against boolean type": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -338,7 +338,7 @@ const tests = {
 
     let type = await personCardType(testCards);
     {
-      let { cards, meta } = await client.search(
+      let { cards, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -357,7 +357,7 @@ const tests = {
       assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
     }
     {
-      let { cards, meta } = await client.search(
+      let { cards, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -376,7 +376,7 @@ const tests = {
       assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
     }
     {
-      let { cards, meta } = await client.search(
+      let { cards, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -398,10 +398,10 @@ const tests = {
 
   'can filter eq from a code ref query value': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { stringFieldEntry, numberFieldEntry } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: stringFieldEntry,
         data: {
@@ -423,7 +423,7 @@ const tests = {
     ]);
 
     let type = await simpleCatalogEntryType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -449,10 +449,10 @@ const tests = {
 
   'can filter eq from a date query value': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mangoBirthday, vangoghBirthday } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mangoBirthday,
         data: {
@@ -476,7 +476,7 @@ const tests = {
     ]);
 
     let type = await eventType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -495,10 +495,10 @@ const tests = {
 
   "can search with a 'not' filter": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -526,7 +526,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -547,10 +547,10 @@ const tests = {
 
   'can handle a filter with double negatives': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -578,7 +578,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -599,10 +599,10 @@ const tests = {
 
   "can use a 'contains' filter": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -630,7 +630,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -651,10 +651,10 @@ const tests = {
 
   "can use 'contains' to match multiple fields": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -676,7 +676,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -693,10 +693,10 @@ const tests = {
 
   "can use a 'contains' filter to match 'null'": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -716,7 +716,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -733,10 +733,10 @@ const tests = {
 
   "can use 'every' to combine multiple filters": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -776,7 +776,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -800,10 +800,10 @@ const tests = {
 
   "can use 'any' to combine multiple filters": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -831,7 +831,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -859,12 +859,12 @@ const tests = {
 
   'gives a good error when query refers to missing card': async (
     assert,
-    { client, loader },
+    { indexer, loader },
   ) => {
-    await setupIndex(client, []);
+    await setupIndex(indexer, []);
 
     try {
-      await client.search(
+      await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -893,7 +893,7 @@ const tests = {
       },
     };
     try {
-      await client.search(
+      await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -918,13 +918,13 @@ const tests = {
 
   'gives a good error when query refers to missing field': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
-    await setupIndex(client, []);
+    await setupIndex(indexer, []);
     let type = await personCardType(testCards);
 
     try {
-      await client.search(
+      await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -950,10 +950,10 @@ const tests = {
 
   "it can filter on a plural primitive field using 'eq'": async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -975,7 +975,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -991,9 +991,9 @@ const tests = {
   },
 
   "it can filter on a nested field within a plural composite field using 'eq'":
-    async (assert, { client, loader, testCards }) => {
+    async (assert, { indexer, loader, testCards }) => {
       let { mango, vangogh } = testCards;
-      await setupIndex(client, [
+      await setupIndex(indexer, [
         {
           card: mango,
           data: {
@@ -1021,7 +1021,7 @@ const tests = {
 
       let type = await personCardType(testCards);
       {
-        let { cards, meta } = await client.search(
+        let { cards, meta } = await indexer.search(
           new URL(testRealmURL),
           {
             filter: {
@@ -1040,7 +1040,7 @@ const tests = {
         assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
       }
       {
-        let { cards, meta } = await client.search(
+        let { cards, meta } = await indexer.search(
           new URL(testRealmURL),
           {
             filter: {
@@ -1066,10 +1066,10 @@ const tests = {
 
   'it can match a null in a plural field': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -1091,7 +1091,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1108,10 +1108,10 @@ const tests = {
 
   'it can match a leaf plural field nested in a plural composite field': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -1139,7 +1139,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1155,9 +1155,9 @@ const tests = {
   },
 
   'it can match thru a plural nested composite field that is field of a singular composite field':
-    async (assert, { client, loader, testCards }) => {
+    async (assert, { indexer, loader, testCards }) => {
       let { mango, vangogh } = testCards;
-      await setupIndex(client, [
+      await setupIndex(indexer, [
         {
           card: mango,
           data: {
@@ -1182,7 +1182,7 @@ const tests = {
       ]);
 
       let type = await personCardType(testCards);
-      let { cards, meta } = await client.search(
+      let { cards, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -1202,9 +1202,9 @@ const tests = {
     },
 
   "can return a single result for a card when there are multiple matches within a result's search doc":
-    async (assert, { client, loader, testCards }) => {
+    async (assert, { indexer, loader, testCards }) => {
       let { mango } = testCards;
-      await setupIndex(client, [
+      await setupIndex(indexer, [
         {
           card: mango,
           data: {
@@ -1220,7 +1220,7 @@ const tests = {
       ]);
 
       let type = await personCardType(testCards);
-      let { cards, meta } = await client.search(
+      let { cards, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -1241,11 +1241,11 @@ const tests = {
 
   'can perform query against WIP version of the index': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -1272,7 +1272,7 @@ const tests = {
     );
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1299,11 +1299,11 @@ const tests = {
 
   'can perform query against "production" version of the index': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -1326,7 +1326,7 @@ const tests = {
     );
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1346,9 +1346,9 @@ const tests = {
     assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
   },
 
-  'can sort search results': async (assert, { client, loader, testCards }) => {
+  'can sort search results': async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -1376,7 +1376,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         sort: [
@@ -1397,9 +1397,9 @@ const tests = {
     );
   },
 
-  'can sort descending': async (assert, { client, loader, testCards }) => {
+  'can sort descending': async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(client, [
+    await setupIndex(indexer, [
       {
         card: mango,
         data: {
@@ -1427,7 +1427,7 @@ const tests = {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         sort: [
@@ -1451,7 +1451,7 @@ const tests = {
 
   'can get paginated results that are stable during index mutations': async (
     assert,
-    { client, loader, testCards },
+    { indexer, loader, testCards },
   ) => {
     let { mango } = testCards;
     let Card = mango.constructor as typeof CardDef;
@@ -1463,11 +1463,11 @@ const tests = {
       });
     }
 
-    await setupIndex(client, testData);
+    await setupIndex(indexer, testData);
 
     // page 1
     let type = await personCardType(testCards);
-    let { cards, meta } = await client.search(
+    let { cards, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         page: { number: 0, size: 3 },
@@ -1499,7 +1499,7 @@ const tests = {
 
     {
       // page 2
-      let { cards, meta } = await client.search(
+      let { cards, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           // providing the realm version received from the 1st page's meta keeps
@@ -1537,13 +1537,13 @@ const tests = {
     }
 
     // mutate the index
-    let batch = await client.createBatch(new URL(testRealmURL));
+    let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.deleteEntry(new URL(`${testRealmURL}mango3.json`));
     await batch.done();
 
     {
       // page 3
-      let { cards, meta } = await client.search(
+      let { cards, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           // providing the realm version received from the 1st page's meta keeps
@@ -1583,7 +1583,7 @@ const tests = {
     // assert that a new search against the current index no longer contains the
     // removed card
     {
-      let { cards, meta } = await client.search(
+      let { cards, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           sort: [
@@ -1620,10 +1620,10 @@ const tests = {
     }
   },
 } as SharedTests<{
-  client: IndexerDBClient;
+  indexer: Indexer;
   loader: Loader;
   testCards: TestCards;
-}>;
+}>);
 
 export default tests;
 
