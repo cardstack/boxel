@@ -89,9 +89,7 @@ function createColumns(
           column.push('TEXT');
           break;
         case 'JSONB':
-          // TODO change this to 'BLOB' after we do the sqlite BLOB storage
-          // support in CS-6668 for faster performance
-          column.push('JSON');
+          column.push('BLOB');
           break;
         case 'BOOLEAN':
           column.push('BOOLEAN');

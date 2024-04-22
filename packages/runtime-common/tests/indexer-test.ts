@@ -1,5 +1,5 @@
 import {
-  IndexerDBClient,
+  Indexer,
   internalKeyFor,
   baseCardRef,
   type IndexedCardsTable,
@@ -15,10 +15,10 @@ const testRealmURL2 = `http://test-realm/test2/`;
 const tests = Object.freeze({
   'can perform invalidations for an index entry': async (
     assert,
-    { client, adapter },
+    { indexer, adapter },
   ) => {
     await setupIndex(
-      client,
+      indexer,
       [
         { realm_url: testRealmURL, current_version: 1 },
         { realm_url: testRealmURL2, current_version: 5 },
@@ -63,7 +63,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await client.createBatch(new URL(testRealmURL));
+    let batch = await indexer.createBatch(new URL(testRealmURL));
     let invalidations = await batch.invalidate(
       new URL(`${testRealmURL}4.json`),
     );
@@ -138,14 +138,14 @@ const tests = Object.freeze({
 
   'does not create invalidation record for non-JSON invalidation': async (
     assert,
-    { client, adapter },
+    { indexer, adapter },
   ) => {
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [],
     );
-    let batch = await client.createBatch(new URL(testRealmURL));
+    let batch = await indexer.createBatch(new URL(testRealmURL));
     let invalidations = await batch.invalidate(
       new URL(`${testRealmURL}module`),
     );
@@ -160,10 +160,10 @@ const tests = Object.freeze({
 
   'only invalidates latest version of content': async (
     assert,
-    { client, adapter },
+    { indexer, adapter },
   ) => {
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 2 }],
       [
         {
@@ -205,7 +205,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await client.createBatch(new URL(testRealmURL));
+    let batch = await indexer.createBatch(new URL(testRealmURL));
     let invalidations = await batch.invalidate(
       new URL(`${testRealmURL}4.json`),
     );
@@ -231,10 +231,10 @@ const tests = Object.freeze({
 
   'can prevent concurrent batch invalidations from colliding': async (
     assert,
-    { client },
+    { indexer },
   ) => {
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -259,8 +259,8 @@ const tests = Object.freeze({
     );
 
     // both batches have the same WIP version number
-    let batch1 = await client.createBatch(new URL(testRealmURL));
-    let batch2 = await client.createBatch(new URL(testRealmURL));
+    let batch1 = await indexer.createBatch(new URL(testRealmURL));
+    let batch2 = await indexer.createBatch(new URL(testRealmURL));
     await batch1.invalidate(new URL(`${testRealmURL}1.json`));
 
     try {
@@ -277,9 +277,9 @@ const tests = Object.freeze({
   },
 
   'can prevent concurrent batch invalidations from colliding when making new generation':
-    async (assert, { client }) => {
+    async (assert, { indexer }) => {
       await setupIndex(
-        client,
+        indexer,
         [{ realm_url: testRealmURL, current_version: 1 }],
         [
           {
@@ -292,8 +292,8 @@ const tests = Object.freeze({
       );
 
       // both batches have the same WIP version number
-      let batch1 = await client.createBatch(new URL(testRealmURL));
-      let batch2 = await client.createBatch(new URL(testRealmURL));
+      let batch1 = await indexer.createBatch(new URL(testRealmURL));
+      let batch2 = await indexer.createBatch(new URL(testRealmURL));
       await batch1.invalidate(new URL(`${testRealmURL}1.json`));
 
       try {
@@ -309,9 +309,9 @@ const tests = Object.freeze({
       }
     },
 
-  'can update an index entry': async (assert, { client, adapter }) => {
+  'can update an index entry': async (assert, { indexer, adapter }) => {
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -340,7 +340,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await client.createBatch(new URL(testRealmURL));
+    let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'entry',
@@ -490,9 +490,9 @@ const tests = Object.freeze({
     );
   },
 
-  'can remove an index entry': async (assert, { client, adapter }) => {
+  'can remove an index entry': async (assert, { indexer, adapter }) => {
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -503,7 +503,7 @@ const tests = Object.freeze({
         },
       ],
     );
-    let batch = await client.createBatch(new URL(testRealmURL));
+    let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.deleteEntry(new URL(`${testRealmURL}1.json`));
 
@@ -567,10 +567,10 @@ const tests = Object.freeze({
 
   'can create a new generation of index entries': async (
     assert,
-    { client, adapter },
+    { indexer, adapter },
   ) => {
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -596,7 +596,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await client.createBatch(new URL(testRealmURL));
+    let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.makeNewGeneration();
 
     let index = await adapter.execute(
@@ -712,9 +712,9 @@ const tests = Object.freeze({
     );
   },
 
-  'can get "production" index entry': async (assert, { client }) => {
+  'can get "production" index entry': async (assert, { indexer }) => {
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -736,7 +736,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await client.createBatch(new URL(testRealmURL));
+    let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'entry',
@@ -760,7 +760,7 @@ const tests = Object.freeze({
       },
     });
 
-    let entry = await client.getIndexEntry(new URL(`${testRealmURL}1`));
+    let entry = await indexer.getIndexEntry(new URL(`${testRealmURL}1`));
     assert.deepEqual(entry, {
       card_url: `${testRealmURL}1.json`,
       realm_version: 1,
@@ -787,9 +787,9 @@ const tests = Object.freeze({
     });
   },
 
-  'can get work in progress index entry': async (assert, { client }) => {
+  'can get work in progress index entry': async (assert, { indexer }) => {
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -811,7 +811,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await client.createBatch(new URL(testRealmURL));
+    let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'entry',
@@ -835,7 +835,7 @@ const tests = Object.freeze({
       },
     });
 
-    let entry = await client.getIndexEntry(new URL(`${testRealmURL}1`), {
+    let entry = await indexer.getIndexEntry(new URL(`${testRealmURL}1`), {
       useWorkInProgressIndex: true,
     });
     assert.ok(entry?.indexed_at, 'the indexed_at field was set');
@@ -869,10 +869,10 @@ const tests = Object.freeze({
 
   'returns undefined when getting a deleted entry': async (
     assert,
-    { client },
+    { indexer },
   ) => {
     await setupIndex(
-      client,
+      indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -884,9 +884,9 @@ const tests = Object.freeze({
       ],
     );
 
-    let entry = await client.getIndexEntry(new URL(`${testRealmURL}1`));
+    let entry = await indexer.getIndexEntry(new URL(`${testRealmURL}1`));
     assert.strictEqual(entry, undefined, 'deleted entries return undefined');
   },
-} as SharedTests<{ client: IndexerDBClient; adapter: DBAdapter }>);
+} as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);
 
 export default tests;

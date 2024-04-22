@@ -75,7 +75,11 @@ export default class SQLiteAdapter implements DBAdapter {
   }
 
   async execute(sql: string, opts?: ExecuteOptions) {
-    return await this.query(this.adjustSQL(sql), opts);
+    sql = this.adjustSQL(sql);
+    console.debug(
+      `executing sql: ${sql}, with bindings: ${JSON.stringify(opts?.bind)}`,
+    );
+    return await this.query(sql, opts);
   }
 
   async close() {

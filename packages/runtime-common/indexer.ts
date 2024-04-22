@@ -8,7 +8,7 @@ import {
   loadCard,
   internalKeyFor,
   identifyCard,
-} from '../index';
+} from './index';
 import {
   type PgPrimitive,
   type Expression,
@@ -29,6 +29,8 @@ import {
   fieldValue,
   fieldArity,
   upsert,
+  tableValuedFunctionsPlaceholder,
+  query,
 } from './expression';
 import {
   type Query,
@@ -37,10 +39,10 @@ import {
   type NotFilter,
   type ContainsFilter,
   type Sort,
-} from '../query';
-import { type SerializedError } from '../error';
-import { type DBAdapter } from '../db';
-import { type SearchEntryWithErrors } from '../search-index';
+} from './query';
+import { type SerializedError } from './error';
+import { type DBAdapter } from './db';
+import { type SearchEntryWithErrors } from './search-index';
 
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -97,9 +99,7 @@ const coerceTypes = Object.freeze({
   is_deleted: 'BOOLEAN',
 });
 
-const placeholder = '__TABLE_VALUED_FUNCTIONS__';
-
-export class IndexerDBClient {
+export class Indexer {
   #ready: Promise<void>;
   constructor(private dbAdapter: DBAdapter) {
     this.#ready = this.dbAdapter.startClient();
@@ -113,20 +113,12 @@ export class IndexerDBClient {
     await this.dbAdapter.close();
   }
 
-  async query(query: Expression) {
-    let sql = await this.expressionToSql(query);
-    return await this.dbAdapter.execute(sql.text, {
-      coerceTypes,
-      bind: sql.values,
-    });
+  async query(expression: Expression) {
+    return await query(this.dbAdapter, expression, coerceTypes);
   }
 
-  async queryCards(query: CardExpression, loader: Loader) {
-    let sql = await this.cardQueryToSQL(query, loader);
-    return await this.dbAdapter.execute(sql.text, {
-      coerceTypes,
-      bind: sql.values,
-    });
+  private async queryCards(query: CardExpression, loader: Loader) {
+    return this.query(await this.makeExpression(query, loader));
   }
 
   // TODO handle getting error document
@@ -221,7 +213,7 @@ export class IndexerDBClient {
     let everyCondition = every(conditions);
     let query = [
       `SELECT card_url, ANY_VALUE(pristine_doc) AS pristine_doc`,
-      `FROM indexed_cards AS i ${placeholder}`,
+      `FROM indexed_cards AS i ${tableValuedFunctionsPlaceholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...everyCondition,
@@ -231,7 +223,7 @@ export class IndexerDBClient {
     ];
     let queryCount = [
       'SELECT COUNT(DISTINCT card_url) AS total',
-      `FROM indexed_cards AS i ${placeholder}`,
+      `FROM indexed_cards AS i ${tableValuedFunctionsPlaceholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...everyCondition,
@@ -405,10 +397,6 @@ export class IndexerDBClient {
         errorHint: 'filter',
       }),
     ];
-  }
-
-  private async cardQueryToSQL(query: CardExpression, loader: Loader) {
-    return this.expressionToSql(await this.makeExpression(query, loader));
   }
 
   private async makeExpression(
@@ -701,76 +689,6 @@ export class IndexerDBClient {
     }
     return expression;
   }
-
-  private expressionToSql(query: Expression) {
-    let values: PgPrimitive[] = [];
-    let nonce = 0;
-    let tableValuedFunctions = new Map<
-      string,
-      {
-        name: string;
-        fn: string;
-      }
-    >();
-    let text = query
-      .map((element) => {
-        if (isParam(element)) {
-          values.push(element.param);
-          return `$${values.length}`;
-        } else if (typeof element === 'string') {
-          return element;
-        } else if (element.kind === 'table-valued-tree') {
-          let { column, path, treeColumn } = element;
-          let field = trimBrackets(
-            path === '$' ? column : path.split('.').pop()!,
-          );
-          let key = `tree_${column}_${path}`;
-          let { name } = tableValuedFunctions.get(key) ?? {};
-          if (!name) {
-            name = `${field}${nonce++}_tree`;
-            let absolutePath = path === '$' ? '$' : `$.${path}`;
-
-            tableValuedFunctions.set(key, {
-              name,
-              fn: `jsonb_tree(${column}, '${absolutePath}') as ${name}`,
-            });
-          }
-          return `${name}.${treeColumn}`;
-        } else if (element.kind === 'table-valued-each') {
-          let { column } = element;
-          let key = `each_${column}`;
-          let { name } = tableValuedFunctions.get(key) ?? {};
-          if (!name) {
-            name = `${column}${nonce++}_array_element`;
-
-            tableValuedFunctions.set(key, {
-              name,
-              fn: `jsonb_array_elements_text(${column}) as ${name}`,
-            });
-          }
-          return name;
-        } else {
-          throw assertNever(element);
-        }
-      })
-      .join(' ');
-
-    if (tableValuedFunctions.size > 0) {
-      text = replace(
-        text,
-        placeholder,
-        `${[...tableValuedFunctions.values()]
-          .map((fn) => `CROSS JOIN LATERAL ${fn.fn}`)
-          .join(' ')}`,
-      );
-    } else {
-      text = replace(text, placeholder, '');
-    }
-    return {
-      text,
-      values,
-    };
-  }
 }
 
 export class Batch {
@@ -780,7 +698,7 @@ export class Batch {
   private declare realmVersion: number;
 
   constructor(
-    private client: IndexerDBClient,
+    private client: Indexer,
     private realmURL: URL, // this assumes that we only index cards in our own realm...
   ) {
     this.ready = this.setNextRealmVersion();
@@ -1056,10 +974,6 @@ function traveledThruPlural(pathTraveled: string) {
   return pathTraveled.includes('[');
 }
 
-function trimBrackets(pathTraveled: string) {
-  return pathTraveled.replace(/\[\]/g, '');
-}
-
 function trimTrailingBrackets(pathTraveled: string) {
   return pathTraveled.replace(/\[\]$/g, '');
 }
@@ -1076,19 +990,6 @@ function isFieldPlural(field: Field): boolean {
   return (
     field.fieldType === 'containsMany' || field.fieldType === 'linksToMany'
   );
-}
-
-// i'm slicing up the text as opposed to using a 'String.replace()' since
-// the ()'s in the SQL query are treated like regex matches when using
-// String.replace()
-function replace(text: string, placeholder: string, replacement: string) {
-  let index = text.indexOf(placeholder);
-  if (index === -1) {
-    return text;
-  }
-  return `${text.substring(0, index)}${replacement}${text.substring(
-    index + placeholder.length,
-  )}`;
 }
 
 function assertNever(value: never) {
