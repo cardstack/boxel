@@ -159,6 +159,11 @@ jobs:
         env:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
+      - name: Save dist
+        uses: actions/upload-artifact@v3
+        with:
+          name: host-dist
+          path: packages/host/dist
       - name: Start realm servers
         run: pnpm start:all &
         working-directory: packages/realm-server
