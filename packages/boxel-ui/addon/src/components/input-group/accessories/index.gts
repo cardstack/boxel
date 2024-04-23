@@ -210,7 +210,6 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
 
       :global(.boxel-input-group__select-accessory__dropdown ul) {
         font: var(--boxel-button-font, var(--boxel-font-sm));
-        font-weight: 600;
         padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
           var(--boxel-sp-xs);
       }
