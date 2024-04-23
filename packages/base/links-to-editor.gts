@@ -4,7 +4,7 @@ import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
-import { getBoxComponent } from './field-component';
+import { DefaultFormatProvider, getBoxComponent } from './field-component';
 import {
   type CardDef,
   type BaseDef,
@@ -18,7 +18,6 @@ import {
   identifyCard,
   CardContextName,
 } from '@cardstack/runtime-common';
-import type { ComponentLike } from '@glint/template';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
@@ -30,7 +29,7 @@ interface Signature {
   };
 }
 
-class LinksToEditor extends GlimmerComponent<Signature> {
+export class LinksToEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
@@ -47,7 +46,9 @@ class LinksToEditor extends GlimmerComponent<Signature> {
           {{@field.card.displayName}}
         </AddButton>
       {{else}}
-        <this.linkedCard />
+        <DefaultFormatProvider @value='embedded'>
+          <this.linkedCard />
+        </DefaultFormatProvider>
         <div class='remove-button-container'>
           <IconButton
             @variant='primary'
@@ -113,7 +114,6 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       card,
       this.args.model as Box<BaseDef>,
       this.args.field,
-      'embedded',
     );
   }
 
@@ -141,15 +141,4 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       this.args.model.value = newCard;
     }
   });
-}
-
-export function getLinksToEditor(
-  model: Box<CardDef | null>,
-  field: Field<typeof CardDef>,
-): ComponentLike<{ Args: {}; Blocks: {} }> {
-  return class LinksToEditTemplate extends GlimmerComponent {
-    <template>
-      <LinksToEditor @model={{model}} @field={{field}} />
-    </template>
-  };
 }

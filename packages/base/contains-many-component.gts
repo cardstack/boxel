@@ -10,16 +10,20 @@ import {
   type FieldDef,
   type BaseDef,
 } from './card-api';
-import { getBoxComponent, getPluralViewComponent } from './field-component';
+import {
+  type BoxComponentSignature,
+  getBoxComponent,
+  DefaultFormatConsumer,
+} from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { getPlural } from '@cardstack/runtime-common';
 import { IconTrash } from '@cardstack/boxel-ui/icons';
+import { TemplateOnlyComponent } from '@ember/component/template-only';
 
-interface Signature {
+interface ContainsManyEditorSignature {
   Args: {
     model: Box<FieldDef>;
     arrayField: Box<FieldDef[]>;
-    format: Format;
     field: Field<typeof FieldDef>;
     cardTypeFor(
       field: Field<typeof BaseDef>,
@@ -28,7 +32,7 @@ interface Signature {
   };
 }
 
-class ContainsManyEditor extends GlimmerComponent<Signature> {
+class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
   <template>
     <div data-test-contains-many={{@field.name}}>
       {{#if @arrayField.children.length}}
@@ -37,11 +41,11 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
             <li class='editor' data-test-item={{i}}>
               {{#let
                 (getBoxComponent
-                  (@cardTypeFor @field boxedElement) @format boxedElement @field
+                  (@cardTypeFor @field boxedElement) boxedElement @field
                 )
                 as |Item|
               }}
-                <Item @format={{@format}} />
+                <Item />
               {{/let}}
               <div class='remove-button-container'>
                 <IconButton
@@ -118,33 +122,118 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
   };
 }
 
+function getPluralChildFormat(effectiveFormat: Format, model: Box<FieldDef>) {
+  if (
+    effectiveFormat === 'edit' &&
+    'isFieldDef' in model.value.constructor &&
+    model.value.constructor.isFieldDef
+  ) {
+    return 'atom';
+  }
+  return effectiveFormat;
+}
+
+function coalesce<T>(arg1: T | undefined, arg2: T): T {
+  return arg1 ?? arg2;
+}
+
 export function getContainsManyComponent({
   model,
   arrayField,
-  format,
   field,
   cardTypeFor,
 }: {
   model: Box<FieldDef>;
   arrayField: Box<FieldDef[]>;
-  format: Format;
   field: Field<typeof FieldDef>;
   cardTypeFor(
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
 }): BoxComponent {
-  if (format === 'edit') {
-    return <template>
-      <ContainsManyEditor
-        @model={{model}}
-        @arrayField={{arrayField}}
-        @field={{field}}
-        @format={{format}}
-        @cardTypeFor={{cardTypeFor}}
-      />
-    </template>;
-  } else {
-    return getPluralViewComponent(arrayField, field, format, cardTypeFor);
+  let getComponents = () =>
+    arrayField.children.map((child) =>
+      getBoxComponent(cardTypeFor(field, child), child, field),
+    ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
+  let isComputed = !!field.computeVia;
+  function shouldRenderEditor(
+    format: Format | undefined,
+    defaultFormat: Format,
+    isComputed: boolean,
+  ) {
+    if (
+      'isFieldDef' in model.value.constructor &&
+      model.value.constructor.isFieldDef
+    ) {
+      return false;
+    }
+    if (isComputed) {
+      return false;
+    }
+    return (format ?? defaultFormat) === 'edit';
   }
+  let containsManyComponent: TemplateOnlyComponent<BoxComponentSignature> =
+    <template>
+      <DefaultFormatConsumer as |defaultFormat|>
+        {{#if (shouldRenderEditor @format defaultFormat isComputed)}}
+          <ContainsManyEditor
+            @model={{model}}
+            @arrayField={{arrayField}}
+            @field={{field}}
+            @cardTypeFor={{cardTypeFor}}
+          />
+        {{else}}
+          {{#let (coalesce @format defaultFormat) as |effectiveFormat|}}
+            <div
+              class='plural-field containsMany-field
+                {{effectiveFormat}}-format
+                {{unless arrayField.children.length "empty"}}'
+              data-test-plural-view={{field.fieldType}}
+              data-test-plural-view-format={{effectiveFormat}}
+            >
+              {{#each (getComponents) as |Item i|}}
+                <div data-test-plural-view-item={{i}}>
+                  <Item
+                    @format={{getPluralChildFormat effectiveFormat model}}
+                  />
+                </div>
+              {{/each}}
+            </div>
+          {{/let}}
+        {{/if}}
+      </DefaultFormatConsumer>
+      <style>
+        .containsMany-field.edit-format {
+          padding: var(--boxel-sp-sm);
+          background-color: var(--boxel-100);
+          border: none !important;
+          border-radius: var(--boxel-border-radius);
+        }
+      </style>
+    </template>;
+  return new Proxy(containsManyComponent, {
+    get(target, property, received) {
+      // proxying the bare minimum of an Array in order to render within a
+      // template. add more getters as necessary...
+      let components = getComponents();
+
+      if (property === Symbol.iterator) {
+        return components[Symbol.iterator];
+      }
+      if (property === 'length') {
+        return components.length;
+      }
+      if (typeof property === 'string' && property.match(/\d+/)) {
+        return components[parseInt(property)];
+      }
+      return Reflect.get(target, property, received);
+    },
+    getPrototypeOf() {
+      // This is necessary for Ember to be able to locate the template associated
+      // with a proxied component. Our Proxy object won't be in the template WeakMap,
+      // but we can pretend our Proxy object inherits from the true component, and
+      // Ember's template lookup respects inheritance.
+      return containsManyComponent;
+    },
+  });
 }
