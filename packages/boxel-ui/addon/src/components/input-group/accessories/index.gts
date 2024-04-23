@@ -208,16 +208,11 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         position: relative;
       }
 
-      :global(.boxel-input-group__select-accessory__dropdown ul) {
-        font: var(--boxel-button-font, var(--boxel-font-sm));
-        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
-          var(--boxel-sp-xs);
-      }
-
       :global(
           .boxel-input-group__select-accessory__dropdown
             .ember-power-select-option
         ) {
+        font: var(--boxel-button-font, var(--boxel-font-sm));
         padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
           var(--boxel-sp-xs);
       }
