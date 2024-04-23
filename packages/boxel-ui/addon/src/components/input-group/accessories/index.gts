@@ -210,6 +210,11 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
           var(--boxel-sp-xs);
       }
+
+      .boxel-input-group__select-accessory
+        :deep(.ember-power-select-status-icon) {
+        position: relative;
+      }
     </style>
   </template>;
 
