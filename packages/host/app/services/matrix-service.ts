@@ -399,12 +399,14 @@ export default class MatrixService extends Service {
       throw new Error(`Room ${roomId} not found`);
     }
 
-    let event = room.events.find(
-      (e) =>
-        e.type === 'm.reaction' &&
-        e.content['m.relates_to'].rel_type === 'm.annotation' &&
-        e.content['m.relates_to'].event_id === eventId,
-    );
+    let event = room.events
+      .filter(
+        (e) =>
+          e.type === 'm.reaction' &&
+          e.content['m.relates_to'].rel_type === 'm.annotation' &&
+          e.content['m.relates_to'].event_id === eventId,
+      )
+      .sort((a, b) => b.origin_server_ts - a.origin_server_ts)[0];
     if (!event) {
       return;
     }

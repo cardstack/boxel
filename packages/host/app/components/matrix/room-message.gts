@@ -310,6 +310,7 @@ export default class RoomMessage extends Component<Signature> {
         eventId,
         'applied',
       );
+      await this.getApplyState.perform(this.args.roomId, eventId);
     } catch (e) {
       this.patchCardError = { id: payload.id, error: e };
       await this.matrixService.sendReactionEvent(
@@ -317,6 +318,7 @@ export default class RoomMessage extends Component<Signature> {
         eventId,
         'failed',
       );
+      await this.getApplyState.perform(this.args.roomId, eventId);
     }
   });
 

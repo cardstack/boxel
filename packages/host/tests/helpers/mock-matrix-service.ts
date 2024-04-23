@@ -3,6 +3,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
+import { v4 as uuid } from 'uuid';
+
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { clearAllRealmSessions } from '@cardstack/host/resources/realm-session';
@@ -12,7 +14,11 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import type { RoomField } from 'https://cardstack.com/base/room';
+import type {
+  RoomField,
+  ReactionEvent,
+  ReactionEventContent,
+} from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
@@ -125,6 +131,59 @@ function generateMockMatrixService(
         throw new Error('Intentional error thrown');
       }
       return await this.createAndJoinRoom(name);
+    }
+
+    async sendReactionEvent(roomId: string, eventId: string, status: string) {
+      let content: ReactionEventContent = {
+        'm.relates_to': {
+          event_id: eventId,
+          key: status,
+          rel_type: 'm.annotation',
+        },
+      };
+      try {
+        return await this.sendEvent(roomId, 'm.reaction', content);
+      } catch (e) {
+        throw new Error(
+          `Error sending reaction event: ${
+            'message' in (e as Error) ? (e as Error).message : e
+          }`,
+        );
+      }
+    }
+
+    async getReactionKeyForEvent(roomId: string, eventId: string) {
+      let room = await this.rooms.get(roomId);
+      if (!room) {
+        throw new Error(`Room ${roomId} not found`);
+      }
+
+      let event = room.events
+        .filter(
+          (e) =>
+            e.type === 'm.reaction' &&
+            e.content['m.relates_to'].rel_type === 'm.annotation' &&
+            e.content['m.relates_to'].event_id === eventId,
+        )
+        .sort((a, b) => b.origin_server_ts - a.origin_server_ts)[0];
+      if (!event) {
+        return;
+      }
+
+      return (event as ReactionEvent).content['m.relates_to'].key;
+    }
+
+    async sendEvent(roomId: string, eventType: string, content: any) {
+      await addRoomEvent(this, {
+        event_id: uuid(),
+        room_id: roomId,
+        type: eventType,
+        sender: '@testuser:staging',
+        state_key: '@testuser:staging',
+        origin_server_ts: Date.now(),
+        content,
+        status: null,
+      });
     }
 
     async sendMessage(
