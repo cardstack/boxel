@@ -33,6 +33,7 @@ export default class BoxelSelectUsage extends Component {
   @tracked disabled = false;
   @tracked searchField = '';
   @tracked searchEnabled = false;
+  @tracked matchTriggerWidth = true;
 
   @cssVariable({ cssClassName: 'boxel-select__dropdown' })
   declare boxelSelectCurrentColor: CSSVariableInfo;
@@ -66,6 +67,7 @@ export default class BoxelSelectUsage extends Component {
           @renderInPlace={{this.renderInPlace}}
           @disabled={{this.disabled}}
           @dropdownClass='boxel-select-usage'
+          @matchTriggerWidth={{this.matchTriggerWidth}}
           aria-label={{this.placeholder}}
           as |item|
         >
@@ -115,6 +117,13 @@ export default class BoxelSelectUsage extends Component {
           @value={{this.renderInPlace}}
           @onInput={{fn (mut this.renderInPlace)}}
           @description='When passed true, the content will render next to the trigger instead of being placed in the root of the body'
+        />
+        <Args.Bool
+          @name='matchTriggerWidth'
+          @defaultValue={{true}}
+          @value={{this.matchTriggerWidth}}
+          @onInput={{fn (mut this.matchTriggerWidth)}}
+          @description='Allow dropdown width to match trigger width'
         />
         <Args.Bool
           @name='disabled'

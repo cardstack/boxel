@@ -33,7 +33,7 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     @dropdownClass={{cn 'boxel-select__dropdown' @dropdownClass}}
     @triggerComponent={{@triggerComponent}}
     @disabled={{@disabled}}
-    @matchTriggerWidth={{false}}
+    @matchTriggerWidth={{@matchTriggerWidth}}
     @eventType='click'
     @searchEnabled={{@searchEnabled}}
     @beforeOptionsComponent={{component BeforeOptions autofocus=false}}
