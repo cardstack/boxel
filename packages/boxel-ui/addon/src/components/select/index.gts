@@ -53,9 +53,6 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       padding-right: var(--boxel-sp);
     }
 
-    .boxel-select :deep(.ember-power-select-status-icon) {
-      position: relative;
-    }
     .boxel-select:after {
       display: none;
     }
