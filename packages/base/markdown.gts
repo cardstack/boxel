@@ -1,4 +1,4 @@
-import { primitive, Component, useIndexBasedKey } from './card-api';
+import { Component } from './card-api';
 import StringField from './string';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { markdownToHtml } from '@cardstack/runtime-common';
