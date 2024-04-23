@@ -59,15 +59,20 @@ export interface EqFilter extends TypedFilter {
   eq: { [fieldName: string]: JSON.Value };
 }
 
+export type RangeOperator = 'gt' | 'gte' | 'lt' | 'lte';
+export const RANGE_OPERATORS: Record<RangeOperator, string> = {
+  'gt': '>',
+  'gte': '>=',
+  'lt': '<',
+  'lte': '<='
+}
+
 export interface RangeFilter extends TypedFilter {
   range: {
     [fieldName: string]: {
       // these might be objects that have custom queryable values so we need to
       // be permissive on the types
-      gt?: JSON.Value;
-      gte?: JSON.Value;
-      lt?: JSON.Value;
-      lte?: JSON.Value;
+      [operator in RangeOperator]?: JSON.Value;
     };
   };
 }

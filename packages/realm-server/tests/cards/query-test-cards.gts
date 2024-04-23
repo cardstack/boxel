@@ -16,6 +16,7 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 export class Address extends FieldDef {
   @field street = contains(StringField);
   @field city = contains(StringField);
+  @field number = contains(NumberField);
 }
 
 export class Person extends CardDef {

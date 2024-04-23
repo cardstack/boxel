@@ -1619,6 +1619,432 @@ const tests = Object.freeze({
       ]);
     }
   },
+
+  "can filter using 'gt'": async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+            },
+            age: 35
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+            },
+            age: 30
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+            },
+            age: 25
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: { 'age': { gt: 25 } },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, vangogh.id],
+      'results are correct',
+    );
+  },
+
+  "can filter using 'gt' thru nested fields": async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+              number: 123
+            },
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+              number: 456
+            },
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+              number: 100
+            },
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: { 
+            'address.number': {
+              gt: 100 
+            }
+          },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, vangogh.id],
+      'results are correct',
+    );
+  },
+
+  "can filter using 'gte'": async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+            },
+            age: 35
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+            },
+            age: 30
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+            },
+            age: 25
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: { 'age': { gte: 25 } },
+        },
+        sort: [{
+          on: type,
+          by: 'age',
+          direction: 'desc',
+        }],
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, vangogh.id, ringo.id],
+      'results are correct',
+    );
+  },
+
+  "can filter using 'lt'": async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+            },
+            age: 35
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+            },
+            age: 30
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+            },
+            age: 25
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: { 'age': { lt: 35 } },
+        },
+        sort: [{
+          on: type,
+          by: 'age',
+          direction: 'desc',
+        }],
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [vangogh.id, ringo.id],
+      'results are correct',
+    );
+  },
+
+  "can filter using 'lte'": async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+            },
+            age: 35
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+            },
+            age: 30
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+            },
+            age: 25
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: { 'age': { lte: 35 } },
+        },
+        sort: [{
+          on: type,
+          by: 'age',
+          direction: 'desc',
+        }],
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, vangogh.id, ringo.id],
+      'results are correct',
+    );
+  },
+
+  "can combine 'range' filter": async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+            },
+            age: 35
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+            },
+            age: 30
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+            },
+            age: 25
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: { 'age': { gt: 25, lt: 35 } },
+        },
+        sort: [{
+          on: type,
+          by: 'age',
+          direction: 'desc',
+        }],
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [vangogh.id],
+      'results are correct',
+    );
+  },
 } as SharedTests<{
   indexer: Indexer;
   loader: Loader;

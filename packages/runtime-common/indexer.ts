@@ -39,6 +39,9 @@ import {
   type NotFilter,
   type ContainsFilter,
   type Sort,
+  type RangeFilter,
+  RANGE_OPERATORS,
+  RangeOperator,
 } from './query';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
@@ -280,6 +283,8 @@ export class Indexer {
       return this.containsCondition(filter, on);
     } else if ('not' in filter) {
       return this.notCondition(filter, on);
+    } else if ('range' in filter) {
+      return this.rangeCondition(filter, on);
     } else if ('every' in filter) {
       return every(
         filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
@@ -336,6 +341,32 @@ export class Indexer {
     return every([
       this.typeCondition(on),
       ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
+    ]);
+  }
+
+  private rangeCondition(filter: RangeFilter, on: CodeRef): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      this.typeCondition(on),
+      ...flatten(Object.entries(filter.range).map(([path, range]) => {
+        let query = fieldQuery(path, on, false, 'filter');
+        let cardExpression: FieldArity[][] = [];
+        Object.entries(range).forEach(([operator, value]) => {
+          if (value != null) {
+            let v = fieldValue(path, [param(value)], on, 'filter');
+            cardExpression.push([
+              fieldArity({
+              type: on,
+              path,
+              value: [query, RANGE_OPERATORS[operator as RangeOperator], v],
+              errorHint: 'filter',
+              })]
+            );
+          }
+          
+        });
+        return cardExpression;
+      })),
     ]);
   }
 

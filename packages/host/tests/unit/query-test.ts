@@ -67,6 +67,7 @@ module('Unit | query', function (hooks) {
     class Address extends FieldDef {
       @field street = contains(StringField);
       @field city = contains(StringField);
+      @field number = contains(NumberField);
     }
     class Person extends CardDef {
       @field name = contains(StringField);
@@ -417,6 +418,54 @@ module('Unit | query', function (hooks) {
   });
 
   test('can get paginated results that are stable during index mutations', async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`can filter using 'gt'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`can filter using 'gte'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`can filter using 'gt' thru nested fields`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`can filter using 'lt'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`can filter using 'lte'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`can combine 'range' filter`, async function (assert) {
     await runSharedTest(queryTests, assert, {
       indexer,
       loader,
