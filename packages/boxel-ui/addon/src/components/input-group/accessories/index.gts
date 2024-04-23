@@ -203,8 +203,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       .boxel-input-group--invalid .boxel-input-group__select-accessory {
         border-color: var(--boxel-error-100);
       }
-    </style>
-    <style>
+
       :global(.boxel-input-group__select-accessory__dropdown ul) {
         font: var(--boxel-button-font, var(--boxel-font-sm));
         font-weight: 600;
