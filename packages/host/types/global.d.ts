@@ -4,6 +4,15 @@ import '@glint/environment-ember-loose/native-integration';
 import { ComponentLike } from '@glint/template';
 import 'ember-freestyle/glint';
 
+import type EmberContextTemplateRegistry from 'ember-provide-consume-context/template-registry';
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry
+    extends EmberContextTemplateRegistry /* other addon registries */ {
+    // local entries
+  }
+}
+
 // Types for compiled templates
 declare module '@cardstack/host/templates/*' {
   const tmpl: TemplateFactory;

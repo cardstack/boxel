@@ -12,12 +12,14 @@ import {
   isCompoundField,
   formats,
 } from './card-api';
-import { getField } from '@cardstack/runtime-common';
+import { CardContextName, getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
 import { initSharedState } from './shared-state';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { consume } from 'ember-provide-consume-context';
+import Component from '@glimmer/component';
 
 interface BoxComponentSignature {
   Args: { Named: { format?: Format; displayContainer?: boolean } };
@@ -25,6 +27,33 @@ interface BoxComponentSignature {
 }
 
 export type BoxComponent = ComponentLike<BoxComponentSignature>;
+
+interface CardContextConsumerSignature {
+  Blocks: { default: [CardContext] };
+}
+
+// cardComponentModifier, when provided, is used for the host environment to get access to card's rendered elements
+const DEFAULT_CARD_CONTEXT = {
+  cardComponentModifier: class NoOpModifier extends Modifier<any> {
+    modify() {}
+  },
+  actions: undefined,
+};
+
+export class CardContextConsumer extends Component<CardContextConsumerSignature> {
+  @consume(CardContextName) declare dynamicCardContext: CardContext;
+
+  get context(): CardContext {
+    return {
+      ...DEFAULT_CARD_CONTEXT,
+      ...this.dynamicCardContext,
+    };
+  }
+
+  <template>
+    {{yield this.context}}
+  </template>
+}
 
 const componentCache = initSharedState(
   'componentCache',
@@ -36,7 +65,6 @@ export function getBoxComponent(
   defaultFormat: Format,
   model: Box<BaseDef>,
   field: Field | undefined,
-  context: CardContext = {},
 ): BoxComponent {
   let stable = componentCache.get(model);
   if (stable) {
@@ -45,13 +73,6 @@ export function getBoxComponent(
   let internalFieldsCache:
     | { fields: FieldsTypeFor<BaseDef>; format: Format }
     | undefined;
-
-  // cardComponentModifier, when provided, is used for the host environment to get access to card's rendered elements
-  let cardComponentModifier =
-    context.cardComponentModifier ??
-    class NoOpModifier extends Modifier<any> {
-      modify() {}
-    };
 
   function lookupFormat(userFormat: Format | undefined): {
     Implementation: BaseDefComponent;
@@ -78,12 +99,7 @@ export function getBoxComponent(
     if (internalFieldsCache?.format === format) {
       fields = internalFieldsCache.fields;
     } else {
-      fields = fieldsComponentsFor(
-        {},
-        model,
-        defaultFieldFormat(format),
-        context,
-      );
+      fields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
       internalFieldsCache = { fields, format };
     }
 
@@ -97,26 +113,57 @@ export function getBoxComponent(
   let component: TemplateOnlyComponent<{
     Args: { format?: Format; displayContainer?: boolean };
   }> = <template>
-    {{#let
-      (lookupFormat @format) (if (eq @displayContainer false) false true)
-      as |f displayContainer|
-    }}
-      {{#if (isCard model.value)}}
-        <CardContainer
-          @displayBoundaries={{displayContainer}}
-          class='field-component-card
-            {{f.format}}-format display-container-{{displayContainer}}'
-          {{cardComponentModifier
-            card=model.value
-            format=f.format
-            fieldType=field.fieldType
-            fieldName=field.name
-          }}
-          data-test-card-format={{f.format}}
-          data-test-field-component-card
-          {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-          ...attributes
-        >
+    <CardContextConsumer as |context|>
+      {{#let
+        (lookupFormat @format) (if (eq @displayContainer false) false true)
+        as |f displayContainer|
+      }}
+        {{#if (isCard model.value)}}
+          <CardContainer
+            @displayBoundaries={{displayContainer}}
+            class='field-component-card
+              {{f.format}}-format display-container-{{displayContainer}}'
+            {{context.cardComponentModifier
+              card=model.value
+              format=f.format
+              fieldType=field.fieldType
+              fieldName=field.name
+            }}
+            data-test-card-format={{f.format}}
+            data-test-field-component-card
+            {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+            ...attributes
+          >
+            <f.Implementation
+              @cardOrField={{card}}
+              @model={{model.value}}
+              @fields={{f.fields}}
+              @format={{f.format}}
+              @displayContainer={{@displayContainer}}
+              @set={{model.set}}
+              @fieldName={{model.name}}
+              @context={{context}}
+            />
+          </CardContainer>
+        {{else if (isCompoundField model.value)}}
+          <div
+            data-test-compound-field-format={{f.format}}
+            data-test-compound-field-component
+            {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+            ...attributes
+          >
+            <f.Implementation
+              @cardOrField={{card}}
+              @model={{model.value}}
+              @fields={{f.fields}}
+              @format={{f.format}}
+              @displayContainer={{@displayContainer}}
+              @set={{model.set}}
+              @fieldName={{model.name}}
+              @context={{context}}
+            />
+          </div>
+        {{else}}
           <f.Implementation
             @cardOrField={{card}}
             @model={{model.value}}
@@ -127,38 +174,9 @@ export function getBoxComponent(
             @fieldName={{model.name}}
             @context={{context}}
           />
-        </CardContainer>
-      {{else if (isCompoundField model.value)}}
-        <div
-          data-test-compound-field-format={{f.format}}
-          data-test-compound-field-component
-          {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-          ...attributes
-        >
-          <f.Implementation
-            @cardOrField={{card}}
-            @model={{model.value}}
-            @fields={{f.fields}}
-            @format={{f.format}}
-            @displayContainer={{@displayContainer}}
-            @set={{model.set}}
-            @fieldName={{model.name}}
-            @context={{context}}
-          />
-        </div>
-      {{else}}
-        <f.Implementation
-          @cardOrField={{card}}
-          @model={{model.value}}
-          @fields={{f.fields}}
-          @format={{f.format}}
-          @displayContainer={{@displayContainer}}
-          @set={{model.set}}
-          @fieldName={{model.name}}
-          @context={{context}}
-        />
-      {{/if}}
-    {{/let}}
+        {{/if}}
+      {{/let}}
+    </CardContextConsumer>
     <style>
       .field-component-card.embedded-format {
         padding: var(--boxel-sp);
@@ -187,7 +205,6 @@ export function getBoxComponent(
     component,
     model,
     defaultFieldFormat(defaultFormat),
-    context,
   );
 
   // This cast is safe because we're returning a proxy that wraps component.
@@ -212,7 +229,6 @@ function fieldsComponentsFor<T extends BaseDef>(
   target: object,
   model: Box<T>,
   defaultFormat: Format,
-  context?: CardContext,
 ): FieldsTypeFor<T> {
   // This is a cache of the fields we've already created components for
   // so that they do not get recreated
@@ -248,7 +264,6 @@ function fieldsComponentsFor<T extends BaseDef>(
       let result = field.component(
         model as unknown as Box<BaseDef>,
         defaultFormat,
-        context,
       );
       stableComponents.set(property, result);
       return result;
@@ -302,11 +317,10 @@ export function getPluralViewComponent(
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
   ) => typeof BaseDef,
-  context?: CardContext,
 ): BoxComponent {
   let getComponents = () =>
     model.children.map((child) =>
-      getBoxComponent(cardTypeFor(field, child), format, child, field, context),
+      getBoxComponent(cardTypeFor(field, child), format, child, field),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
   let pluralViewComponent: TemplateOnlyComponent<BoxComponentSignature> =
     <template>
