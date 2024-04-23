@@ -1,4 +1,5 @@
-import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
+import { Component } from './card-api';
+import StringField from './string';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { markdownToHtml } from '@cardstack/runtime-common';
 
@@ -10,10 +11,8 @@ class View extends Component<typeof MarkdownField> {
   </template>
 }
 
-export default class MarkdownField extends FieldDef {
+export default class MarkdownField extends StringField {
   static displayName = 'Markdown';
-  static [primitive]: string;
-  static [useIndexBasedKey]: never;
 
   static embedded = View;
   static atom = View;
