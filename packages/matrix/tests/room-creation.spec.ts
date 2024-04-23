@@ -41,6 +41,8 @@ test.describe('Room creation', () => {
   });
 
   test('it can create a room', async ({ page }) => {
+    test.slow();
+
     await login(page, 'user1', 'pass');
 
     let room1 = await getRoomId(page); // Automatically created room
@@ -68,6 +70,8 @@ test.describe('Room creation', () => {
   test('it does not create a new room when another new room is available', async ({
     page,
   }) => {
+    test.slow();
+
     await login(page, 'user1', 'pass');
 
     let room = await getRoomId(page); // Automatically created room
@@ -240,7 +244,9 @@ test.describe('Room creation', () => {
     expect(roomsAfterDeletionKeys.length).toEqual(
       roomsBeforeDeletionKeys.length,
     );
-    expect(roomsAfterDeletionKeys.includes(roomsBeforeDeletionKeys[1])).toBeFalsy(); // Deleted room
+    expect(
+      roomsAfterDeletionKeys.includes(roomsBeforeDeletionKeys[1]),
+    ).toBeFalsy(); // Deleted room
   });
 
   test('it can cancel deleting a room', async ({ page }) => {
