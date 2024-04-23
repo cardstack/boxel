@@ -66,19 +66,6 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     :global(.boxel-select__dropdown) {
       --boxel-select-current-color: var(--boxel-highlight);
       --boxel-select-selected-color: var(--boxel-light-100);
-      --boxel-select-below-transitioning-in-animation: drop-fade-below
-        var(--boxel-transition);
-      --boxel-select-below-transitioning-out-animation: var(
-          --boxel-select-below-transitioning-in-animation
-        )
-        reverse;
-      --boxel-select-above-transitioning-in-animation: drop-fade-above
-        var(--boxel-transition);
-      --boxel-select-above-transitioning-out-animation: var(
-          --boxel-select-above-transitioning-in-animation
-        )
-        reverse;
-
       box-shadow: var(--boxel-box-shadow);
       border-radius: var(--boxel-form-control-border-radius);
     }
