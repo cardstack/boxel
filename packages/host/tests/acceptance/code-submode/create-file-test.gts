@@ -6,9 +6,8 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred, Loader } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
@@ -212,7 +211,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   }
 
   let adapter: TestRealmAdapter;
-  let loader: Loader;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -232,8 +230,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       [testRealmURL]: ['read', 'write'],
       [testRealmURL2]: ['read', 'write'],
     };
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+
     await setupAcceptanceTestRealm({
       contents: filesB,
       realmURL: testRealmURL2,
@@ -1053,7 +1050,7 @@ export class TestCard extends CardDef {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
 
-    let file = await adapter.openFile('test-dir/test-card.gts', loader);
+    let file = await adapter.openFile('test-dir/test-card.gts');
     assert.strictEqual(
       file?.content,
       expectedSrc,
@@ -1106,7 +1103,7 @@ export class TestCard extends CardDef {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
 
-    let file = await adapter.openFile('test-card.gts', loader);
+    let file = await adapter.openFile('test-card.gts');
     assert.strictEqual(
       file?.content,
       expectedSrc,
@@ -1159,7 +1156,7 @@ export class TestCard extends CardDef {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
 
-    let file = await adapter.openFile('test-card.gts', loader);
+    let file = await adapter.openFile('test-card.gts');
     assert.strictEqual(
       file?.content,
       expectedSrc,

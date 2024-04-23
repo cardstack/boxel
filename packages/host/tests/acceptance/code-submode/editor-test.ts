@@ -15,7 +15,7 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import type EnvironmentService from '@cardstack/host/services/environment-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
+
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
@@ -397,12 +397,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         await waitFor('[data-test-save-idle]');
       },
     });
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-    let fileRef = await adapter.openFile(
-      'Person/john-with-bad-pet-link.json',
-      loader,
-    );
+
+    let fileRef = await adapter.openFile('Person/john-with-bad-pet-link.json');
     if (!fileRef) {
       throw new Error('file not found');
     }
@@ -760,9 +756,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         await waitFor('[data-test-save-idle]');
       },
     });
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-    let fileRef = await adapter.openFile('pet.gts', loader);
+
+    let fileRef = await adapter.openFile('pet.gts');
     if (!fileRef) {
       throw new Error('file not found');
     }

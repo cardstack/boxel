@@ -45,6 +45,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
   #subscriber: ((message: UpdateEventData) => void) | undefined;
+  #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
 
   constructor(contents: TestAdapterContents, realmURL = new URL(testRealmURL)) {
     this.#paths = new RealmPaths(realmURL);
@@ -60,6 +61,11 @@ export class TestRealmAdapter implements RealmAdapter {
       this.#lastModified.set(this.#paths.fileURL(path).href, now);
       dir.contents[last] = { kind: 'file', content };
     }
+  }
+
+  setLoader(loader: Loader) {
+    // Should remove this once CS-6720 is finished
+    this.#loader = loader;
   }
 
   createJWT(claims: TokenClaims, expiration: string, secret: string) {
@@ -138,10 +144,7 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
-  async openFile(
-    path: LocalPath,
-    loader: Loader,
-  ): Promise<FileRef | undefined> {
+  async openFile(path: LocalPath): Promise<FileRef | undefined> {
     let content;
     try {
       content = this.#traverse(path.split('/'), 'file');
@@ -155,12 +158,18 @@ export class TestRealmAdapter implements RealmAdapter {
       return undefined;
     }
 
+    if (!this.#loader) {
+      throw new Error('bug: loader needs to be set in test adapter');
+    }
+
     let value = content.content;
 
     let fileRefContent = '';
 
     if (path.endsWith('.json')) {
-      let cardApi = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      let cardApi = await this.#loader.import<CardAPI>(
+        `${baseRealm.url}card-api`,
+      );
       if (cardApi.isCard(value)) {
         value.id = `${this.#paths.url}${path.replace(/\.json$/, '')}`;
         cardApi.setCardAsSavedForTest(value);
@@ -176,7 +185,7 @@ export class TestRealmAdapter implements RealmAdapter {
       } else {
         let moduleURLString = `${this.#paths.url}${path.replace(/\.gts$/, '')}`;
 
-        loader.shimModule(moduleURLString, value as object);
+        this.#loader.shimModule(moduleURLString, value as object);
 
         fileRefContent = shimmedModuleIndicator;
       }

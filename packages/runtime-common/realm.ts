@@ -146,6 +146,8 @@ export interface RealmAdapter {
   subscribe(cb: (message: UpdateEventData) => void): Promise<void>;
 
   unsubscribe(): void;
+
+  setLoader(loader: Loader): void;
 }
 
 interface Options {
@@ -292,7 +294,10 @@ export class Realm {
     this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
+
     let loader = virtualNetwork.createLoader();
+    adapter.setLoader?.(loader);
+
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
@@ -1510,13 +1515,11 @@ export class Realm {
   private async readFileAsText(
     path: LocalPath,
     opts: { withFallbacks?: true } = {},
-    loader?: Loader,
   ): Promise<{ content: string; lastModified: number } | undefined> {
     return readFileAsText(
       path,
       this.#adapter.openFile.bind(this.#adapter),
       opts,
-      loader,
     );
   }
 
@@ -1537,11 +1540,7 @@ export class Realm {
   private async realmInfo(_request: Request): Promise<Response> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig = await this.readFileAsText(
-      localPath,
-      undefined,
-      this.loader,
-    );
+    let realmConfig = await this.readFileAsText(localPath, undefined);
     let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
