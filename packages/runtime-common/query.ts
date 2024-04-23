@@ -61,11 +61,11 @@ export interface EqFilter extends TypedFilter {
 
 export type RangeOperator = 'gt' | 'gte' | 'lt' | 'lte';
 export const RANGE_OPERATORS: Record<RangeOperator, string> = {
-  'gt': '>',
-  'gte': '>=',
-  'lt': '<',
-  'lte': '<='
-}
+  gt: '>',
+  gte: '>=',
+  lt: '<',
+  lte: '<=',
+};
 
 export interface RangeFilter extends TypedFilter {
   range: {

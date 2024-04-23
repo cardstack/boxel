@@ -1620,10 +1620,7 @@ const tests = Object.freeze({
     }
   },
 
-  "can filter using 'gt'": async (
-    assert,
-    { indexer, loader, testCards },
-  ) => {
+  "can filter using 'gt'": async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(indexer, [
       {
@@ -1635,7 +1632,7 @@ const tests = Object.freeze({
               street: '123 Main Street',
               city: 'Barksville',
             },
-            age: 35
+            age: 35,
           },
         },
       },
@@ -1648,7 +1645,7 @@ const tests = Object.freeze({
               street: '456 Grand Blvd',
               city: 'Barksville',
             },
-            age: 30
+            age: 30,
           },
         },
       },
@@ -1661,7 +1658,7 @@ const tests = Object.freeze({
               street: '100 Treat Street',
               city: 'Waggington',
             },
-            age: 25
+            age: 25,
           },
         },
       },
@@ -1673,7 +1670,7 @@ const tests = Object.freeze({
       {
         filter: {
           on: type,
-          range: { 'age': { gt: 25 } },
+          range: { age: { gt: 25 } },
         },
       },
       loader,
@@ -1701,7 +1698,7 @@ const tests = Object.freeze({
             address: {
               street: '123 Main Street',
               city: 'Barksville',
-              number: 123
+              number: 123,
             },
           },
         },
@@ -1714,7 +1711,7 @@ const tests = Object.freeze({
             address: {
               street: '456 Grand Blvd',
               city: 'Barksville',
-              number: 456
+              number: 456,
             },
           },
         },
@@ -1727,7 +1724,7 @@ const tests = Object.freeze({
             address: {
               street: '100 Treat Street',
               city: 'Waggington',
-              number: 100
+              number: 100,
             },
           },
         },
@@ -1740,10 +1737,10 @@ const tests = Object.freeze({
       {
         filter: {
           on: type,
-          range: { 
+          range: {
             'address.number': {
-              gt: 100 
-            }
+              gt: 100,
+            },
           },
         },
       },
@@ -1758,10 +1755,7 @@ const tests = Object.freeze({
     );
   },
 
-  "can filter using 'gte'": async (
-    assert,
-    { indexer, loader, testCards },
-  ) => {
+  "can filter using 'gte'": async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(indexer, [
       {
@@ -1773,7 +1767,7 @@ const tests = Object.freeze({
               street: '123 Main Street',
               city: 'Barksville',
             },
-            age: 35
+            age: 35,
           },
         },
       },
@@ -1786,7 +1780,7 @@ const tests = Object.freeze({
               street: '456 Grand Blvd',
               city: 'Barksville',
             },
-            age: 30
+            age: 30,
           },
         },
       },
@@ -1799,7 +1793,7 @@ const tests = Object.freeze({
               street: '100 Treat Street',
               city: 'Waggington',
             },
-            age: 25
+            age: 25,
           },
         },
       },
@@ -1811,13 +1805,15 @@ const tests = Object.freeze({
       {
         filter: {
           on: type,
-          range: { 'age': { gte: 25 } },
+          range: { age: { gte: 25 } },
         },
-        sort: [{
-          on: type,
-          by: 'age',
-          direction: 'desc',
-        }],
+        sort: [
+          {
+            on: type,
+            by: 'age',
+            direction: 'desc',
+          },
+        ],
       },
       loader,
     );
@@ -1830,10 +1826,7 @@ const tests = Object.freeze({
     );
   },
 
-  "can filter using 'lt'": async (
-    assert,
-    { indexer, loader, testCards },
-  ) => {
+  "can filter using 'lt'": async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(indexer, [
       {
@@ -1845,7 +1838,7 @@ const tests = Object.freeze({
               street: '123 Main Street',
               city: 'Barksville',
             },
-            age: 35
+            age: 35,
           },
         },
       },
@@ -1858,7 +1851,7 @@ const tests = Object.freeze({
               street: '456 Grand Blvd',
               city: 'Barksville',
             },
-            age: 30
+            age: 30,
           },
         },
       },
@@ -1871,7 +1864,7 @@ const tests = Object.freeze({
               street: '100 Treat Street',
               city: 'Waggington',
             },
-            age: 25
+            age: 25,
           },
         },
       },
@@ -1883,13 +1876,15 @@ const tests = Object.freeze({
       {
         filter: {
           on: type,
-          range: { 'age': { lt: 35 } },
+          range: { age: { lt: 35 } },
         },
-        sort: [{
-          on: type,
-          by: 'age',
-          direction: 'desc',
-        }],
+        sort: [
+          {
+            on: type,
+            by: 'age',
+            direction: 'desc',
+          },
+        ],
       },
       loader,
     );
@@ -1902,10 +1897,7 @@ const tests = Object.freeze({
     );
   },
 
-  "can filter using 'lte'": async (
-    assert,
-    { indexer, loader, testCards },
-  ) => {
+  "can filter using 'lte'": async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(indexer, [
       {
@@ -1917,7 +1909,7 @@ const tests = Object.freeze({
               street: '123 Main Street',
               city: 'Barksville',
             },
-            age: 35
+            age: 35,
           },
         },
       },
@@ -1930,7 +1922,7 @@ const tests = Object.freeze({
               street: '456 Grand Blvd',
               city: 'Barksville',
             },
-            age: 30
+            age: 30,
           },
         },
       },
@@ -1943,7 +1935,7 @@ const tests = Object.freeze({
               street: '100 Treat Street',
               city: 'Waggington',
             },
-            age: 25
+            age: 25,
           },
         },
       },
@@ -1955,13 +1947,15 @@ const tests = Object.freeze({
       {
         filter: {
           on: type,
-          range: { 'age': { lte: 35 } },
+          range: { age: { lte: 35 } },
         },
-        sort: [{
-          on: type,
-          by: 'age',
-          direction: 'desc',
-        }],
+        sort: [
+          {
+            on: type,
+            by: 'age',
+            direction: 'desc',
+          },
+        ],
       },
       loader,
     );
@@ -1989,7 +1983,7 @@ const tests = Object.freeze({
               street: '123 Main Street',
               city: 'Barksville',
             },
-            age: 35
+            age: 35,
           },
         },
       },
@@ -2002,7 +1996,7 @@ const tests = Object.freeze({
               street: '456 Grand Blvd',
               city: 'Barksville',
             },
-            age: 30
+            age: 30,
           },
         },
       },
@@ -2015,7 +2009,7 @@ const tests = Object.freeze({
               street: '100 Treat Street',
               city: 'Waggington',
             },
-            age: 25
+            age: 25,
           },
         },
       },
@@ -2027,23 +2021,21 @@ const tests = Object.freeze({
       {
         filter: {
           on: type,
-          range: { 'age': { gt: 25, lt: 35 } },
+          range: { age: { gt: 25, lt: 35 } },
         },
-        sort: [{
-          on: type,
-          by: 'age',
-          direction: 'desc',
-        }],
+        sort: [
+          {
+            on: type,
+            by: 'age',
+            direction: 'desc',
+          },
+        ],
       },
       loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(
-      getIds(cards),
-      [vangogh.id],
-      'results are correct',
-    );
+    assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
   },
 } as SharedTests<{
   indexer: Indexer;

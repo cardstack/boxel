@@ -348,25 +348,26 @@ export class Indexer {
     on = filter.on ?? on;
     return every([
       this.typeCondition(on),
-      ...flatten(Object.entries(filter.range).map(([path, range]) => {
-        let query = fieldQuery(path, on, false, 'filter');
-        let cardExpression: FieldArity[][] = [];
-        Object.entries(range).forEach(([operator, value]) => {
-          if (value != null) {
-            let v = fieldValue(path, [param(value)], on, 'filter');
-            cardExpression.push([
-              fieldArity({
-              type: on,
-              path,
-              value: [query, RANGE_OPERATORS[operator as RangeOperator], v],
-              errorHint: 'filter',
-              })]
-            );
-          }
-          
-        });
-        return cardExpression;
-      })),
+      ...flatten(
+        Object.entries(filter.range).map(([path, range]) => {
+          let query = fieldQuery(path, on, false, 'filter');
+          let cardExpression: FieldArity[][] = [];
+          Object.entries(range).forEach(([operator, value]) => {
+            if (value != null) {
+              let v = fieldValue(path, [param(value)], on, 'filter');
+              cardExpression.push([
+                fieldArity({
+                  type: on,
+                  path,
+                  value: [query, RANGE_OPERATORS[operator as RangeOperator], v],
+                  errorHint: 'filter',
+                }),
+              ]);
+            }
+          });
+          return cardExpression;
+        }),
+      ),
     ]);
   }
 
