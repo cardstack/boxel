@@ -1438,12 +1438,28 @@ module('Acceptance | code submode tests', function (hooks) {
       ).getPropertyValue('--boxel-modal-z-index'),
     );
     console.log(
+      'urgent dialog z-index',
+      getComputedStyle(
+        document.querySelector(
+          '[style="--boxel-modal-z-index: var(--boxel-layer-modal-urgent)"] dialog',
+        ),
+      )['z-index'],
+    );
+    console.log(
       'default variable value',
       getComputedStyle(
         document.querySelector(
           '[style="--boxel-modal-z-index: var(--boxel-layer-modal-default)"]',
         )!,
       ).getPropertyValue('--boxel-modal-z-index'),
+    );
+    console.log(
+      'default dialog z-index',
+      getComputedStyle(
+        document.querySelector(
+          '[style="--boxel-modal-z-index: var(--boxel-layer-modal-default)"] dialog',
+        ),
+      )['z-index'],
     );
     await percySnapshot(assert);
     await click(cardCatalogModalOverlay!);
