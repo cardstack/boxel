@@ -3,7 +3,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -233,7 +233,7 @@ export default class RoomMessage extends Component<Signature> {
 
   @tracked private isDisplayingCode = false;
   @tracked private patchCardError: { id: string; error: unknown } | undefined;
-  @tracked private _applyButtonState: ApplyButtonState = 'ready';
+  @tracked private _applyButtonState: ApplyButtonState | undefined = 'ready';
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -330,12 +330,16 @@ export default class RoomMessage extends Component<Signature> {
       this._applyButtonState = (await this.matrixService.getReactionKeyForEvent(
         roomId,
         eventId,
-      )) as Partial<ApplyButtonState>;
+      )) as ApplyButtonState | undefined;
     },
   );
 
+  @cached
   private get applyButtonState() {
-    return this.patchCard.isRunning ? 'applying' : this._applyButtonState;
+    if (this.patchCard.isRunning) {
+      return 'applying';
+    }
+    return this._applyButtonState ?? 'ready';
   }
 
   @action private viewCodeToggle() {

@@ -49,6 +49,7 @@ import type {
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
+  ReactionEvent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -397,15 +398,18 @@ export default class MatrixService extends Service {
     if (!room) {
       throw new Error(`Room ${roomId} not found`);
     }
-    let event = room.events
-      .filter(RoomModule.isReactionEvent)
-      .find((e) => e.content['m.relates_to'].event_id === eventId);
 
+    let event = room.events.find(
+      (e) =>
+        e.type === 'm.reaction' &&
+        e.content['m.relates_to'].rel_type === 'm.annotation' &&
+        e.content['m.relates_to'].event_id === eventId,
+    );
     if (!event) {
-      throw new Error(`ReactionEvent not found for event ${eventId}`);
+      return;
     }
 
-    return event.content['m.relates_to'].key;
+    return (event as ReactionEvent).content['m.relates_to'].key;
   }
 
   async sendMessage(

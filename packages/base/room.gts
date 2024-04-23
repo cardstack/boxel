@@ -797,7 +797,7 @@ interface CommandMessageContent {
   };
 }
 
-interface ReactionEvent extends BaseMatrixEvent {
+export interface ReactionEvent extends BaseMatrixEvent {
   type: 'm.reaction';
   content: ReactionEventContent;
 }
@@ -808,10 +808,6 @@ export interface ReactionEventContent {
     key: string;
     rel_type: 'm.annotation';
   };
-}
-
-export function isReactionEvent(event: MatrixEvent): event is ReactionEvent {
-  return event.type === 'm.reaction';
 }
 
 interface CardMessageEvent extends BaseMatrixEvent {
