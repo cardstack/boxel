@@ -393,6 +393,22 @@ module('query', function (hooks) {
     });
   });
 
+  test(`can filter using 'gt' thru a plural primitive field`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
+  test(`can filter using 'gt' thru a plural composite field`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
   test(`can filter using 'lt'`, async function (assert) {
     await runSharedTest(queryTests, assert, {
       indexer,

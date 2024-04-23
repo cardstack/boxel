@@ -27,6 +27,7 @@ export class Person extends CardDef {
   @field friends = linksToMany(() => Person);
   @field age = contains(NumberField);
   @field isHairy = contains(BooleanField);
+  @field lotteryNumbers = containsMany(NumberField);
 }
 
 export class FancyPerson extends Person {

@@ -42,6 +42,7 @@ import {
   type RangeFilter,
   RANGE_OPERATORS,
   RangeOperator,
+  RangeFilterValue,
 } from './query';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
@@ -348,26 +349,9 @@ export class Indexer {
     on = filter.on ?? on;
     return every([
       this.typeCondition(on),
-      ...flatten(
-        Object.entries(filter.range).map(([path, range]) => {
-          let query = fieldQuery(path, on, false, 'filter');
-          let cardExpression: FieldArity[][] = [];
-          Object.entries(range).forEach(([operator, value]) => {
-            if (value != null) {
-              let v = fieldValue(path, [param(value)], on, 'filter');
-              cardExpression.push([
-                fieldArity({
-                  type: on,
-                  path,
-                  value: [query, RANGE_OPERATORS[operator as RangeOperator], v],
-                  errorHint: 'filter',
-                }),
-              ]);
-            }
-          });
-          return cardExpression;
-        }),
-      ),
+      ...Object.entries(filter.range).map(([key, filterValue]) => {
+        return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
+      }),
     ]);
   }
 
@@ -429,6 +413,30 @@ export class Indexer {
         errorHint: 'filter',
       }),
     ];
+  }
+
+  private fieldRangeFilter(
+    key: string,
+    filterValue: RangeFilterValue,
+    onRef: CodeRef,
+  ): CardExpression {
+    let query = fieldQuery(key, onRef, false, 'filter');
+    let cardExpressions: CardExpression[] = [];
+    Object.entries(filterValue).forEach(([operator, value]) => {
+      if (value != null) {
+        let v = fieldValue(key, [param(value)], onRef, 'filter');
+        cardExpressions.push([
+          fieldArity({
+            type: onRef,
+            path: key,
+            value: [query, RANGE_OPERATORS[operator as RangeOperator], v],
+            errorHint: 'filter',
+          }),
+        ]);
+      }
+    });
+
+    return every(cardExpressions);
   }
 
   private async makeExpression(

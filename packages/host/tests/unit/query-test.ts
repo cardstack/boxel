@@ -77,6 +77,7 @@ module('Unit | query', function (hooks) {
       @field friends = linksToMany(() => Person);
       @field age = contains(NumberField);
       @field isHairy = contains(BooleanField);
+      @field lotteryNumbers = containsMany(NumberField);
     }
     class FancyPerson extends Person {
       @field favoriteColor = contains(StringField);
@@ -442,6 +443,22 @@ module('Unit | query', function (hooks) {
   });
 
   test(`can filter using 'gt' thru nested fields`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`can filter using 'gt' thru a plural primitive field`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`can filter using 'gt' thru a plural composite field`, async function (assert) {
     await runSharedTest(queryTests, assert, {
       indexer,
       loader,

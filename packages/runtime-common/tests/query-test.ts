@@ -1755,6 +1755,163 @@ const tests = Object.freeze({
     );
   },
 
+  "can filter using 'gt' thru a plural primitive field": async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+            },
+            age: 35,
+            lotteryNumbers: [20, 50, 70],
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+            },
+            age: 30,
+            lotteryNumbers: [40, 60, 80],
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+            },
+            age: 25,
+            lotteryNumbers: [10, 20, 30],
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: {
+            lotteryNumbers: {
+              gt: 50,
+            },
+          },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, vangogh.id],
+      'results are correct',
+    );
+  },
+
+  "can filter using 'gt' thru a plural composite field": async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    let mangoDoc = {
+      name: 'Mango',
+      address: {
+        street: '123 Main Street',
+        city: 'Barksville',
+      },
+      age: 35,
+    };
+    let vanGoghDoc = {
+      name: 'Van Gogh',
+      address: {
+        street: '456 Grand Blvd',
+        city: 'Barksville',
+      },
+      age: 30,
+    };
+    let ringoDoc = {
+      name: 'Ringo',
+      address: {
+        street: '100 Treat Street',
+        city: 'Waggington',
+      },
+      age: 25,
+    };
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            ...mangoDoc,
+            friends: [{ ...vanGoghDoc }],
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            ...vanGoghDoc,
+            friends: [{ ...ringoDoc }],
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            ...ringoDoc,
+            friends: [{ ...mangoDoc }],
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: {
+            'friends.age': {
+              gt: 25,
+            },
+          },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, ringo.id],
+      'results are correct',
+    );
+  },
+
   "can filter using 'gte'": async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(indexer, [
