@@ -1429,6 +1429,23 @@ module('Acceptance | code submode tests', function (hooks) {
       '[data-test-card-catalog-modal]',
     )?.previousElementSibling;
     assert.dom(cardCatalogModalOverlay).exists();
+    console.log(
+      'urgent variable value',
+      getComputedStyle(
+        document.querySelector(
+          '[style="--boxel-modal-z-index: var(--boxel-layer-modal-urgent)"]',
+        )!,
+      ).getPropertyValue('--boxel-modal-z-index'),
+    );
+    console.log(
+      'default variable value',
+      getComputedStyle(
+        document.querySelector(
+          '[style="--boxel-modal-z-index: var(--boxel-layer-modal-default)"]',
+        )!,
+      ).getPropertyValue('--boxel-modal-z-index'),
+    );
+    await percySnapshot(assert);
     await click(cardCatalogModalOverlay!);
     assert.dom('[data-test-card-catalog-modal]').doesNotExist();
 
