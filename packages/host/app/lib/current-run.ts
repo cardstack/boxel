@@ -105,6 +105,9 @@ export class CurrentRun {
     entrySetter: EntrySetter;
     renderCard: RenderCard;
   }) {
+    if ((globalThis as any).__enablePgIndexer?.()) {
+      log.debug(`current-run is using db index`);
+    }
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
     this.#realmURL = realmURL;
