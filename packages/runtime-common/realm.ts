@@ -147,7 +147,7 @@ export interface RealmAdapter {
 
   unsubscribe(): void;
 
-  setLoader(loader: Loader): void;
+  setLoader?(loader: Loader): void;
 }
 
 interface Options {
