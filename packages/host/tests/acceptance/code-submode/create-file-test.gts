@@ -8,7 +8,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
@@ -21,9 +20,9 @@ import {
   waitForCodeEditor,
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
-  TestRealmAdapter,
   type TestContextWithSave,
 } from '../../helpers';
+import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const testRealmURL2 = 'http://test-realm/test2/';
@@ -231,10 +230,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       [testRealmURL]: ['read', 'write'],
       [testRealmURL2]: ['read', 'write'],
     };
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+
     await setupAcceptanceTestRealm({
-      loader,
       contents: filesB,
       realmURL: testRealmURL2,
       onFetch: async (req: Request) => {
@@ -247,7 +244,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       },
     });
     ({ adapter } = await setupAcceptanceTestRealm({
-      loader,
       contents: files,
     }));
   });

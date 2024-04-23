@@ -125,7 +125,7 @@ module('Realm Server', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, loader, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -1713,13 +1713,10 @@ module('Realm Server', function (hooks) {
           '*': ['read', 'write'],
         }));
 
-      let testRealmServer2Loader = virtualNetwork.createLoader();
-
       shimExternals(virtualNetwork);
 
       testRealmServer2 = (
         await runTestRealmServer(
-          testRealmServer2Loader,
           virtualNetwork,
           dir.name,
           undefined,
@@ -2034,17 +2031,14 @@ module('Realm Server serving from root', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, loader, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    let testRealmServerLoader = virtualNetwork.createLoader();
-
     testRealmServer = (
       await runTestRealmServer(
-        testRealmServerLoader,
         virtualNetwork,
         dir.name,
         undefined,
@@ -2240,17 +2234,14 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, loader, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    let testRealmServerLoader = virtualNetwork.createLoader();
-
     testRealmServer = (
       await runTestRealmServer(
-        testRealmServerLoader,
         virtualNetwork,
         dir.name,
         undefined,
@@ -2299,10 +2290,7 @@ async function setupPermissionedRealm(permissions: RealmPermissions) {
   shimExternals(virtualNetwork);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
 
-  let testRealmServerLoader = virtualNetwork.createLoader();
-
   ({ testRealm, testRealmServer } = await runTestRealmServer(
-    testRealmServerLoader,
     virtualNetwork,
     dir.name,
     undefined,
@@ -2312,5 +2300,5 @@ async function setupPermissionedRealm(permissions: RealmPermissions) {
 
   request = supertest(testRealmServer);
 
-  return { testRealm, testRealmServer, request, dir, testRealmServerLoader };
+  return { testRealm, testRealmServer, request, dir };
 }

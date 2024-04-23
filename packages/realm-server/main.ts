@@ -130,7 +130,7 @@ if (
 }
 
 let virtualNetwork = new VirtualNetwork();
-let loader = virtualNetwork.createLoader();
+
 shimExternals(virtualNetwork);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
@@ -179,7 +179,6 @@ if (distURL) {
       {
         url,
         adapter: new NodeAdapter(resolve(String(path))),
-        loader,
         indexRunner: getRunner,
         runnerOptsMgr: manager,
         getIndexHTML: async () =>
@@ -187,6 +186,7 @@ if (distURL) {
         matrix: { url: new URL(matrixURL), username, password },
         realmSecretSeed: REALM_SECRET_SEED,
         permissions: realmPermissions.users,
+        virtualNetwork,
       },
       {
         deferStartUp: true,

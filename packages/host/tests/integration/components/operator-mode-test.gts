@@ -44,10 +44,10 @@ import {
   setupOnSave,
   showSearchResult,
   type TestContextWithSave,
-  TestRealmAdapter,
   getMonacoContent,
   waitForCodeEditor,
 } from '../../helpers';
+import { TestRealmAdapter } from '../../helpers/adapter';
 import {
   setupMatrixServiceMock,
   MockMatrixService,
