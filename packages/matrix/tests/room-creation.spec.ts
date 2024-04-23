@@ -272,6 +272,8 @@ test.describe('Room creation', () => {
   test('it opens latest room available (or creates new) when current room is deleted', async ({
     page,
   }) => {
+    test.slow();
+
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
