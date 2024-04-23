@@ -49,7 +49,7 @@ module('Integration | search-index', function (_hooks) {
         });
 
         hooks.afterEach(function (this: RenderingTestContext) {
-          (globalThis as any).__enablePgIndexer = () => false;
+          delete (globalThis as any).__enablePgIndexer;
         });
 
         setupLocalIndexing(hooks);
