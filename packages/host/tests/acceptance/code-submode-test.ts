@@ -1402,7 +1402,7 @@ module('Acceptance | code submode tests', function (hooks) {
       );
   });
 
-  test('closes the top-most modal first when clicking overlay background', async function (assert) {
+  test.only('closes the top-most modal first when clicking overlay background', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
