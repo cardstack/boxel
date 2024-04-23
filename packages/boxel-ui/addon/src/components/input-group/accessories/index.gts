@@ -151,7 +151,6 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         @selected={{@selected}}
         @onChange={{@onChange}}
         @onBlur={{@onBlur}}
-        @renderInPlace={{true}}
         data-test-boxel-input-group-select-accessory-trigger
         ...attributes
         as |item|
@@ -204,6 +203,11 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         border-color: var(--boxel-error-100);
       }
 
+      .boxel-input-group__select-accessory
+        :deep(.ember-power-select-status-icon) {
+        position: relative;
+      }
+
       :global(.boxel-input-group__select-accessory__dropdown ul) {
         font: var(--boxel-button-font, var(--boxel-font-sm));
         font-weight: 600;
@@ -211,9 +215,12 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
           var(--boxel-sp-xs);
       }
 
-      .boxel-input-group__select-accessory
-        :deep(.ember-power-select-status-icon) {
-        position: relative;
+      :global(
+          .boxel-input-group__select-accessory__dropdown
+            .ember-power-select-option
+        ) {
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
+          var(--boxel-sp-xs);
       }
     </style>
   </template>;

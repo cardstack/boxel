@@ -50,7 +50,6 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       background: none;
       display: flex;
       gap: var(--boxel-sp-sm);
-      padding-right: var(--boxel-sp);
     }
 
     .boxel-select:after {
