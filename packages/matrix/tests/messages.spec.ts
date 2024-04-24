@@ -890,22 +890,8 @@ test.describe('Room messages', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass');
-    
-    //Generating a message that is big enough to trigger M_TOO_LARGE error
-    let pElements = [];
-    let pElement = `<p>
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam vitae malesuada leo. 
-        Sed in fermentum nunc. Integer vestibulum posuere felis, et placerat neque lacinia ut. 
-        Cras at lectus vitae lorem consequat egestas a a lorem. Nulla aliquet felis risus, 
-        sit amet interdum purus placerat vel. Vivamus at augue et nisi suscipit consequat id in massa. 
-        Mauris dictum erat nec nunc lacinia, nec faucibus enim consequat. Cras varius, velit eget 
-        consequat euismod, eros eros vulputate libero, vel tincidunt felis nisl vel dui. Integer 
-        pellentesque luctus consequat. Donec nec ligula lorem. Curabitur gravida non sem nec fringilla.
-    </p>`
-    for (let i=1; i<=100; i++) {
-      pElements.push(pElement);
-    }
-    await page.locator('[data-test-message-field]').fill(pElements.join(''));
+
+    await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
     await page.locator('[data-test-send-message-btn]').click();
 
     await expect(page.locator('[data-test-ai-assistant-message]')).toHaveCount(1);
