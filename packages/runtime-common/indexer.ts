@@ -343,14 +343,9 @@ export class Indexer {
       return any(
         filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
       );
+    } else {
+      assertNever(filter);
     }
-
-    // TODO handle filter for range
-    // refer to hub v2 for a good reference:
-    // https://github.dev/cardstack/cardstack/blob/d36e6d114272a9107a7315d95d2f0f415e06bf5c/packages/hub/pgsearch/pgclient.ts
-
-    // TODO assert "notNever()" after we have implemented the "range" filter so we
-    // get type errors if new filters are introduced
     throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
   }
 
@@ -568,6 +563,7 @@ export class Indexer {
                 tableValuedTree(
                   'search_doc',
                   trimPathAtFirstPluralField(pathTraveled),
+                  path,
                   'fullkey',
                 ),
                 `LIKE '$.${
@@ -613,6 +609,7 @@ export class Indexer {
             tableValuedTree(
               'search_doc',
               rootPluralPath,
+              path,
               useJsonBValue ? 'jsonb_value' : 'text_value',
             ),
           ];
@@ -629,7 +626,7 @@ export class Indexer {
           if (isFieldPlural(field)) {
             rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
             return [
-              tableValuedTree('search_doc', rootPluralPath, 'text_value'),
+              tableValuedTree('search_doc', rootPluralPath, path, 'text_value'),
             ];
           }
           return expression;
@@ -717,14 +714,30 @@ export class Indexer {
     if (!api) {
       throw new Error(`could not load card API`);
     }
-    let fields = api.getFields(cardOrField);
-    let field = fields[currentSegment];
-    if (!field) {
-      throw new Error(
-        `Your filter refers to nonexistent field "${currentSegment}" on type ${JSON.stringify(
-          identifyCard(cardOrField),
-        )}`,
-      );
+    let field: Field;
+    if (currentSegment === '_cardType') {
+      // this is a little awkward--we have the need to treat the card type as a
+      // type of string field that we can query against from the index (e.g. the
+      // cards grid sorts by the card's display name). current-run is injecting
+      // this into the searchDoc during index time.
+      field = {
+        card: (
+          await loader.import<{ default: typeof CardAPI.FieldDef }>(
+            'https://cardstack.com/base/string',
+          )
+        ).default,
+        fieldType: 'contains',
+      } as unknown as Field; // just pretend this is an actual field
+    } else {
+      let fields = api.getFields(cardOrField, { includeComputeds: true });
+      field = fields[currentSegment];
+      if (!field) {
+        throw new Error(
+          `Your filter refers to nonexistent field "${currentSegment}" on type ${JSON.stringify(
+            identifyCard(cardOrField),
+          )}`,
+        );
+      }
     }
     // we use '[]' to denote plural fields as that has important ramifications
     // to how we compose our queries in the various handlers and ultimately in

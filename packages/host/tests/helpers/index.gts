@@ -527,13 +527,13 @@ async function setupTestRealm({
     matrix: testMatrix,
     permissions,
     realmSecretSeed: testRealmSecretSeed,
+    virtualNetwork,
     ...((globalThis as any).__enablePgIndexer?.()
       ? {
           dbAdapter: new SQLiteAdapter(sqlSchema),
           queue: new BrowserQueue(),
         }
       : {}),
-    virtualNetwork,
   });
   virtualNetwork.mount(realm.maybeHandle);
 

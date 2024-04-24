@@ -1387,7 +1387,7 @@ export class Realm {
     }
 
     let useWorkInProgressIndex = Boolean(
-      request.headers.get('x-boxel-use-wip-index'),
+      request.headers.get('X-Boxel-Use-WIP-Index'),
     );
 
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
@@ -1544,7 +1544,7 @@ export class Realm {
 
   private async search(request: Request): Promise<Response> {
     let useWorkInProgressIndex = Boolean(
-      request.headers.get('x-boxel-use-wip-index'),
+      request.headers.get('X-Boxel-Use-WIP-Index'),
     );
     let doc = await this.#searchIndex.search(
       parseQueryString(new URL(request.url).search.slice(1)),

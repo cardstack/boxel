@@ -376,6 +376,12 @@ export class SearchIndex {
         name: 'CardDef',
       });
 
+      // fallback to always sorting by id
+      query.sort = query.sort ?? [];
+      query.sort.push({
+        by: 'id',
+        on: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+      });
       doc = {
         data: flatMap([...this.#index.instances.values()], (maybeError) =>
           maybeError.type !== 'error' ? [maybeError.entry] : [],
@@ -514,6 +520,7 @@ export class SearchIndex {
           realmVersion: -1,
           realmURL: this.#realm.url,
           types: result.entry.types,
+          indexedAt: 0,
           deps: [...result.entry.deps],
         };
       }

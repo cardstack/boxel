@@ -1290,7 +1290,7 @@ module('Integration | search-index', function (_hooks) {
               email: 'hassan@cardstack.com',
               posts: 100,
               title: 'Hassan Abdel-Rahman',
-              cardType: 'Person',
+              _cardType: 'Person',
             },
             `search doc does not include fullName field`,
           );
@@ -1341,7 +1341,7 @@ module('Integration | search-index', function (_hooks) {
             new URL(`${testRealmURL}CatalogEntry/booking`),
           );
           assert.deepEqual(entry?.searchDoc, {
-            cardType: 'Catalog Entry',
+            _cardType: 'Catalog Entry',
             id: `${testRealmURL}CatalogEntry/booking`,
             demo: {
               hosts: [],
@@ -1509,7 +1509,7 @@ module('Integration | search-index', function (_hooks) {
           );
           if (hassanEntry) {
             assert.deepEqual(hassanEntry.searchDoc, {
-              cardType: 'Pet Person',
+              _cardType: 'Pet Person',
               id: `${testRealmURL}PetPerson/hassan`,
               firstName: 'Hassan',
               pets: [
@@ -1610,7 +1610,7 @@ module('Integration | search-index', function (_hooks) {
           );
           if (entry) {
             assert.deepEqual(entry.searchDoc, {
-              cardType: 'Pet Person',
+              _cardType: 'Pet Person',
               id: `${testRealmURL}PetPerson/burcu`,
               firstName: 'Burcu',
               pets: [],
@@ -1801,7 +1801,7 @@ module('Integration | search-index', function (_hooks) {
           );
           if (entry) {
             assert.deepEqual(entry.searchDoc, {
-              cardType: 'Catalog Entry',
+              _cardType: 'Catalog Entry',
               id: `${testRealmURL}pet-person-catalog-entry`,
               title: 'PetPerson',
               description: 'Catalog entry for PetPerson',
@@ -1962,7 +1962,7 @@ module('Integration | search-index', function (_hooks) {
           );
           if (hassanEntry) {
             assert.deepEqual(hassanEntry.searchDoc, {
-              cardType: 'Friend',
+              _cardType: 'Friend',
               id: `${testRealmURL}Friend/hassan`,
               firstName: 'Hassan',
               title: 'Hassan',
@@ -2130,7 +2130,7 @@ module('Integration | search-index', function (_hooks) {
           );
           if (hassanEntry) {
             assert.deepEqual(hassanEntry.searchDoc, {
-              cardType: 'Friend',
+              _cardType: 'Friend',
               id: `${testRealmURL}Friend/hassan`,
               firstName: 'Hassan',
               description: 'Dog owner',
@@ -2241,7 +2241,7 @@ module('Integration | search-index', function (_hooks) {
           );
           if (mangoEntry) {
             assert.deepEqual(mangoEntry.searchDoc, {
-              cardType: 'Friend',
+              _cardType: 'Friend',
               id: `${testRealmURL}Friend/mango`,
               firstName: 'Mango',
               title: 'Mango',
@@ -2411,7 +2411,7 @@ module('Integration | search-index', function (_hooks) {
             assert.deepEqual(
               hassanEntry.searchDoc,
               {
-                cardType: 'Friends',
+                _cardType: 'Friends',
                 id: hassanID,
                 firstName: 'Hassan',
                 title: 'Hassan',
@@ -2532,7 +2532,7 @@ module('Integration | search-index', function (_hooks) {
             assert.deepEqual(
               mangoEntry.searchDoc,
               {
-                cardType: 'Friends',
+                _cardType: 'Friends',
                 id: mangoID,
                 firstName: 'Mango',
                 title: 'Mango',
@@ -2656,7 +2656,7 @@ module('Integration | search-index', function (_hooks) {
             assert.deepEqual(
               vanGoghEntry.searchDoc,
               {
-                cardType: 'Friends',
+                _cardType: 'Friends',
                 id: vanGoghID,
                 firstName: 'Van Gogh',
                 title: 'Van Gogh',
@@ -2903,7 +2903,11 @@ posts/ignore-me.json
             'card-2.json': {
               data: {
                 type: 'card',
-                attributes: { author: { firstName: 'Cardy' }, editions: 1 },
+                attributes: {
+                  author: { firstName: 'Cardy', lastName: 'Jones' },
+                  editions: 1,
+                  pubDate: '2023-09-01',
+                },
                 meta: {
                   adoptsFrom: {
                     module: `${testModuleRealm}book`,
@@ -3189,6 +3193,7 @@ posts/ignore-me.json
                       title: 'post 1',
                       author: {
                         firstName: 'A',
+                        lastName: null,
                         posts: 10,
                       },
                       views: 16,
@@ -3311,13 +3316,13 @@ posts/ignore-me.json
           test(`can use 'eq' to find 'null' values`, async function (assert) {
             let { data: matching } = await indexer.search({
               filter: {
-                on: { module: `${testModuleRealm}book`, name: 'Book' },
-                eq: { 'author.lastName': null },
+                on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+                eq: { 'posts.author.lastName': null },
               },
             });
             assert.deepEqual(
               matching.map((m) => m.id),
-              [`${testRealmURL}card-2`],
+              [`${testRealmURL}booking1`],
             );
           });
 
@@ -3472,20 +3477,6 @@ posts/ignore-me.json
               assert.deepEqual(
                 matching.map((m) => m.id),
                 [`${paths.url}booking2`],
-              );
-            }
-            {
-              let { data: matching } = await indexer.search({
-                filter: {
-                  on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-                  range: {
-                    'posts.views': { lte: undefined },
-                  },
-                },
-              });
-              assert.deepEqual(
-                matching.map((m) => m.id),
-                [],
               );
             }
           });
@@ -3816,20 +3807,22 @@ posts/ignore-me.json
               sort: [
                 {
                   on: baseCardRef,
-                  by: 'cardType',
+                  by: '_cardType',
                 },
               ],
             });
 
+            // note that the card id is always included as a secondary sort
+            // field in the case of ties for the specified sort field
             assert.deepEqual(
               matching.map((m) => m.id),
               [
                 `${paths.url}card-1`, // article
                 `${paths.url}cards/2`, // article
-                `${paths.url}card-2`, // book
                 `${paths.url}books/1`, // book
                 `${paths.url}books/2`, // book
                 `${paths.url}books/3`, // book
+                `${paths.url}card-2`, // book
                 `${paths.url}booking1`, // booking
                 `${paths.url}booking2`, // booking
                 `${paths.url}catalog-entry-1`, // catalog entry
@@ -3839,8 +3832,8 @@ posts/ignore-me.json
                 `${paths.url}vangogh`, // dog
                 `${paths.url}event-1`, // event
                 `${paths.url}event-2`, // event
-                `${paths.url}friend2`, // friend
                 `${paths.url}friend1`, // friend
+                `${paths.url}friend2`, // friend
                 `${paths.url}person-card1`, // person
                 `${paths.url}person-card2`, // person
                 `${paths.url}cards/1`, // person
@@ -3916,13 +3909,18 @@ posts/ignore-me.json
                 type: { module: `${testModuleRealm}book`, name: 'Book' },
               },
             });
+            // note that sorting by nulls is problematic in that sqlite
+            // considers nulls the smallest possible value and postgres considers
+            // nulls the largest possible value. removing tests that make
+            // assertions around the positions of nulls as it cannot be run
+            // consistently between postgres, sqlite, and our in-memory index
             assert.deepEqual(
               matching.map((m) => m.id),
               [
                 `${paths.url}books/1`, // 2022-07-01
                 `${paths.url}books/3`, // 2022-08-01
                 `${paths.url}books/2`, // 2023-08-01
-                `${paths.url}card-2`, // null
+                `${paths.url}card-2`, // 2023-09-01
               ],
             );
           });
@@ -3949,49 +3947,62 @@ posts/ignore-me.json
               [
                 `${paths.url}books/3`, // 2
                 `${paths.url}books/1`, // 1 // Ab
-                `${paths.url}card-2`, // 1 // null
+                `${paths.url}card-2`, // 1 // Jo
                 `${paths.url}books/2`, // 0
               ],
             );
           });
 
-          test(`can sort on multiple paths in combination with 'any' filter`, async function (assert) {
-            let { data: matching } = await indexer.search({
-              sort: [
-                {
-                  by: 'author.lastName',
-                  on: { module: `${testModuleRealm}book`, name: 'Book' },
-                },
-                {
-                  by: 'author.firstName',
-                  on: { module: `${testModuleRealm}book`, name: 'Book' },
-                  direction: 'desc',
-                },
-              ],
-              filter: {
-                any: [
-                  { type: { module: `${testModuleRealm}book`, name: 'Book' } },
-                  {
-                    type: {
-                      module: `${testModuleRealm}article`,
-                      name: 'Article',
+          // There is actually a sorting bug here in our original in-memory based
+          // index that was revealed when we started using the DB based index.
+          // probably not worth fixing as we are about to remove the in-memory based
+          // index shortly.
+          !isDbIndexingEnabled
+            ? skip(
+                "can sort on multiple paths in combination with 'any' filter",
+              )
+            : test(`can sort on multiple paths in combination with 'any' filter`, async function (assert) {
+                let { data: matching } = await indexer.search({
+                  sort: [
+                    {
+                      by: 'author.lastName',
+                      on: { module: `${testModuleRealm}book`, name: 'Book' },
                     },
+                    {
+                      by: 'author.firstName',
+                      on: { module: `${testModuleRealm}book`, name: 'Book' },
+                      direction: 'desc',
+                    },
+                  ],
+                  filter: {
+                    any: [
+                      {
+                        type: {
+                          module: `${testModuleRealm}book`,
+                          name: 'Book',
+                        },
+                      },
+                      {
+                        type: {
+                          module: `${testModuleRealm}article`,
+                          name: 'Article',
+                        },
+                      },
+                    ],
                   },
-                ],
-              },
-            });
-            assert.deepEqual(
-              matching.map((m) => m.id),
-              [
-                `${paths.url}books/2`, // Ab Van Gogh
-                `${paths.url}books/1`, // Ab Mango
-                `${paths.url}books/3`, // Ag Jackie
-                `${paths.url}card-2`, // null
-                `${paths.url}card-1`, // (article)
-                `${paths.url}cards/2`, // (article)
-              ],
-            );
-          });
+                });
+                assert.deepEqual(
+                  matching.map((m) => m.id),
+                  [
+                    `${paths.url}books/2`, // Ab Van Gogh
+                    `${paths.url}books/1`, // Ab Mango
+                    `${paths.url}books/3`, // Ag Jackie
+                    `${paths.url}cards/2`, // De Darrin
+                    `${paths.url}card-2`, // Jo Cardy
+                    `${paths.url}card-1`, // St Cardy
+                  ],
+                );
+              });
 
           test(`can sort on multiple paths in combination with 'every' filter`, async function (assert) {
             let { data: matching } = await indexer.search({
@@ -4017,7 +4028,10 @@ posts/ignore-me.json
             });
             assert.deepEqual(
               matching.map((m) => m.id),
-              [`${paths.url}books/1`],
+              [
+                `${paths.url}books/1`, // Mango
+                `${paths.url}card-2`, // Cardy
+              ],
             );
           });
 

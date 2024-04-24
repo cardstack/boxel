@@ -132,7 +132,7 @@ export class CurrentRun {
     this.loader.prependURLHandlers([
       async (req) => {
         if (this.#isIndexing) {
-          req.headers.set('x-boxel-use-wip-index', 'true');
+          req.headers.set('X-Boxel-Use-WIP-Index', 'true');
         }
         return null;
       },
@@ -504,10 +504,13 @@ export class CurrentRun {
         );
       }
 
+      // Add a "pseudo field" to the search doc for the card type. We use the
+      // "_" prefix to make a decent attempt to not pollute the userland
+      // namespace for cards
       if (cardType.displayName === 'Card') {
-        searchData.cardType = cardType.name;
+        searchData._cardType = cardType.name;
       } else {
-        searchData.cardType = cardType.displayName;
+        searchData._cardType = cardType.displayName;
       }
     } catch (err: any) {
       uncaughtError = err;

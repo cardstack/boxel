@@ -435,8 +435,8 @@ export class Loader {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
+    let request = this.asRequest(urlOrRequest, init);
     try {
-      let request = this.asRequest(urlOrRequest, init);
       for (let handler of this.urlHandlers) {
         let result = await handler(request);
         if (result) {
@@ -448,23 +448,17 @@ export class Loader {
         }
       }
 
-      let shimmedModule = this.moduleShims.get(
-        this.asRequest(urlOrRequest, init).url,
-      );
+      let shimmedModule = this.moduleShims.get(request.url);
       if (shimmedModule) {
         let response = new Response();
         (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
         return response;
       }
 
-      return await this.fetchImplementation(this.asRequest(urlOrRequest, init));
+      return await this.fetchImplementation(request);
     } catch (err: any) {
-      let url =
-        urlOrRequest instanceof Request
-          ? urlOrRequest.url
-          : String(urlOrRequest);
-      this.log.error(`fetch failed for ${url}`, err);
-      return new Response(`fetch failed for ${url}`, {
+      this.log.error(`fetch failed for ${request.url}`, err);
+      return new Response(`fetch failed for ${request.url}`, {
         status: 500,
         statusText: err.message,
       });
