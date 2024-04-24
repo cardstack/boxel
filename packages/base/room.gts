@@ -23,7 +23,11 @@ import { cached } from '@glimmer/tracking';
 import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
 import { md5 } from 'super-fast-md5';
-import { EventStatus } from 'matrix-js-sdk';
+import { EventStatus, MatrixError } from 'matrix-js-sdk';
+
+const ErrorMessage: Record<string, string> = {
+  ['M_TOO_LARGE']: 'Message is too large',
+};
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -281,6 +285,11 @@ export class MessageField extends FieldDef {
   // to verify whether the message is already sent or not.
   @field clientGeneratedId = contains(StringField);
   @field status = contains(StringField);
+  @field isRetryable = contains(BooleanField, {
+    computeVia: function (this: MessageField) {
+      return this.errorMessage !== ErrorMessage['M_TOO_LARGE'];
+    },
+  });
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -517,7 +526,11 @@ export class RoomField extends FieldDef {
         };
 
         if (event.status === 'cancelled' || event.status === 'not_sent') {
-          (cardArgs as any).errorMessage = 'Failed to send';
+          (cardArgs as any).errorMessage =
+            event.error?.data.errcode &&
+            Object.keys(ErrorMessage).includes(event.error?.data.errcode)
+              ? ErrorMessage[event.error?.data.errcode]
+              : 'Failed to send';
         }
 
         if ('errorMessage' in event.content) {
@@ -674,6 +687,7 @@ interface BaseMatrixEvent {
     prev_sender?: string;
   };
   status: EventStatus | null;
+  error?: MatrixError;
 }
 
 interface RoomStateEvent extends BaseMatrixEvent {
