@@ -1,4 +1,4 @@
-import { isNode, executableExtensions } from './index';
+import { isNode, executableExtensions, Loader } from './index';
 import type { FileRef } from './realm';
 import type { LocalPath } from './paths';
 
@@ -74,16 +74,17 @@ export async function readFileAsText(
 // explicit file extensions in your source code
 export async function getFileWithFallbacks(
   path: LocalPath,
-  openFile: (path: string) => Promise<FileRef | undefined>,
+  openFile: (path: string, loader?: Loader) => Promise<FileRef | undefined>,
   fallbackExtensions: string[],
+  loader?: Loader,
 ): Promise<FileRef | undefined> {
-  let result = await openFile(path);
+  let result = await openFile(path, loader);
   if (result) {
     return result;
   }
 
   for (let extension of fallbackExtensions) {
-    result = await openFile(path + extension);
+    result = await openFile(path + extension, loader);
     if (result) {
       return result;
     }

@@ -7,12 +7,10 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
     xmlns='http://www.w3.org/2000/svg'
     xml:space='preserve'
-    width='800'
-    height='800'
     fill='var(--icon-color, #000)'
     stroke='var(--icon-color, #000)'
     stroke-width='20'
-    viewBox='0 0 500.462 500.462'
+    viewBox='-10 68.31 520.46 363.84'
     ...attributes
   ><path
       d='m328.538 78.313-13.923 13.923 158 157.99-158 158 13.923 13.923 171.924-171.923zM185.837 92.236l-13.924-13.923L0 250.226l171.913 171.923 13.924-13.923-157.991-158z'

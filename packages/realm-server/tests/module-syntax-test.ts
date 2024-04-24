@@ -1,26 +1,11 @@
 import { module, test } from 'qunit';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-import { dirSync } from 'tmp';
-import {
-  baseRealm,
-  baseCardRef,
-  baseFieldRef,
-  VirtualNetwork,
-} from '@cardstack/runtime-common';
-import { testRealm, createRealm } from './helpers';
+
+import { baseCardRef, baseFieldRef } from '@cardstack/runtime-common';
+import { testRealm } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { shimExternals } from '../lib/externals';
 
 module('module-syntax', function () {
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
-  loader.addURLMapping(
-    new URL(baseRealm.url),
-    new URL('http://localhost:4201/base/'),
-  );
-  shimExternals(virtualNetwork);
-
   function addField(src: string, addFieldAtIndex?: number) {
     let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person.gts`));
     mod.addField({
@@ -758,17 +743,6 @@ module('module-syntax', function () {
   });
 
   test('can add a linksTo field', async function (assert) {
-    let realm = await createRealm(loader, dirSync().name, {
-      'pet.gts': `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
-      export class Pet extends CardDef {
-        @field petName = contains(StringField);
-      }
-    `,
-    });
-    await realm.ready;
-
     let src = `
       import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringField from "https://cardstack.com/base/string";

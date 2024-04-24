@@ -65,7 +65,7 @@ export default class RealmDropdown extends Component<Signature> {
           {{else}}
             Select a workspace
           {{/if}}
-          <DropdownArrowDown class='arrow-icon' width='22px' height='22px' />
+          <DropdownArrowDown class='arrow-icon' width='18px' height='18px' />
         </Button>
       </:trigger>
       <:content as |dd|>
@@ -93,10 +93,10 @@ export default class RealmDropdown extends Component<Signature> {
       .arrow-icon {
         --icon-color: var(--boxel-highlight);
         margin-left: auto;
-        flex-shrink: 0;
+        padding-right: var(--boxel-sp-xxxs);
       }
       .realm-dropdown-trigger[aria-expanded='true'] .arrow-icon {
-        transform: rotate(180deg);
+        transform: scaleY(-1);
       }
       .selected-item {
         text-overflow: ellipsis;

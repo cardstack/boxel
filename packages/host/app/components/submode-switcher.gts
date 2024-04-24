@@ -59,9 +59,9 @@ export default class SubmodeSwitcher extends Component<Signature> {
               }}
             >
               {{#if this.isExpanded}}
-                <DropdownArrowUp width='22px' height='22px' />
+                <DropdownArrowUp width='12px' height='12px' />
               {{else}}
-                <DropdownArrowDown width='22px' height='22px' />
+                <DropdownArrowDown width='12px' height='12px' />
               {{/if}}
             </div>
           </Button>
@@ -120,6 +120,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
       }
       .arrow-icon {
         margin-left: auto;
+        padding-right: var(--boxel-sp-4xs);
 
         display: flex;
       }

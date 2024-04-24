@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let sqlSchema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
 module.exports = function (environment) {
   const ENV = {
@@ -57,6 +57,9 @@ module.exports = function (environment) {
         ? 'http://test-realm/test/'
         : process.env.OWN_REALM_URL || 'http://localhost:4200/',
     sqlSchema,
+    featureFlags: {
+      'pg-indexer': process.env.PG_INDEXER,
+    },
   };
 
   if (environment === 'development') {
@@ -94,3 +97,26 @@ module.exports = function (environment) {
 
   return ENV;
 };
+
+function getLatestSchemaFile() {
+  const migrationsDir = path.resolve(
+    path.join(__dirname, '..', '..', 'realm-server', 'migrations'),
+  );
+  let migrations = fs.readdirSync(migrationsDir);
+  let lastMigration = migrations
+    .filter((f) => f !== '.eslintrc.js')
+    .sort()
+    .pop();
+  const schemaDir = path.join(__dirname, 'schema');
+  let files = fs.readdirSync(schemaDir);
+  let latestSchemaFile = files.sort().pop();
+  if (
+    lastMigration.replace(/_.*/, '') !== latestSchemaFile.replace(/_.*/, '') &&
+    ['development', 'test'].includes(process.env.EMBER_ENV)
+  ) {
+    throw new Error(
+      `The sqlite schema file is out of date--please regenerate the sqlite schema file`,
+    );
+  }
+  return path.join(schemaDir, latestSchemaFile);
+}

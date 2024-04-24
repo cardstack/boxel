@@ -53,6 +53,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         'ai-assistant-message'
         is-from-assistant=@isFromAssistant
         is-pending=@isPending
+        is-error=@errorMessage
       }}
       {{ScrollIntoView}}
       data-test-ai-assistant-message
@@ -209,6 +210,13 @@ export default class AiAssistantMessage extends Component<Signature> {
         color: var(--boxel-500);
       }
 
+      .is-error .content,
+      .is-error .content .cards > :deep(.card-pill),
+      .is-error .content .cards > :deep(.card-pill .boxel-card-container) {
+        background: var(--boxel-200);
+        color: var(--boxel-500);
+      }
+
       .content > :deep(.patch-message) {
         font-weight: 700;
         letter-spacing: var(--boxel-lsp-sm);
@@ -239,6 +247,9 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       .error-message {
         align-self: center;
+        overflow: hidden;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
       }
       .retry-button {
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);

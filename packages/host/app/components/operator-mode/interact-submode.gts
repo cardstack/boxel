@@ -102,7 +102,7 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
       }}
       {{on 'click' (fn @onTrigger @triggerSide)}}
     >
-      <Download width='25' height='25' />
+      <Download width='19' height='19' />
     </button>
   </template>
 }
@@ -532,7 +532,7 @@ export default class InteractSubmode extends Component<Signature> {
     >
       <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
         {{#if (eq this.allStackItems.length 0)}}
-          <div class='no-cards'>
+          <div class='no-cards' data-test-empty-stack>
             <p class='add-card-title'>
               Add a card to get started
             </p>
@@ -542,7 +542,7 @@ export default class InteractSubmode extends Component<Signature> {
               {{on 'click' (fn (perform this.addCard))}}
               data-test-add-card-button
             >
-              <IconPlus width='50px' height='50px' />
+              <IconPlus width='36px' height='36px' />
             </button>
           </div>
         {{else}}

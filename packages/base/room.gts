@@ -23,6 +23,11 @@ import { cached } from '@glimmer/tracking';
 import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
 import { md5 } from 'super-fast-md5';
+import { EventStatus, MatrixError } from 'matrix-js-sdk';
+
+const ErrorMessage: Record<string, string> = {
+  ['M_TOO_LARGE']: 'Message is too large',
+};
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -135,7 +140,7 @@ class RoomMembershipField extends FieldDef {
   };
 }
 
-type CardArgs = {
+type MessageFieldArgs = {
   author: RoomMemberField;
   created: Date;
   updated: Date;
@@ -147,6 +152,7 @@ type CardArgs = {
   command: string | null;
   isStreamingFinished?: boolean;
   clientGeneratedId?: string | null;
+  status: EventStatus | null;
 };
 
 type AttachedCardResource = {
@@ -245,6 +251,7 @@ class CommandType extends FieldDef {
 class PatchField extends FieldDef {
   @field commandType = contains(CommandType);
   @field payload = contains(PatchObjectField);
+  @field eventId = contains(StringField);
 }
 
 // A map from a hash of roomId + card document to the first card fragment event id.
@@ -277,6 +284,12 @@ export class MessageField extends FieldDef {
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
   @field clientGeneratedId = contains(StringField);
+  @field status = contains(StringField);
+  @field isRetryable = contains(BooleanField, {
+    computeVia: function (this: MessageField) {
+      return this.errorMessage !== ErrorMessage['M_TOO_LARGE'];
+    },
+  });
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -498,7 +511,7 @@ export class RoomField extends FieldDef {
         }
 
         let author = upsertRoomMember({ room: this, userId: event.sender });
-        let cardArgs: CardArgs = {
+        let cardArgs: MessageFieldArgs = {
           author,
           created: new Date(event.origin_server_ts),
           updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
@@ -509,7 +522,16 @@ export class RoomField extends FieldDef {
           transactionId: event.unsigned?.transaction_id || null,
           attachedCard: null,
           command: null,
+          status: event.status,
         };
+
+        if (event.status === 'cancelled' || event.status === 'not_sent') {
+          (cardArgs as any).errorMessage =
+            event.error?.data.errcode &&
+            Object.keys(ErrorMessage).includes(event.error?.data.errcode)
+              ? ErrorMessage[event.error?.data.errcode]
+              : 'Failed to send';
+        }
 
         if ('errorMessage' in event.content) {
           (cardArgs as any).errorMessage = event.content.errorMessage;
@@ -560,6 +582,7 @@ export class RoomField extends FieldDef {
             ...cardArgs,
             formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
             command: new PatchField({
+              eventId: event_id,
               commandType: command.type,
               payload: command,
             }),
@@ -574,14 +597,21 @@ export class RoomField extends FieldDef {
         }
 
         if (messageField) {
-          newMessages.set(event_id, messageField);
+          newMessages.set(
+            (event.content as CardMessageContent).clientGeneratedId ?? event_id,
+            messageField,
+          );
           index++;
         }
       }
 
-      // upodate the cache with the new messages
-      for (let [eventId, message] of newMessages) {
-        cache.set(eventId, message);
+      // update the cache with the new messages
+      for (let [id, message] of newMessages) {
+        // The `id` can either be an `eventId` or `clientGeneratedId`.
+        // For messages sent by the user, we prefer to use `clientGeneratedId`
+        // because `eventId` can change in certain scenarios,
+        // such as when resending a failed message or updating its status from sending to sent.
+        cache.set(id, message);
       }
 
       // this sort should hopefully be very optimized since events will
@@ -657,6 +687,8 @@ interface BaseMatrixEvent {
     prev_content?: any;
     prev_sender?: string;
   };
+  status: EventStatus | null;
+  error?: MatrixError;
 }
 
 interface RoomStateEvent extends BaseMatrixEvent {
@@ -753,24 +785,43 @@ interface MessageEvent extends BaseMatrixEvent {
 
 interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: {
-    data: {
-      command: any;
-    };
-    'm.relates_to'?: {
-      rel_type: string;
-      event_id: string;
-    };
-    msgtype: 'org.boxel.command';
-    format: 'org.matrix.custom.html';
-    body: string;
-    formatted_body: string;
-  };
+  content: CommandMessageContent;
   unsigned: {
     age: number;
     transaction_id: string;
     prev_content?: any;
     prev_sender?: string;
+  };
+}
+
+interface CommandMessageContent {
+  'm.relates_to'?: {
+    rel_type: string;
+    event_id: string;
+  };
+  msgtype: 'org.boxel.command';
+  format: 'org.matrix.custom.html';
+  body: string;
+  formatted_body: string;
+  data: {
+    command: {
+      type: 'patch';
+      payload: PatchObject;
+      eventId: string;
+    };
+  };
+}
+
+export interface ReactionEvent extends BaseMatrixEvent {
+  type: 'm.reaction';
+  content: ReactionEventContent;
+}
+
+export interface ReactionEventContent {
+  'm.relates_to': {
+    event_id: string;
+    key: string;
+    rel_type: 'm.annotation';
   };
 }
 
@@ -845,6 +896,7 @@ export type MatrixEvent =
   | RoomPowerLevels
   | MessageEvent
   | CommandEvent
+  | ReactionEvent
   | CardMessageEvent
   | RoomNameEvent
   | RoomTopicEvent

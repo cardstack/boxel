@@ -78,7 +78,6 @@ module('Acceptance | basic tests', function (hooks) {
     }
 
     await setupAcceptanceTestRealm({
-      loader,
       contents: {
         'index.gts': { Index },
         'person.gts': { Person },

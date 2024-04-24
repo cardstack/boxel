@@ -46,8 +46,8 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
               <div class='remove-button-container'>
                 <IconButton
                   @icon={{IconTrash}}
-                  @width='20px'
-                  @height='20px'
+                  @width='18px'
+                  @height='18px'
                   class='remove'
                   {{on 'click' (fn this.remove i)}}
                   data-test-remove={{i}}

@@ -6,7 +6,7 @@ import type { Signature } from './types.ts';
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
     xmlns='http://www.w3.org/2000/svg'
-    viewBox='0 0 50 50'
+    viewBox='2.5 2.5 45 45'
     ...attributes
   ><circle
       cx='25'

@@ -1,7 +1,7 @@
 import isEqual from 'lodash/isEqual';
 
 import {
-  IndexerDBClient,
+  Indexer,
   asExpressions,
   addExplicitParens,
   separatedByCommas,
@@ -17,13 +17,13 @@ import {
   type Expression,
   type IndexedCardsTable,
   type RealmVersionsTable,
-} from '@cardstack/runtime-common';
+} from '../index';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { testRealmURL } from './const';
 
-let defaultIndexEntry = {
+const defaultIndexEntry = {
   realm_version: 1,
   realm_url: testRealmURL,
 };
@@ -94,16 +94,16 @@ export type TestIndexRow =
 // the realm version table will default to version 1 of the testRealmURL if no
 // value is supplied
 export async function setupIndex(
-  client: IndexerDBClient,
+  client: Indexer,
   indexRows: TestIndexRow[],
 ): Promise<void>;
 export async function setupIndex(
-  client: IndexerDBClient,
+  client: Indexer,
   versionRows: RealmVersionsTable[],
   indexRows: TestIndexRow[],
 ): Promise<void>;
 export async function setupIndex(
-  client: IndexerDBClient,
+  client: Indexer,
   maybeVersionRows: RealmVersionsTable[] | TestIndexRow[],
   indexRows?: TestIndexRow[],
 ): Promise<void> {

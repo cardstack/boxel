@@ -38,8 +38,8 @@ import { Query } from './query';
 import { Loader } from './loader';
 export * from './constants';
 export * from './queue';
-export * from './indexer/expression';
-export * from './indexer/client';
+export * from './expression';
+export * from './indexer';
 export * from './db';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
@@ -58,13 +58,12 @@ export const isNode =
 
 export { Realm } from './realm';
 export { SupportedMimeType } from './router';
-export { VirtualNetwork } from './virtual-network';
+export { VirtualNetwork, type ResponseWithNodeStream } from './virtual-network';
 
 export type {
   Kind,
   RealmAdapter,
   FileRef,
-  ResponseWithNodeStream,
   RealmInfo,
   TokenClaims,
   RealmPermissions,

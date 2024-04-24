@@ -4,9 +4,9 @@ import { resolve, join } from 'path';
 import {
   Realm,
   LooseSingleCardDocument,
-  Loader,
   baseRealm,
   RealmPermissions,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
@@ -14,6 +14,8 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type IndexRunner } from '@cardstack/runtime-common/search-index';
 import { RealmServer } from '../../server';
 import { Server } from 'http';
+
+export * from '@cardstack/runtime-common/helpers/indexer';
 
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
@@ -33,11 +35,11 @@ export async function prepareTestDB() {
 }
 
 export async function createRealm(
-  loader: Loader,
   dir: string,
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   realmURL = testRealm,
   permissions: RealmPermissions = { '*': ['read', 'write'] },
+  virtualNetwork: VirtualNetwork,
 ): Promise<Realm> {
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
@@ -55,7 +57,6 @@ export async function createRealm(
   return new Realm({
     url: realmURL,
     adapter: new NodeAdapter(dir),
-    loader,
     indexRunner: getRunner,
     runnerOptsMgr: manager,
     getIndexHTML: async () =>
@@ -63,13 +64,17 @@ export async function createRealm(
     matrix: testMatrix,
     permissions,
     realmSecretSeed: "shhh! it's a secret",
+    virtualNetwork,
   });
 }
 
-export function setupBaseRealmServer(hooks: NestedHooks, loader: Loader) {
+export function setupBaseRealmServer(
+  hooks: NestedHooks,
+  virtualNetwork: VirtualNetwork,
+) {
   let baseRealmServer: Server;
   hooks.before(async function () {
-    baseRealmServer = await runBaseRealmServer(loader);
+    baseRealmServer = await runBaseRealmServer(virtualNetwork);
   });
 
   hooks.after(function () {
@@ -77,39 +82,43 @@ export function setupBaseRealmServer(hooks: NestedHooks, loader: Loader) {
   });
 }
 
-export async function runBaseRealmServer(loader: Loader) {
+export async function runBaseRealmServer(virtualNetwork: VirtualNetwork) {
   let localBaseRealmURL = new URL(localBaseRealm);
-  loader.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
   let testBaseRealm = await createRealm(
-    loader,
     basePath,
     undefined,
     baseRealm.url,
+    undefined,
+    virtualNetwork,
   );
+  virtualNetwork.mount(testBaseRealm.maybeExternalHandle);
   await testBaseRealm.ready;
-  let testBaseRealmServer = new RealmServer([testBaseRealm]);
+  let testBaseRealmServer = new RealmServer([testBaseRealm], virtualNetwork);
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
 
 export async function runTestRealmServer(
-  loader: Loader,
+  virtualNetwork: VirtualNetwork,
   dir: string,
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   testRealmURL: URL,
   permissions?: RealmPermissions,
 ) {
   let testRealm = await createRealm(
-    loader,
     dir,
     flatFiles,
     testRealmURL.href,
     permissions,
+    virtualNetwork,
   );
+  virtualNetwork.mount(testRealm.maybeExternalHandle);
   await testRealm.ready;
-  let testRealmServer = await new RealmServer([testRealm]).listen(
-    parseInt(testRealmURL.port),
-  );
+  let testRealmServer = await new RealmServer(
+    [testRealm],
+    virtualNetwork,
+  ).listen(parseInt(testRealmURL.port));
   return {
     testRealm,
     testRealmServer,

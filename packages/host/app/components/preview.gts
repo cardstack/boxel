@@ -2,7 +2,6 @@ import Component from '@glimmer/component';
 
 import type {
   BaseDef,
-  CardContext,
   Format,
   Field,
 } from 'https://cardstack.com/base/card-api';
@@ -12,7 +11,6 @@ interface Signature {
     card: BaseDef;
     format?: Format;
     field?: Field;
-    context?: CardContext;
   };
 }
 
@@ -26,7 +24,6 @@ export default class Preview extends Component<Signature> {
       this.args.card,
       this.args.format ?? 'isolated',
       this.args.field,
-      this.args.context,
     );
   }
 }

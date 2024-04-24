@@ -76,6 +76,14 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     task() {},
     restartableTask() {},
   });
+  virtualNetwork.shimModule('ember-provide-consume-context', {
+    consume() {
+      return () => {};
+    },
+    provide() {
+      return () => {};
+    },
+  });
   // import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
   virtualNetwork.shimModule('ember-concurrency/-private/async-arrow-runtime', {
     default: () => {},
@@ -100,4 +108,5 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('marked', { marked: () => {} });
   virtualNetwork.shimModule('ethers', ethers);
   virtualNetwork.shimModule('super-fast-md5', { md5: (_data: string) => {} });
+  virtualNetwork.shimModule('matrix-js-sdk', {});
 }

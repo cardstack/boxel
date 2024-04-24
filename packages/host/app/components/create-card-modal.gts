@@ -34,7 +34,6 @@ export default class CreateCardModal extends Component {
         <ModalContainer
           @title='Create New Card'
           @onClose={{fn this.save undefined}}
-          @zIndex={{this.zIndex}}
           data-test-create-new-card={{card.constructor.name}}
         >
           <:content>
@@ -52,7 +51,6 @@ export default class CreateCardModal extends Component {
         deferred: Deferred<CardDef | undefined>;
       }
     | undefined = undefined;
-  @tracked zIndex = 20;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -70,7 +68,6 @@ export default class CreateCardModal extends Component {
       doc?: LooseSingleCardDocument;
     },
   ): Promise<undefined | T> {
-    this.zIndex++;
     return (await this._create.perform(ref, relativeTo, opts)) as T | undefined;
   }
 

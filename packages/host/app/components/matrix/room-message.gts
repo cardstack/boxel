@@ -1,12 +1,11 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { modifier } from 'ember-modifier';
 
@@ -18,6 +17,7 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -26,6 +26,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
+import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
@@ -33,7 +34,9 @@ import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    roomId: string;
     message: MessageField;
+    index?: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     currentEditor: number | undefined;
@@ -48,6 +51,12 @@ export default class RoomMessage extends Component<Signature> {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
+    if (this.args.message.command?.eventId) {
+      this.getApplyState.perform(
+        this.args.roomId,
+        this.args.message.command.eventId,
+      );
+    }
   }
 
   @tracked streamingTimeout = false;
@@ -75,7 +84,7 @@ export default class RoomMessage extends Component<Signature> {
 
   <template>
     <AiAssistantMessage
-      id='message-container-{{@message.index}}'
+      id='message-container-{{@index}}'
       class='room-message'
       @formattedMessage={{htmlSafe (markdownToHtml @message.formattedMessage)}}
       @datetime={{@message.created}}
@@ -87,7 +96,11 @@ export default class RoomMessage extends Component<Signature> {
       @resources={{this.resources}}
       @errorMessage={{this.errorMessage}}
       @isStreaming={{@isStreaming}}
-      @retryAction={{@retryAction}}
+      @retryAction={{if
+        (eq @message.command.commandType 'patch')
+        (perform this.patchCard)
+        @retryAction
+      }}
       @isPending={{@isPending}}
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
@@ -97,29 +110,20 @@ export default class RoomMessage extends Component<Signature> {
           class='patch-button-bar'
           data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
         >
-          {{#let @message.command.payload as |payload|}}
-            <Button
-              class='view-code-button'
-              {{on 'click' this.viewCodeToggle}}
-              @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
-              @size='extra-small'
-              data-test-view-code-button
-            >
-              {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
-            </Button>
-            <ApplyButton
-              @state={{if
-                this.operatorModeStateService.patchCard.isRunning
-                'applying'
-                'ready'
-              }}
-              data-test-command-apply
-              {{on
-                'click'
-                (fn this.patchCard payload.id payload.patch.attributes)
-              }}
-            />
-          {{/let}}
+          <Button
+            class='view-code-button'
+            {{on 'click' this.viewCodeToggle}}
+            @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
+            @size='extra-small'
+            data-test-view-code-button
+          >
+            {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
+          </Button>
+          <ApplyButton
+            @state={{this.applyButtonState}}
+            {{on 'click' (perform this.patchCard)}}
+            data-test-command-apply={{this.applyButtonState}}
+          />
         </div>
         {{#if this.isDisplayingCode}}
           <div class='preview-code'>
@@ -161,6 +165,11 @@ export default class RoomMessage extends Component<Signature> {
     <style>
       .room-message {
         --ai-assistant-message-padding: var(--boxel-sp);
+      }
+      .is-pending .view-code-button,
+      .is-error .view-code-button {
+        background: var(--boxel-200);
+        color: var(--boxel-500);
       }
       .patch-button-bar {
         display: flex;
@@ -219,9 +228,12 @@ export default class RoomMessage extends Component<Signature> {
   };
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
 
   @tracked private isDisplayingCode = false;
+  @tracked private patchCardError: { id: string; error: unknown } | undefined;
+  @tracked private _applyButtonState: ApplyButtonState | undefined = 'ready';
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -248,6 +260,18 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private get errorMessage() {
+    if (this.patchCardError) {
+      let message = '';
+      if (typeof this.patchCardError.error === 'string') {
+        message = this.patchCardError.error;
+      } else if (this.patchCardError.error instanceof Error) {
+        message = this.patchCardError.error.message;
+      } else {
+        console.error('Unexpected error type', this.patchCardError.error);
+      }
+      return `Failed to apply changes. ${message}`;
+    }
+
     if (this.args.message.errorMessage) {
       return this.args.message.errorMessage;
     }
@@ -270,16 +294,54 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  @action patchCard(cardId: string, attributes: Record<string, unknown>) {
+  private patchCard = task(async () => {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
-    this.operatorModeStateService.patchCard.perform(cardId, attributes);
-  }
+    let { payload, eventId } = this.args.message.command;
+    this.patchCardError = undefined;
+    try {
+      await this.operatorModeStateService.patchCard.perform(
+        payload.id,
+        payload.patch.attributes,
+      );
+      await this.matrixService.sendReactionEvent(
+        this.args.roomId,
+        eventId,
+        'applied',
+      );
+      await this.getApplyState.perform(this.args.roomId, eventId);
+    } catch (e) {
+      this.patchCardError = { id: payload.id, error: e };
+      await this.matrixService.sendReactionEvent(
+        this.args.roomId,
+        eventId,
+        'failed',
+      );
+      await this.getApplyState.perform(this.args.roomId, eventId);
+    }
+  });
 
   private get previewPatchCode() {
     let { commandType, payload } = this.args.message.command;
     return JSON.stringify({ commandType, payload }, null, 2);
+  }
+
+  private getApplyState = restartableTask(
+    async (roomId: string, eventId: string) => {
+      this._applyButtonState = (await this.matrixService.getReactionKeyForEvent(
+        roomId,
+        eventId,
+      )) as ApplyButtonState | undefined;
+    },
+  );
+
+  @cached
+  private get applyButtonState() {
+    if (this.patchCard.isRunning) {
+      return 'applying';
+    }
+    return this._applyButtonState ?? 'ready';
   }
 
   @action private viewCodeToggle() {
@@ -301,7 +363,7 @@ export default class RoomMessage extends Component<Signature> {
     element.style.height = `${height}px`;
 
     let outerContainer = document.getElementById(
-      `message-container-${this.args.message.index}`,
+      `message-container-${this.args.index}`,
     );
     if (!outerContainer) {
       return;

@@ -69,13 +69,13 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
       </div>
 
       <div class='header-actions'>
-        {{! Offer to edit embedded card only when the stack item is in edit 
+        {{! Offer to edit embedded card only when the stack item is in edit
             mode and you can write to the card in question }}
         {{#if (and @canWrite (eq @item.stackItem.format 'edit'))}}
           <IconButton
             @icon={{IconPencil}}
-            @width='24px'
-            @height='24px'
+            @width='20px'
+            @height='20px'
             class='header-actions__button'
             aria-label='Edit'
             data-test-embedded-card-edit-button
@@ -98,8 +98,8 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
               <:trigger>
                 <IconButton
                   @icon={{ThreeDotsHorizontal}}
-                  @width='20px'
-                  @height='20px'
+                  @width='16px'
+                  @height='16px'
                   class='header-actions__button'
                   aria-label='Options'
                   data-test-embedded-card-options-button

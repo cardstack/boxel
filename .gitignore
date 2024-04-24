@@ -6,3 +6,4 @@ node_modules
 .dist
 /junit
 .eslintcache
+schema_tmp.sql

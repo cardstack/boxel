@@ -23,7 +23,6 @@ import {
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
@@ -425,13 +424,9 @@ module('Acceptance | code submode tests', function (hooks) {
       'service:monaco-service',
     ) as MonacoService;
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     ({ realm } = await setupAcceptanceTestRealm({
-      loader,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,

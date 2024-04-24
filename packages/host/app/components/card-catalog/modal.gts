@@ -5,7 +5,6 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
@@ -31,7 +30,7 @@ import type { Query, Filter } from '@cardstack/runtime-common/query';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { getCard } from '../../resources/card-resource';
 import { getSearchResults, Search } from '../../resources/search';
@@ -52,9 +51,7 @@ import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 
 interface Signature {
-  Args: {
-    context?: CardContext;
-  };
+  Args: {};
 }
 
 export interface RealmCards {
@@ -91,9 +88,10 @@ export default class CardCatalogModal extends Component<Signature> {
   <template>
     {{#if (and (gt this.stateStack.length 0) (not this.state.dismissModal))}}
       <ModalContainer
+        class='card-catalog-modal'
         @title={{this.state.chooseCardTitle}}
         @onClose={{fn this.pick undefined}}
-        @zIndex={{this.zIndex}}
+        @layer='urgent'
         {{focusTrap
           isActive=(not this.state.dismissModal)
           focusTrapOptions=(hash
@@ -137,7 +135,6 @@ export default class CardCatalogModal extends Component<Signature> {
               }}
               @select={{this.selectCard}}
               @selectedCard={{this.state.selectedCard}}
-              @context={{@context}}
             />
           {{/if}}
         </:content>
@@ -195,6 +192,12 @@ export default class CardCatalogModal extends Component<Signature> {
       </ModalContainer>
     {{/if}}
     <style>
+      .card-catalog-modal > :deep(.boxel-modal__inner) {
+        max-height: 80vh;
+      }
+      .card-catalog-modal.large {
+        --boxel-modal-offset-top: var(--boxel-sp-xxxl);
+      }
       .footer {
         display: flex;
         justify-content: space-between;
@@ -221,7 +224,6 @@ export default class CardCatalogModal extends Component<Signature> {
 
   stateStack: State[] = new TrackedArray<State>();
   stateId = 0;
-  @tracked zIndex = 20;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -298,7 +300,6 @@ export default class CardCatalogModal extends Component<Signature> {
       createNewCard?: CreateNewCard;
     },
   ): Promise<undefined | T> {
-    this.zIndex++;
     return (await this._chooseCard.perform(
       {
         // default to title sort so that we can maintain stability in
