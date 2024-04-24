@@ -318,7 +318,7 @@ export default class RoomMessage extends Component<Signature> {
     if (this.patchCard.isRunning) {
       return 'applying';
     }
-    if (this.patchCardError) {
+    if (this.errorMessage) {
       return 'failed';
     }
     return this.args.message.command.status;

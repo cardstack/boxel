@@ -816,8 +816,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Evie' } },
+              eventId: 'room1-event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'room1-event1',
+          },
         },
         status: null,
       });
@@ -837,8 +842,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Jackie' } },
+              eventId: 'room1-event2',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'room1-event2',
+          },
         },
         status: null,
       });
@@ -858,8 +868,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { pet: null } },
+              eventId: 'room2-event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'room2-event1',
+          },
         },
         status: null,
       });
@@ -869,6 +884,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-message-idx="1"] [data-test-command-apply]');
       await click('[data-test-message-idx="1"] [data-test-command-apply]');
       await waitFor('[data-test-patch-card-idle]');
+
       assert
         .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
         .exists();
@@ -906,8 +922,8 @@ module('Integration | operator-mode', function (hooks) {
       await click(`[data-test-enter-room="room2"]`);
       await waitFor('[data-test-room-name="test room 2"]');
       assert
-        .dom('[data-test-message-idx="0"] [data-test-apply-state="failed"]')
-        .exists();
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
+        .exists('failed state is not saved');
     });
 
     test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
@@ -946,8 +962,13 @@ module('Integration | operator-mode', function (hooks) {
               patch: {
                 attributes: { firstName: 'Dave' },
               },
+              eventId: 'event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
         },
         status: null,
       });
@@ -1003,8 +1024,9 @@ module('Integration | operator-mode', function (hooks) {
             address: { shippingInfo: { preferredCarrier: 'UPS' } },
           },
         },
+        eventId: 'event1',
       };
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
         state_key: 'state',
@@ -1017,6 +1039,10 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({ command: payload }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
         },
         status: null,
       });
@@ -1191,8 +1217,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { firstName: 'Dave' } },
+              eventId: 'event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
         },
         status: null,
       });
@@ -1212,8 +1243,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { pet: 'Harry' } },
+              eventId: 'event2',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event2',
+          },
         },
         status: null,
       });
@@ -1233,8 +1269,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { firstName: 'Jackie' } },
+              eventId: 'event3',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event3',
+          },
         },
         status: null,
       });
