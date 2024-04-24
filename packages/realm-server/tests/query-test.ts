@@ -368,4 +368,76 @@ module('query', function (hooks) {
       testCards: await makeTestCards(loader),
     });
   });
+
+  test(`can filter using 'gt'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
+  test(`can filter using 'gte'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
+  test(`can filter using 'gt' thru nested fields`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
+  test(`can filter using 'gt' thru a plural primitive field`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
+  test(`can filter using 'gt' thru a plural composite field`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
+  test(`can filter using 'lt'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
+  test(`can filter using 'lte'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
+  test(`can combine 'range' filter`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
+  test(`cannot filter 'null' value using 'range'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
 });
