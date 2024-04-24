@@ -2739,6 +2739,7 @@ module('Integration | search-index', function (_hooks) {
               'https://packages/ember-concurrency',
               'https://packages/ember-concurrency/-private/async-arrow-runtime',
               'https://packages/ember-modifier',
+              'https://packages/ember-provide-consume-context',
               'https://packages/lodash',
               'https://packages/tracked-built-ins',
             ],

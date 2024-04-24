@@ -86,7 +86,7 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
-import type { ResponseWithNodeStream } from './virtual-network';
+import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 export type RealmInfo = {
   name: string;
@@ -98,6 +98,7 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+  [key: symbol]: object;
 }
 
 export interface TokenClaims {
@@ -118,7 +119,7 @@ export interface RealmAdapter {
     },
   ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void>;
 
-  openFile(path: LocalPath): Promise<FileRef | undefined>;
+  openFile(path: LocalPath, loader?: Loader): Promise<FileRef | undefined>;
 
   exists(path: LocalPath): Promise<boolean>;
 
@@ -147,6 +148,8 @@ export interface RealmAdapter {
   subscribe(cb: (message: UpdateEventData) => void): Promise<void>;
 
   unsubscribe(): void;
+
+  setLoader?(loader: Loader): void;
 }
 
 interface Options {
@@ -266,7 +269,6 @@ export class Realm {
     {
       url,
       adapter,
-      loader,
       indexRunner,
       runnerOptsMgr,
       getIndexHTML,
@@ -275,10 +277,10 @@ export class Realm {
       permissions,
       dbAdapter,
       queue,
+      virtualNetwork,
     }: {
       url: string;
       adapter: RealmAdapter;
-      loader: Loader;
       indexRunner: IndexRunner;
       runnerOptsMgr: RunnerOptionsManager;
       getIndexHTML: () => Promise<string>;
@@ -287,6 +289,7 @@ export class Realm {
       realmSecretSeed: string;
       dbAdapter?: DBAdapter;
       queue?: Queue;
+      virtualNetwork: VirtualNetwork;
     },
     opts?: Options,
   ) {
@@ -297,6 +300,10 @@ export class Realm {
     this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
+
+    let loader = virtualNetwork.createLoader();
+    adapter.setLoader?.(loader);
+
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
@@ -869,26 +876,37 @@ export class Realm {
   async fallbackHandle(request: Request) {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
-    let maybeHandle = await this.getFileWithFallbacks(
+
+    let maybeFileRef = await this.getFileWithFallbacks(
       localPath,
       executableExtensions,
     );
 
-    if (!maybeHandle) {
+    if (!maybeFileRef) {
       return notFound(this, request, `${request.url} not found`);
     }
 
-    let handle = maybeHandle;
+    let fileRef = maybeFileRef;
 
     if (
       executableExtensions.some((extension) =>
-        handle.path.endsWith(extension),
+        fileRef.path.endsWith(extension),
       ) &&
       !localPath.startsWith(assetsDir)
     ) {
-      return this.makeJS(await fileContentToText(handle), handle.path);
+      let response = this.makeJS(
+        await fileContentToText(fileRef),
+        fileRef.path,
+      );
+
+      if (fileRef[Symbol.for('shimmed-module')]) {
+        (response as any)[Symbol.for('shimmed-module')] =
+          fileRef[Symbol.for('shimmed-module')];
+      }
+
+      return response;
     } else {
-      return await this.serveLocalFile(handle);
+      return await this.serveLocalFile(fileRef);
     }
   }
 
@@ -1201,6 +1219,7 @@ export class Realm {
       path,
       this.#adapter.openFile.bind(this.#adapter),
       fallbackExtensions,
+      this.loader,
     );
   }
 
@@ -1430,6 +1449,7 @@ export class Realm {
       return undefined;
     }
     let entries: { name: string; kind: Kind; path: LocalPath }[] = [];
+
     for await (let entry of this.#adapter.readdir(path)) {
       let innerPath = join(path, entry.name);
       let innerURL =
@@ -1538,7 +1558,7 @@ export class Realm {
   private async realmInfo(_request: Request): Promise<Response> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig = await this.readFileAsText(localPath);
+    let realmConfig = await this.readFileAsText(localPath, undefined);
     let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,

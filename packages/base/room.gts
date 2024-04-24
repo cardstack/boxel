@@ -23,7 +23,11 @@ import { cached } from '@glimmer/tracking';
 import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
 import { md5 } from 'super-fast-md5';
-import { EventStatus } from 'matrix-js-sdk';
+import { EventStatus, MatrixError } from 'matrix-js-sdk';
+
+const ErrorMessage: Record<string, string> = {
+  ['M_TOO_LARGE']: 'Message is too large',
+};
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -247,6 +251,7 @@ class CommandType extends FieldDef {
 class PatchField extends FieldDef {
   @field commandType = contains(CommandType);
   @field payload = contains(PatchObjectField);
+  @field eventId = contains(StringField);
 }
 
 // A map from a hash of roomId + card document to the first card fragment event id.
@@ -280,6 +285,11 @@ export class MessageField extends FieldDef {
   // to verify whether the message is already sent or not.
   @field clientGeneratedId = contains(StringField);
   @field status = contains(StringField);
+  @field isRetryable = contains(BooleanField, {
+    computeVia: function (this: MessageField) {
+      return this.errorMessage !== ErrorMessage['M_TOO_LARGE'];
+    },
+  });
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -516,7 +526,11 @@ export class RoomField extends FieldDef {
         };
 
         if (event.status === 'cancelled' || event.status === 'not_sent') {
-          (cardArgs as any).errorMessage = 'Failed to send';
+          (cardArgs as any).errorMessage =
+            event.error?.data.errcode &&
+            Object.keys(ErrorMessage).includes(event.error?.data.errcode)
+              ? ErrorMessage[event.error?.data.errcode]
+              : 'Failed to send';
         }
 
         if ('errorMessage' in event.content) {
@@ -567,6 +581,7 @@ export class RoomField extends FieldDef {
             ...cardArgs,
             formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
             command: new PatchField({
+              eventId: event_id,
               commandType: command.type,
               payload: command,
             }),
@@ -672,6 +687,7 @@ interface BaseMatrixEvent {
     prev_sender?: string;
   };
   status: EventStatus | null;
+  error?: MatrixError;
 }
 
 interface RoomStateEvent extends BaseMatrixEvent {
@@ -768,24 +784,43 @@ interface MessageEvent extends BaseMatrixEvent {
 
 interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: {
-    data: {
-      command: any;
-    };
-    'm.relates_to'?: {
-      rel_type: string;
-      event_id: string;
-    };
-    msgtype: 'org.boxel.command';
-    format: 'org.matrix.custom.html';
-    body: string;
-    formatted_body: string;
-  };
+  content: CommandMessageContent;
   unsigned: {
     age: number;
     transaction_id: string;
     prev_content?: any;
     prev_sender?: string;
+  };
+}
+
+interface CommandMessageContent {
+  'm.relates_to'?: {
+    rel_type: string;
+    event_id: string;
+  };
+  msgtype: 'org.boxel.command';
+  format: 'org.matrix.custom.html';
+  body: string;
+  formatted_body: string;
+  data: {
+    command: {
+      type: 'patch';
+      payload: PatchObject;
+      eventId: string;
+    };
+  };
+}
+
+export interface ReactionEvent extends BaseMatrixEvent {
+  type: 'm.reaction';
+  content: ReactionEventContent;
+}
+
+export interface ReactionEventContent {
+  'm.relates_to': {
+    event_id: string;
+    key: string;
+    rel_type: 'm.annotation';
   };
 }
 
@@ -857,6 +892,7 @@ export type MatrixEvent =
   | RoomPowerLevels
   | MessageEvent
   | CommandEvent
+  | ReactionEvent
   | CardMessageEvent
   | RoomNameEvent
   | RoomTopicEvent

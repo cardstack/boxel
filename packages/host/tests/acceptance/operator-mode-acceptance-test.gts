@@ -257,7 +257,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     }
 
     await setupAcceptanceTestRealm({
-      loader,
       contents: {
         'address.gts': { Address },
         'boom-field.gts': { BoomField },

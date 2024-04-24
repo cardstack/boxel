@@ -10,7 +10,6 @@ import { Currency } from './asset';
 import { action } from '@ember/object';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
 import { getLiveCards } from '@cardstack/runtime-common';
-import { cn } from '@cardstack/boxel-ui/helpers';
 import { guidFor } from '@ember/object/internals';
 import GlimmerComponent from '@glimmer/component';
 
@@ -100,14 +99,11 @@ class Edit extends Component<typeof MonetaryAmount> {
           @onChange={{this.setCurrency}}
           @dropdownClass='input-selectable-currency-amount__dropdown'
           @verticalPosition='below'
-          as |item itemCssClass|
+          as |item|
         >
           <div
             data-test-currency={{item.symbol}}
-            class={{cn
-              'input-selectable-currency-amount__dropdown-item'
-              itemCssClass
-            }}
+            class='input-selectable-currency-amount__dropdown-item'
             title={{item.name}}
           >
             {{#if item.logoURL}}

@@ -16,20 +16,23 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
+  CardContextName,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
+import { consume } from 'ember-provide-consume-context';
 
 interface Signature {
   Args: {
     model: Box<CardDef | null>;
     field: Field<typeof CardDef>;
-    context?: CardContext;
   };
 }
 
 class LinksToEditor extends GlimmerComponent<Signature> {
+  @consume(CardContextName) declare cardContext: CardContext;
+
   <template>
     <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
       {{#if this.isEmpty}}
@@ -111,7 +114,6 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       'embedded',
       this.args.model as Box<BaseDef>,
       this.args.field,
-      this.args.context,
     );
   }
 
@@ -121,7 +123,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       { filter: { type } },
       {
         offerToCreate: { ref: type, relativeTo: undefined },
-        createNewCard: this.args.context?.actions?.createCard,
+        createNewCard: this.cardContext?.actions?.createCard,
       },
     );
     if (chosenCard) {
@@ -132,7 +134,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   private createCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let newCard: CardDef | undefined =
-      await this.args.context?.actions?.createCard(type, undefined, {
+      await this.cardContext?.actions?.createCard(type, undefined, {
         isLinkedCard: true,
       });
     if (newCard) {
@@ -144,11 +146,10 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 export function getLinksToEditor(
   model: Box<CardDef | null>,
   field: Field<typeof CardDef>,
-  context?: CardContext,
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   return class LinksToEditTemplate extends GlimmerComponent {
     <template>
-      <LinksToEditor @model={{model}} @field={{field}} @context={{context}} />
+      <LinksToEditor @model={{model}} @field={{field}} />
     </template>
   };
 }

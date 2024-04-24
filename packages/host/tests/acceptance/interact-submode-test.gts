@@ -227,7 +227,6 @@ module('Acceptance | interact submode tests', function (hooks) {
     let mangoPet = new Pet({ name: 'Mango' });
 
     ({ realm } = await setupAcceptanceTestRealm({
-      loader,
       onFetch: wrappedOnFetch(),
       contents: {
         'address.gts': { Address },
@@ -268,7 +267,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       },
     }));
     await setupAcceptanceTestRealm({
-      loader,
       realmURL: testRealm2URL,
       contents: {
         'index.json': new CardsGrid(),

@@ -310,7 +310,7 @@ export class CurrentRun {
         continue;
       }
       if (kind === 'file') {
-        await this.visitFile(innerURL);
+        await this.visitFile(innerURL, undefined);
       } else {
         let directoryURL = this.#realmPaths.directoryURL(innerPath);
         await this.visitDirectory(directoryURL);
@@ -335,7 +335,12 @@ export class CurrentRun {
       await this.indexCardSource(url);
     } else {
       let localPath = this.#realmPaths.local(url);
-      let fileRef = await this.#reader.readFileAsText(localPath);
+
+      let fileRef = await this.#reader.readFileAsText(
+        localPath,
+        {},
+        this.loader,
+      );
       if (!fileRef) {
         let error = new CardError(`missing file ${url.href}`, { status: 404 });
         error.deps = [url.href];
@@ -439,7 +444,7 @@ export class CurrentRun {
       let api = await this.#loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
       );
-      //Get realm info
+
       if (!this.#realmInfo) {
         let realmInfoResponse = await this.#loader.fetch(
           `${this.realmURL}_info`,

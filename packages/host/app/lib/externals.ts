@@ -16,6 +16,7 @@ import * as emberConcurrency from 'ember-concurrency';
 import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
 import * as cssUrl from 'ember-css-url';
 import * as emberModifier2 from 'ember-modifier';
+import * as emberProvideConsumeContext from 'ember-provide-consume-context';
 import * as emberResources from 'ember-resources';
 import * as ethers from 'ethers';
 import * as flat from 'flat';
@@ -60,6 +61,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     emberConcurrencyAsyncArrowRuntime,
   );
   virtualNetwork.shimModule('ember-modifier', emberModifier2);
+  virtualNetwork.shimModule(
+    'ember-provide-consume-context',
+    emberProvideConsumeContext,
+  );
   virtualNetwork.shimModule('flat', flat);
   virtualNetwork.shimModule('lodash', lodash);
   virtualNetwork.shimModule('tracked-built-ins', tracked);

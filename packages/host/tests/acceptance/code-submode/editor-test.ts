@@ -15,11 +15,10 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import type EnvironmentService from '@cardstack/host/services/environment-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
+
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
-  TestRealmAdapter,
   percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
@@ -34,6 +33,7 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
+import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
@@ -70,11 +70,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
     );
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-
     ({ realm, adapter } = await setupAcceptanceTestRealm({
-      loader,
       contents: {
         'pet.gts': `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
