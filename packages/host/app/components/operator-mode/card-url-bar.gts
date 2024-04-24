@@ -206,7 +206,7 @@ export default class CardURLBar extends Component<Signature> {
   @service private declare cardService: CardService;
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
-    getValue: () => this.codePath,
+    getValue: () => decodeURI(this.codePath),
     setValue: (url: string) => {
       this.operatorModeStateService.updateCodePath(new URL(url));
     },
