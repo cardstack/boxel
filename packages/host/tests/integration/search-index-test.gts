@@ -34,7 +34,6 @@ const testModuleRealm = 'http://localhost:4202/test/';
 let loader: Loader;
 
 module('Integration | search-index', function (_hooks) {
-  // TODO run for both in-memory and db based indexing
   for (let isDbIndexingEnabled of [false, true]) {
     module(
       isDbIndexingEnabled ? 'db index' : 'in-memory index',
@@ -206,7 +205,7 @@ module('Integration | search-index', function (_hooks) {
           }
         });
 
-        skip('can query the "production" index while performing indexing operations', async function (assert) {});
+        skip('can query the "production" index while performing indexing operations', async function (_assert) {});
 
         test('can index card with linkTo field', async function (assert) {
           let { realm, adapter } = await setupIntegrationTestRealm({

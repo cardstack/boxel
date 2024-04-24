@@ -237,8 +237,8 @@ export class CurrentRun {
         }ms`,
       );
       if (onInvalidation) {
-        let urls = [url, ...invalidations].map(
-          (i) => new URL(i.href.replace(/\.json$/, '')),
+        let urls = [...new Set([url, ...invalidations].map((u) => u.href))].map(
+          (href) => new URL(href.replace(/\.json$/, '')),
         );
         onInvalidation(urls);
       }
@@ -342,9 +342,8 @@ export class CurrentRun {
         this.loader,
       );
       if (!fileRef) {
-        let error = new CardError(`missing file ${url.href}`, { status: 404 });
-        error.deps = [url.href];
-        throw error;
+        log.info(`tried to visit file ${url.href}, but it no longer exists`);
+        return;
       }
       if (!identityContext) {
         let api = await this.#loader.import<typeof CardAPI>(
