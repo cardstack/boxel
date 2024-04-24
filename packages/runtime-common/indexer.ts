@@ -1,7 +1,7 @@
 import * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
 import {
-  type LooseCardResource,
+  type CardResource,
   type CodeRef,
   Loader,
   baseCardRef,
@@ -52,7 +52,7 @@ export interface IndexedCardsTable {
   realm_version: number;
   realm_url: string;
   // TODO in followup PR update this to be a document not a resource
-  pristine_doc: LooseCardResource | null;
+  pristine_doc: CardResource | null;
   error_doc: SerializedError | null;
   search_doc: Record<string, PgPrimitive> | null;
   // `deps` is a list of URLs that the card depends on, either card URL's or
@@ -72,8 +72,25 @@ export interface RealmVersionsTable {
   current_version: number;
 }
 
+export interface SearchCardResult {
+  type: 'card';
+  card: CardResource;
+  isolatedHtml: string | null;
+  searchDoc: Record<string, any> | null;
+  types: string[] | null;
+  deps: string[] | null;
+  realmVersion: number;
+  realmURL: string;
+  indexedAt: number | null;
+}
+interface SearchErrorResult {
+  type: 'error';
+  error: SerializedError;
+}
+export type SearchResult = SearchCardResult | SearchErrorResult;
+
 type GetEntryOptions = WIPOptions;
-type QueryOptions = WIPOptions;
+export type QueryOptions = WIPOptions;
 interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
@@ -121,17 +138,17 @@ export class Indexer {
     return this.query(await this.makeExpression(query, loader));
   }
 
-  // TODO handle getting error document
-  async getIndexEntry(
+  async getCard(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<IndexedCardsTable | undefined> {
+  ): Promise<SearchResult | undefined> {
+    let href = assertURLEndsWithJSON(url).href;
     let result = (await this.query([
       `SELECT i.* 
        FROM indexed_cards as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE i.card_url =`,
-      param(`${!url.href.endsWith('.json') ? url.href + '.json' : url.href}`),
+      param(href),
       'AND',
       ...realmVersionExpression(opts),
     ] as Expression)) as unknown as IndexedCardsTable[];
@@ -143,7 +160,38 @@ export class Indexer {
       return undefined;
     }
 
-    return maybeResult;
+    if (maybeResult.error_doc) {
+      // TODO make a test for this!
+      return { type: 'error', error: maybeResult.error_doc };
+    }
+    let {
+      pristine_doc: card,
+      isolated_html: isolatedHtml,
+      search_doc: searchDoc,
+      realm_version: realmVersion,
+      realm_url: realmURL,
+      indexed_at: indexedAt,
+      types,
+      deps,
+    } = maybeResult;
+    if (!card) {
+      throw new Error(
+        `bug: index entry for ${href} with opts: ${JSON.stringify(
+          opts,
+        )} has neither an error_doc nor a pristine_doc`,
+      );
+    }
+    return {
+      type: 'card',
+      realmURL,
+      card,
+      isolatedHtml,
+      searchDoc,
+      types,
+      indexedAt,
+      deps,
+      realmVersion,
+    };
   }
 
   async createBatch(realmURL: URL) {
@@ -185,7 +233,7 @@ export class Indexer {
     opts?: QueryOptions,
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
-  ): Promise<{ cards: LooseCardResource[]; meta: QueryResultsMeta }> {
+  ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
     let version: number;
     if (page?.realmVersion) {
       version = page.realmVersion;
@@ -204,6 +252,7 @@ export class Indexer {
     let conditions: CardExpression[] = [
       ['i.realm_url = ', param(realmURL.href)],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
+      ['error_doc IS NULL'], // TODO include a test for this!
       realmVersionExpression({ withMaxVersion: version }),
     ];
     if (filter) {
@@ -212,7 +261,7 @@ export class Indexer {
 
     let everyCondition = every(conditions);
     let query = [
-      `SELECT card_url, ANY_VALUE(pristine_doc) AS pristine_doc`,
+      `SELECT card_url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc`,
       `FROM indexed_cards AS i ${tableValuedFunctionsPlaceholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
@@ -232,13 +281,13 @@ export class Indexer {
     let [totalResults, results] = await Promise.all([
       this.queryCards(queryCount, loader) as Promise<{ total: number }[]>,
       this.queryCards(query, loader) as Promise<
-        Pick<IndexedCardsTable, 'pristine_doc' | 'card_url'>[]
+        Pick<IndexedCardsTable, 'pristine_doc' | 'card_url' | 'error_doc'>[]
       >,
     ]);
 
     let cards = results
       .map((r) => r.pristine_doc)
-      .filter(Boolean) as LooseCardResource[];
+      .filter(Boolean) as CardResource[];
     let meta: QueryResultsMeta = {
       // postgres returns the `COUNT()` aggregate function as a string
       page: { total: Number(totalResults[0].total), realmVersion: version },
@@ -705,10 +754,11 @@ export class Batch {
   }
 
   async updateEntry(url: URL, entry: SearchEntryWithErrors): Promise<void> {
-    this.touched.add(url.href);
+    let href = assertURLEndsWithJSON(url).href;
+    this.touched.add(href);
     let { nameExpressions, valueExpressions } = asExpressions(
       {
-        card_url: url.href,
+        card_url: href,
         realm_version: this.realmVersion,
         realm_url: this.realmURL.href,
         is_deleted: false,
@@ -749,10 +799,15 @@ export class Batch {
     ]);
   }
 
+  // TODO I don't think we actually need this--we rely on the fact that deleted
+  // entries will be invalidated as part of incremental update, and if it is
+  // tru0ly gone, then we'll never visit the file as we try to visit the
+  // invalidations.
   async deleteEntry(url: URL): Promise<void> {
-    this.touched.add(url.href);
+    let href = assertURLEndsWithJSON(url).href;
+    this.touched.add(href);
     let { nameExpressions, valueExpressions } = asExpressions({
-      card_url: url.href,
+      card_url: href,
       realm_version: this.realmVersion,
       realm_url: this.realmURL.href,
       is_deleted: true,
@@ -823,6 +878,19 @@ export class Batch {
       param(this.realmURL.href),
     ])) as Pick<RealmVersionsTable, 'current_version'>[];
     if (!row) {
+      let { nameExpressions, valueExpressions } = asExpressions({
+        realm_url: this.realmURL.href,
+        current_version: 0,
+      } as RealmVersionsTable);
+      // Make the batch updates live
+      await this.client.query([
+        ...upsert(
+          'realm_versions',
+          'realm_versions_pkey',
+          nameExpressions,
+          valueExpressions,
+        ),
+      ]);
       this.realmVersion = 1;
     } else {
       this.realmVersion = row.current_version + 1;
@@ -990,6 +1058,13 @@ function isFieldPlural(field: Field): boolean {
   return (
     field.fieldType === 'containsMany' || field.fieldType === 'linksToMany'
   );
+}
+
+function assertURLEndsWithJSON(url: URL): URL {
+  if (!url.href.endsWith('.json')) {
+    return new URL(`${url}.json`);
+  }
+  return url;
 }
 
 function assertNever(value: never) {

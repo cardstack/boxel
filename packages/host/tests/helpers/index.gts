@@ -237,10 +237,8 @@ class MockLocalIndexer extends Service {
     }
     return this.#adapter;
   }
+  // TODO make this throw when no indexer after feature flag removed
   get indexer() {
-    if (!this.#indexer) {
-      throw new Error(`indexer has not been set on MockLocalIndexer`);
-    }
     return this.#indexer;
   }
 }

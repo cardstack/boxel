@@ -17,6 +17,7 @@ import {
   type Expression,
   type IndexedCardsTable,
   type RealmVersionsTable,
+  LooseCardResource,
 } from '../index';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -73,14 +74,20 @@ export async function serializeCard(card: CardDef): Promise<CardResource> {
   return api.serializeCard(card).data as CardResource;
 }
 
+// we can relax the resource here since we will be asserting an ID when we
+// setup the index
+type RelaxedIndexedCardsTable = Omit<IndexedCardsTable, 'pristine_doc'> & {
+  pristine_doc: LooseCardResource;
+};
+
 export type TestIndexRow =
-  | (Pick<IndexedCardsTable, 'card_url'> &
-      Partial<Omit<IndexedCardsTable, 'card_url'>>)
+  | (Pick<RelaxedIndexedCardsTable, 'card_url'> &
+      Partial<Omit<RelaxedIndexedCardsTable, 'card_url'>>)
   | CardDef
   | {
       card: CardDef;
       data: Partial<
-        Omit<IndexedCardsTable, 'card_url' | 'pristine_doc' | 'types'>
+        Omit<RelaxedIndexedCardsTable, 'card_url' | 'pristine_doc' | 'types'>
       >;
     };
 
@@ -116,8 +123,8 @@ export async function setupIndex(
   }
   let indexedCardsExpressions = await Promise.all(
     indexRows.map(async (r) => {
-      let row: Pick<IndexedCardsTable, 'card_url'> &
-        Partial<Omit<IndexedCardsTable, 'card_url'>>;
+      let row: Pick<RelaxedIndexedCardsTable, 'card_url'> &
+        Partial<Omit<RelaxedIndexedCardsTable, 'card_url'>>;
       if ('card_url' in r) {
         row = r;
       } else if ('card' in r) {

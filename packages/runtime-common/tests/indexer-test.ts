@@ -760,7 +760,7 @@ const tests = Object.freeze({
       },
     });
 
-    let entry = await indexer.getIndexEntry(new URL(`${testRealmURL}1`));
+    let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
     assert.deepEqual(entry, {
       card_url: `${testRealmURL}1.json`,
       realm_version: 1,
@@ -835,7 +835,7 @@ const tests = Object.freeze({
       },
     });
 
-    let entry = await indexer.getIndexEntry(new URL(`${testRealmURL}1`), {
+    let entry = await indexer.getCard(new URL(`${testRealmURL}1`), {
       useWorkInProgressIndex: true,
     });
     assert.ok(entry?.indexed_at, 'the indexed_at field was set');
@@ -884,7 +884,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let entry = await indexer.getIndexEntry(new URL(`${testRealmURL}1`));
+    let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
     assert.strictEqual(entry, undefined, 'deleted entries return undefined');
   },
 } as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);

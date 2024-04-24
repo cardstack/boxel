@@ -436,9 +436,8 @@ export class Loader {
     init?: RequestInit,
   ): Promise<Response> {
     try {
+      let request = this.asRequest(urlOrRequest, init);
       for (let handler of this.urlHandlers) {
-        let request = this.asRequest(urlOrRequest, init);
-
         let result = await handler(request);
         if (result) {
           return await followRedirections(

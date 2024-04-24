@@ -8,6 +8,8 @@ import {
   type LooseCardResource,
   type DBAdapter,
   type Queue,
+  type QueryOptions,
+  type SearchCardResult,
 } from '.';
 import { Kind, Realm } from './realm';
 import { LocalPath, RealmPaths } from './paths';
@@ -102,9 +104,9 @@ export type ModuleWithErrors =
   | { type: 'module'; module: Module }
   | { type: 'error'; moduleURL: string; error: SerializedError };
 
-interface Options {
+type Options = {
   loadLinks?: true;
-}
+} & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
 interface SearchResultDoc {
@@ -331,38 +333,79 @@ export class SearchIndex {
   }
 
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
-    let matcher = await this.buildMatcher(query.filter, {
-      module: `${baseRealm.url}card-api`,
-      name: 'CardDef',
-    });
-
-    let doc: CardCollectionDocument = {
-      data: flatMap([...this.#index.instances.values()], (maybeError) =>
-        maybeError.type !== 'error' ? [maybeError.entry] : [],
-      )
-        .filter(matcher)
-        .sort(this.buildSorter(query.sort))
-        .map((entry) => ({
-          ...entry.resource,
-          ...{ links: { self: entry.resource.id } },
+    let doc: CardCollectionDocument;
+    if (this.isDbIndexerEnabled) {
+      let { cards: data, meta: _meta } = await this.indexer.search(
+        new URL(this.#realm.url),
+        query,
+        this.loader,
+        opts,
+      );
+      doc = {
+        data: data.map((resource) => ({
+          ...resource,
+          ...{ links: { self: resource.id } },
         })),
-    };
+      };
 
-    let omit = doc.data.map((r) => r.id);
-    if (opts?.loadLinks) {
-      let included: CardResource<Saved>[] = [];
-      for (let resource of doc.data) {
-        included = await loadLinks({
-          realmURL: this.#index.realmURL,
-          instances: this.#index.instances,
-          loader: this.loader,
-          resource,
-          omit,
-          included,
-        });
+      let omit = doc.data.map((r) => r.id);
+      // TODO eventually the links will be cached in the index, and this will only
+      // fill in the included resources for links that were not cached (e.g.
+      // volatile fields)
+      if (opts?.loadLinks) {
+        let included: CardResource<Saved>[] = [];
+        for (let resource of doc.data) {
+          included = await this.loadLinks(
+            {
+              realmURL: this.#index.realmURL,
+              resource,
+              omit,
+              included,
+            },
+            opts,
+          );
+        }
+        if (included.length > 0) {
+          doc.included = included;
+        }
       }
-      if (included.length > 0) {
-        doc.included = included;
+    } else {
+      let matcher = await this.buildMatcher(query.filter, {
+        module: `${baseRealm.url}card-api`,
+        name: 'CardDef',
+      });
+
+      doc = {
+        data: flatMap([...this.#index.instances.values()], (maybeError) =>
+          maybeError.type !== 'error' ? [maybeError.entry] : [],
+        )
+          .filter(matcher)
+          .sort(this.buildSorter(query.sort))
+          .map((entry) => ({
+            ...entry.resource,
+            ...{ links: { self: entry.resource.id } },
+          })),
+      };
+
+      let omit = doc.data.map((r) => r.id);
+      // TODO eventually the links will be cached in the index, and this will only
+      // fill in the included resources for links that were not cached (e.g.
+      // volatile fields)
+      if (opts?.loadLinks) {
+        let included: CardResource<Saved>[] = [];
+        for (let resource of doc.data) {
+          included = await loadLinksForInMemoryIndex({
+            realmURL: this.#index.realmURL,
+            instances: this.#index.instances,
+            loader: this.loader,
+            resource,
+            omit,
+            included,
+          });
+        }
+        if (included.length > 0) {
+          doc.included = included;
+        }
       }
     }
 
@@ -383,36 +426,96 @@ export class SearchIndex {
   }
 
   async card(url: URL, opts?: Options): Promise<SearchResult | undefined> {
-    let card = this.#index.instances.get(url);
-    if (!card) {
-      return undefined;
-    }
-    if (card.type === 'error') {
-      return card;
-    }
-    let doc: SingleCardDocument = {
-      data: { ...card.entry.resource, ...{ links: { self: url.href } } },
-    };
-    if (opts?.loadLinks) {
-      let included = await loadLinks({
-        realmURL: this.#index.realmURL,
-        instances: this.#index.instances,
-        loader: this.loader,
-        resource: doc.data,
-        omit: [doc.data.id],
-      });
-      if (included.length > 0) {
-        doc.included = included;
+    let doc: SingleCardDocument | undefined;
+    if (this.isDbIndexerEnabled) {
+      let maybeCard = await this.indexer.getCard(url, opts);
+      if (!maybeCard) {
+        return undefined;
+      }
+      if (maybeCard.type === 'error') {
+        return maybeCard;
+      }
+      doc = {
+        data: { ...maybeCard.card, ...{ links: { self: url.href } } },
+      };
+      if (!doc) {
+        throw new Error(
+          `bug: should never get here--search index doc is undefined`,
+        );
+      }
+      if (opts?.loadLinks) {
+        let included = await this.loadLinks(
+          {
+            realmURL: this.#index.realmURL,
+            resource: doc.data,
+            omit: [doc.data.id],
+          },
+          opts,
+        );
+        if (included.length > 0) {
+          doc.included = included;
+        }
+      }
+    } else {
+      let card = this.#index.instances.get(url);
+      if (!card) {
+        return undefined;
+      }
+      if (card.type === 'error') {
+        return card;
+      }
+      doc = {
+        data: { ...card.entry.resource, ...{ links: { self: url.href } } },
+      };
+
+      if (!doc) {
+        throw new Error(
+          `bug: should never get here--search index doc is undefined`,
+        );
+      }
+      if (opts?.loadLinks) {
+        let included = await loadLinksForInMemoryIndex({
+          realmURL: this.#index.realmURL,
+          instances: this.#index.instances,
+          loader: this.loader,
+          resource: doc.data,
+          omit: [doc.data.id],
+        });
+        if (included.length > 0) {
+          doc.included = included;
+        }
       }
     }
     return { type: 'doc', doc };
   }
 
   // this is meant for tests only
-  async searchEntry(url: URL): Promise<SearchEntry | undefined> {
-    let result = this.#index.instances.get(url);
-    if (result?.type !== 'error') {
-      return result?.entry;
+  async searchEntry(url: URL): Promise<SearchCardResult | undefined> {
+    if (this.isDbIndexerEnabled) {
+      let result = await this.indexer.getCard(url);
+      if (result?.type !== 'error') {
+        return result;
+      }
+    } else {
+      let result = this.#index.instances.get(url);
+      if (!result) {
+        return undefined;
+      }
+      if (result?.type !== 'error') {
+        return {
+          type: 'card',
+          card: result.entry.resource,
+          // search docs will now be persisted in JSONB objects--this means that
+          // `undefined` values will no longer be represented since `undefined`
+          // does not exist in JSON and it is not the same as `null`
+          searchDoc: JSON.parse(JSON.stringify(result.entry.searchData)),
+          isolatedHtml: result.entry.html ?? null,
+          realmVersion: -1,
+          realmURL: this.#realm.url,
+          types: result.entry.types,
+          deps: [...result.entry.deps],
+        };
+      }
     }
     return undefined;
   }
@@ -425,6 +528,118 @@ export class SearchIndex {
     return Boolean(
       entry.types?.find((t) => t === internalKeyFor(ref, undefined)), // assumes ref refers to absolute module URL
     );
+  }
+
+  // TODO The caller should provide a list of fields to be included via JSONAPI
+  // request. currently we just use the maxLinkDepth to control how deep to load
+  // links
+  private async loadLinks(
+    {
+      realmURL,
+      resource,
+      omit = [],
+      included = [],
+      visited = [],
+      stack = [],
+    }: {
+      realmURL: URL;
+      resource: LooseCardResource;
+      omit?: string[];
+      included?: CardResource<Saved>[];
+      visited?: string[];
+      stack?: string[];
+    },
+    opts?: Options,
+  ): Promise<CardResource<Saved>[]> {
+    if (resource.id != null) {
+      if (visited.includes(resource.id)) {
+        return [];
+      }
+      visited.push(resource.id);
+    }
+    let realmPath = new RealmPaths(realmURL);
+    for (let [fieldName, relationship] of Object.entries(
+      resource.relationships ?? {},
+    )) {
+      if (!relationship.links.self) {
+        continue;
+      }
+      let linkURL = new URL(
+        relationship.links.self,
+        resource.id ? new URL(resource.id) : realmURL,
+      );
+      let linkResource: CardResource<Saved> | undefined;
+      if (realmPath.inRealm(linkURL)) {
+        let maybeResult = await this.indexer.getCard(linkURL, opts);
+        linkResource =
+          maybeResult?.type === 'card' ? maybeResult.card : undefined;
+      } else {
+        let response = await this.loader.fetch(linkURL, {
+          headers: { Accept: SupportedMimeType.CardJson },
+        });
+        if (!response.ok) {
+          let cardError = await CardError.fromFetchResponse(
+            linkURL.href,
+            response,
+          );
+          throw cardError;
+        }
+        let json = await response.json();
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `instance ${
+              linkURL.href
+            } is not a card document. it is: ${JSON.stringify(json, null, 2)}`,
+          );
+        }
+        linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
+      }
+      let foundLinks = false;
+      // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
+      // index based on keeping track of the rendered fields and invalidate the
+      // index as consumed cards change
+      if (linkResource && stack.length <= maxLinkDepth) {
+        for (let includedResource of await this.loadLinks(
+          {
+            realmURL,
+            resource: linkResource,
+            omit,
+            included: [...included, linkResource],
+            visited,
+            stack: [...(resource.id != null ? [resource.id] : []), ...stack],
+          },
+          opts,
+        )) {
+          foundLinks = true;
+          if (
+            !omit.includes(includedResource.id) &&
+            !included.find((r) => r.id === includedResource.id)
+          ) {
+            included.push({
+              ...includedResource,
+              ...{ links: { self: includedResource.id } },
+            });
+          }
+        }
+      }
+      let relationshipId = maybeURL(relationship.links.self, resource.id);
+      if (!relationshipId) {
+        throw new Error(
+          `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
+        );
+      }
+      if (
+        foundLinks ||
+        omit.includes(relationshipId.href) ||
+        (relationshipId && included.find((i) => i.id === relationshipId!.href))
+      ) {
+        resource.relationships![fieldName].data = {
+          type: 'card',
+          id: relationshipId.href,
+        };
+      }
+    }
+    return included;
   }
 
   private async loadField(ref: CodeRef, fieldPath: string): Promise<Field> {
@@ -748,7 +963,7 @@ export class SearchIndex {
 // TODO The caller should provide a list of fields to be included via JSONAPI
 // request. currently we just use the maxLinkDepth to control how deep to load
 // links
-export async function loadLinks({
+export async function loadLinksForInMemoryIndex({
   realmURL,
   instances,
   loader,
@@ -815,7 +1030,7 @@ export async function loadLinks({
     // index based on keeping track of the rendered fields and invalidate the
     // index as consumed cards change
     if (linkResource && stack.length <= maxLinkDepth) {
-      for (let includedResource of await loadLinks({
+      for (let includedResource of await loadLinksForInMemoryIndex({
         realmURL,
         instances,
         loader,
