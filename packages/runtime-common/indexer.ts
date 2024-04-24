@@ -716,7 +716,7 @@ export class Indexer {
     }
     let field: Field;
     if (currentSegment === '_cardType') {
-      // this is a little awkward--we have the need to treat the card type as a
+      // this is a little awkward--we have the need to treat '_cardType' as a
       // type of string field that we can query against from the index (e.g. the
       // cards grid sorts by the card's display name). current-run is injecting
       // this into the searchDoc during index time.
