@@ -3,9 +3,9 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { modifier } from 'ember-modifier';
 
@@ -17,6 +17,7 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -33,6 +34,7 @@ import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    roomId: string;
     message: MessageField;
     index?: number;
     monacoSDK: MonacoSDK;
@@ -49,6 +51,12 @@ export default class RoomMessage extends Component<Signature> {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
+    if (this.args.message.command?.eventId) {
+      this.getApplyState.perform(
+        this.args.roomId,
+        this.args.message.command.eventId,
+      );
+    }
   }
 
   @tracked streamingTimeout = false;
@@ -220,11 +228,12 @@ export default class RoomMessage extends Component<Signature> {
   };
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
 
   @tracked private isDisplayingCode = false;
   @tracked private patchCardError: { id: string; error: unknown } | undefined;
-  @tracked private applyButtonState: ApplyButtonState = 'ready';
+  @tracked private _applyButtonState: ApplyButtonState | undefined = 'ready';
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -289,24 +298,50 @@ export default class RoomMessage extends Component<Signature> {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
-    let { id, patch } = this.args.message.command.payload;
+    let { payload, eventId } = this.args.message.command;
     this.patchCardError = undefined;
     try {
-      this.applyButtonState = 'applying';
       await this.operatorModeStateService.patchCard.perform(
-        id,
-        patch.attributes,
+        payload.id,
+        payload.patch.attributes,
       );
-      this.applyButtonState = 'applied';
+      await this.matrixService.sendReactionEvent(
+        this.args.roomId,
+        eventId,
+        'applied',
+      );
+      await this.getApplyState.perform(this.args.roomId, eventId);
     } catch (e) {
-      this.patchCardError = { id, error: e };
-      this.applyButtonState = 'failed';
+      this.patchCardError = { id: payload.id, error: e };
+      await this.matrixService.sendReactionEvent(
+        this.args.roomId,
+        eventId,
+        'failed',
+      );
+      await this.getApplyState.perform(this.args.roomId, eventId);
     }
   });
 
   private get previewPatchCode() {
     let { commandType, payload } = this.args.message.command;
     return JSON.stringify({ commandType, payload }, null, 2);
+  }
+
+  private getApplyState = restartableTask(
+    async (roomId: string, eventId: string) => {
+      this._applyButtonState = (await this.matrixService.getReactionKeyForEvent(
+        roomId,
+        eventId,
+      )) as ApplyButtonState | undefined;
+    },
+  );
+
+  @cached
+  private get applyButtonState() {
+    if (this.patchCard.isRunning) {
+      return 'applying';
+    }
+    return this._applyButtonState ?? 'ready';
   }
 
   @action private viewCodeToggle() {

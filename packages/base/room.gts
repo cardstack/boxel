@@ -247,6 +247,7 @@ class CommandType extends FieldDef {
 class PatchField extends FieldDef {
   @field commandType = contains(CommandType);
   @field payload = contains(PatchObjectField);
+  @field eventId = contains(StringField);
 }
 
 // A map from a hash of roomId + card document to the first card fragment event id.
@@ -567,6 +568,7 @@ export class RoomField extends FieldDef {
             ...cardArgs,
             formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
             command: new PatchField({
+              eventId: event_id,
               commandType: command.type,
               payload: command,
             }),
@@ -768,24 +770,43 @@ interface MessageEvent extends BaseMatrixEvent {
 
 interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: {
-    data: {
-      command: any;
-    };
-    'm.relates_to'?: {
-      rel_type: string;
-      event_id: string;
-    };
-    msgtype: 'org.boxel.command';
-    format: 'org.matrix.custom.html';
-    body: string;
-    formatted_body: string;
-  };
+  content: CommandMessageContent;
   unsigned: {
     age: number;
     transaction_id: string;
     prev_content?: any;
     prev_sender?: string;
+  };
+}
+
+interface CommandMessageContent {
+  'm.relates_to'?: {
+    rel_type: string;
+    event_id: string;
+  };
+  msgtype: 'org.boxel.command';
+  format: 'org.matrix.custom.html';
+  body: string;
+  formatted_body: string;
+  data: {
+    command: {
+      type: 'patch';
+      payload: PatchObject;
+      eventId: string;
+    };
+  };
+}
+
+export interface ReactionEvent extends BaseMatrixEvent {
+  type: 'm.reaction';
+  content: ReactionEventContent;
+}
+
+export interface ReactionEventContent {
+  'm.relates_to': {
+    event_id: string;
+    key: string;
+    rel_type: 'm.annotation';
   };
 }
 
@@ -857,6 +878,7 @@ export type MatrixEvent =
   | RoomPowerLevels
   | MessageEvent
   | CommandEvent
+  | ReactionEvent
   | CardMessageEvent
   | RoomNameEvent
   | RoomTopicEvent

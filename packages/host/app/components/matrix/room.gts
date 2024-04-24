@@ -47,6 +47,7 @@ export default class Room extends Component<Signature> {
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
+              @roomId={{@roomId}}
               @message={{message}}
               @index={{i}}
               @isPending={{this.isPendingMessage message}}
