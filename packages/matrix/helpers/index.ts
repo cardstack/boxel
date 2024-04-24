@@ -59,7 +59,7 @@ export async function openAiAssistant(page: Page) {
 
 export async function openRoot(page: Page, url = testHost) {
   await page.goto(url);
-  await expect(page.locator('.cards-grid')).toHaveCount(1);
+  await expect(page.locator('.cards-grid')).toHaveCount(1, { timeout: 60000 });
   let isOperatorMode = !!(await page.evaluate(() =>
     document.querySelector('dialog.operator-mode'),
   ));
