@@ -2194,6 +2194,69 @@ const tests = Object.freeze({
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
   },
+
+  "cannot filter 'null' value using 'range'": async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+            },
+            age: 35,
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+            },
+            age: 30,
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+            },
+            age: 25,
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    assert.rejects(
+      indexer.search(
+        new URL(testRealmURL),
+        {
+          filter: {
+            on: type,
+            range: { age: { gt: null } },
+          },
+        },
+        loader,
+      ),
+      `'null' is not a permitted value in a 'range' filter`,
+    );
+  },
 } as SharedTests<{
   indexer: Indexer;
   loader: Loader;

@@ -423,17 +423,18 @@ export class Indexer {
     let query = fieldQuery(key, onRef, false, 'filter');
     let cardExpressions: CardExpression[] = [];
     Object.entries(filterValue).forEach(([operator, value]) => {
-      if (value != null) {
-        let v = fieldValue(key, [param(value)], onRef, 'filter');
-        cardExpressions.push([
-          fieldArity({
-            type: onRef,
-            path: key,
-            value: [query, RANGE_OPERATORS[operator as RangeOperator], v],
-            errorHint: 'filter',
-          }),
-        ]);
+      if (value == null) {
+        throw new Error(`'null' is not a permitted value in a 'range' filter`);
       }
+      let v = fieldValue(key, [param(value)], onRef, 'filter');
+      cardExpressions.push([
+        fieldArity({
+          type: onRef,
+          path: key,
+          value: [query, RANGE_OPERATORS[operator as RangeOperator], v],
+          errorHint: 'filter',
+        }),
+      ]);
     });
 
     return every(cardExpressions);

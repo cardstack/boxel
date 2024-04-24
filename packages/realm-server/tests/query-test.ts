@@ -432,4 +432,12 @@ module('query', function (hooks) {
       testCards: await makeTestCards(loader),
     });
   });
+
+  test(`cannot filter 'null' value using 'range'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
 });

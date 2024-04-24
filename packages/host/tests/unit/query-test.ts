@@ -489,4 +489,12 @@ module('Unit | query', function (hooks) {
       testCards,
     });
   });
+
+  test(`cannot filter 'null' value using 'range'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
 });
