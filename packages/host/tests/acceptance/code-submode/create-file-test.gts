@@ -556,7 +556,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
-    assert.expect(9);
+    assert.expect(10);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
@@ -594,7 +594,7 @@ export class TestCard extends CardDef {
     assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
-    await fillIn('[data-test-file-name-field]', 'test-card');
+    await fillIn('[data-test-file-name-field]', 'très-test-card');
     assert
       .dom('[data-test-create-definition]')
       .isEnabled('create button is enabled');
@@ -615,6 +615,7 @@ export class TestCard extends CardDef {
     );
 
     await waitFor('[data-test-card-schema="Test Card"]');
+    assert.dom('[data-test-current-module-name]').hasText('très-test-card.gts');
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 3 }, 'the card hierarchy is displayed in schema editor');
