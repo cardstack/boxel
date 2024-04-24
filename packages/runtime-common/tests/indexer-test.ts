@@ -2,9 +2,9 @@ import {
   Indexer,
   internalKeyFor,
   baseCardRef,
-  type IndexedCardsTable,
   type LooseCardResource,
   type DBAdapter,
+  type SearchCardResult,
 } from '../index';
 import { type SharedTests } from '../helpers';
 import { setupIndex } from '../helpers/indexer';
@@ -722,6 +722,8 @@ const tests = Object.freeze({
           realm_version: 1,
           realm_url: testRealmURL,
           pristine_doc: {
+            id: `${testRealmURL}1`,
+            type: 'card',
             attributes: {
               name: 'Mango',
             },
@@ -761,30 +763,33 @@ const tests = Object.freeze({
     });
 
     let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
-    assert.deepEqual(entry, {
-      card_url: `${testRealmURL}1.json`,
-      realm_version: 1,
-      realm_url: testRealmURL,
-      pristine_doc: {
-        attributes: {
-          name: 'Mango',
-        },
-        meta: {
-          adoptsFrom: {
-            module: `./person`,
-            name: 'Person',
+    if (entry?.type === 'card') {
+      assert.deepEqual(entry, {
+        type: 'card',
+        realmVersion: 1,
+        realmURL: testRealmURL,
+        card: {
+          id: `${testRealmURL}1`,
+          type: 'card',
+          attributes: {
+            name: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `./person`,
+              name: 'Person',
+            },
           },
         },
-      },
-      is_deleted: null,
-      error_doc: null,
-      search_doc: null,
-      deps: null,
-      types: null,
-      indexed_at: null,
-      isolated_html: null,
-      embedded_html: null,
-    });
+        searchDoc: null,
+        deps: null,
+        types: null,
+        indexedAt: null,
+        isolatedHtml: null,
+      });
+    } else {
+      assert.ok(false, `expected index entry to not be an error document`);
+    }
   },
 
   'can get work in progress index entry': async (assert, { indexer }) => {
@@ -838,33 +843,34 @@ const tests = Object.freeze({
     let entry = await indexer.getCard(new URL(`${testRealmURL}1`), {
       useWorkInProgressIndex: true,
     });
-    assert.ok(entry?.indexed_at, 'the indexed_at field was set');
-    delete (entry as Partial<IndexedCardsTable>)?.indexed_at;
-    assert.deepEqual(entry as Partial<IndexedCardsTable>, {
-      card_url: `${testRealmURL}1.json`,
-      realm_version: 2,
-      realm_url: testRealmURL,
-      pristine_doc: {
-        id: `${testRealmURL}1.json`,
+    if (entry?.type === 'card') {
+      assert.ok(entry?.indexedAt, 'the indexed_at field was set');
+      delete (entry as Partial<SearchCardResult>)?.indexedAt;
+      assert.deepEqual(entry as Omit<SearchCardResult, 'indexedAt'>, {
         type: 'card',
-        attributes: {
-          name: 'Van Gogh',
-        },
-        meta: {
-          adoptsFrom: {
-            module: `./person`,
-            name: 'Person',
+        realmVersion: 2,
+        realmURL: testRealmURL,
+        card: {
+          id: `${testRealmURL}1.json`,
+          type: 'card',
+          attributes: {
+            name: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `./person`,
+              name: 'Person',
+            },
           },
         },
-      },
-      is_deleted: false,
-      error_doc: null,
-      search_doc: { name: 'Van Gogh' },
-      deps: [],
-      types: [],
-      isolated_html: null,
-      embedded_html: null,
-    });
+        searchDoc: { name: 'Van Gogh' },
+        deps: [],
+        types: [],
+        isolatedHtml: null,
+      });
+    } else {
+      assert.ok(false, `expected index entry to not be an error document`);
+    }
   },
 
   'returns undefined when getting a deleted entry': async (

@@ -27,7 +27,7 @@ const tests = Object.freeze({
     let { mango, vangogh, paper } = testCards;
     await setupIndex(indexer, [mango, vangogh, paper]);
 
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {},
       loader,
@@ -65,7 +65,7 @@ const tests = Object.freeze({
     await setupIndex(indexer, [mango, vangogh, paper]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       { filter: { type } },
       loader,
@@ -90,7 +90,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -150,7 +150,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -196,7 +196,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -244,7 +244,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -286,7 +286,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -338,7 +338,7 @@ const tests = Object.freeze({
 
     let type = await personCardType(testCards);
     {
-      let { results, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -357,7 +357,7 @@ const tests = Object.freeze({
       assert.deepEqual(getIds(results), [mango.id], 'results are correct');
     }
     {
-      let { results, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -376,7 +376,7 @@ const tests = Object.freeze({
       assert.deepEqual(getIds(results), [vangogh.id], 'results are correct');
     }
     {
-      let { results, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -423,7 +423,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await simpleCatalogEntryType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -476,7 +476,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await eventType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -530,7 +530,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -582,7 +582,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -634,7 +634,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -680,7 +680,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -720,7 +720,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -780,7 +780,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -835,7 +835,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -979,7 +979,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1025,7 +1025,7 @@ const tests = Object.freeze({
 
       let type = await personCardType(testCards);
       {
-        let { results, meta } = await indexer.search(
+        let { cards: results, meta } = await indexer.search(
           new URL(testRealmURL),
           {
             filter: {
@@ -1044,7 +1044,7 @@ const tests = Object.freeze({
         assert.deepEqual(getIds(results), [mango.id], 'results are correct');
       }
       {
-        let { results, meta } = await indexer.search(
+        let { cards: results, meta } = await indexer.search(
           new URL(testRealmURL),
           {
             filter: {
@@ -1095,7 +1095,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1143,7 +1143,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1186,7 +1186,7 @@ const tests = Object.freeze({
       ]);
 
       let type = await personCardType(testCards);
-      let { results, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -1224,7 +1224,7 @@ const tests = Object.freeze({
       ]);
 
       let type = await personCardType(testCards);
-      let { results, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -1276,7 +1276,7 @@ const tests = Object.freeze({
     );
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1330,7 +1330,7 @@ const tests = Object.freeze({
     );
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1380,7 +1380,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         sort: [
@@ -1431,7 +1431,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         sort: [
@@ -1471,7 +1471,7 @@ const tests = Object.freeze({
 
     // page 1
     let type = await personCardType(testCards);
-    let { results, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         page: { number: 0, size: 3 },
@@ -1503,7 +1503,7 @@ const tests = Object.freeze({
 
     {
       // page 2
-      let { results, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           // providing the realm version received from the 1st page's meta keeps
@@ -1547,7 +1547,7 @@ const tests = Object.freeze({
 
     {
       // page 3
-      let { results, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           // providing the realm version received from the 1st page's meta keeps
@@ -1587,7 +1587,7 @@ const tests = Object.freeze({
     // assert that a new search against the current index no longer contains the
     // removed card
     {
-      let { results, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           sort: [
