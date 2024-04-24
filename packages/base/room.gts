@@ -573,10 +573,9 @@ export class RoomField extends FieldDef {
           // We only handle patches for now
           let command = event.content.data.command;
           if (command.type !== 'patch') {
-            console.log(
+            throw new Error(
               `cannot handle commands in room with type ${command.type}`,
             );
-            continue;
           }
           messageField = new MessageField({
             ...cardArgs,
