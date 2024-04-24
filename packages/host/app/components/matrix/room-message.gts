@@ -5,7 +5,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { modifier } from 'ember-modifier';
 
@@ -51,12 +51,6 @@ export default class RoomMessage extends Component<Signature> {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
-    if (this.args.message.command?.eventId) {
-      this.getApplyState.perform(
-        this.args.roomId,
-        this.args.message.command.eventId,
-      );
-    }
   }
 
   @tracked streamingTimeout = false;
@@ -233,7 +227,6 @@ export default class RoomMessage extends Component<Signature> {
 
   @tracked private isDisplayingCode = false;
   @tracked private patchCardError: { id: string; error: unknown } | undefined;
-  @tracked private _applyButtonState: ApplyButtonState | undefined = 'ready';
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -310,15 +303,8 @@ export default class RoomMessage extends Component<Signature> {
         eventId,
         'applied',
       );
-      await this.getApplyState.perform(this.args.roomId, eventId);
     } catch (e) {
       this.patchCardError = { id: payload.id, error: e };
-      await this.matrixService.sendReactionEvent(
-        this.args.roomId,
-        eventId,
-        'failed',
-      );
-      await this.getApplyState.perform(this.args.roomId, eventId);
     }
   });
 
@@ -327,21 +313,15 @@ export default class RoomMessage extends Component<Signature> {
     return JSON.stringify({ commandType, payload }, null, 2);
   }
 
-  private getApplyState = restartableTask(
-    async (roomId: string, eventId: string) => {
-      this._applyButtonState = (await this.matrixService.getReactionKeyForEvent(
-        roomId,
-        eventId,
-      )) as ApplyButtonState | undefined;
-    },
-  );
-
   @cached
-  private get applyButtonState() {
+  private get applyButtonState(): ApplyButtonState {
     if (this.patchCard.isRunning) {
       return 'applying';
     }
-    return this._applyButtonState ?? 'ready';
+    if (this.patchCardError) {
+      return 'failed';
+    }
+    return this.args.message.command.status;
   }
 
   @action private viewCodeToggle() {
