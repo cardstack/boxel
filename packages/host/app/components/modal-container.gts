@@ -19,6 +19,7 @@ interface Signature {
     centered?: boolean;
     cardContainerClass?: string;
     isOpen?: boolean;
+    layer?: 'urgent';
   };
   Blocks: {
     content: [];
@@ -42,6 +43,7 @@ export default class ModalContainer extends Component<Signature> {
       @isOpen={{this.isOpen}}
       @onClose={{@onClose}}
       @centered={{@centered}}
+      @layer={{@layer}}
       ...attributes
     >
       <CardContainer
