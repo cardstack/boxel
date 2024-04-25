@@ -226,7 +226,6 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare monacoService: MonacoService;
 
   @tracked private isDisplayingCode = false;
-  @tracked private patchCardError: { id: string; error: unknown } | undefined;
 
   private copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.previewPatchCode);
@@ -253,16 +252,8 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private get errorMessage() {
-    if (this.patchCardError) {
-      let message = '';
-      if (typeof this.patchCardError.error === 'string') {
-        message = this.patchCardError.error;
-      } else if (this.patchCardError.error instanceof Error) {
-        message = this.patchCardError.error.message;
-      } else {
-        console.error('Unexpected error type', this.patchCardError.error);
-      }
-      return `Failed to apply changes. ${message}`;
+    if (this.failedCommandState) {
+      return `Failed to apply changes. ${this.failedCommandState.message}`;
     }
 
     if (this.args.message.errorMessage) {
@@ -292,7 +283,7 @@ export default class RoomMessage extends Component<Signature> {
       return;
     }
     let { payload, eventId } = this.args.message.command;
-    this.patchCardError = undefined;
+    this.matrixService.failedCommandState.delete(eventId);
     try {
       await this.operatorModeStateService.patchCard.perform(
         payload.id,
@@ -304,7 +295,13 @@ export default class RoomMessage extends Component<Signature> {
         'applied',
       );
     } catch (e) {
-      this.patchCardError = { id: payload.id, error: e };
+      let error =
+        typeof e === 'string'
+          ? new Error(e)
+          : e instanceof Error
+          ? e
+          : new Error('Unknown error.');
+      this.matrixService.failedCommandState.set(eventId, error);
     }
   });
 
@@ -314,11 +311,21 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   @cached
+  private get failedCommandState() {
+    if (!this.args.message.command?.eventId) {
+      return;
+    }
+    return this.matrixService.failedCommandState.get(
+      this.args.message.command.eventId,
+    );
+  }
+
+  @cached
   private get applyButtonState(): ApplyButtonState {
     if (this.patchCard.isRunning) {
       return 'applying';
     }
-    if (this.errorMessage) {
+    if (this.failedCommandState) {
       return 'failed';
     }
     return this.args.message.command.status;

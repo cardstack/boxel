@@ -768,8 +768,13 @@ module('Integration | operator-mode', function (hooks) {
               patch: {
                 attributes: { firstName: 'Dave' },
               },
+              eventId: 'patch1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch1',
+          },
         },
         status: null,
       });
@@ -922,8 +927,8 @@ module('Integration | operator-mode', function (hooks) {
       await click(`[data-test-enter-room="room2"]`);
       await waitFor('[data-test-room-name="test room 2"]');
       assert
-        .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
-        .exists('failed state is not saved');
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="failed"]')
+        .exists();
     });
 
     test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
@@ -1085,7 +1090,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-person="Fadhlan"]');
 
       let roomId = await openAiAssistant();
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
         state_key: 'state',
@@ -1101,8 +1106,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { pet: null } },
+              eventId: 'patch1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch1',
+          },
         },
         status: null,
       });
@@ -1116,7 +1126,7 @@ module('Integration | operator-mode', function (hooks) {
           `Failed to apply changes. The "pet" attribute does not exist on the card "${id}".`,
         );
 
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event2',
         room_id: roomId,
         state_key: 'state',
@@ -1132,8 +1142,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: {} },
+              eventId: 'patch2',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch2',
+          },
         },
         status: null,
       });
@@ -1147,7 +1162,7 @@ module('Integration | operator-mode', function (hooks) {
         .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
         .hasText(`Failed to apply changes. Patch failed.`);
 
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event3',
         room_id: roomId,
         state_key: 'state',
@@ -1170,8 +1185,13 @@ module('Integration | operator-mode', function (hooks) {
                   },
                 },
               },
+              eventId: 'patch3',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch3',
+          },
         },
         status: null,
       });
@@ -1920,8 +1940,13 @@ module('Integration | operator-mode', function (hooks) {
               patch: {
                 attributes: { firstName: 'Dave' },
               },
+              eventId: 'patch1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch1',
+          },
         },
         status: null,
       });

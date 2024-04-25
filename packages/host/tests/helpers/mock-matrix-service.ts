@@ -84,6 +84,7 @@ function generateMockMatrixService(
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
+    failedCommandState: TrackedMap<string, Error> = new TrackedMap();
 
     async start(_auth?: any) {}
 
