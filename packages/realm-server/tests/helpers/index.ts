@@ -40,6 +40,7 @@ export async function createRealm(
   realmURL = testRealm,
   permissions: RealmPermissions = { '*': ['read', 'write'] },
   virtualNetwork: VirtualNetwork,
+  matrixConfig = testMatrix,
 ): Promise<Realm> {
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
@@ -54,6 +55,7 @@ export async function createRealm(
       writeJSONSync(join(dir, filename), contents);
     }
   }
+  // debugger;
   return new Realm({
     url: realmURL,
     adapter: new NodeAdapter(dir),
@@ -61,7 +63,7 @@ export async function createRealm(
     runnerOptsMgr: manager,
     getIndexHTML: async () =>
       readFileSync(join(distPath, 'index.html')).toString(),
-    matrix: testMatrix,
+    matrix: matrixConfig,
     permissions,
     realmSecretSeed: "shhh! it's a secret",
     virtualNetwork,
@@ -105,6 +107,7 @@ export async function runTestRealmServer(
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   testRealmURL: URL,
   permissions?: RealmPermissions,
+  matrixConfig?: { url: URL; username: string; password: string },
 ) {
   let testRealm = await createRealm(
     dir,
@@ -112,13 +115,13 @@ export async function runTestRealmServer(
     testRealmURL.href,
     permissions,
     virtualNetwork,
+    matrixConfig,
   );
   virtualNetwork.mount(testRealm.maybeExternalHandle);
   await testRealm.ready;
-  let testRealmServer = await new RealmServer(
-    [testRealm],
-    virtualNetwork,
-  ).listen(parseInt(testRealmURL.port));
+  let testRealmServer = new RealmServer([testRealm], virtualNetwork).listen(
+    parseInt(testRealmURL.port),
+  );
   return {
     testRealm,
     testRealmServer,

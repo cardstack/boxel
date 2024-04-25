@@ -86,6 +86,8 @@ import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
+import { RealmAuthHandler } from './realm-auth-handler';
+
 export type RealmInfo = {
   name: string;
   backgroundURL: string | null;
@@ -246,6 +248,7 @@ export class Realm {
   #operationQueue: Operation[] = [];
   #realmSecretSeed: string;
   #permissions: RealmPermissions;
+  #realmAuthHandler: RealmAuthHandler;
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -298,8 +301,17 @@ export class Realm {
     let loader = virtualNetwork.createLoader();
     adapter.setLoader?.(loader);
 
+    this.#realmAuthHandler = new RealmAuthHandler(
+      this.#matrixClient,
+      loader,
+      url,
+    );
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
+    this.loaderTemplate.registerURLHandler(
+      this.#realmAuthHandler.fetchWithAuth,
+    );
+
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -358,12 +370,29 @@ export class Realm {
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
       )
-      .get('/.*', SupportedMimeType.HTML, this.respondWithHTML.bind(this));
+      .get('/.*', SupportedMimeType.HTML, this.respondWithHTML.bind(this))
+      .get(
+        '/_readiness-check',
+        SupportedMimeType.RealmInfo,
+        this.readinessCheck.bind(this),
+      );
 
     this.#deferStartup = opts?.deferStartUp ?? false;
     if (!opts?.deferStartUp) {
       this.#startedUp.fulfill((() => this.#startup())());
     }
+  }
+
+  get p() {
+    return this.#permissions;
+  }
+
+  private async readinessCheck() {
+    await this.ready;
+    return createResponse(this, null, {
+      headers: { 'content-type': 'text/html' },
+      status: 200,
+    });
   }
 
   // it's only necessary to call this when the realm is using a deferred startup
@@ -1018,6 +1047,10 @@ export class Realm {
     request: Request,
     neededPermission: 'read' | 'write',
   ) {
+    if (this.isRequestToPublicEndpoint(request)) {
+      return;
+    }
+
     let endpointsWithoutAuthNeeded: RouteTable<true> = new Map([
       // authentication endpoint
       [
@@ -1710,6 +1743,19 @@ export class Realm {
 
   get isPublicReadable(): boolean {
     return this.#permissions['*']?.includes('read') ?? false;
+  }
+
+  publicEndpoints = [
+    { path: '/_session', method: 'POST' },
+    { path: '/_readiness-check', method: 'GET' },
+  ];
+
+  private isRequestToPublicEndpoint(request: Request) {
+    return this.publicEndpoints.some(
+      (endpoint) =>
+        request.url.endsWith(endpoint.path) &&
+        request.method === endpoint.method,
+    );
   }
 }
 
