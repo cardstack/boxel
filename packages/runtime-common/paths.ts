@@ -36,7 +36,7 @@ export class RealmPaths {
     local = local.replace(/\/+$/, '');
 
     // the LocalPath has no leading nor trailing slashes
-    return local;
+    return decodeURI(local);
   }
 
   fileURL(local: LocalPath): URL {
