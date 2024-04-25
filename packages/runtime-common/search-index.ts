@@ -1,3 +1,4 @@
+import * as JSONTypes from 'json-typescript';
 import {
   baseRealm,
   SupportedMimeType,
@@ -10,6 +11,10 @@ import {
   type Queue,
   type QueryOptions,
   type SearchCardResult,
+  type FromScratchArgs,
+  type FromScratchResult,
+  type IncrementalArgs,
+  type IncrementalResult,
 } from '.';
 import { Kind, Realm } from './realm';
 import { LocalPath, RealmPaths } from './paths';
@@ -25,7 +30,7 @@ import type {
 import { CardError, type SerializedError } from './error';
 import { URLMap } from './url-map';
 import flatMap from 'lodash/flatMap';
-import { type Ignore } from 'ignore';
+import ignore, { type Ignore } from 'ignore';
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CodeRef, getField, identifyCard, loadCard } from './code-ref';
@@ -48,7 +53,7 @@ export interface Reader {
   ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
 }
 
-export interface Stats {
+export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
   instanceErrors: number;
   moduleErrors: number;
@@ -58,9 +63,10 @@ export interface RunState {
   realmURL: URL;
   instances: URLMap<SearchEntryWithErrors>;
   ignoreMap: URLMap<Ignore>;
-  ignoreMapContents: URLMap<string>;
+  ignoreData: Record<string, string>;
   modules: Map<string, ModuleWithErrors>;
   stats: Stats;
+  invalidations: string[];
 }
 
 export type RunnerRegistration = (
@@ -213,9 +219,10 @@ export class SearchIndex {
       realmURL: new URL(realm.url),
       loader: Loader.cloneLoader(realm.loaderTemplate),
       ignoreMap: new URLMap(),
-      ignoreMapContents: new URLMap(),
+      ignoreData: new Object(null) as Record<string, string>,
       instances: new URLMap(),
       modules: new Map(),
+      invalidations: [],
       stats: {
         instancesIndexed: 0,
         instanceErrors: 0,
@@ -258,55 +265,122 @@ export class SearchIndex {
     return this.#index;
   }
 
-  async run() {
+  async run(onIndexer?: (indexer: Indexer) => Promise<void>) {
     if (this.isDbIndexerEnabled) {
       await this.queue.start();
       await this.indexer.ready();
-    }
-    await this.setupRunner(async () => {
-      if (!this.#fromScratch) {
-        throw new Error(`Index runner has not been registered`);
+      if (onIndexer) {
+        await onIndexer(this.indexer);
       }
-      let current = await this.#fromScratch(this.#index.realmURL);
+
+      let args: FromScratchArgs = {
+        realmURL: this.#realm.url,
+      };
+      let job = await this.queue.publish<FromScratchResult>(
+        'from-scratch-index',
+        args,
+      );
+      let { ignoreData, stats } = await job.done;
+      let ignoreMap = new URLMap<Ignore>();
+      for (let [url, contents] of Object.entries(ignoreData)) {
+        ignoreMap.set(new URL(url), ignore().add(contents));
+      }
+      // TODO clean this up after we remove feature flag. For now I'm just
+      // including the bare minimum to keep this from blowing up using the old APIs
       this.#index = {
-        ...this.#index, // don't clobber the instances that the entrySetter has already made
-        modules: current.modules,
-        ignoreMap: current.ignoreMap,
-        realmURL: current.realmURL,
-        stats: current.stats,
+        stats,
+        ignoreMap,
+        realmURL: new URL(this.#realm.url),
+        ignoreData,
+        instances: new URLMap(),
+        modules: new Map(),
+        invalidations: [],
         loader: Loader.cloneLoader(this.#realm.loaderTemplate),
       };
-    });
+    } else {
+      await this.setupRunner(async () => {
+        if (!this.#fromScratch) {
+          throw new Error(`Index runner has not been registered`);
+        }
+        let current = await this.#fromScratch(this.#index.realmURL);
+        this.#index = {
+          ...this.#index, // don't clobber the instances that the entrySetter has already made
+          modules: current.modules,
+          ignoreMap: current.ignoreMap,
+          realmURL: current.realmURL,
+          stats: current.stats,
+          loader: Loader.cloneLoader(this.#realm.loaderTemplate),
+        };
+      });
+    }
   }
 
   async update(
     url: URL,
     opts?: { delete?: true; onInvalidation?: (invalidatedURLs: URL[]) => void },
   ): Promise<void> {
-    await this.setupRunner(async () => {
-      if (!this.#incremental) {
-        throw new Error(`Index runner has not been registered`);
-      }
-      // TODO this should be published into the queue
-      let current = await this.#incremental(
-        this.#index,
-        url,
-        opts?.delete ? 'delete' : 'update',
-        opts?.onInvalidation,
+    if (this.isDbIndexerEnabled) {
+      let args: IncrementalArgs = {
+        url: url.href,
+        realmURL: this.#realm.url,
+        operation: opts?.delete ? 'delete' : 'update',
+        ignoreData: { ...this.#index.ignoreData },
+      };
+      let job = await this.queue.publish<IncrementalResult>(
+        'incremental-index',
+        args,
       );
+      let { invalidations, ignoreData, stats } = await job.done;
+      let ignoreMap = new URLMap<Ignore>();
+      for (let [url, contents] of Object.entries(ignoreData)) {
+        ignoreMap.set(new URL(url), ignore().add(contents));
+      }
+      // TODO clean this up after we remove feature flag. For now I'm just
+      // including the bare minimum to keep this from blowing up using the old APIs
       this.#index = {
-        // we overwrite the instances in the incremental update, as there may
-        // have been instance removals due to invalidation that the entrySetter
-        // cannot accommodate in its current form
-        instances: current.instances,
-        modules: current.modules,
-        ignoreMap: current.ignoreMap,
-        ignoreMapContents: current.ignoreMapContents,
-        realmURL: current.realmURL,
-        stats: current.stats,
+        stats,
+        ignoreMap,
+        ignoreData,
+        invalidations,
+        realmURL: new URL(this.#realm.url),
+        instances: new URLMap(),
+        modules: new Map(),
         loader: Loader.cloneLoader(this.#realm.loaderTemplate),
       };
-    });
+      if (opts?.onInvalidation) {
+        opts.onInvalidation(
+          invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+        );
+      }
+    } else {
+      await this.setupRunner(async () => {
+        if (!this.#incremental) {
+          throw new Error(`Index runner has not been registered`);
+        }
+        // TODO this should be published into the queue
+        let current = await this.#incremental(
+          this.#index,
+          url,
+          opts?.delete ? 'delete' : 'update',
+          opts?.onInvalidation,
+        );
+        // TODO we should handle onInvalidation here in the case where we are doing db based index
+
+        this.#index = {
+          // we overwrite the instances in the incremental update, as there may
+          // have been instance removals due to invalidation that the entrySetter
+          // cannot accommodate in its current form
+          instances: current.instances,
+          modules: current.modules,
+          ignoreMap: current.ignoreMap,
+          ignoreData: current.ignoreData,
+          realmURL: current.realmURL,
+          stats: current.stats,
+          invalidations: current.invalidations,
+          loader: Loader.cloneLoader(this.#realm.loaderTemplate),
+        };
+      });
+    }
   }
 
   // TODO I think we can break this out into a different module specifically a

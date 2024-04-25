@@ -303,6 +303,7 @@ export class Indexer {
     if (!sort) {
       return ['ORDER BY card_url COLLATE "POSIX"'];
     }
+    // TODO use NULL FIRST or NULLS LAST to assert consistent null ordering in sorts
     return [
       'ORDER BY',
       ...separatedByCommas([
@@ -842,31 +843,6 @@ export class Batch {
         ],
       },
     );
-
-    await this.client.query([
-      ...upsert(
-        'indexed_cards',
-        'indexed_cards_pkey',
-        nameExpressions,
-        valueExpressions,
-      ),
-    ]);
-  }
-
-  // TODO I don't think we actually need this--we rely on the fact that deleted
-  // entries will be invalidated as part of incremental update, and if it is
-  // tru0ly gone, then we'll never visit the file as we try to visit the
-  // invalidations.
-  async deleteEntry(url: URL): Promise<void> {
-    let href = assertURLEndsWithJSON(url).href;
-    this.touched.add(href);
-    let { nameExpressions, valueExpressions } = asExpressions({
-      card_url: href,
-      realm_version: this.realmVersion,
-      realm_url: this.realmURL.href,
-      is_deleted: true,
-      indexed_at: Date.now(),
-    } as IndexedCardsTable);
 
     await this.client.query([
       ...upsert(

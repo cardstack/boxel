@@ -1,5 +1,4 @@
-// TODO make sure to remove this from @cardstack/runtime-common deps
-import ignore, { Ignore } from 'ignore';
+import ignore, { type Ignore } from 'ignore';
 
 import flatMap from 'lodash/flatMap';
 import isEqual from 'lodash/isEqual';
@@ -34,6 +33,7 @@ import {
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
   CardError,
+  isCardError,
   serializableError,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
@@ -66,6 +66,7 @@ type TypesWithErrors =
   | { type: 'error'; error: SerializedError };
 
 export class CurrentRun {
+  #invalidations: string[] = [];
   #instances: URLMap<SearchEntryWithErrors>;
   #modules = new Map<string, ModuleWithErrors>();
   #moduleWorkingCache = new Map<string, Promise<Module>>();
@@ -78,7 +79,7 @@ export class CurrentRun {
   #batch: Batch | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
-  #ignoreMapContents: URLMap<string>;
+  #ignoreData: Record<string, string>;
   #loader: Loader;
   #entrySetter: EntrySetter;
   #renderCard: RenderCard;
@@ -98,7 +99,7 @@ export class CurrentRun {
     instances = new URLMap(),
     modules = new Map(),
     ignoreMap = new URLMap(),
-    ignoreMapContents = new URLMap(),
+    ignoreData = new Object(null) as Record<string, string>,
     loader,
     entrySetter,
     renderCard,
@@ -109,7 +110,7 @@ export class CurrentRun {
     instances?: URLMap<SearchEntryWithErrors>;
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
-    ignoreMapContents?: URLMap<string>;
+    ignoreData?: Record<string, string>;
     loader: Loader;
     entrySetter: EntrySetter;
     renderCard: RenderCard;
@@ -124,7 +125,7 @@ export class CurrentRun {
     this.#instances = instances;
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
-    this.#ignoreMapContents = ignoreMapContents;
+    this.#ignoreData = ignoreData;
     this.#loader = loader;
     this.#entrySetter = entrySetter;
     this.#renderCard = renderCard;
@@ -146,6 +147,7 @@ export class CurrentRun {
       (globalThis as any).__currentRunLoader = current.loader;
       if (isDbIndexerEnabled()) {
         current.#batch = await current.indexer.createBatch(current.realmURL);
+        current.#invalidations = [];
         await current.batch.makeNewGeneration();
       }
       await current.visitDirectory(current.realmURL);
@@ -177,6 +179,8 @@ export class CurrentRun {
     entrySetter: EntrySetter;
     renderCard: RenderCard;
     indexer?: Indexer;
+    // TODO remove this after we remove the feature flag. this handler happens
+    // outside of the index job
     onInvalidation?: (invalidatedURLs: URL[]) => void;
   }) {
     let start = Date.now();
@@ -184,7 +188,7 @@ export class CurrentRun {
     (globalThis as any).__currentRunLoader = loader;
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
-    let ignoreMapContents = new URLMap(prev.ignoreMapContents);
+    let ignoreData = { ...prev.ignoreData };
     let invalidations: URL[] = [];
     let modules = new Map(prev.modules);
 
@@ -206,7 +210,7 @@ export class CurrentRun {
       instances,
       modules,
       ignoreMap,
-      ignoreMapContents,
+      ignoreData,
       loader,
       entrySetter,
       renderCard,
@@ -216,6 +220,7 @@ export class CurrentRun {
       invalidations = (await current.batch.invalidate(url)).map(
         (href) => new URL(href),
       );
+      current.#invalidations = [...invalidations].map((url) => url.href);
     }
 
     await current.whileIndexing(async () => {
@@ -223,7 +228,17 @@ export class CurrentRun {
         await current.visitFile(url);
       }
       for (let invalidation of invalidations) {
-        await current.visitFile(invalidation);
+        try {
+          await current.visitFile(invalidation);
+        } catch (err: any) {
+          if (isCardError(err) && err.status === 404) {
+            log.info(
+              `tried to visit file ${invalidation}, but it no longer exists`,
+            );
+          } else {
+            throw err;
+          }
+        }
       }
 
       if (isDbIndexerEnabled()) {
@@ -273,6 +288,10 @@ export class CurrentRun {
     return this.#instances;
   }
 
+  get invalidations() {
+    return [...this.#invalidations];
+  }
+
   get modules() {
     return this.#modules;
   }
@@ -281,8 +300,8 @@ export class CurrentRun {
     return this.#ignoreMap;
   }
 
-  get ignoreMapContents() {
-    return this.#ignoreMapContents;
+  get ignoreData() {
+    return this.#ignoreData;
   }
 
   get realmURL() {
@@ -299,7 +318,7 @@ export class CurrentRun {
     );
     if (ignorePatterns && ignorePatterns.content) {
       this.#ignoreMap.set(url, ignore().add(ignorePatterns.content));
-      this.#ignoreMapContents.set(url, ignorePatterns.content);
+      this.#ignoreData[url.href] = ignorePatterns.content;
     }
 
     for await (let { path: innerPath, kind } of this.#reader.readdir(
@@ -342,8 +361,9 @@ export class CurrentRun {
         this.loader,
       );
       if (!fileRef) {
-        log.info(`tried to visit file ${url.href}, but it no longer exists`);
-        return;
+        let error = new CardError(`missing file ${url.href}`, { status: 404 });
+        error.deps = [url.href];
+        throw error;
       }
       if (!identityContext) {
         let api = await this.#loader.import<typeof CardAPI>(

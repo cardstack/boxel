@@ -1542,7 +1542,7 @@ const tests = Object.freeze({
 
     // mutate the index
     let batch = await indexer.createBatch(new URL(testRealmURL));
-    await batch.deleteEntry(new URL(`${testRealmURL}mango3.json`));
+    await batch.invalidate(new URL(`${testRealmURL}mango3.json`));
     await batch.done();
 
     {

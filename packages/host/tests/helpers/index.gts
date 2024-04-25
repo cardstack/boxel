@@ -12,6 +12,7 @@ import {
   baseRealm,
   RealmPermissions,
   Deferred,
+  Worker,
   type RealmInfo,
   type TokenClaims,
   type Indexer,
@@ -31,6 +32,7 @@ import {
   type RunnerRegistration,
   type EntrySetter,
   type SearchEntryWithErrors,
+  type IndexRunner,
 } from '@cardstack/runtime-common/search-index';
 
 import ENV from '@cardstack/host/config/environment';
@@ -507,20 +509,23 @@ async function setupTestRealm({
   }
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
+  let dbAdapter = new SQLiteAdapter(sqlSchema);
+  let queue = new BrowserQueue();
+  let indexRunner: IndexRunner = async (optsId) => {
+    let { registerRunner, entrySetter, indexer } =
+      runnerOptsMgr.getOptions(optsId);
+    await localIndexer.configureRunner(
+      registerRunner,
+      entrySetter,
+      adapter,
+      indexer,
+    );
+  };
 
   realm = new Realm({
     url: realmURL,
     adapter,
-    indexRunner: async (optsId) => {
-      let { registerRunner, entrySetter, indexer } =
-        runnerOptsMgr.getOptions(optsId);
-      await localIndexer.configureRunner(
-        registerRunner,
-        entrySetter,
-        adapter,
-        indexer,
-      );
-    },
+    indexRunner,
     runnerOptsMgr,
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
@@ -528,12 +533,16 @@ async function setupTestRealm({
     permissions,
     realmSecretSeed: testRealmSecretSeed,
     virtualNetwork,
-    ...((globalThis as any).__enablePgIndexer?.()
-      ? {
-          dbAdapter: new SQLiteAdapter(sqlSchema),
-          queue: new BrowserQueue(),
-        }
-      : {}),
+    ...((globalThis as any).__enablePgIndexer?.() ? { dbAdapter, queue } : {}),
+    onIndexer: async (indexer) =>
+      await new Worker({
+        indexer,
+        queue,
+        realmAdapter: adapter,
+        runnerOptsManager: runnerOptsMgr,
+        loader: virtualNetwork.createLoader(),
+        indexRunner,
+      }).run(),
   });
   virtualNetwork.mount(realm.maybeHandle);
 

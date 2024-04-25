@@ -44,10 +44,6 @@ module('indexer db client', function (hooks) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
-  test('can remove an index entry', async function (assert) {
-    await runSharedTest(indexerTests, assert, { indexer, adapter });
-  });
-
   test('can create a new generation of index entries', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });

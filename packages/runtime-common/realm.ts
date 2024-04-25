@@ -32,6 +32,7 @@ import {
   type DirectoryEntryRelationship,
   type DBAdapter,
   type Queue,
+  type Indexer,
 } from './index';
 import merge from 'lodash/merge';
 import flatMap from 'lodash/flatMap';
@@ -248,6 +249,7 @@ export class Realm {
   #operationQueue: Operation[] = [];
   #realmSecretSeed: string;
   #permissions: RealmPermissions;
+  #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -269,7 +271,9 @@ export class Realm {
     {
       url,
       adapter,
+      // TODO remove this after feature flag is removed
       indexRunner,
+      // TODO remove this after feature flag is removed
       runnerOptsMgr,
       getIndexHTML,
       matrix,
@@ -278,6 +282,7 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
+      onIndexer,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -290,6 +295,7 @@ export class Realm {
       dbAdapter?: DBAdapter;
       queue?: Queue;
       virtualNetwork: VirtualNetwork;
+      onIndexer?: (indexer: Indexer) => Promise<void>;
     },
     opts?: Options,
   ) {
@@ -307,6 +313,7 @@ export class Realm {
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
+    this.#onIndexer = onIndexer;
     this.#searchIndex = new SearchIndex({
       realm: this,
       readdir: this.#adapter.readdir.bind(this.#adapter),
@@ -566,7 +573,7 @@ export class Realm {
   async #startup() {
     await Promise.resolve();
     await this.#warmUpCache();
-    await this.#searchIndex.run();
+    await this.#searchIndex.run(this.#onIndexer);
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
   }
 
