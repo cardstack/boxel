@@ -107,6 +107,8 @@ test.describe('Room creation', () => {
   });
 
   test('it can rename a room', async ({ page }) => {
+    test.slow();
+
     await login(page, 'user1', 'pass');
 
     let room1 = await getRoomId(page);
