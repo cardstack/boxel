@@ -75,7 +75,7 @@ module('realm-auth-handler-test', function () {
       'http://test-realm/',
     );
 
-    (realmAuthHandler as any).buildRealmAuthClient = () => {
+    (realmAuthHandler as any).createRealmAuthClient = () => {
       return {
         getJWT: () => 'Bearer token_3',
       };
