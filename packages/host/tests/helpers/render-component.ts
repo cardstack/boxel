@@ -18,9 +18,12 @@ async function cardApi(
   return await loader.import(`${baseRealm.url}card-api`);
 }
 
-export async function renderComponent(C: ComponentLike) {
+export async function renderComponent(C: ComponentLike, format?: Format) {
   await render(
-    precompileTemplate(`<C/>`, { strictMode: true, scope: () => ({ C }) }),
+    precompileTemplate(`<C @format={{format}} />`, {
+      strictMode: true,
+      scope: () => ({ C, format }),
+    }),
   );
 }
 
@@ -32,6 +35,6 @@ export async function renderCard(
 ) {
   let api = await cardApi(loader);
   await api.recompute(card, { recomputeAllFields: true });
-  await renderComponent(api.getComponent(card, format, field));
+  await renderComponent(api.getComponent(card, field), format);
   return (getContext() as { element: Element }).element;
 }

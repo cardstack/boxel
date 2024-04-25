@@ -427,6 +427,14 @@ module('Integration | computeds', function (hooks) {
       ),
       ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura'],
     );
+
+    await renderCard(loader, abdelRahmans, 'edit');
+    assert
+      .dom('[data-test-contains-many="people"] [data-test-remove]')
+      .exists({ count: 6 });
+    assert
+      .dom('[data-test-contains-many="slowPeople"] [data-test-remove]')
+      .doesNotExist();
   });
 
   test('supports an empty containsMany computed composite field', async function (assert) {
