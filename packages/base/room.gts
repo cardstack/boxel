@@ -186,7 +186,7 @@ class ScrollIntoView extends Modifier {
 }
 
 function getCardComponent(card: CardDef) {
-  return card.constructor.getComponent(card, 'atom');
+  return card.constructor.getComponent(card);
 }
 
 class EmbeddedMessageField extends Component<typeof MessageField> {
@@ -210,7 +210,7 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
         {{else if cardResource.card}}
           {{#let (getCardComponent cardResource.card) as |CardComponent|}}
             <div data-test-attached-card={{cardResource.card.id}}>
-              <CardComponent />
+              <CardComponent @format='atom' />
             </div>
           {{/let}}
         {{/if}}
