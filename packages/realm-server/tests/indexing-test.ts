@@ -572,7 +572,7 @@ module('permissioned realm', function (hooks) {
   let testRealmServer2: Server;
   let baseRealmServer: Server;
 
-  // We want 2 different realm users to test authorization between them These names are selected because they are already available in the test environment (via register-realm-users.ts)
+  // We want 2 different realm users to test authorization between them - these names are selected because they are already available in the test environment (via register-realm-users.ts)
   let matrixUser1 = 'test_realm';
   let matrixUser2 = 'node-test_realm';
 

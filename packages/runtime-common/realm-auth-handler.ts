@@ -4,6 +4,7 @@ import { RealmAuthClient } from './realm-auth-client';
 import { Loader } from './loader';
 
 export class RealmAuthHandler {
+  // Cached realm info to avoid fetching it multiple times for the same realm
   private visitedRealms = new Map<
     string,
     {
@@ -22,8 +23,8 @@ export class RealmAuthHandler {
     this.realmURL = realmURL;
   }
 
-  // As a separate method to support mocking in tests
-  private buildRealmAuthClient(
+  // A separate method for realm auth client creation to support mocking in tests
+  private createRealmAuthClient(
     realmURL: URL,
     matrixClient: MatrixClient,
     loader: Loader,
@@ -39,9 +40,9 @@ export class RealmAuthHandler {
     if (
       request.url.endsWith('_session') ||
       request.method === 'HEAD' ||
-      request.headers.has('Authorization')
+      request.headers.has('Authorization') // Prevent infinite recursion when loader.fetch calls this handler again - fetchWithAuth from here on already added what it needed to
     ) {
-      return null; // Prevent infinite recursion when loader.fetch calls this handler again - fetchWithAuth from here on already added what it needed to
+      return null;
     }
 
     let targetRealm: {
@@ -75,7 +76,7 @@ export class RealmAuthHandler {
       targetRealm = {
         isPublicReadable,
         url: targetRealmURL,
-        realmAuthClient: this.buildRealmAuthClient(
+        realmAuthClient: this.createRealmAuthClient(
           new URL(targetRealmURL),
           this.matrixClient,
           this.loader,
