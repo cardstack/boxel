@@ -4,14 +4,16 @@ import { assertJSONValue, assertJSONPrimitive } from './json-validation';
 import qs from 'qs';
 import { type CodeRef, isCodeRef } from './index';
 
+export type Page = {
+  number: number; // page.number is 0-based
+  size: number;
+  realmVersion?: number;
+}
+
 export interface Query {
   filter?: Filter;
   sort?: Sort;
-  page?: {
-    number: number; // page.number is 0-based
-    size: number;
-    realmVersion?: number;
-  };
+  page?: Page;
 }
 
 export type CardURL = string;

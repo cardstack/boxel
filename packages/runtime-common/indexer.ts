@@ -43,6 +43,7 @@ import {
   RANGE_OPERATORS,
   RangeOperator,
   RangeFilterValue,
+  Page,
 } from './query';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
@@ -156,13 +157,7 @@ export class Indexer {
     return batch;
   }
 
-  async cardsThatReference(cardId: string): Promise<string[]> {
-    // TODO we really need a solution to iterate through large invalidation
-    // result sets for this--pervious implementations ran into a bug that
-    // necessitated a cursor for large invalidations. But beware, there is no
-    // cursor support for SQLite in worker mode. Instead, implement paging for
-    // this query. we can probably do something similar to how we are paging the
-    // search() method using realm_version for stability between pages.
+  async cardsThatReference(cardId: string, page?: Page): Promise<string[]> {
     let rows = (await this.query([
       `SELECT card_url
        FROM
@@ -174,6 +169,7 @@ export class Indexer {
       'AND',
       ...realmVersionExpression({ useWorkInProgressIndex: true }),
       'ORDER BY i.card_url COLLATE "POSIX"',
+      ...(page ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`] : []),
     ] as Expression)) as Pick<IndexedCardsTable, 'card_url'>[];
     return rows.map((r) => r.card_url);
   }
@@ -951,7 +947,15 @@ export class Batch {
 
   private async calculateInvalidations(id: string): Promise<string[]> {
     let invalidations = [id];
-    let childInvalidations = await this.client.cardsThatReference(id);
+    let childInvalidations: string[] = [];
+    let page = { number: -1, size: 10};
+    let results: string[];
+    do {
+      page.number++;
+      results = await this.client.cardsThatReference(id, page);
+      childInvalidations = [...childInvalidations, ...results];
+    } while(results.length === page.size);
+
     invalidations = [
       ...invalidations,
       ...flatten(
