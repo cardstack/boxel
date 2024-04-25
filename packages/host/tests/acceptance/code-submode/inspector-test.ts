@@ -23,13 +23,11 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
-  TestRealmAdapter,
   elementIsVisible,
   getMonacoContent,
   percySnapshot,
@@ -44,6 +42,7 @@ import {
   type TestContextWithSave,
   setMonacoContent,
 } from '../../helpers';
+import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const testRealmURL2 = 'http://test-realm/test2/';
@@ -417,18 +416,13 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     window.localStorage.removeItem('recent-files');
     realmPermissions = { [testRealmURL]: ['read', 'write'] };
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
-      loader,
       contents: realmAFiles,
       realmURL: testRealmURL2,
     });
     ({ realm, adapter } = await setupAcceptanceTestRealm({
-      loader,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,

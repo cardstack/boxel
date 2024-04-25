@@ -33,7 +33,10 @@ export interface RoomMeta {
   name?: string;
 }
 
-export type Event = Partial<IEvent> & { status: MatrixSDK.EventStatus | null };
+export type Event = Partial<IEvent> & {
+  status: MatrixSDK.EventStatus | null;
+  error?: MatrixSDK.MatrixError;
+};
 
 export interface EventSendingContext {
   rooms: Map<string, Promise<RoomField>>;

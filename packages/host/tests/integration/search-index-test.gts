@@ -886,7 +886,9 @@ module('Integration | search-index', function (hooks) {
               description: 'Dog',
               thumbnailURL: './jackie.jpg',
             },
-            meta: { adoptsFrom: { module: `./pet-card`, name: 'PetCard' } },
+            meta: {
+              adoptsFrom: { module: `./pet-card`, name: 'PetCard' },
+            },
             relationships: {
               'appointment.contact.pet': {
                 links: { self: `${testRealmURL}mango` },
@@ -2196,7 +2198,10 @@ module('Integration | search-index', function (hooks) {
     let hassanID = `${testRealmURL}Friends/hassan`;
     let mangoID = `${testRealmURL}Friends/mango`;
     let vanGoghID = `${testRealmURL}Friends/vanGogh`;
-    let friendsRef = { module: `${testModuleRealm}friends`, name: 'Friends' };
+    let friendsRef = {
+      module: `${testModuleRealm}friends`,
+      name: 'Friends',
+    };
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -2237,7 +2242,9 @@ module('Integration | search-index', function (hooks) {
       'instances are indexed without error',
     );
 
-    let hassan = await indexer.card(new URL(hassanID), { loadLinks: true });
+    let hassan = await indexer.card(new URL(hassanID), {
+      loadLinks: true,
+    });
     if (hassan?.type === 'doc') {
       assert.deepEqual(
         hassan.doc.data,
@@ -2487,7 +2494,9 @@ module('Integration | search-index', function (hooks) {
       assert.ok(false, `could not find ${mangoID} in the index`);
     }
 
-    let vanGogh = await indexer.card(new URL(vanGoghID), { loadLinks: true });
+    let vanGogh = await indexer.card(new URL(vanGoghID), {
+      loadLinks: true,
+    });
     if (vanGogh?.type === 'doc') {
       assert.deepEqual(
         vanGogh.doc.data,
@@ -2669,6 +2678,7 @@ module('Integration | search-index', function (hooks) {
         'https://packages/ember-concurrency',
         'https://packages/ember-concurrency/-private/async-arrow-runtime',
         'https://packages/ember-modifier',
+        'https://packages/ember-provide-consume-context',
         'https://packages/lodash',
         'https://packages/tracked-built-ins',
       ],
@@ -2680,8 +2690,12 @@ module('Integration | search-index', function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
-        'ignore-me-1.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-        'posts/nested.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'ignore-me-1.json': {
+          data: { meta: { adoptsFrom: baseCardRef } },
+        },
+        'posts/nested.json': {
+          data: { meta: { adoptsFrom: baseCardRef } },
+        },
         'posts/please-ignore-me.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
         },
@@ -2770,7 +2784,9 @@ posts/please-ignore-me.json
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
-        'posts/ignore-me.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'posts/ignore-me.json': {
+          data: { meta: { adoptsFrom: baseCardRef } },
+        },
         '.gitignore': `
 posts/ignore-me.json
       `,
@@ -2822,7 +2838,10 @@ posts/ignore-me.json
           type: 'card',
           attributes: { author: { firstName: 'Cardy' }, editions: 1 },
           meta: {
-            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
+            adoptsFrom: {
+              module: `${testModuleRealm}book`,
+              name: 'Book',
+            },
           },
         },
       },
@@ -2841,7 +2860,10 @@ posts/ignore-me.json
             views: 10,
           },
           meta: {
-            adoptsFrom: { module: `${testModuleRealm}post`, name: 'Post' },
+            adoptsFrom: {
+              module: `${testModuleRealm}post`,
+              name: 'Post',
+            },
           },
         },
       },
@@ -2879,7 +2901,10 @@ posts/ignore-me.json
             pubDate: '2022-07-01',
           },
           meta: {
-            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
+            adoptsFrom: {
+              module: `${testModuleRealm}book`,
+              name: 'Book',
+            },
           },
         },
       },
@@ -2895,7 +2920,10 @@ posts/ignore-me.json
             pubDate: '2023-08-01',
           },
           meta: {
-            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
+            adoptsFrom: {
+              module: `${testModuleRealm}book`,
+              name: 'Book',
+            },
           },
         },
       },
@@ -2911,7 +2939,10 @@ posts/ignore-me.json
             pubDate: '2022-08-01',
           },
           meta: {
-            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
+            adoptsFrom: {
+              module: `${testModuleRealm}book`,
+              name: 'Book',
+            },
           },
         },
       },
@@ -3252,7 +3283,10 @@ posts/ignore-me.json
     test(`can search for cards that have custom queryableValue`, async function (assert) {
       let { data: matching } = await indexer.search({
         filter: {
-          on: { module: `${baseRealm.url}catalog-entry`, name: 'CatalogEntry' },
+          on: {
+            module: `${baseRealm.url}catalog-entry`,
+            name: 'CatalogEntry',
+          },
           eq: {
             ref: {
               module: `${testModuleRealm}post`,
@@ -3311,7 +3345,9 @@ posts/ignore-me.json
 
       matching = (
         await indexer.search({
-          filter: { type: { module: `${testModuleRealm}post`, name: 'Post' } },
+          filter: {
+            type: { module: `${testModuleRealm}post`, name: 'Post' },
+          },
         })
       ).data;
       assert.deepEqual(
@@ -3325,7 +3361,10 @@ posts/ignore-me.json
       let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
-          range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
+          range: {
+            views: { lte: 10, gt: 5 },
+            'author.posts': { gte: 1 },
+          },
         },
       });
       assert.deepEqual(
@@ -3385,7 +3424,10 @@ posts/ignore-me.json
         filter: {
           on: { module: `${testModuleRealm}dog`, name: 'Dog' },
           range: {
-            numberOfTreats: { lt: ['three', 'zero'], gt: ['two', 'zero'] },
+            numberOfTreats: {
+              lt: ['three', 'zero'],
+              gt: ['two', 'zero'],
+            },
           },
         },
       });
@@ -3517,7 +3559,10 @@ posts/ignore-me.json
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: { 'posts.author.firstName': 'A', 'posts.author.lastName': 'B' },
+            eq: {
+              'posts.author.firstName': 'A',
+              'posts.author.lastName': 'B',
+            },
           },
         });
         assert.deepEqual(
@@ -3607,7 +3652,10 @@ posts/ignore-me.json
         filter: {
           any: [
             {
-              on: { module: `${testModuleRealm}article`, name: 'Article' },
+              on: {
+                module: `${testModuleRealm}article`,
+                name: 'Article',
+              },
               eq: { 'author.firstName': 'Cardy' },
             },
             {
@@ -3651,7 +3699,9 @@ posts/ignore-me.json
             direction: 'desc',
           },
         ],
-        filter: { type: { module: `${testModuleRealm}post`, name: 'Post' } },
+        filter: {
+          type: { module: `${testModuleRealm}post`, name: 'Post' },
+        },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -3672,7 +3722,9 @@ posts/ignore-me.json
             direction: 'asc',
           },
         ],
-        filter: { type: { module: `${testModuleRealm}dog`, name: 'Dog' } },
+        filter: {
+          type: { module: `${testModuleRealm}dog`, name: 'Dog' },
+        },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -3735,7 +3787,9 @@ posts/ignore-me.json
             direction: 'desc',
           },
         ],
-        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+        filter: {
+          type: { module: `${testModuleRealm}book`, name: 'Book' },
+        },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -3760,7 +3814,9 @@ posts/ignore-me.json
             on: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         ],
-        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+        filter: {
+          type: { module: `${testModuleRealm}book`, name: 'Book' },
+        },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -3781,7 +3837,9 @@ posts/ignore-me.json
             on: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         ],
-        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+        filter: {
+          type: { module: `${testModuleRealm}book`, name: 'Book' },
+        },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -3807,7 +3865,9 @@ posts/ignore-me.json
             on: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         ],
-        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+        filter: {
+          type: { module: `${testModuleRealm}book`, name: 'Book' },
+        },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -3836,7 +3896,12 @@ posts/ignore-me.json
         filter: {
           any: [
             { type: { module: `${testModuleRealm}book`, name: 'Book' } },
-            { type: { module: `${testModuleRealm}article`, name: 'Article' } },
+            {
+              type: {
+                module: `${testModuleRealm}article`,
+                name: 'Article',
+              },
+            },
           ],
         },
       });

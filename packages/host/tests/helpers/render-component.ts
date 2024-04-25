@@ -10,7 +10,6 @@ import type {
   BaseDef,
   Format,
   Field,
-  CardContext,
 } from 'https://cardstack.com/base/card-api';
 
 async function cardApi(
@@ -30,10 +29,9 @@ export async function renderCard(
   card: BaseDef,
   format: Format,
   field?: Field,
-  context?: CardContext,
 ) {
   let api = await cardApi(loader);
   await api.recompute(card, { recomputeAllFields: true });
-  await renderComponent(api.getComponent(card, format, field, context));
+  await renderComponent(api.getComponent(card, format, field));
   return (getContext() as { element: Element }).element;
 }

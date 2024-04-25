@@ -39,6 +39,10 @@ import {
   type NotFilter,
   type ContainsFilter,
   type Sort,
+  type RangeFilter,
+  RANGE_OPERATORS,
+  RangeOperator,
+  RangeFilterValue,
 } from './query';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
@@ -280,6 +284,8 @@ export class Indexer {
       return this.containsCondition(filter, on);
     } else if ('not' in filter) {
       return this.notCondition(filter, on);
+    } else if ('range' in filter) {
+      return this.rangeCondition(filter, on);
     } else if ('every' in filter) {
       return every(
         filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
@@ -336,6 +342,16 @@ export class Indexer {
     return every([
       this.typeCondition(on),
       ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
+    ]);
+  }
+
+  private rangeCondition(filter: RangeFilter, on: CodeRef): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      this.typeCondition(on),
+      ...Object.entries(filter.range).map(([key, filterValue]) => {
+        return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
+      }),
     ]);
   }
 
@@ -397,6 +413,31 @@ export class Indexer {
         errorHint: 'filter',
       }),
     ];
+  }
+
+  private fieldRangeFilter(
+    key: string,
+    filterValue: RangeFilterValue,
+    onRef: CodeRef,
+  ): CardExpression {
+    let query = fieldQuery(key, onRef, false, 'filter');
+    let cardExpressions: CardExpression[] = [];
+    Object.entries(filterValue).forEach(([operator, value]) => {
+      if (value == null) {
+        throw new Error(`'null' is not a permitted value in a 'range' filter`);
+      }
+      let v = fieldValue(key, [param(value)], onRef, 'filter');
+      cardExpressions.push([
+        fieldArity({
+          type: onRef,
+          path: key,
+          value: [query, RANGE_OPERATORS[operator as RangeOperator], v],
+          errorHint: 'filter',
+        }),
+      ]);
+    });
+
+    return every(cardExpressions);
   }
 
   private async makeExpression(

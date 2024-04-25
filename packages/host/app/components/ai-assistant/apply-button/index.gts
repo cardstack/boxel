@@ -21,6 +21,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       @size='small'
       class='apply-button'
       {{setCssVar boxel-button-text-color='var(--boxel-dark)'}}
+      data-test-apply-state={{@state}}
       ...attributes
     >
       Apply
@@ -30,9 +31,9 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       {{#if (eq @state 'applying')}}
         <CircleSpinner width='18' height='18' />
       {{else if (eq @state 'applied')}}
-        <CheckMark width='24' height='24' />
+        <CheckMark width='16' height='16' />
       {{else if (eq @state 'failed')}}
-        <Exclamation width='17' height='17' />
+        <Exclamation width='16' height='16' />
       {{/if}}
     </div>
   {{/if}}

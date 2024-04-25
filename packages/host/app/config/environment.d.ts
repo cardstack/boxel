@@ -28,4 +28,7 @@ declare const config: {
   loginMessageTimeoutMs: number;
   minSaveTaskDurationMs: number;
   sqlSchema: string;
+  featureFlags?: {
+    'pg-indexer'?: boolean;
+  };
 };

@@ -47,6 +47,7 @@ export default class Room extends Component<Signature> {
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
+              @roomId={{@roomId}}
               @message={{message}}
               @index={{i}}
               @isPending={{this.isPendingMessage message}}
@@ -54,7 +55,7 @@ export default class Room extends Component<Signature> {
               @isStreaming={{this.isMessageStreaming message i}}
               @currentEditor={{this.currentMonacoContainer}}
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
-              @retryAction={{this.maybeRetryAction i}}
+              @retryAction={{this.maybeRetryAction i message}}
               data-test-message-idx={{i}}
             />
           {{/each}}
@@ -128,8 +129,8 @@ export default class Room extends Component<Signature> {
     this.doMatrixEventFlush.perform();
   }
 
-  maybeRetryAction = (messageIndex: number) => {
-    if (this.isLastMessage(messageIndex)) {
+  maybeRetryAction = (messageIndex: number, message: MessageField) => {
+    if (this.isLastMessage(messageIndex) && message.isRetryable) {
       return this.resendLastMessage;
     }
     return undefined;
