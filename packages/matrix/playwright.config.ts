@@ -19,7 +19,7 @@ export default defineConfig({
   },
   // General timeout per test
   timeout: 30000,
-  repeatEach: 4,
+  repeatEach: 10,
 
   // For expect calls
   expect: {
