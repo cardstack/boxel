@@ -383,10 +383,6 @@ export class Realm {
     }
   }
 
-  get p() {
-    return this.#permissions;
-  }
-
   private async readinessCheck() {
     await this.ready;
     return createResponse(this, null, {
