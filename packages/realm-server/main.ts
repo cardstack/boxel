@@ -30,6 +30,11 @@ if (process.env.REALM_SENTRY_DSN) {
   );
 }
 
+if (process.env.PG_INDEXER) {
+  console.log('enabling db-based indexing');
+}
+(globalThis as any).__enablePgIndexer = () => Boolean(process.env.PG_INDEXER);
+
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
   console.error(

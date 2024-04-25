@@ -48,6 +48,8 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
   CardFragmentContent,
+  ReactionEventContent,
+  ReactionEvent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -71,6 +73,7 @@ export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
 };
+
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
@@ -358,9 +361,9 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent | CardFragmentContent,
+    content: CardMessageContent | CardFragmentContent | ReactionEventContent,
   ) {
-    if (content.data) {
+    if ('data' in content) {
       const encodedContent = {
         ...content,
         data: JSON.stringify(content.data),
@@ -369,6 +372,46 @@ export default class MatrixService extends Service {
     } else {
       return await this.client.sendEvent(roomId, eventType, content);
     }
+  }
+
+  async sendReactionEvent(roomId: string, eventId: string, status: string) {
+    let content: ReactionEventContent = {
+      'm.relates_to': {
+        event_id: eventId,
+        key: status,
+        rel_type: 'm.annotation',
+      },
+    };
+    try {
+      return await this.sendEvent(roomId, 'm.reaction', content);
+    } catch (e) {
+      throw new Error(
+        `Error sending reaction event: ${
+          'message' in (e as Error) ? (e as Error).message : e
+        }`,
+      );
+    }
+  }
+
+  async getReactionKeyForEvent(roomId: string, eventId: string) {
+    let room = await this.rooms.get(roomId);
+    if (!room) {
+      throw new Error(`Room ${roomId} not found`);
+    }
+
+    let event = room.events
+      .filter(
+        (e) =>
+          e.type === 'm.reaction' &&
+          e.content['m.relates_to'].rel_type === 'm.annotation' &&
+          e.content['m.relates_to'].event_id === eventId,
+      )
+      .sort((a, b) => b.origin_server_ts - a.origin_server_ts)[0];
+    if (!event) {
+      return;
+    }
+
+    return (event as ReactionEvent).content['m.relates_to'].key;
   }
 
   async sendMessage(

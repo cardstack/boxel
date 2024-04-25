@@ -105,6 +105,9 @@ export class CurrentRun {
     entrySetter: EntrySetter;
     renderCard: RenderCard;
   }) {
+    if ((globalThis as any).__enablePgIndexer?.()) {
+      log.debug(`current-run is using db index`);
+    }
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
     this.#realmURL = realmURL;
@@ -263,11 +266,7 @@ export class CurrentRun {
     } else {
       let localPath = this.#realmPaths.local(url);
 
-      let fileRef = await this.#reader.readFileAsText(
-        localPath,
-        {},
-        this.loader,
-      );
+      let fileRef = await this.#reader.readFileAsText(localPath, {});
       if (!fileRef) {
         let error = new CardError(`missing file ${url.href}`, { status: 404 });
         error.deps = [url.href];

@@ -36,7 +36,6 @@ export interface Reader {
   readFileAsText: (
     path: LocalPath,
     opts?: { withFallbacks?: true },
-    loader?: Loader,
   ) => Promise<{ content: string; lastModified: number } | undefined>;
   readdir: (
     path: string,
@@ -174,6 +173,9 @@ export class SearchIndex {
     runner: IndexRunner,
     runnerOptsManager: RunnerOptionsManager,
   ) {
+    if ((globalThis as any).__enablePgIndexer?.()) {
+      console.debug(`search index is using db index`);
+    }
     this.#realm = realm;
     this.#reader = { readdir, readFileAsText };
     this.runnerOptsMgr = runnerOptsManager;

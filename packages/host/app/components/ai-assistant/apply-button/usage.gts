@@ -6,7 +6,7 @@ import { tracked } from '@glimmer/tracking';
 
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import ApplyButton, { ApplyButtonState } from './index';
+import ApplyButton, { type ApplyButtonState } from './index';
 
 export default class AiAssistantApplyButtonUsage extends Component {
   @tracked state: ApplyButtonState = 'ready';

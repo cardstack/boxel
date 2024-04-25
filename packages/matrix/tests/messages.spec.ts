@@ -885,4 +885,17 @@ test.describe('Room messages', () => {
       .locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`)
       .click();
   });
+
+  test('displays error message if message is too large', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+
+    await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
+    await page.locator('[data-test-send-message-btn]').click();
+
+    await expect(page.locator('[data-test-ai-assistant-message]')).toHaveCount(1);
+    await expect(page.locator('[data-test-card-error]')).toContainText('Message is too large');
+    await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(0);
+  });
 });
