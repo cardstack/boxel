@@ -95,6 +95,8 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       undefined,
       context.loaderService.loader,
     );
+    console.log(`got an event for room ${roomId}, creating a new room`);
+    console.log('all rooms', [...context.rooms.keys()]);
     context.rooms.set(roomId, room);
   }
   let resolvedRoom = await room;
