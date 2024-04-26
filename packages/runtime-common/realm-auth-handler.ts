@@ -40,7 +40,7 @@ export class RealmAuthHandler {
     if (
       request.url.endsWith('_session') ||
       request.method === 'HEAD' ||
-      request.headers.has('Authorization') // Prevent infinite recursion when loader.fetch calls this handler again - fetchWithAuth from here on already added what it needed to
+      request.headers.has('Authorization')
     ) {
       return null;
     }
