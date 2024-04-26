@@ -302,7 +302,6 @@ export class Indexer {
     if (!sort) {
       return ['ORDER BY card_url COLLATE "POSIX"'];
     }
-    // TODO use NULL FIRST or NULLS LAST to assert consistent null ordering in sorts
     return [
       'ORDER BY',
       ...separatedByCommas([
@@ -313,6 +312,7 @@ export class Indexer {
           fieldQuery(s.by, s.on, false, 'sort'),
           ')',
           s.direction ?? 'asc',
+          'NULLS LAST',
         ]),
         // we include 'card_url' as the final sort key for deterministic results
         ['card_url COLLATE "POSIX"'],
