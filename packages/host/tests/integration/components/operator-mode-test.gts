@@ -1394,7 +1394,7 @@ module('Integration | operator-mode', function (hooks) {
 
       await waitFor(`[data-test-open-ai-assistant]`);
       await click('[data-test-open-ai-assistant]');
-      await waitFor(`[data-room-settled]`);
+      await waitFor(`[data-test-room-settled]`);
 
       assert
         .dom(`[data-test-room="${room3Id}"]`)
@@ -1407,7 +1407,7 @@ module('Integration | operator-mode', function (hooks) {
 
       await click('[data-test-close-ai-assistant]');
       await click('[data-test-open-ai-assistant]');
-      await waitFor(`[data-room-settled]`);
+      await waitFor(`[data-test-room-settled]`);
       assert
         .dom(`[data-test-room="${room2Id}"]`)
         .exists(
@@ -1420,7 +1420,7 @@ module('Integration | operator-mode', function (hooks) {
         "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
       );
       await click('[data-test-open-ai-assistant]');
-      await waitFor(`[data-room-settled]`);
+      await waitFor(`[data-test-room-settled]`);
       assert
         .dom(`[data-test-room="${room3Id}"]`)
         .exists(
