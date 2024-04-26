@@ -560,8 +560,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-export class TestCard extends CardDef {
-  static displayName = "Test Card";
+export class TrèsTestCard extends CardDef {
+  static displayName = "Très Test Card";
 
   /*
   static isolated = class Isolated extends Component<typeof this> {
@@ -587,7 +587,7 @@ export class TestCard extends CardDef {
     assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
-    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-display-name-field]', 'Très Test Card');
     assert
       .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
       .hasText('Inherits From');
@@ -614,7 +614,7 @@ export class TestCard extends CardDef {
       'monaco displays the new definition',
     );
 
-    await waitFor('[data-test-card-schema="Test Card"]');
+    await waitFor('[data-test-card-schema="Très Test Card"]');
     assert.dom('[data-test-current-module-name]').hasText('très-test-card.gts');
     assert
       .dom('[data-test-card-url-bar-input]')

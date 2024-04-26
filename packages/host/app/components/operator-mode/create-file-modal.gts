@@ -4,16 +4,15 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { capitalize } from '@ember/string';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import camelCase from 'camelcase';
 import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
-import camelCase from 'lodash/camelCase';
 
 import {
   FieldContainer,
@@ -568,19 +567,14 @@ export default class CreateFileModal extends Component<Signature> {
     let {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? this.selectedCatalogEntry)!; // we just checked above to make sure one of these exists
-    let className = camelize(this.displayName);
-    // make sure we don't collide with a javascript built-in object
-    if (typeof (globalThis as any)[className] !== 'undefined') {
-      className = `${className}0`;
-    }
+    let className = convertToClassName(this.displayName);
+
     let absoluteModule = new URL(module, this.selectedCatalogEntry?.id);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
       this.selectedRealmURL,
     );
-    // sanitize the name since it will be used in javascript code
-    let safeName = this.displayName.replace(/[^A-Za-z \d-_]/g, '').trim();
     let src: string[] = [];
 
     // There is actually only one possible declaration collision: `className` and `parent`,
@@ -590,7 +584,7 @@ export default class CreateFileModal extends Component<Signature> {
 import { ${exportName} as ${exportName}Parent } from '${moduleURL}';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName}Parent {
-  static displayName = "${safeName}";`);
+  static displayName = "${this.displayName}";`);
     } else if (exportName === 'default') {
       let parent = camelize(
         module
@@ -604,13 +598,13 @@ export class ${className} extends ${exportName}Parent {
 import ${parent} from '${moduleURL}';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${parent} {
-  static displayName = "${safeName}";`);
+  static displayName = "${this.displayName}";`);
     } else {
       src.push(`
 import { ${exportName} } from '${moduleURL}';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName} {
-  static displayName = "${safeName}";`);
+  static displayName = "${this.displayName}";`);
     }
     src.push(`\n  /*`);
     if (this.fileType.id === 'card-definition') {
@@ -730,8 +724,21 @@ export class ${className} extends ${exportName} {
   });
 }
 
-function camelize(name: string) {
-  return capitalize(camelCase(name));
+function convertToClassName(input) {
+  let invalidLeadingCharactersRemoved = input.replace(/^[^\p{L}_$]+/u, '');
+  let invalidCharactersRemoved = invalidLeadingCharactersRemoved.replace(
+    /[^\p{L}\p{N}_$]+/gu,
+    '',
+  );
+
+  let className = camelCase(invalidCharactersRemoved, { pascalCase: true });
+
+  // make sure we don't collide with a javascript built-in object
+  if (typeof (globalThis as any)[className] !== 'undefined') {
+    className = `${className}0`;
+  }
+
+  return className;
 }
 
 const SelectedTypePill: TemplateOnlyComponent<{
