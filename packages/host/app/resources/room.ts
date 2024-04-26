@@ -25,7 +25,7 @@ export class RoomResource extends Resource<Args> {
 
   private load = restartableTask(async (roomId: string | undefined) => {
     console.log('about to try to load room ' + roomId);
-    console.log(`these rooms exist?`, this.matrixService.rooms.keys());
+    console.log(`these rooms exist?`, [...this.matrixService.rooms.keys()]);
     this.room = roomId ? await this.matrixService.rooms.get(roomId) : undefined;
     console.log('done, did we get a room?', this.room);
   });
