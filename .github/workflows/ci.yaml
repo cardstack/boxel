@@ -200,7 +200,7 @@ jobs:
         run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: host test suite
-        run: PG_INDEXER=true pnpm test-with-percy
+        run: pnpm test-with-percy:pg-index
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
