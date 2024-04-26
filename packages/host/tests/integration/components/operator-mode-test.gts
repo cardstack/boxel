@@ -1358,14 +1358,18 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-room-error]').exists();
       assert.dom('[data-test-room]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isDisabled();
-      await percySnapshot(assert); // error state
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it can handle an error during room creation | error state',
+      );
 
       document.querySelector('[data-test-throw-room-error]')?.remove();
       await click('[data-test-room-error] > button');
       await waitFor('[data-test-room]');
       assert.dom('[data-test-room-error]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isEnabled();
-      await percySnapshot(assert); // new room state
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it can handle an error during room creation | new room state',
+      );
     });
 
     test('when opening ai panel it opens the most recent room', async function (assert) {
