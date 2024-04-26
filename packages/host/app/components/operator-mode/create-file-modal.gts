@@ -725,7 +725,10 @@ export class ${className} extends ${exportName} {
 }
 
 function convertToClassName(input) {
+  // \p{L}: a letter
   let invalidLeadingCharactersRemoved = input.replace(/^[^\p{L}_$]+/u, '');
+
+  // \p{N}: a number
   let invalidCharactersRemoved = invalidLeadingCharactersRemoved.replace(
     /[^\p{L}\p{N}_$]+/gu,
     '',
