@@ -186,10 +186,10 @@ jobs:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
       - name: Build boxel-ui
-        run: pnpm build
+        run: PG_INDEXER=true pnpm build
         working-directory: packages/boxel-ui/addon
       - name: Build host dist/ for fastboot
-        run: pnpm build
+        run: PG_INDEXER=true pnpm build
         env:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
@@ -200,7 +200,7 @@ jobs:
         run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: host test suite
-        run: pnpm test-with-percy:pg-index
+        run: pnpm test-with-percy
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
