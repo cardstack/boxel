@@ -910,7 +910,7 @@ module('Integration | operator-mode', function (hooks) {
         .exists();
     });
 
-    test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
+    test('it only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
       await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
       await renderComponent(
         class TestDriver extends GlimmerComponent {
