@@ -2,14 +2,9 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import {
-  didCancel,
-  enqueueTask,
-  dropTask,
-  restartableTask,
-} from 'ember-concurrency';
+import { didCancel, enqueueTask, restartableTask } from 'ember-concurrency';
 
-import { baseRealm, type Indexer } from '@cardstack/runtime-common';
+import { type Indexer } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import {
   type EntrySetter,
@@ -20,8 +15,6 @@ import {
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 
 import { CurrentRun } from '../lib/current-run';
-
-import { getModulesInRealm } from '../lib/utils';
 
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
@@ -50,7 +43,6 @@ export default class CardPrerender extends Component {
         );
       }
     } else {
-      this.warmUpModuleCache.perform();
       this.localIndexer.setup(
         this.fromScratch.bind(this),
         this.incremental.bind(this),
@@ -95,19 +87,6 @@ export default class CardPrerender extends Component {
       `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`,
     );
   }
-
-  private warmUpModuleCache = dropTask(async () => {
-    let baseRealmModules = await getModulesInRealm(
-      this.loaderService.loader,
-      baseRealm.url,
-    );
-    // TODO the fact that we need to reverse this list is
-    // indicative of a loader issue. Need to work with Ed around this as I think
-    // there is probably missing state in our loader's state machine.
-    for (let module of baseRealmModules.reverse()) {
-      await this.loaderService.loader.import(module);
-    }
-  });
 
   private doRegistration = enqueueTask(async () => {
     let optsId = (globalThis as any).runnerOptsId;

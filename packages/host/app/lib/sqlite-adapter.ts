@@ -15,6 +15,8 @@ export default class SQLiteAdapter implements DBAdapter {
   private _dbId: string | undefined;
   private primaryKeys = new Map<string, string>();
   private tables: string[] = [];
+  private start: Promise<void> | undefined;
+  #hasStarted = false;
   #isClosed = false;
 
   // TODO: one difference that I'm seeing is that it looks like "json_each" is
@@ -28,6 +30,16 @@ export default class SQLiteAdapter implements DBAdapter {
   }
 
   async startClient() {
+    if (this.#hasStarted) {
+      return;
+    }
+    if (this.start) {
+      await this.start;
+      return;
+    }
+    let deferred = new Deferred<void>();
+    this.start = deferred.promise;
+
     this.assertNotClosed();
     let ready = new Deferred<typeof SQLiteWorker>();
     const promisedWorker = sqlite3Worker1Promiser({
@@ -84,6 +96,8 @@ export default class SQLiteAdapter implements DBAdapter {
         this.primaryKeys.set(table_name, primary_keys);
       }
     }
+    this.#hasStarted = true;
+    deferred.fulfill();
   }
 
   async execute(sql: string, opts?: ExecuteOptions) {

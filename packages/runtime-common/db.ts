@@ -12,6 +12,7 @@ export interface ExecuteOptions {
 }
 
 export interface DBAdapter {
+  isClosed: boolean;
   // DB implementations perform DB connection and migration in this method.
   // DBAdapter implementations can take in DB specific config in their
   // constructors (username, password, etc)

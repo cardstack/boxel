@@ -225,20 +225,10 @@ export class CurrentRun {
 
     await current.whileIndexing(async () => {
       if (operation === 'update') {
-        await current.visitFile(url);
+        await current.tryToVisit(url);
       }
       for (let invalidation of invalidations) {
-        try {
-          await current.visitFile(invalidation);
-        } catch (err: any) {
-          if (isCardError(err) && err.status === 404) {
-            log.info(
-              `tried to visit file ${invalidation}, but it no longer exists`,
-            );
-          } else {
-            throw err;
-          }
-        }
+        await current.tryToVisit(invalidation);
       }
 
       if (isDbIndexerEnabled()) {
@@ -259,6 +249,18 @@ export class CurrentRun {
       }
     });
     return current;
+  }
+
+  private async tryToVisit(url: URL) {
+    try {
+      await this.visitFile(url);
+    } catch (err: any) {
+      if (isCardError(err) && err.status === 404) {
+        log.info(`tried to visit file ${url.href}, but it no longer exists`);
+      } else {
+        throw err;
+      }
+    }
   }
 
   private async whileIndexing(doIndexing: () => Promise<void>) {

@@ -37,7 +37,6 @@ import {
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
-import { BrowserQueue } from '@cardstack/host/lib/browser-queue';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -46,6 +45,8 @@ import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 
+import type QueueService from '@cardstack/host/services/queue';
+
 import {
   type CardDef,
   type FieldDef,
@@ -53,9 +54,7 @@ import {
 
 import { TestRealmAdapter } from './adapter';
 import percySnapshot from './percy-snapshot';
-
 import { renderComponent } from './render-component';
-
 import visitOperatorMode from './visit-operator-mode';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
@@ -255,7 +254,9 @@ class MockLocalIndexer extends Service {
 }
 
 export function setupLocalIndexing(hooks: NestedHooks) {
-  hooks.beforeEach(function () {
+  hooks.beforeEach(async function () {
+    let dbAdapter = await getDbAdapter();
+    await dbAdapter.reset();
     this.owner.register('service:local-indexer', MockLocalIndexer);
   });
 }
@@ -485,6 +486,7 @@ async function setupTestRealm({
   let { loader, virtualNetwork } = owner.lookup(
     'service:loader-service',
   ) as LoaderService;
+  let { queue } = owner.lookup('service:queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
 
@@ -521,9 +523,6 @@ async function setupTestRealm({
   }
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
-  let dbAdapter = await getDbAdapter();
-  await dbAdapter.reset();
-  let queue = new BrowserQueue();
   let indexRunner: IndexRunner = async (optsId) => {
     let { registerRunner, entrySetter, indexer } =
       runnerOptsMgr.getOptions(optsId);
@@ -535,6 +534,7 @@ async function setupTestRealm({
     );
   };
 
+  let dbAdapter = await getDbAdapter();
   realm = new Realm({
     url: realmURL,
     adapter,
@@ -547,15 +547,17 @@ async function setupTestRealm({
     realmSecretSeed: testRealmSecretSeed,
     virtualNetwork,
     ...((globalThis as any).__enablePgIndexer?.() ? { dbAdapter, queue } : {}),
-    onIndexer: async (indexer) =>
-      await new Worker({
+    onIndexer: async (indexer) => {
+      let worker = new Worker({
         indexer,
         queue,
         realmAdapter: adapter,
         runnerOptsManager: runnerOptsMgr,
         loader: virtualNetwork.createLoader(),
         indexRunner,
-      }).run(),
+      });
+      await worker.run();
+    },
   });
   virtualNetwork.mount(realm.maybeHandle);
 
