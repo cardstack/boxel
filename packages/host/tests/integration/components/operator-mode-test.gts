@@ -965,7 +965,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-ai-bot-retry-button]').exists();
       assert.dom('[data-test-command-apply]').doesNotExist();
       assert.dom('[data-test-person]').hasText('Fadhlan');
-      await percySnapshot(assert);
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error',
+      );
 
       await setCardInOperatorModeState(otherCardID);
       await waitFor('[data-test-person="Burcu"]');
@@ -977,7 +979,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Dave');
       assert.dom('[data-test-command-apply]').doesNotExist();
       assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
-      await percySnapshot(assert);
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
+      );
     });
 
     test('it can apply change to nested contains field', async function (assert) {
