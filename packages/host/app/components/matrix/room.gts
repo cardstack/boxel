@@ -41,6 +41,7 @@ export default class Room extends Component<Signature> {
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-name={{this.room.name}}
       data-test-room={{this.room.roomId}}
+      data-test-room-raw-id={{@roomId}}
     >
       {{#if this.room.messages}}
         <AiAssistantConversation>
