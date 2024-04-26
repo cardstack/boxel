@@ -99,6 +99,18 @@ export async function waitForCodeEditor() {
   return await waitFor('[data-test-editor]', { timeout: 3000 });
 }
 
+export async function getDbAdapter() {
+  let dbAdapter = (globalThis as any).__sqliteAdapter as
+    | SQLiteAdapter
+    | undefined;
+  if (!dbAdapter) {
+    dbAdapter = new SQLiteAdapter(sqlSchema);
+    await dbAdapter.startClient();
+    (globalThis as any).__sqliteAdapter = dbAdapter;
+  }
+  return dbAdapter;
+}
+
 export async function waitForSyntaxHighlighting(
   textContent: string,
   color: string,
@@ -509,7 +521,8 @@ async function setupTestRealm({
   }
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
-  let dbAdapter = new SQLiteAdapter(sqlSchema);
+  let dbAdapter = await getDbAdapter();
+  await dbAdapter.reset();
   let queue = new BrowserQueue();
   let indexRunner: IndexRunner = async (optsId) => {
     let { registerRunner, entrySetter, indexer } =

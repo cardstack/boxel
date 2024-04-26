@@ -17,7 +17,7 @@ import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import { testRealmURL, p } from '../helpers';
+import { testRealmURL, p, getDbAdapter } from '../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -25,13 +25,17 @@ let date: typeof import('https://cardstack.com/base/date');
 let number: typeof import('https://cardstack.com/base/number');
 let boolean: typeof import('https://cardstack.com/base/boolean');
 let codeRef: typeof import('https://cardstack.com/base/code-ref');
-let { sqlSchema, resolvedBaseRealmURL } = ENV;
+let { resolvedBaseRealmURL } = ENV;
 
 module('Unit | query', function (hooks) {
   let adapter: SQLiteAdapter;
   let indexer: Indexer;
   let loader: Loader;
   let testCards: { [name: string]: CardDef } = {};
+
+  hooks.before(async function () {
+    adapter = await getDbAdapter();
+  });
 
   hooks.beforeEach(async function () {
     let virtualNetwork = new VirtualNetwork();
@@ -169,13 +173,9 @@ module('Unit | query', function (hooks) {
       setCardAsSavedForTest(card);
     }
 
-    adapter = new SQLiteAdapter(sqlSchema);
+    await adapter.reset();
     indexer = new Indexer(adapter);
     await indexer.ready();
-  });
-
-  hooks.afterEach(async function () {
-    await indexer.teardown();
   });
 
   test('can get all cards with empty filter', async function (assert) {

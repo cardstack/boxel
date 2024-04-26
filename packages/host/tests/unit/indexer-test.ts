@@ -5,23 +5,22 @@ import { runSharedTest } from '@cardstack/runtime-common/helpers';
 // eslint-disable-next-line ember/no-test-import-export
 import indexerTests from '@cardstack/runtime-common/tests/indexer-test';
 
-import ENV from '@cardstack/host/config/environment';
-import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-let { sqlSchema } = ENV;
+import { getDbAdapter } from '../helpers';
 
 module('Unit | indexer', function (hooks) {
   let adapter: SQLiteAdapter;
   let indexer: Indexer;
 
-  hooks.beforeEach(async function () {
-    adapter = new SQLiteAdapter(sqlSchema);
-    indexer = new Indexer(adapter);
-    await indexer.ready();
+  hooks.before(async function () {
+    adapter = await getDbAdapter();
   });
 
-  hooks.afterEach(async function () {
-    await indexer.teardown();
+  hooks.beforeEach(async function () {
+    await adapter.reset();
+    indexer = new Indexer(adapter);
+    await indexer.ready();
   });
 
   test('can perform invalidations for an index entry', async function (assert) {
