@@ -55,7 +55,7 @@ export async function createRealm(
       writeJSONSync(join(dir, filename), contents);
     }
   }
-  // debugger;
+
   return new Realm({
     url: realmURL,
     adapter: new NodeAdapter(dir),

@@ -1746,7 +1746,7 @@ export class Realm {
   ];
 
   private isRequestToPublicEndpoint(request: Request) {
-    return this.publicEndpoints.some(
+    return !!this.publicEndpoints.find(
       (endpoint) =>
         request.url.endsWith(endpoint.path) &&
         request.method === endpoint.method,
