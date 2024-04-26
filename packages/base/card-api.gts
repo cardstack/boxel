@@ -69,6 +69,7 @@ export const realmURL = Symbol.for('cardstack-realm-url');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
+const fieldDescription = Symbol.for('cardstack-field-description');
 
 export type BaseInstanceType<T extends BaseDefConstructor> = T extends {
   [primitive]: infer P;
@@ -96,6 +97,7 @@ type Setter = (value: any) => void;
 
 interface Options {
   computeVia?: string | (() => unknown);
+  description?: string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -192,6 +194,10 @@ const subscribers = initSharedState(
   'subscribers',
   () => new WeakMap<BaseDef, Set<CardChangeSubscriber>>(),
 );
+const fieldDescriptions = initSharedState(
+  'fieldDescriptions',
+  () => new WeakMap<typeof BaseDef, Map<string, string>>(),
+);
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
@@ -201,6 +207,31 @@ const cardTracking = initSharedState(
 );
 
 const isBaseInstance = Symbol.for('isBaseInstance');
+
+export function getFieldDescription(
+  cardOrFieldKlass: typeof BaseDef,
+  fieldName: string,
+): string | undefined {
+  let descriptionsMap = fieldDescriptions.get(cardOrFieldKlass);
+  if (!descriptionsMap) {
+    descriptionsMap = new Map();
+    fieldDescriptions.set(cardOrFieldKlass, descriptionsMap);
+  }
+  return descriptionsMap.get(fieldName);
+}
+
+function setFieldDescription(
+  cardOrFieldKlass: typeof BaseDef,
+  fieldName: string,
+  description: string,
+) {
+  let descriptionsMap = fieldDescriptions.get(cardOrFieldKlass);
+  if (!descriptionsMap) {
+    descriptionsMap = new Map();
+    fieldDescriptions.set(cardOrFieldKlass, descriptionsMap);
+  }
+  descriptionsMap.set(fieldName, description);
+}
 
 class Logger {
   private promises: Promise<any>[] = [];
@@ -264,6 +295,7 @@ export interface Field<
   name: string;
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
+  description: undefined | string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -395,6 +427,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
+    readonly description: string | undefined,
     readonly isUsed: undefined | true,
   ) {}
 
@@ -604,6 +637,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
+    readonly description: string | undefined,
     readonly isUsed: undefined | true,
   ) {}
 
@@ -755,6 +789,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
+    readonly description: string | undefined,
     readonly isUsed: undefined | true,
   ) {}
 
@@ -1081,6 +1116,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
+    readonly description: string | undefined,
     readonly isUsed: undefined | true,
   ) {}
 
@@ -1478,11 +1514,19 @@ function fieldComponent(
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
 export const field = function (
-  _target: BaseDefConstructor,
+  target: BaseDef,
   key: string | symbol,
   { initializer }: { initializer(): any },
 ) {
-  return initializer().setupField(key);
+  let descriptor = initializer().setupField(key);
+  if (descriptor[fieldDescription]) {
+    setFieldDescription(
+      target.constructor,
+      key as string,
+      descriptor[fieldDescription],
+    );
+  }
+  return descriptor;
 } as unknown as PropertyDecorator;
 (field as any)[fieldDecorator] = undefined;
 
@@ -1497,6 +1541,7 @@ export function containsMany<FieldT extends FieldDefConstructor>(
           cardThunk(field),
           options?.computeVia,
           fieldName,
+          options?.description,
           options?.isUsed,
         ),
       );
@@ -1516,6 +1561,7 @@ export function contains<FieldT extends FieldDefConstructor>(
           cardThunk(field),
           options?.computeVia,
           fieldName,
+          options?.description,
           options?.isUsed,
         ),
       );
@@ -1535,6 +1581,7 @@ export function linksTo<CardT extends CardDefConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
+          options?.description,
           options?.isUsed,
         ),
       );
@@ -1554,6 +1601,7 @@ export function linksToMany<CardT extends CardDefConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
+          options?.description,
           options?.isUsed,
         ),
       );
@@ -2679,6 +2727,9 @@ function makeDescriptor<
       notifySubscribers(this, field.name, value);
       logger.log(recompute(this));
     };
+  }
+  if (field.description) {
+    (descriptor as any)[fieldDescription] = field.description;
   }
   (descriptor.get as any)[isField] = field;
   return descriptor;
