@@ -46,7 +46,6 @@ export interface Reader {
   readFileAsText: (
     path: LocalPath,
     opts?: { withFallbacks?: true },
-    loader?: Loader,
   ) => Promise<{ content: string; lastModified: number } | undefined>;
   readdir: (
     path: string,

@@ -1,5 +1,9 @@
 import Component from '@glimmer/component';
 
+import { provide } from 'ember-provide-consume-context';
+
+import { DefaultFormatContextName } from '@cardstack/runtime-common';
+
 import type {
   BaseDef,
   Format,
@@ -15,6 +19,11 @@ interface Signature {
 }
 
 export default class Preview extends Component<Signature> {
+  @provide(DefaultFormatContextName)
+  get defaultFormat() {
+    return this.args.format ?? 'isolated';
+  }
+
   <template>
     <this.renderedCard />
   </template>
@@ -22,7 +31,6 @@ export default class Preview extends Component<Signature> {
   get renderedCard() {
     return this.args.card.constructor.getComponent(
       this.args.card,
-      this.args.format ?? 'isolated',
       this.args.field,
     );
   }

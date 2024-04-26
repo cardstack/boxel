@@ -357,11 +357,7 @@ export class CurrentRun {
     } else {
       let localPath = this.#realmPaths.local(url);
 
-      let fileRef = await this.#reader.readFileAsText(
-        localPath,
-        {},
-        this.loader,
-      );
+      let fileRef = await this.#reader.readFileAsText(localPath, {});
       if (!fileRef) {
         let error = new CardError(`missing file ${url.href}`, { status: 404 });
         error.deps = [url.href];
