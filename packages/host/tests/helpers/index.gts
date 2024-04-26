@@ -35,8 +35,8 @@ import {
   type IndexRunner,
 } from '@cardstack/runtime-common/search-index';
 
-import ENV from '@cardstack/host/config/environment';
 import CardPrerender from '@cardstack/host/components/card-prerender';
+import ENV from '@cardstack/host/config/environment';
 import { BrowserQueue } from '@cardstack/host/lib/browser-queue';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 

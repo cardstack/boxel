@@ -637,6 +637,34 @@ const tests = Object.freeze({
     );
   },
 
+  'can get an error doc': async (assert, { indexer }) => {
+    await setupIndex(indexer, [
+      {
+        card_url: `${testRealmURL}1.json`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        error_doc: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      },
+    ]);
+    let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
+    if (entry?.type === 'error') {
+      assert.deepEqual(entry, {
+        type: 'error',
+        error: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      });
+    } else {
+      assert.ok(false, `expected index entry to not be a card document`);
+    }
+  },
+
   'can get "production" index entry': async (assert, { indexer }) => {
     await setupIndex(
       indexer,

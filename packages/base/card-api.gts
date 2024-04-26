@@ -287,6 +287,7 @@ export interface Field<
   component(model: Box<BaseDef>, defaultFormat: Format): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
+  // TODO remove this after feature flag is removed
   queryMatcher(
     innerMatcher: (innerValue: any) => boolean | null,
   ): (value: SearchT) => boolean | null;
@@ -384,7 +385,7 @@ function getter<CardT extends BaseDefConstructor>(
 }
 
 class ContainsMany<FieldT extends FieldDefConstructor>
-  implements Field<FieldT, any[]>
+  implements Field<FieldT, any[] | null>
 {
   readonly fieldType = 'containsMany';
   constructor(
@@ -402,9 +403,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     return getter(instance, this);
   }
 
-  queryableValue(instances: any[] | null, stack: BaseDef[]): any[] {
-    if (instances == null) {
-      return [];
+  queryableValue(instances: any[] | null, stack: BaseDef[]): any[] | null {
+    if (instances === null || instances.length === 0) {
+      // we intentionally use a "null" to represent an empty plural field as
+      // this is a limitation to SQLite's json_tree() function when trying to match
+      // plural fields that are empty
+      return null;
     }
 
     // Need to replace the WatchedArray proxy with an actual array because the
@@ -418,14 +422,17 @@ class ContainsMany<FieldT extends FieldDefConstructor>
 
   queryMatcher(
     innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[]) => boolean | null {
+  ): (value: any[] | null) => boolean | null {
     return (value) => {
-      if (value.length === 0) {
+      if (Array.isArray(value) && value.length === 0) {
         return innerMatcher(null);
       }
-      return value.some((innerValue) => {
-        return innerMatcher(innerValue);
-      });
+      return (
+        Array.isArray(value) &&
+        value.some((innerValue) => {
+          return innerMatcher(innerValue);
+        })
+      );
     };
   }
 
@@ -438,49 +445,54 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     if (primitive in this.card) {
       return {
         attributes: {
-          [this.name]: values.map((value) =>
-            callSerializeHook(this.card, value, doc, undefined, opts),
-          ),
+          [this.name]:
+            values === null
+              ? null
+              : values.map((value) =>
+                  callSerializeHook(this.card, value, doc, undefined, opts),
+                ),
         },
       };
     } else {
       let relationships: Record<string, Relationship> = {};
-      let serialized = values.map((value, index) => {
-        let resource: JSONAPISingleResourceDocument['data'] = callSerializeHook(
-          this.card,
-          value,
-          doc,
-          undefined,
-          opts,
-        );
-        if (resource.relationships) {
-          for (let [fieldName, relationship] of Object.entries(
-            resource.relationships as Record<string, Relationship>,
-          )) {
-            relationships[`${this.name}.${index}.${fieldName}`] = relationship; // warning side-effect
-          }
-        }
-        if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
-          // when our implementation matches the default we don't need to include
-          // meta.adoptsFrom
-          delete resource.meta?.adoptsFrom;
-        }
-        if (resource.meta && Object.keys(resource.meta).length === 0) {
-          delete resource.meta;
-        }
-        return resource;
-      });
+      let serialized =
+        values === null
+          ? null
+          : values.map((value, index) => {
+              let resource: JSONAPISingleResourceDocument['data'] =
+                callSerializeHook(this.card, value, doc, undefined, opts);
+              if (resource.relationships) {
+                for (let [fieldName, relationship] of Object.entries(
+                  resource.relationships as Record<string, Relationship>,
+                )) {
+                  relationships[`${this.name}.${index}.${fieldName}`] =
+                    relationship; // warning side-effect
+                }
+              }
+              if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
+                // when our implementation matches the default we don't need to include
+                // meta.adoptsFrom
+                delete resource.meta?.adoptsFrom;
+              }
+              if (resource.meta && Object.keys(resource.meta).length === 0) {
+                delete resource.meta;
+              }
+              return resource;
+            });
 
       let result: JSONAPIResource = {
         attributes: {
-          [this.name]: serialized.map((resource) => resource.attributes),
+          [this.name]:
+            serialized === null
+              ? null
+              : serialized.map((resource) => resource.attributes),
         },
       };
       if (Object.keys(relationships).length > 0) {
         result.relationships = relationships;
       }
 
-      if (serialized.some((resource) => resource.meta)) {
+      if (serialized && serialized.some((resource) => resource.meta)) {
         result.meta = {
           fields: {
             [this.name]: serialized.map((resource) => resource.meta ?? {}),
@@ -501,7 +513,10 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
-  ): Promise<BaseInstanceType<FieldT>[]> {
+  ): Promise<BaseInstanceType<FieldT>[] | null> {
+    if (value == null) {
+      return null;
+    }
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
@@ -1054,7 +1069,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
 }
 
 class LinksToMany<FieldT extends CardDefConstructor>
-  implements Field<FieldT, any[]>
+  implements Field<FieldT, any[] | null>
 {
   readonly fieldType = 'linksToMany';
   constructor(
@@ -1087,9 +1102,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
     return getter(instance, this);
   }
 
-  queryableValue(instances: any[] | null, stack: CardDef[]): any[] {
-    if (instances == null) {
-      return [];
+  queryableValue(instances: any[] | null, stack: CardDef[]): any[] | null {
+    if (instances === null || instances.length === 0) {
+      // we intentionally use a "null" to represent an empty plural field as
+      // this is a limitation to SQLite's json_tree() function when trying to match
+      // plural fields that are empty
+      return null;
     }
 
     // Need to replace the WatchedArray proxy with an actual array because the
@@ -1111,14 +1129,17 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
   queryMatcher(
     innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[]) => boolean | null {
+  ): (value: any[] | null) => boolean | null {
     return (value) => {
-      if (value.length === 0) {
+      if (Array.isArray(value) && value.length === 0) {
         return innerMatcher(null);
       }
-      return value.some((innerValue) => {
-        return innerMatcher(innerValue);
-      });
+      return (
+        Array.isArray(value) &&
+        value.some((innerValue) => {
+          return innerMatcher(innerValue);
+        })
+      );
     };
   }
 
@@ -1128,7 +1149,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     visited: Set<string>,
     opts?: SerializeOpts,
   ) {
-    if (values == undefined || values.length === 0) {
+    if (values == null || values.length === 0) {
       return {
         relationships: {
           [this.name]: {
@@ -3031,6 +3052,9 @@ export class Box<T> {
       throw new Error('tried to call children() on root box');
     }
     let value = this.value;
+    if (value == null) {
+      return [];
+    }
     if (!Array.isArray(value)) {
       throw new Error(
         `tried to call children() on Boxed non-array value ${value} for ${String(

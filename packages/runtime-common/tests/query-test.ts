@@ -59,6 +59,54 @@ const tests = Object.freeze({
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
   },
 
+  'error docs are not included in results': async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh } = testCards;
+    await setupIndex(indexer, [
+      {
+        card_url: `${testRealmURL}1.json`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        pristine_doc: undefined,
+        types: [],
+        error_doc: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      },
+      {
+        card_url: `${testRealmURL}mango.json`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        pristine_doc: await serializeCard(mango),
+        types: await getTypes(mango),
+        error_doc: undefined,
+      },
+      {
+        card_url: `${testRealmURL}vangogh.json`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        pristine_doc: await serializeCard(vangogh),
+        types: await getTypes(vangogh),
+        error_doc: undefined,
+      },
+    ]);
+    let { cards: results, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {},
+      loader,
+    );
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(results),
+      [mango.id, vangogh.id],
+      'results are correct',
+    );
+  },
+
   'can filter by type': async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, paper } = testCards;
 

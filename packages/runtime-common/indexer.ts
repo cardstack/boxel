@@ -165,7 +165,6 @@ export class Indexer {
     }
 
     if (maybeResult.error_doc) {
-      // TODO make a test for this!
       return { type: 'error', error: maybeResult.error_doc };
     }
     let {
@@ -256,7 +255,7 @@ export class Indexer {
     let conditions: CardExpression[] = [
       ['i.realm_url = ', param(realmURL.href)],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
-      ['error_doc IS NULL'], // TODO include a test for this!
+      ['error_doc IS NULL'],
       realmVersionExpression({ withMaxVersion: version }),
     ];
     if (filter) {

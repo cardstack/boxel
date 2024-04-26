@@ -194,6 +194,14 @@ module('Unit | query', function (hooks) {
     });
   });
 
+  test('error docs are not included in results', async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
   test('can filter by type', async function (assert) {
     await runSharedTest(queryTests, assert, {
       indexer,

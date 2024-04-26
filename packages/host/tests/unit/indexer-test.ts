@@ -52,6 +52,10 @@ module('Unit | indexer', function (hooks) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
+  test('can get an error doc', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
   test('can get "production" index entry', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });

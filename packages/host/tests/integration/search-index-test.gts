@@ -1343,8 +1343,8 @@ module('Integration | search-index', function (_hooks) {
             _cardType: 'Catalog Entry',
             id: `${testRealmURL}CatalogEntry/booking`,
             demo: {
-              hosts: [],
-              sponsors: [],
+              hosts: null,
+              sponsors: null,
               title: null,
               venue: null,
             },
@@ -1612,7 +1612,7 @@ module('Integration | search-index', function (_hooks) {
               _cardType: 'Pet Person',
               id: `${testRealmURL}PetPerson/burcu`,
               firstName: 'Burcu',
-              pets: [],
+              pets: null,
               friend: null,
               title: 'Burcu Pet Person',
               description: 'A person with pets',
@@ -3218,6 +3218,7 @@ posts/ignore-me.json
                       lastName: 'Faulkner',
                     },
                   ],
+                  sponsors: null,
                   posts: [
                     {
                       title: 'post 1',
@@ -3654,50 +3655,63 @@ posts/ignore-me.json
             }
           });
 
-          skip(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
-            {
-              let { data: matching } = await indexer.search({
-                filter: {
-                  on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-                  eq: { sponsors: ['Nintendo'] },
-                },
+          !isDbIndexingEnabled
+            ? skip(
+                `can filter on an array of primitive fields inside a containsMany using 'eq'`,
+              )
+            : test(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
+                {
+                  let { data: matching } = await indexer.search({
+                    filter: {
+                      on: {
+                        module: `${testModuleRealm}booking`,
+                        name: 'Booking',
+                      },
+                      eq: { sponsors: 'Nintendo' },
+                    },
+                  });
+                  assert.deepEqual(
+                    matching.map((m) => m.id),
+                    [`${paths.url}booking1`],
+                    'eq on sponsors',
+                  );
+                }
+                {
+                  let { data: matching } = await indexer.search({
+                    filter: {
+                      on: {
+                        module: `${testModuleRealm}booking`,
+                        name: 'Booking',
+                      },
+                      eq: { sponsors: 'Playstation' },
+                    },
+                  });
+                  assert.strictEqual(
+                    matching.length,
+                    0,
+                    'eq on nonexisting value in sponsors',
+                  );
+                }
+                {
+                  let { data: matching } = await indexer.search({
+                    filter: {
+                      on: {
+                        module: `${testModuleRealm}booking`,
+                        name: 'Booking',
+                      },
+                      eq: {
+                        'hosts.firstName': 'Arthur',
+                        sponsors: null,
+                      },
+                    },
+                  });
+                  assert.deepEqual(
+                    matching.map((m) => m.id),
+                    [`${paths.url}booking2`],
+                    'eq on hosts.firstName and null sponsors',
+                  );
+                }
               });
-              assert.deepEqual(
-                matching.map((m) => m.id),
-                [`${paths.url}booking1`],
-                'eq on sponsors',
-              );
-            }
-            {
-              let { data: matching } = await indexer.search({
-                filter: {
-                  on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-                  eq: { sponsors: ['Playstation'] },
-                },
-              });
-              assert.strictEqual(
-                matching.length,
-                0,
-                'eq on nonexisting value in sponsors',
-              );
-            }
-            {
-              let { data: matching } = await indexer.search({
-                filter: {
-                  on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-                  eq: {
-                    'hosts.firstName': 'Arthur',
-                    sponsors: null,
-                  },
-                },
-              });
-              assert.deepEqual(
-                matching.map((m) => m.id),
-                [`${paths.url}booking2`],
-                'eq on hosts.firstName and null sponsors',
-              );
-            }
-          });
 
           test('can negate a filter', async function (assert) {
             let { data: matching } = await indexer.search({
