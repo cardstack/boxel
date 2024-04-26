@@ -88,10 +88,10 @@ module('realm-auth-handler-test', function () {
     assert.strictEqual(request!.headers.get('Authorization'), 'Bearer token_3'); // Authorization header gets added as a result from getJWT
     assert.strictEqual(realmInfoFetchCount, 1);
 
-    // Now test caching–the visited realms: cache should be used to avoid re-fetching the realm URL
+    // Now test caching the visited realms: cache should be used to avoid re-fetching the realm URL
     await realmAuthHandler.fetchWithAuth(request);
     assert.strictEqual(request!.headers.get('Authorization'), 'Bearer token_3');
-    assert.strictEqual(realmInfoFetchCount, 1); // fetch count should not increase because the realm info should be cached
+    assert.strictEqual(realmInfoFetchCount, 1); // fetch count should not increase because the realm info should be read from the cache
   });
 
   test('it does not add authorization header to the request for target realms that are publicly readable', async function (assert) {
