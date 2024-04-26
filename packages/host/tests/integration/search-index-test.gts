@@ -205,7 +205,126 @@ module('Integration | search-index', function (_hooks) {
           }
         });
 
-        skip('can query the "production" index while performing indexing operations', async function (_assert) {});
+        test('can query the "production" index while performing indexing operations', async function (assert) {
+          let { realm } = await setupIntegrationTestRealm({
+            loader,
+            contents: {
+              'Pet/mango.json': {
+                data: {
+                  id: `${testRealmURL}Pet/mango`,
+                  attributes: {
+                    firstName: 'Mango',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/test/pet',
+                      name: 'Pet',
+                    },
+                  },
+                },
+              },
+            },
+          });
+          let indexer = realm.searchIndex;
+          let updateCard = realm.write(
+            'Pet/mango.json',
+            JSON.stringify({
+              data: {
+                id: `${testRealmURL}Pet/mango`,
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://localhost:4202/test/pet',
+                    name: 'Pet',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument),
+          );
+          let getCard = indexer.card(new URL(`${testRealmURL}Pet/mango`));
+          let [_, entry] = await Promise.all([updateCard, getCard]);
+          if (entry?.type === 'doc') {
+            // we see the "production" version of this card while it is being indexed
+            delete entry.doc.data.meta.lastModified;
+            assert.deepEqual(entry.doc.data, {
+              id: `${testRealmURL}Pet/mango`,
+              type: 'card',
+              links: {
+                self: `${testRealmURL}Pet/mango`,
+              },
+              attributes: {
+                description: null,
+                firstName: 'Mango',
+                title: 'Mango',
+                thumbnailURL: null,
+              },
+              relationships: {
+                owner: {
+                  links: {
+                    self: null,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4202/test/pet',
+                  name: 'Pet',
+                },
+                realmInfo: testRealmInfo,
+                realmURL: 'http://test-realm/test/',
+              },
+            });
+          } else {
+            assert.ok(
+              false,
+              `search entry was an error: ${entry?.error.detail}`,
+            );
+          }
+          {
+            // after the card has been indexed, the update is moved from the WIP version
+            // of the index to the production version of the index
+            let entry = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
+            if (entry?.type === 'doc') {
+              // we see the "production" version of this card while it is being indexed
+              delete entry.doc.data.meta.lastModified;
+              assert.deepEqual(entry.doc.data, {
+                id: `${testRealmURL}Pet/mango`,
+                type: 'card',
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+                attributes: {
+                  description: null,
+                  firstName: 'Van Gogh',
+                  title: 'Van Gogh',
+                  thumbnailURL: null,
+                },
+                relationships: {
+                  owner: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://localhost:4202/test/pet',
+                    name: 'Pet',
+                  },
+                  realmInfo: testRealmInfo,
+                  realmURL: 'http://test-realm/test/',
+                },
+              });
+            } else {
+              assert.ok(
+                false,
+                `search entry was an error: ${entry?.error.detail}`,
+              );
+            }
+          }
+        });
 
         test('can index card with linkTo field', async function (assert) {
           let { realm, adapter } = await setupIntegrationTestRealm({
