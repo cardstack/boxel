@@ -726,15 +726,16 @@ export class ${className} extends ${exportName} {
 
 function convertToClassName(input) {
   // \p{L}: a letter
-  let invalidLeadingCharactersRemoved = input.replace(/^[^\p{L}_$]+/u, '');
+  let invalidLeadingCharactersRemoved = camelCase(
+    input.replace(/^[^\p{L}_$]+/u, ''),
+    { pascalCase: true },
+  );
 
-  // \p{N}: a number
-  let invalidCharactersRemoved = invalidLeadingCharactersRemoved.replace(
+  let className = invalidLeadingCharactersRemoved.replace(
+    // \p{N}: a number
     /[^\p{L}\p{N}_$]+/gu,
     '',
   );
-
-  let className = camelCase(invalidCharactersRemoved, { pascalCase: true });
 
   // make sure we don't collide with a javascript built-in object
   if (typeof (globalThis as any)[className] !== 'undefined') {
