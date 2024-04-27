@@ -8,6 +8,8 @@ import {
   loadCard,
   internalKeyFor,
   identifyCard,
+  hasExecutableExtension,
+  trimExecutableExtension,
 } from './index';
 import {
   type PgPrimitive,
@@ -51,10 +53,11 @@ import { type SearchEntryWithErrors } from './search-index';
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-export interface IndexedCardsTable {
-  card_url: string;
+export interface BoxelIndexTable {
+  url: string;
   realm_version: number;
   realm_url: string;
+  type: 'instance' | 'module' | 'error';
   // TODO in followup PR update this to be a document not a resource
   pristine_doc: CardResource | null;
   error_doc: SerializedError | null;
@@ -149,14 +152,16 @@ export class Indexer {
     let href = assertURLEndsWithJSON(url).href;
     let result = (await this.query([
       `SELECT i.* 
-       FROM indexed_cards as i
+       FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
-       WHERE i.card_url =`,
-      param(href),
-      'AND',
-      ...realmVersionExpression(opts),
-    ] as Expression)) as unknown as IndexedCardsTable[];
-    let maybeResult: IndexedCardsTable | undefined = result[0];
+       WHERE`,
+      ...every([
+        [`i.url =`, param(href)],
+        ['i.type =', param('instance')],
+        realmVersionExpression(opts),
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    let maybeResult: BoxelIndexTable | undefined = result[0];
     if (!maybeResult) {
       return undefined;
     }
@@ -203,7 +208,9 @@ export class Indexer {
     return batch;
   }
 
-  async cardsThatReference(cardId: string): Promise<string[]> {
+  async itemsThatReference(
+    url: URL,
+  ): Promise<{ url: string; type: 'instance' | 'module' | 'error' }[]> {
     // TODO we really need a solution to iterate through large invalidation
     // result sets for this--pervious implementations ran into a bug that
     // necessitated a cursor for large invalidations. But beware, there is no
@@ -211,18 +218,18 @@ export class Indexer {
     // this query. we can probably do something similar to how we are paging the
     // search() method using realm_version for stability between pages.
     let rows = (await this.query([
-      `SELECT card_url
+      `SELECT i.url, i.type
        FROM
-         indexed_cards as i
+         boxel_index as i
        CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE deps_array_element =`,
-      param(cardId),
+      param(url.href),
       'AND',
       ...realmVersionExpression({ useWorkInProgressIndex: true }),
-      'ORDER BY i.card_url COLLATE "POSIX"',
-    ] as Expression)) as Pick<IndexedCardsTable, 'card_url'>[];
-    return rows.map((r) => r.card_url);
+      'ORDER BY i.url COLLATE "POSIX"',
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type'>[];
+    return rows;
   }
 
   // we pass the loader in so there is no ambiguity which loader to use as this
@@ -254,6 +261,7 @@ export class Indexer {
     }
     let conditions: CardExpression[] = [
       ['i.realm_url = ', param(realmURL.href)],
+      ['i.type =', param('instance')],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
       ['error_doc IS NULL'],
       realmVersionExpression({ withMaxVersion: version }),
@@ -264,18 +272,18 @@ export class Indexer {
 
     let everyCondition = every(conditions);
     let query = [
-      `SELECT card_url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc`,
-      `FROM indexed_cards AS i ${tableValuedFunctionsPlaceholder}`,
+      `SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc`,
+      `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...everyCondition,
-      'GROUP BY card_url',
+      'GROUP BY url',
       ...this.orderExpression(sort),
       ...(page ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`] : []),
     ];
     let queryCount = [
-      'SELECT COUNT(DISTINCT card_url) AS total',
-      `FROM indexed_cards AS i ${tableValuedFunctionsPlaceholder}`,
+      'SELECT COUNT(DISTINCT url) AS total',
+      `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...everyCondition,
@@ -284,7 +292,7 @@ export class Indexer {
     let [totalResults, results] = await Promise.all([
       this.queryCards(queryCount, loader) as Promise<{ total: number }[]>,
       this.queryCards(query, loader) as Promise<
-        Pick<IndexedCardsTable, 'pristine_doc' | 'card_url' | 'error_doc'>[]
+        Pick<BoxelIndexTable, 'pristine_doc' | 'url' | 'error_doc'>[]
       >,
     ]);
 
@@ -300,7 +308,7 @@ export class Indexer {
 
   private orderExpression(sort: Sort | undefined): CardExpression {
     if (!sort) {
-      return ['ORDER BY card_url COLLATE "POSIX"'];
+      return ['ORDER BY url COLLATE "POSIX"'];
     }
     return [
       'ORDER BY',
@@ -314,8 +322,8 @@ export class Indexer {
           s.direction ?? 'asc',
           'NULLS LAST',
         ]),
-        // we include 'card_url' as the final sort key for deterministic results
-        ['card_url COLLATE "POSIX"'],
+        // we include 'url' as the final sort key for deterministic results
+        ['url COLLATE "POSIX"'],
       ]),
     ];
   }
@@ -522,9 +530,9 @@ export class Indexer {
   // '->' and '->>' JSON operators.
   // The result is a query that looks like this:
   //
-  //   SELECT card_url, pristine_doc
+  //   SELECT url, pristine_doc
   //   FROM
-  //     indexed_cards,
+  //     boxel_index,
   //   CROSS JOIN LATERAL jsonb_array_elements_text(types) as types0_array_element
   //     -- This json_tree was derived by this handler:
   //   CROSS JOIN LATERAL jsonb_tree(search_doc, '$.friends') as friends1_tree
@@ -539,8 +547,8 @@ export class Indexer {
   //         ( friends1_tree.fullkey LIKE '$.friends[%].bestFriend.name' )
   //       )
   //     )
-  //   GROUP BY card_url
-  //   ORDER BY card_url
+  //   GROUP BY url
+  //   ORDER BY url
 
   private async handleFieldArity(
     fieldArity: FieldArity,
@@ -807,12 +815,22 @@ export class Batch {
     this.ready = this.setNextRealmVersion();
   }
 
-  async updateEntry(url: URL, entry: SearchEntryWithErrors): Promise<void> {
-    let href = assertURLEndsWithJSON(url).href;
+  async updateEntry(
+    url: URL,
+    entry:
+      | SearchEntryWithErrors
+      | {
+          type: 'module';
+          module: {
+            deps: Set<string>;
+          };
+        },
+  ): Promise<void> {
+    let href = url.href;
     this.touched.add(href);
     let { nameExpressions, valueExpressions } = asExpressions(
       {
-        card_url: href,
+        url: href,
         realm_version: this.realmVersion,
         realm_url: this.realmURL.href,
         is_deleted: false,
@@ -821,17 +839,24 @@ export class Batch {
           ? {
               // TODO in followup PR we need to alter the SearchEntry type to use
               // a document instead of a resource
+              type: 'instance',
               pristine_doc: entry.entry.resource,
               search_doc: entry.entry.searchData,
               isolated_html: entry.entry.html,
               deps: [...entry.entry.deps],
               types: entry.entry.types,
             }
+          : entry.type === 'module'
+          ? {
+              type: 'module',
+              deps: [...entry.module.deps],
+            }
           : {
+              type: 'error',
               error_doc: entry.error,
               deps: entry.error.deps,
             }),
-      } as IndexedCardsTable,
+      } as BoxelIndexTable,
       {
         jsonFields: [
           'pristine_doc',
@@ -845,8 +870,8 @@ export class Batch {
 
     await this.client.query([
       ...upsert(
-        'indexed_cards',
-        'indexed_cards_pkey',
+        'boxel_index',
+        'boxel_index_pkey',
         nameExpressions,
         valueExpressions,
       ),
@@ -855,17 +880,17 @@ export class Batch {
 
   async makeNewGeneration() {
     this.isNewGeneration = true;
-    let cols = ['card_url', 'realm_url', 'realm_version', 'is_deleted'].map(
+    let cols = ['url', 'type', 'realm_url', 'realm_version', 'is_deleted'].map(
       (c) => [c],
     );
     await this.detectUniqueConstraintError(
       () =>
         // create tombstones for all card URLs
         this.client.query([
-          `INSERT INTO indexed_cards`,
+          `INSERT INTO boxel_index`,
           ...addExplicitParens(separatedByCommas(cols)),
-          `SELECT i.card_url, i.realm_url, ${this.realmVersion} as realm_version, true as is_deleted`,
-          'FROM indexed_cards as i',
+          `SELECT i.url, i.type, i.realm_url, ${this.realmVersion} as realm_version, true as is_deleted`,
+          'FROM boxel_index as i',
           'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
           'WHERE i.realm_url =',
           param(this.realmURL.href),
@@ -894,7 +919,7 @@ export class Batch {
     // prune obsolete generation index entries
     if (this.isNewGeneration) {
       await this.client.query([
-        `DELETE FROM indexed_cards`,
+        `DELETE FROM boxel_index`,
         'WHERE realm_version <',
         param(this.realmVersion),
       ]);
@@ -930,40 +955,44 @@ export class Batch {
     url: URL /* this can be a card or module URL. This must include .json extension for cards */,
   ): Promise<string[]> {
     await this.ready;
-
-    let invalidations = await this.calculateInvalidations(url.href);
-
-    if (url.href.endsWith('.json')) {
-      // insert tombstone into next version of the realm index
-      let columns = [
-        'card_url',
-        'realm_version',
-        'realm_url',
-        'is_deleted',
-      ].map((c) => [c]);
-      let rows = invalidations
-        // don't add module URLs to indexed_cards table--we use
-        // '.json' extension as heuristic to identify card instances
-        .filter((i) => i.endsWith('.json'))
-        .map((id) =>
-          [id, this.realmVersion, this.realmURL.href, true].map((v) => [
-            param(v),
-          ]),
-        );
-
-      await this.detectUniqueConstraintError(
-        () =>
-          this.client.query([
-            `INSERT INTO indexed_cards`,
-            ...addExplicitParens(separatedByCommas(columns)),
-            'VALUES',
-            ...separatedByCommas(
-              rows.map((value) => addExplicitParens(separatedByCommas(value))),
-            ),
-          ] as Expression),
-        { url, invalidations },
-      );
+    let type = url.href.endsWith('.json') ? 'instance' : 'module';
+    if (hasExecutableExtension(url.href)) {
+      url = trimExecutableExtension(url);
     }
+    let invalidations = await this.calculateInvalidations(url);
+
+    // if (url.href.endsWith('.json')) {
+    // insert tombstone into next version of the realm index
+    let columns = [
+      'url',
+      'type',
+      'realm_version',
+      'realm_url',
+      'is_deleted',
+    ].map((c) => [c]);
+    let rows = invalidations
+      // don't add module URLs to boxel_index table--we use
+      // '.json' extension as heuristic to identify card instances
+      .filter((i) => i.endsWith('.json'))
+      .map((id) =>
+        [id, type, this.realmVersion, this.realmURL.href, true].map((v) => [
+          param(v),
+        ]),
+      );
+
+    await this.detectUniqueConstraintError(
+      () =>
+        this.client.query([
+          `INSERT INTO boxel_index`,
+          ...addExplicitParens(separatedByCommas(columns)),
+          'VALUES',
+          ...separatedByCommas(
+            rows.map((value) => addExplicitParens(separatedByCommas(value))),
+          ),
+        ] as Expression),
+      { url, invalidations },
+    );
+    // }
 
     // FYI: these invalidations may include modules...
     this.touched = new Set([...this.touched, ...invalidations]);
@@ -1005,14 +1034,20 @@ export class Batch {
     }
   }
 
-  private async calculateInvalidations(id: string): Promise<string[]> {
-    let invalidations = [id];
-    let childInvalidations = await this.client.cardsThatReference(id);
+  private async calculateInvalidations(url: URL): Promise<string[]> {
+    let invalidations = [url.href];
+    let childInvalidations = await this.client.itemsThatReference(url);
     invalidations = [
       ...invalidations,
       ...flatten(
         await Promise.all(
-          childInvalidations.map((id) => this.calculateInvalidations(id)),
+          childInvalidations.map(({ url, type }) =>
+            this.calculateInvalidations(
+              type === 'module'
+                ? trimExecutableExtension(new URL(url))
+                : new URL(url),
+            ),
+          ),
         ),
       ),
     ];
@@ -1053,8 +1088,8 @@ function realmVersionExpression(opts?: {
     'realm_version =',
     ...addExplicitParens([
       'SELECT MAX(i2.realm_version)',
-      'FROM indexed_cards i2',
-      'WHERE i2.card_url = i.card_url',
+      'FROM boxel_index i2',
+      'WHERE i2.url = i.url',
       ...(opts?.withMaxVersion
         ? ['AND i2.realm_version <=', param(opts?.withMaxVersion)]
         : !opts?.useWorkInProgressIndex

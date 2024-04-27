@@ -66,7 +66,7 @@ const tests = Object.freeze({
     let { mango, vangogh } = testCards;
     await setupIndex(indexer, [
       {
-        card_url: `${testRealmURL}1.json`,
+        url: `${testRealmURL}1.json`,
         realm_version: 1,
         realm_url: testRealmURL,
         pristine_doc: undefined,
@@ -78,7 +78,7 @@ const tests = Object.freeze({
         },
       },
       {
-        card_url: `${testRealmURL}mango.json`,
+        url: `${testRealmURL}mango.json`,
         realm_version: 1,
         realm_url: testRealmURL,
         pristine_doc: await serializeCard(mango),
@@ -86,7 +86,7 @@ const tests = Object.freeze({
         error_doc: undefined,
       },
       {
-        card_url: `${testRealmURL}vangogh.json`,
+        url: `${testRealmURL}vangogh.json`,
         realm_version: 1,
         realm_url: testRealmURL,
         pristine_doc: await serializeCard(vangogh),

@@ -27,10 +27,6 @@ module('Unit | indexer', function (hooks) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
-  test('does not create invalidation record for non-JSON invalidation', async function (assert) {
-    await runSharedTest(indexerTests, assert, { indexer, adapter });
-  });
-
   test('only invalidates latest version of content', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });

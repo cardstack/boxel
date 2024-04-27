@@ -583,7 +583,7 @@ export class CurrentRun {
 
   private async setInstance(instanceURL: URL, entry: SearchEntryWithErrors) {
     if (isDbIndexerEnabled()) {
-      await this.batch.updateEntry(instanceURL, entry);
+      await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
     } else {
       this.#instances.set(instanceURL, entry);
       this.#entrySetter(instanceURL, entry);
@@ -631,7 +631,18 @@ export class CurrentRun {
       url,
       consumes,
     };
-    this.#modules.set(url, { type: 'module', module });
+    if (isDbIndexerEnabled()) {
+      await this.batch.updateEntry(new URL(url), {
+        type: 'module',
+        module: {
+          deps: new Set(
+            consumes.map((d) => trimExecutableExtension(new URL(d)).href),
+          ),
+        },
+      });
+    } else {
+      this.#modules.set(url, { type: 'module', module });
+    }
     deferred.fulfill(module);
   }
 
@@ -790,4 +801,11 @@ function invalidate(
 
 function isDbIndexerEnabled() {
   return Boolean((globalThis as any).__enablePgIndexer?.());
+}
+
+function assertURLEndsWithJSON(url: URL): URL {
+  if (!url.href.endsWith('.json')) {
+    return new URL(`${url}.json`);
+  }
+  return url;
 }
