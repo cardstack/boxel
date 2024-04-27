@@ -1,6 +1,7 @@
 exports.up = (pgm) => {
   pgm.createTable('boxel_index', {
     url: { type: 'varchar', notNull: true },
+    file_alias: { type: 'varchar', notNull: true },
     type: { type: 'varchar', notNull: true },
     realm_version: { type: 'integer', notNull: true },
     realm_url: { type: 'varchar', notNull: true },

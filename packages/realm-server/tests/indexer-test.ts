@@ -20,7 +20,11 @@ module('indexer db client', function (hooks) {
     await indexer.teardown();
   });
 
-  test('can perform invalidations for an index entry', async function (assert) {
+  test('can perform invalidations for a instance entry', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('can perform invalidations for a module entry', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 

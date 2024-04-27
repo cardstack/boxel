@@ -407,6 +407,17 @@ export class CurrentRun {
       let deps = await (
         await this.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
+      if (isDbIndexerEnabled()) {
+        await this.batch.updateEntry(new URL(url), {
+          type: 'error',
+          error: {
+            status: 500,
+            detail: `encountered error loading module "${url.href}": ${err.message}`,
+            additionalErrors: null,
+            deps,
+          },
+        });
+      }
       this.#modules.set(url.href, {
         type: 'error',
         moduleURL: url.href,
@@ -640,9 +651,8 @@ export class CurrentRun {
           ),
         },
       });
-    } else {
-      this.#modules.set(url, { type: 'module', module });
     }
+    this.#modules.set(url, { type: 'module', module });
     deferred.fulfill(module);
   }
 

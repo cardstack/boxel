@@ -23,7 +23,11 @@ module('Unit | indexer', function (hooks) {
     await indexer.ready();
   });
 
-  test('can perform invalidations for an index entry', async function (assert) {
+  test('can perform invalidations for a instance entry', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('can perform invalidations for a module entry', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 

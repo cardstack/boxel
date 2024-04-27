@@ -55,6 +55,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export interface BoxelIndexTable {
   url: string;
+  file_alias: string;
   realm_version: number;
   realm_url: string;
   type: 'instance' | 'module' | 'error';
@@ -157,8 +158,11 @@ export class Indexer {
        WHERE`,
       ...every([
         [`i.url =`, param(href)],
-        ['i.type =', param('instance')],
         realmVersionExpression(opts),
+        any([
+          ['i.type =', param('instance')],
+          ['i.type =', param('error')],
+        ]),
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let maybeResult: BoxelIndexTable | undefined = result[0];
@@ -209,8 +213,10 @@ export class Indexer {
   }
 
   async itemsThatReference(
-    url: URL,
-  ): Promise<{ url: string; type: 'instance' | 'module' | 'error' }[]> {
+    alias: string,
+  ): Promise<
+    { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
+  > {
     // TODO we really need a solution to iterate through large invalidation
     // result sets for this--pervious implementations ran into a bug that
     // necessitated a cursor for large invalidations. But beware, there is no
@@ -218,18 +224,23 @@ export class Indexer {
     // this query. we can probably do something similar to how we are paging the
     // search() method using realm_version for stability between pages.
     let rows = (await this.query([
-      `SELECT i.url, i.type
+      `SELECT i.url, i.file_alias, i.type
        FROM
          boxel_index as i
        CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
-       WHERE deps_array_element =`,
-      param(url.href),
-      'AND',
-      ...realmVersionExpression({ useWorkInProgressIndex: true }),
+       WHERE`,
+      ...every([
+        [`deps_array_element =`, param(alias)],
+        realmVersionExpression({ useWorkInProgressIndex: true }),
+      ]),
       'ORDER BY i.url COLLATE "POSIX"',
-    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type'>[];
-    return rows;
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'file_alias' | 'type'>[];
+    return rows.map(({ url, file_alias, type }) => ({
+      url,
+      alias: file_alias,
+      type,
+    }));
   }
 
   // we pass the loader in so there is no ambiguity which loader to use as this
@@ -263,7 +274,6 @@ export class Indexer {
       ['i.realm_url = ', param(realmURL.href)],
       ['i.type =', param('instance')],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
-      ['error_doc IS NULL'],
       realmVersionExpression({ withMaxVersion: version }),
     ];
     if (filter) {
@@ -831,6 +841,7 @@ export class Batch {
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         url: href,
+        file_alias: trimExecutableExtension(url).href,
         realm_version: this.realmVersion,
         realm_url: this.realmURL.href,
         is_deleted: false,
@@ -880,16 +891,21 @@ export class Batch {
 
   async makeNewGeneration() {
     this.isNewGeneration = true;
-    let cols = ['url', 'type', 'realm_url', 'realm_version', 'is_deleted'].map(
-      (c) => [c],
-    );
+    let cols = [
+      'url',
+      'file_alias',
+      'type',
+      'realm_url',
+      'realm_version',
+      'is_deleted',
+    ].map((c) => [c]);
     await this.detectUniqueConstraintError(
       () =>
         // create tombstones for all card URLs
         this.client.query([
           `INSERT INTO boxel_index`,
           ...addExplicitParens(separatedByCommas(cols)),
-          `SELECT i.url, i.type, i.realm_url, ${this.realmVersion} as realm_version, true as is_deleted`,
+          `SELECT i.url, i.file_alias, i.type, i.realm_url, ${this.realmVersion} as realm_version, true as is_deleted`,
           'FROM boxel_index as i',
           'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
           'WHERE i.realm_url =',
@@ -951,34 +967,35 @@ export class Batch {
     }
   }
 
-  async invalidate(
-    url: URL /* this can be a card or module URL. This must include .json extension for cards */,
-  ): Promise<string[]> {
+  async invalidate(url: URL): Promise<string[]> {
     await this.ready;
-    let type = url.href.endsWith('.json') ? 'instance' : 'module';
-    if (hasExecutableExtension(url.href)) {
-      url = trimExecutableExtension(url);
-    }
-    let invalidations = await this.calculateInvalidations(url);
+    let alias = trimExecutableExtension(url).href;
+    let invalidations = [
+      ...new Set([
+        url.href,
+        ...(alias ? await this.calculateInvalidations(alias) : []),
+      ]),
+    ];
 
-    // if (url.href.endsWith('.json')) {
     // insert tombstone into next version of the realm index
     let columns = [
       'url',
+      'file_alias',
       'type',
       'realm_version',
       'realm_url',
       'is_deleted',
     ].map((c) => [c]);
-    let rows = invalidations
-      // don't add module URLs to boxel_index table--we use
-      // '.json' extension as heuristic to identify card instances
-      .filter((i) => i.endsWith('.json'))
-      .map((id) =>
-        [id, type, this.realmVersion, this.realmURL.href, true].map((v) => [
-          param(v),
-        ]),
-      );
+    let rows = invalidations.map((id) =>
+      [
+        id,
+        trimExecutableExtension(new URL(id)).href,
+        hasExecutableExtension(id) ? 'module' : 'instance',
+        this.realmVersion,
+        this.realmURL.href,
+        true,
+      ].map((v) => [param(v)]),
+    );
 
     await this.detectUniqueConstraintError(
       () =>
@@ -992,9 +1009,7 @@ export class Batch {
         ] as Expression),
       { url, invalidations },
     );
-    // }
 
-    // FYI: these invalidations may include modules...
     this.touched = new Set([...this.touched, ...invalidations]);
     return invalidations;
   }
@@ -1034,24 +1049,19 @@ export class Batch {
     }
   }
 
-  private async calculateInvalidations(url: URL): Promise<string[]> {
-    let invalidations = [url.href];
-    let childInvalidations = await this.client.itemsThatReference(url);
-    invalidations = [
+  private async calculateInvalidations(alias: string): Promise<string[]> {
+    let childInvalidations = await this.client.itemsThatReference(alias);
+    let invalidations = childInvalidations.map(({ url }) => url);
+    let aliases = childInvalidations.map(({ alias: _alias }) => _alias);
+    let results = [
       ...invalidations,
       ...flatten(
         await Promise.all(
-          childInvalidations.map(({ url, type }) =>
-            this.calculateInvalidations(
-              type === 'module'
-                ? trimExecutableExtension(new URL(url))
-                : new URL(url),
-            ),
-          ),
+          aliases.map((alias) => this.calculateInvalidations(alias)),
         ),
       ),
     ];
-    return [...new Set(invalidations)];
+    return [...new Set(results)];
   }
 }
 

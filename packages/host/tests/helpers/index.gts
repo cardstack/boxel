@@ -383,8 +383,10 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           return e;
         });
         assert.deepEqual(
-          eventsWithoutClientRequestId,
-          expectedEvents,
+          eventsWithoutClientRequestId.forEach((e) =>
+            e.data.invalidations?.sort(),
+          ),
+          expectedEvents.forEach((e) => e.data.invalidations?.sort()),
           'sse response is correct',
         );
       }

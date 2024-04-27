@@ -18,6 +18,7 @@ import {
   type BoxelIndexTable,
   type RealmVersionsTable,
   LooseCardResource,
+  trimExecutableExtension,
 } from '../index';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -143,7 +144,13 @@ export async function setupIndex(
           types: await getTypes(r),
         };
       }
-      row.url = !row.url.endsWith('.json') ? `${row.url}.json` : row.url;
+      row.url =
+        row.type === 'instance'
+          ? !row.url.endsWith('.json')
+            ? `${row.url}.json`
+            : row.url
+          : row.url;
+      row.file_alias = trimExecutableExtension(new URL(row.url)).href;
       row.type = row.type ?? 'instance';
       return asExpressions(
         { ...defaultIndexEntry, ...row },

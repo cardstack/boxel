@@ -13,7 +13,7 @@ import { testRealmURL } from '../helpers/const';
 const testRealmURL2 = `http://test-realm/test2/`;
 
 const tests = Object.freeze({
-  'can perform invalidations for an index entry': async (
+  'can perform invalidations for a instance entry': async (
     assert,
     { indexer, adapter },
   ) => {
@@ -134,6 +134,73 @@ const tests = Object.freeze({
       ],
       'the "production" realm versions are correct',
     );
+  },
+
+  'can perform invalidations for a module entry': async (
+    assert,
+    { indexer },
+  ) => {
+    await setupIndex(
+      indexer,
+      [
+        { realm_url: testRealmURL, current_version: 1 },
+        { realm_url: testRealmURL2, current_version: 5 },
+      ],
+      [
+        {
+          url: `${testRealmURL}person.gts`,
+          file_alias: `${testRealmURL}person`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          url: `${testRealmURL}employee.gts`,
+          file_alias: `${testRealmURL}employee`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}person`],
+        },
+        {
+          url: `${testRealmURL}1.json`,
+          file_alias: `${testRealmURL}1.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}employee`],
+        },
+        {
+          url: `${testRealmURL}2.json`,
+          file_alias: `${testRealmURL}2.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}1.json`],
+        },
+        {
+          url: `${testRealmURL}3.json`,
+          file_alias: `${testRealmURL}3.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+      ],
+    );
+
+    let batch = await indexer.createBatch(new URL(testRealmURL));
+    let invalidations = await batch.invalidate(
+      new URL(`${testRealmURL}person.gts`),
+    );
+
+    assert.deepEqual(invalidations.sort(), [
+      `${testRealmURL}1.json`,
+      `${testRealmURL}2.json`,
+      `${testRealmURL}employee.gts`,
+      `${testRealmURL}person.gts`,
+    ]);
   },
 
   'only invalidates latest version of content': async (

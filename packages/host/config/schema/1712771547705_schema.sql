@@ -3,6 +3,7 @@
 
  CREATE TABLE IF NOT EXISTS boxel_index (
    url TEXT NOT NULL,
+   file_alias TEXT NOT NULL,
    type TEXT NOT NULL,
    realm_version INTEGER NOT NULL,
    realm_url TEXT NOT NULL,
