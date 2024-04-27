@@ -200,7 +200,8 @@ jobs:
         run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: host test suite
-        run: pnpm test-with-percy
+        # don't run the db index host tests in percy until we remove the feature flag
+        run: pnpm test:wait-for-servers
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
