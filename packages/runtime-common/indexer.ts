@@ -52,6 +52,7 @@ import { type SearchEntryWithErrors } from './search-index';
 
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { RealmPaths } from './index';
 
 export interface BoxelIndexTable {
   url: string;
@@ -274,6 +275,8 @@ export class Indexer {
       ['i.realm_url = ', param(realmURL.href)],
       ['i.type =', param('instance')],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
+      // our tests assert that the index card should not come back in the search results, so:
+      ['url !=', param(new RealmPaths(realmURL).fileURL('index.json').href)],
       realmVersionExpression({ withMaxVersion: version }),
     ];
     if (filter) {

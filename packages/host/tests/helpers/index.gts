@@ -551,6 +551,7 @@ async function setupTestRealm({
     ...((globalThis as any).__enablePgIndexer?.() ? { dbAdapter, queue } : {}),
     onIndexer: async (indexer) => {
       let worker = new Worker({
+        realmURL: new URL(realmURL!),
         indexer,
         queue,
         realmAdapter: adapter,

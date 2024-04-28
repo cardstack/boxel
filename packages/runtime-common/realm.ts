@@ -430,6 +430,7 @@ export class Realm {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
+  // TODO bypass the operationQueue when dbIndex is enabled
   async write(
     path: LocalPath,
     contents: string,
@@ -515,6 +516,7 @@ export class Realm {
     return { isTracked: false, url };
   }
 
+  // TODO bypass the operationQueue when dbIndex is enabled
   async delete(path: LocalPath): Promise<void> {
     let deferred = new Deferred<void>();
     this.#operationQueue.push({

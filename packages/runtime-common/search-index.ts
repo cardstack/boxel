@@ -276,7 +276,7 @@ export class SearchIndex {
         realmURL: this.#realm.url,
       };
       let job = await this.queue.publish<FromScratchResult>(
-        'from-scratch-index',
+        `from-scratch-index:${this.#realm.url}`,
         args,
       );
       let { ignoreData, stats } = await job.done;
@@ -326,7 +326,7 @@ export class SearchIndex {
         ignoreData: { ...this.#index.ignoreData },
       };
       let job = await this.queue.publish<IncrementalResult>(
-        'incremental-index',
+        `incremental-index:${this.#realm.url}`,
         args,
       );
       let { invalidations, ignoreData, stats } = await job.done;

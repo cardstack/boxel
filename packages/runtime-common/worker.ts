@@ -41,6 +41,7 @@ export interface IncrementalResult {
 }
 
 export class Worker {
+  #realmURL: URL;
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
   #reader: Reader;
@@ -59,6 +60,7 @@ export class Worker {
     | undefined;
 
   constructor({
+    realmURL,
     indexer,
     queue,
     indexRunner,
@@ -66,6 +68,7 @@ export class Worker {
     realmAdapter,
     loader,
   }: {
+    realmURL: URL;
     indexer: Indexer;
     queue: Queue;
     indexRunner: IndexRunner;
@@ -73,6 +76,7 @@ export class Worker {
     loader: Loader; // this should be analogous to the realm's loader template
     realmAdapter: RealmAdapter;
   }) {
+    this.#realmURL = realmURL;
     this.#queue = queue;
     this.#indexer = indexer;
     this.#realmAdapter = realmAdapter;
@@ -90,8 +94,14 @@ export class Worker {
     await this.#queue.start();
     await this.#indexer.ready();
 
-    await this.#queue.register('from-scratch-index', this.fromScratch);
-    await this.#queue.register('incremental-index', this.incremental);
+    await this.#queue.register(
+      `from-scratch-index:${this.#realmURL}`,
+      this.fromScratch,
+    );
+    await this.#queue.register(
+      `incremental-index:${this.#realmURL}`,
+      this.incremental,
+    );
   }
 
   private async readFileAsText(
