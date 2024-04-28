@@ -392,6 +392,7 @@ jobs:
     needs:
       - change-check
       - boxel-ui-test
+      # don't forget to change this after we remove the feature flag
       - host-test-in-memory-index
       - realm-server-test
     uses: ./.github/workflows/manual-deploy.yml
