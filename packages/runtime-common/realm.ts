@@ -309,7 +309,7 @@ export class Realm {
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.loaderTemplate.registerURLHandler(
-      this.#realmAuthHandler.fetchWithAuth,
+      this.#realmAuthHandler.addAuthorizationHeader,
     );
 
     this.#adapter = adapter;

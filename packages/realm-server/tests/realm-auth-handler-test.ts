@@ -35,21 +35,21 @@ module('realm-auth-handler-test', function () {
     let request1 = new Request('http://localhost/test-realm/_session', {
       method: 'POST',
     });
-    await realmAuthHandler.fetchWithAuth(request1);
+    await realmAuthHandler.addAuthorizationHeader(request1);
     assert.false(request1.headers.has('Authorization'));
 
     // Case 2: HEAD request which is for getting realm info
     let request2 = new Request('http://localhost/test-realm/card', {
       method: 'HEAD',
     });
-    await realmAuthHandler.fetchWithAuth(request2);
+    await realmAuthHandler.addAuthorizationHeader(request2);
     assert.false(request2.headers.has('Authorization'));
 
     // Case 3: Request with Authorization header already set
     let request3 = new Request('http://localhost/test-realm/card', {
       headers: { Authorization: 'Bearer token_1' },
     });
-    await realmAuthHandler.fetchWithAuth(request3);
+    await realmAuthHandler.addAuthorizationHeader(request3);
     assert.strictEqual(request3.headers.get('Authorization'), 'Bearer token_1'); // authorization header is not changed (it shouldn't be what realm auth client mock is returning above)
   });
 
@@ -83,13 +83,13 @@ module('realm-auth-handler-test', function () {
 
     let request = new Request('http://another-test-realm/card');
 
-    await realmAuthHandler.fetchWithAuth(request);
+    await realmAuthHandler.addAuthorizationHeader(request);
 
     assert.strictEqual(request!.headers.get('Authorization'), 'Bearer token_3'); // Authorization header gets added as a result from getJWT
     assert.strictEqual(realmInfoFetchCount, 1);
 
     // Now test caching the visited realms: cache should be used to avoid re-fetching the realm URL
-    await realmAuthHandler.fetchWithAuth(request);
+    await realmAuthHandler.addAuthorizationHeader(request);
     assert.strictEqual(request!.headers.get('Authorization'), 'Bearer token_3');
     assert.strictEqual(realmInfoFetchCount, 1); // fetch count should not increase because the realm info should be read from the cache
   });
@@ -122,7 +122,7 @@ module('realm-auth-handler-test', function () {
 
     let request = new Request('http://another-test-realm/card');
 
-    await realmAuthHandler.fetchWithAuth(request);
+    await realmAuthHandler.addAuthorizationHeader(request);
 
     assert.false(request!.headers.has('Authorization')); // Authorization header does not get added because the realm is publicly readable
   });
@@ -152,7 +152,7 @@ module('realm-auth-handler-test', function () {
     };
 
     let request = new Request(`${realmURL}/card`);
-    await realmAuthHandler.fetchWithAuth(request);
+    await realmAuthHandler.addAuthorizationHeader(request);
 
     assert.false(request!.headers.has('Authorization')); // Authorization header does not get added because the realm is making a request to itself
   });

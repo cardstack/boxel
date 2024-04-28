@@ -32,7 +32,7 @@ export class RealmAuthHandler {
     return new RealmAuthClient(realmURL, matrixClient, loader);
   }
 
-  fetchWithAuth = async (request: Request) => {
+  addAuthorizationHeader = async (request: Request) => {
     if (request.url.startsWith(PACKAGES_FAKE_ORIGIN)) {
       return null;
     }
