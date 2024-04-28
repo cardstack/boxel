@@ -21,6 +21,8 @@ module('Postgres', function (hooks) {
       let columns = result.map((r) => r.column_name);
       assert.deepEqual(columns, [
         'url',
+        'file_alias',
+        'type',
         'realm_version',
         'realm_url',
         'pristine_doc',
