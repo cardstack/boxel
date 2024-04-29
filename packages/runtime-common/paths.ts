@@ -10,9 +10,6 @@ export class RealmPaths {
 
   local(url: URL, opts: LocalOptions = {}): LocalPath {
     if (!this.inRealm(url)) {
-      if (!url || !url.href || url.href.includes('undefined')) {
-        debugger;
-      }
       let error = new Error(`realm ${this.url} does not contain ${url.href}`);
       (error as any).status = 404;
       throw error;
