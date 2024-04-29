@@ -307,10 +307,10 @@ export class Realm {
       url,
     );
     this.loaderTemplate = loader;
-    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.loaderTemplate.registerURLHandler(
-      this.#realmAuthHandler.addAuthorizationHeader,
+      this.#realmAuthHandler.fetchWithAuth,
     );
+    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
 
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(

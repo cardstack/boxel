@@ -25,45 +25,39 @@ module('realm-auth-handler-test', function () {
       'http://test-realm/',
     );
 
-    (realmAuthHandler as any).buildRealmAuthClient = () => {
-      return {
-        getJWT: () => 'Bearer token_2',
-      };
-    };
-
     // Case 1: POST request to _session which is for creating a session
     let request1 = new Request('http://localhost/test-realm/_session', {
       method: 'POST',
     });
-    await realmAuthHandler.addAuthorizationHeader(request1);
-    assert.false(request1.headers.has('Authorization'));
+    let response1 = await realmAuthHandler.fetchWithAuth(request1);
+    assert.strictEqual(response1, null);
 
     // Case 2: HEAD request which is for getting realm info
     let request2 = new Request('http://localhost/test-realm/card', {
       method: 'HEAD',
     });
-    await realmAuthHandler.addAuthorizationHeader(request2);
-    assert.false(request2.headers.has('Authorization'));
+    let response2 = await realmAuthHandler.fetchWithAuth(request2);
+    assert.strictEqual(response2, null);
 
     // Case 3: Request with Authorization header already set
     let request3 = new Request('http://localhost/test-realm/card', {
       headers: { Authorization: 'Bearer token_1' },
     });
-    await realmAuthHandler.addAuthorizationHeader(request3);
-    assert.strictEqual(request3.headers.get('Authorization'), 'Bearer token_1'); // authorization header is not changed (it shouldn't be what realm auth client mock is returning above)
+    let response3 = await realmAuthHandler.fetchWithAuth(request3);
+    assert.strictEqual(response3, null);
   });
 
   test('it adds authorization header to the request for target realms that are not publicly readable', async function (assert) {
-    let realmInfoFetchCount = 0; // for testing how many times realm info is fetched (to test if realm info caching works)
+    let requestsMade: Request[] = [];
     let loader = {
-      // fetch is used in the handler for fething realm info
-      fetch: async () => {
-        realmInfoFetchCount++;
+      fetch: async (request: Request, init?: RequestInit) => {
+        request = new Request(request, init);
+        requestsMade.push(request);
+
         return new Response(null, {
           status: 200,
           headers: {
             'x-boxel-realm-url': 'http://another-test-realm/',
-            // x-boxel-realm-public-readable is not set, so the realm is not publicly readable
           },
         });
       },
@@ -77,27 +71,40 @@ module('realm-auth-handler-test', function () {
 
     (realmAuthHandler as any).createRealmAuthClient = () => {
       return {
-        getJWT: () => 'Bearer token_3',
+        getJWT: () => 'Bearer token_1',
       };
     };
 
     let request = new Request('http://another-test-realm/card');
 
-    await realmAuthHandler.addAuthorizationHeader(request);
-
-    assert.strictEqual(request!.headers.get('Authorization'), 'Bearer token_3'); // Authorization header gets added as a result from getJWT
-    assert.strictEqual(realmInfoFetchCount, 1);
+    await realmAuthHandler.fetchWithAuth(request);
+    assert.strictEqual(requestsMade.length, 2); // one for realm info, one for the actual request
+    assert.strictEqual(requestsMade[0].method, 'HEAD');
+    assert.strictEqual(requestsMade[0].headers.get('Authorization'), null);
+    assert.strictEqual(requestsMade[1].method, 'GET');
+    assert.strictEqual(
+      requestsMade[1].headers.get('Authorization'),
+      'Bearer token_1',
+    );
 
     // Now test caching the visited realms: cache should be used to avoid re-fetching the realm URL
-    await realmAuthHandler.addAuthorizationHeader(request);
-    assert.strictEqual(request!.headers.get('Authorization'), 'Bearer token_3');
-    assert.strictEqual(realmInfoFetchCount, 1); // fetch count should not increase because the realm info should be read from the cache
+    requestsMade = [];
+    request.headers.delete('Authorization');
+    await realmAuthHandler.fetchWithAuth(request);
+    assert.strictEqual(requestsMade.length, 1); // Only the actual request should be made, and not the realm info request (the one with HEAD method) because realm info should be cached at this point
+    assert.strictEqual(
+      requestsMade[0].headers.get('Authorization'),
+      'Bearer token_1',
+    );
   });
 
   test('it does not add authorization header to the request for target realms that are publicly readable', async function (assert) {
+    let requestsMade: Request[] = [];
     let loader = {
-      // fetch is used in the handler for fething realm info
-      fetch: async () => {
+      fetch: async (request: Request, init?: RequestInit) => {
+        request = new Request(request, init);
+        requestsMade.push(request);
+
         return new Response(null, {
           status: 200,
           headers: {
@@ -114,46 +121,101 @@ module('realm-auth-handler-test', function () {
       'http://test-realm/',
     );
 
-    (realmAuthHandler as any).buildRealmAuthClient = () => {
-      return {
-        getJWT: () => 'Bearer token_4',
-      };
-    };
-
     let request = new Request('http://another-test-realm/card');
 
-    await realmAuthHandler.addAuthorizationHeader(request);
+    await realmAuthHandler.fetchWithAuth(request);
 
-    assert.false(request!.headers.has('Authorization')); // Authorization header does not get added because the realm is publicly readable
+    // Fetch with autorization header should not be made because the realm is publicly readable
+    assert.strictEqual(requestsMade.length, 1);
+    assert.strictEqual(requestsMade[0].method, 'HEAD');
+    assert.strictEqual(requestsMade[0].headers.get('Authorization'), null);
   });
 
   test('it does not add authorization header to the request when the realm is making requests to itself', async function (assert) {
-    let realmURL = 'http://test-realm/';
-
+    let requestsMade: Request[] = [];
     let loader = {
-      // fetch is used in the handler for fething realm info
-      fetch: async () => {
+      fetch: async (request: Request, init?: RequestInit) => {
+        request = new Request(request, init);
+        requestsMade.push(request);
+
         return new Response(null, {
           status: 200,
           headers: {
-            'x-boxel-realm-url': realmURL,
-            'x-boxel-realm-public-readable': 'true',
+            'x-boxel-realm-url': 'http://test-realm/',
           },
         });
       },
     } as unknown as Loader;
 
-    let realmAuthHandler = new RealmAuthHandler(matrixClient, loader, realmURL);
+    let realmAuthHandler = new RealmAuthHandler(
+      matrixClient,
+      loader,
+      'http://test-realm/',
+    );
 
-    (realmAuthHandler as any).buildRealmAuthClient = () => {
+    let request = new Request('http://test-realm/card');
+
+    await realmAuthHandler.fetchWithAuth(request);
+
+    // Fetch with autorization header should not be made because the realm is making requests to itself
+    assert.strictEqual(requestsMade.length, 1);
+    assert.strictEqual(requestsMade[0].method, 'HEAD');
+    assert.strictEqual(requestsMade[0].headers.get('Authorization'), null);
+  });
+
+  test('retries once when auth endpoint returns 401 (token invalid which could indicate permissions changed on the target server)', async function (assert) {
+    let requestsMade: Request[] = [];
+    let loader = {
+      fetch: async (request: Request, init?: RequestInit) => {
+        request = new Request(request, init);
+        requestsMade.push(request);
+
+        return new Response(null, {
+          status: 401,
+          headers: {
+            'x-boxel-realm-url': 'http://another-test-realm/',
+          },
+        });
+      },
+    } as unknown as Loader;
+
+    let realmAuthHandler = new RealmAuthHandler(
+      matrixClient,
+      loader,
+      'http://test-realm/',
+    );
+
+    let bearerToken = 'Bearer token_1';
+    (realmAuthHandler as any).createRealmAuthClient = () => {
       return {
-        getJWT: () => 'Bearer token_5',
+        getJWT: () => {
+          let token = bearerToken;
+          bearerToken = 'Bearer new_token_for_retry'; // Simulate a new token when this gets called again on retry
+          return token;
+        },
       };
     };
 
-    let request = new Request(`${realmURL}/card`);
-    await realmAuthHandler.addAuthorizationHeader(request);
+    let request = new Request('http://another-test-realm/card');
 
-    assert.false(request!.headers.has('Authorization')); // Authorization header does not get added because the realm is making a request to itself
+    await realmAuthHandler.fetchWithAuth(request);
+
+    // Fetch with autorization header should not be made because the realm is making requests to itself
+    assert.strictEqual(requestsMade.length, 3); // realm info request, actual request, and the retry
+    assert.strictEqual(requestsMade[0].method, 'HEAD');
+    assert.strictEqual(requestsMade[0].headers.get('Authorization'), null);
+
+    assert.strictEqual(requestsMade[1].method, 'GET');
+    assert.strictEqual(
+      requestsMade[1].headers.get('Authorization'),
+      'Bearer token_1',
+    );
+
+    assert.strictEqual(requestsMade.length, 3);
+    assert.strictEqual(requestsMade[2].method, 'GET');
+    assert.strictEqual(
+      requestsMade[2].headers.get('Authorization'),
+      'Bearer new_token_for_retry',
+    ); // It generated a new token for the retry
   });
 });

@@ -424,11 +424,7 @@ export class Loader {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Request {
-    if (urlOrRequest instanceof Request) {
-      return urlOrRequest;
-    } else {
-      return new Request(urlOrRequest, init);
-    }
+    return new Request(urlOrRequest, init);
   }
 
   async fetch(

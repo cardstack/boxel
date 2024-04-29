@@ -32,7 +32,11 @@ export class RealmAuthHandler {
     return new RealmAuthClient(realmURL, matrixClient, loader);
   }
 
-  addAuthorizationHeader = async (request: Request) => {
+  fetchWithAuth = async (
+    request: Request,
+    retryOnAuthFail = true,
+  ): Promise<Response | null> => {
+    // todo rename method and retryOnAuthFail
     if (request.url.startsWith(PACKAGES_FAKE_ORIGIN)) {
       return null;
     }
@@ -58,7 +62,7 @@ export class RealmAuthHandler {
     if (visitedRealmURL) {
       targetRealm = this.visitedRealms.get(visitedRealmURL)!;
     } else {
-      let targetRealmHeadResponse = await this.loader.fetch(request.url, {
+      let targetRealmHeadResponse = await this.loader.fetch(request, {
         method: 'HEAD',
       });
 
@@ -88,7 +92,7 @@ export class RealmAuthHandler {
 
     if (!targetRealm || !targetRealm.realmAuthClient) {
       throw new Error(
-        `bug: should not have been able to get here without a visitedRealm without an auth client`,
+        `bug: should not have been able to get here without a visitedRealm or without an auth client`,
       );
     }
 
@@ -98,15 +102,24 @@ export class RealmAuthHandler {
       isRequestToItself ||
       (targetRealm.isPublicReadable && request.method === 'GET')
     ) {
-      return null; // No need to add auth header for GET to public readable realms
+      return null; // No need to add auth for GET to public readable realms
     } else {
       if (!this.matrixClient.isLoggedIn()) {
         await this.matrixClient.login();
       }
       let jwt = await targetRealm.realmAuthClient.getJWT(); // This will use a cached JWT from the realm auth client or create a new one if it's expired or about to expire
       request.headers.set('Authorization', jwt);
-    }
 
-    return null;
+      let response = await this.loader.fetch(request);
+
+      // 401 can mean the following: Missing token, expired token, malformed token, permissions changed (jwt payload does not match server permissions)
+      // We make one retry if we get a 401 to make sure we have the latest permissions from the server
+      if (response.status === 401 && retryOnAuthFail) {
+        this.visitedRealms.delete(visitedRealmURL!);
+        request.headers.delete('Authorization');
+        return this.fetchWithAuth(request, false);
+      }
+      return response;
+    }
   };
 }
