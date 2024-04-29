@@ -362,9 +362,11 @@ export class Indexer {
         ...filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
       ]);
     } else if ('any' in filter) {
-      return any([
+      return every([
         ...(filter.on ? [this.typeCondition(filter.on)] : []),
-        ...filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
+        any([
+          ...filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
+        ]),
       ]);
     } else {
       assertNever(filter);
