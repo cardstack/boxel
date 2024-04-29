@@ -58,7 +58,6 @@
     "@types/dompurify": "^3.0.2",
     "@types/js-string-escape": "^1.0.1",
     "@types/qunit": "^2.11.3",
-    "concurrently": "^8.2.2",
     "dompurify": "^3.0.3",
     "ember-cli-htmlbars": "^6.3.0"
   },
@@ -67,9 +66,7 @@
     "ember-cli-htmlbars": "^6.3.0"
   },
   "scripts": {
-    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
-    "lint:js": "eslint . ",
-    "lint:js:fix": "eslint . --fix",
-    "lint:types": "glint"
+    "lint": "eslint . --cache --ext ts",
+    "lint:js:fix": "eslint . --fix"
   }
 }
