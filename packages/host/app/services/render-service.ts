@@ -64,7 +64,7 @@ export default class RenderService extends Service {
       identityContext,
       realmPath,
     } = params;
-    let component = card.constructor.getComponent(card, format);
+    let component = card.constructor.getComponent(card);
 
     let element = getIsolatedRenderElement(this.document);
     // TODO: consider consolidating the NotReady and NotLoaded objects into a single object
@@ -75,7 +75,7 @@ export default class RenderService extends Service {
       notReady = undefined;
       notLoaded = undefined;
       try {
-        render(component, element, this.owner);
+        render(component, element, this.owner, format);
       } catch (err: any) {
         notReady = err.additionalErrors?.find((e: any) =>
           isNotReadyError(e),

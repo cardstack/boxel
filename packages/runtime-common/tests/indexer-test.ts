@@ -887,6 +887,76 @@ const tests = Object.freeze({
     let entry = await indexer.getIndexEntry(new URL(`${testRealmURL}1`));
     assert.strictEqual(entry, undefined, 'deleted entries return undefined');
   },
+
+  'can perform invalidations for an instance with deps more than a thousand':
+    async (assert, { indexer, adapter }) => {
+      let indexRows: any[] = [];
+      for (let i = 1; i <= 1002; i++) {
+        indexRows.push({
+          card_url: `${testRealmURL}${i}.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [...(i <= 1 ? [] : [`${testRealmURL}1.json`])],
+        });
+      }
+      indexRows.sort((a, b) => a.card_url.localeCompare(b.card_url));
+      await setupIndex(
+        indexer,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        indexRows,
+      );
+
+      let batch = await indexer.createBatch(new URL(testRealmURL));
+      let invalidations = await batch.invalidate(
+        new URL(`${testRealmURL}1.json`),
+      );
+
+      assert.ok(invalidations.length > 1000, 'Can invalidate more than 1000');
+      assert.deepEqual(
+        invalidations.sort(),
+        indexRows.map((r) => r.card_url),
+      );
+
+      let originalEntries = await adapter.execute(
+        'SELECT card_url, realm_url, is_deleted FROM indexed_cards WHERE realm_version = 1 ORDER BY card_url COLLATE "POSIX"',
+        { coerceTypes: { is_deleted: 'BOOLEAN' } },
+      );
+      assert.deepEqual(
+        originalEntries,
+        indexRows.map((indexRow) => ({
+          card_url: indexRow.card_url,
+          realm_url: indexRow.realm_url,
+          is_deleted: null,
+        })),
+        'the "production" version of the index entries are unchanged',
+      );
+      let invalidatedEntries = await adapter.execute(
+        'SELECT card_url, realm_url, is_deleted FROM indexed_cards WHERE realm_version = 2 ORDER BY card_url COLLATE "POSIX"',
+        { coerceTypes: { is_deleted: 'BOOLEAN' } },
+      );
+      assert.deepEqual(
+        invalidatedEntries,
+        indexRows.map((indexRow) => ({
+          card_url: indexRow.card_url,
+          realm_url: indexRow.realm_url,
+          is_deleted: true,
+        })),
+        'the "work-in-progress" version of the index entries have been marked as deleted',
+      );
+      let realmVersions = await adapter.execute(
+        'select * from realm_versions ORDER BY realm_url COLLATE "POSIX"',
+      );
+      assert.deepEqual(
+        realmVersions,
+        [
+          {
+            realm_url: `${testRealmURL}`,
+            current_version: 1,
+          },
+        ],
+        'the "production" realm versions are correct',
+      );
+    },
 } as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);
 
 export default tests;

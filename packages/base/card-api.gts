@@ -8,9 +8,13 @@ import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq, pick } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { startCase } from 'lodash';
-import { getBoxComponent, type BoxComponent } from './field-component';
+import {
+  getBoxComponent,
+  type BoxComponent,
+  DefaultFormatConsumer,
+} from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
-import { getLinksToEditor } from './links-to-editor';
+import { LinksToEditor } from './links-to-editor';
 import { getLinksToManyComponent } from './links-to-many-component';
 import {
   SupportedMimeType,
@@ -284,7 +288,7 @@ export interface Field<
   ): Promise<any>;
   emptyValue(instance: BaseDef): any;
   validate(instance: BaseDef, value: any): void;
-  component(model: Box<BaseDef>, defaultFormat: Format): BoxComponent;
+  component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
   queryMatcher(
@@ -578,27 +582,17 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     );
   }
 
-  component(model: Box<BaseDef>, format: Format): BoxComponent {
+  component(model: Box<BaseDef>): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
       fieldName,
       useIndexBasedKey in this.card,
     ) as unknown as Box<BaseDef[]>;
 
-    let renderFormat: Format | undefined = undefined;
-    if (
-      format === 'edit' &&
-      'isFieldDef' in model.value.constructor &&
-      model.value.constructor.isFieldDef
-    ) {
-      renderFormat = 'atom';
-    }
-
     return getContainsManyComponent({
       model,
       arrayField,
       field: this,
-      format: renderFormat ?? format,
       cardTypeFor,
     });
   }
@@ -750,8 +744,8 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     );
   }
 
-  component(model: Box<BaseDef>, format: Format): BoxComponent {
-    return fieldComponent(this, model, format);
+  component(model: Box<BaseDef>): BoxComponent {
+    return fieldComponent(this, model);
   }
 }
 
@@ -1042,14 +1036,40 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return fieldInstance;
   }
 
-  component(model: Box<CardDef>, format: Format): BoxComponent {
-    if (format === 'edit' && !this.computeVia) {
-      let innerModel = model.field(
-        this.name as keyof BaseDef,
-      ) as unknown as Box<CardDef | null>;
-      return getLinksToEditor(innerModel, this);
+  component(model: Box<CardDef>): BoxComponent {
+    let isComputed = !!this.computeVia;
+    let fieldName = this.name as keyof CardDef;
+    let linksToField = this;
+    let getInnerModel = () => {
+      let innerModel = model.field(fieldName);
+      return innerModel as unknown as Box<CardDef | null>;
+    };
+    function shouldRenderEditor(
+      format: Format | undefined,
+      defaultFormat: Format,
+      isComputed: boolean,
+    ) {
+      return (format ?? defaultFormat) === 'edit' && !isComputed;
     }
-    return fieldComponent(this, model, format);
+    return class LinksToComponent extends GlimmerComponent<{
+      Args: { Named: { format?: Format; displayContainer?: boolean } };
+      Blocks: {};
+    }> {
+      <template>
+        <DefaultFormatConsumer as |defaultFormat|>
+          {{#if (shouldRenderEditor @format defaultFormat isComputed)}}
+            <LinksToEditor @model={{(getInnerModel)}} @field={{linksToField}} />
+          {{else}}
+            {{#let (fieldComponent linksToField model) as |FieldComponent|}}
+              <FieldComponent
+                @format={{@format}}
+                @displayContainer={{@displayContainer}}
+              />
+            {{/let}}
+          {{/if}}
+        </DefaultFormatConsumer>
+      </template>
+    };
   }
 }
 
@@ -1424,28 +1444,16 @@ class LinksToMany<FieldT extends CardDefConstructor>
     return fieldInstances;
   }
 
-  component(model: Box<CardDef>, format: Format): BoxComponent {
+  component(model: Box<CardDef>): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
       fieldName,
       useIndexBasedKey in this.card,
     ) as unknown as Box<CardDef[]>;
-    let renderFormat: Format | undefined = undefined;
-    if (
-      format === 'edit' &&
-      'isFieldDef' in model.value.constructor &&
-      model.value.constructor.isFieldDef
-    ) {
-      renderFormat = 'atom';
-    }
-    if (format === 'edit' && this.computeVia) {
-      renderFormat = 'embedded';
-    }
     return getLinksToManyComponent({
       model,
       arrayField,
       field: this,
-      format: renderFormat ?? format,
       cardTypeFor,
     });
   }
@@ -1454,7 +1462,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
 function fieldComponent(
   field: Field<typeof BaseDef>,
   model: Box<BaseDef>,
-  defaultFormat: Format,
 ): BoxComponent {
   let fieldName = field.name as keyof BaseDef;
   let card: typeof BaseDef;
@@ -1465,7 +1472,7 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof BaseDef) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<BaseDef>;
-  return getBoxComponent(card, defaultFormat, innerModel, field);
+  return getBoxComponent(card, innerModel, field);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -1643,8 +1650,8 @@ export class BaseDef {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(card: BaseDef, format: Format, field?: Field) {
-    return getComponent(card, format, field);
+  static getComponent(card: BaseDef, field?: Field) {
+    return getComponent(card, field);
   }
 
   static assignInitialFieldValue(
@@ -1862,7 +1869,6 @@ export type BaseDefComponent = ComponentLike<{
     cardOrField: typeof BaseDef;
     fields: any;
     format: Format;
-    displayContainer?: boolean;
     model: any;
     set: Setter;
     fieldName: string | undefined;
@@ -2712,15 +2718,10 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
   };
 };
 
-export function getComponent(
-  model: BaseDef,
-  format: Format,
-  field?: Field,
-): BoxComponent {
+export function getComponent(model: BaseDef, field?: Field): BoxComponent {
   let box = Box.create(model);
   let boxComponent = getBoxComponent(
     model.constructor as BaseDefConstructor,
-    format,
     box,
     field,
   );
