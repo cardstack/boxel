@@ -156,26 +156,36 @@ export class Indexer {
     return batch;
   }
 
-  async cardsThatReference(cardId: string): Promise<string[]> {
-    // TODO we really need a solution to iterate through large invalidation
-    // result sets for this--pervious implementations ran into a bug that
-    // necessitated a cursor for large invalidations. But beware, there is no
-    // cursor support for SQLite in worker mode. Instead, implement paging for
-    // this query. we can probably do something similar to how we are paging the
-    // search() method using realm_version for stability between pages.
-    let rows = (await this.query([
-      `SELECT card_url
-       FROM
-         indexed_cards as i
-       CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element
-       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
-       WHERE deps_array_element =`,
-      param(cardId),
-      'AND',
-      ...realmVersionExpression({ useWorkInProgressIndex: true }),
-      'ORDER BY i.card_url COLLATE "POSIX"',
-    ] as Expression)) as Pick<IndexedCardsTable, 'card_url'>[];
-    return rows.map((r) => r.card_url);
+  async cardsThatReference(
+    cardId: string,
+    realmVersion: number,
+  ): Promise<string[]> {
+    let pageNumber = 0;
+    let pageSize = 1000;
+    let results: string[] = [];
+    let rows;
+    do {
+      rows = (await this.query([
+        `SELECT card_url
+         FROM
+           indexed_cards as i
+         CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element
+         INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+         WHERE deps_array_element =`,
+        param(cardId),
+        'AND',
+        ...realmVersionExpression({
+          useWorkInProgressIndex: true,
+          withMaxVersion: realmVersion,
+        }),
+        'ORDER BY i.card_url COLLATE "POSIX"',
+        `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
+      ] as Expression)) as Pick<IndexedCardsTable, 'card_url'>[];
+      results = [...results, ...rows.map((r) => r.card_url)];
+      pageNumber++;
+    } while (rows.length === pageSize);
+
+    return results;
   }
 
   // we pass the loader in so there is no ambiguity which loader to use as this
@@ -951,7 +961,11 @@ export class Batch {
 
   private async calculateInvalidations(id: string): Promise<string[]> {
     let invalidations = [id];
-    let childInvalidations = await this.client.cardsThatReference(id);
+    let childInvalidations = await this.client.cardsThatReference(
+      id,
+      this.realmVersion,
+    );
+
     invalidations = [
       ...invalidations,
       ...flatten(
