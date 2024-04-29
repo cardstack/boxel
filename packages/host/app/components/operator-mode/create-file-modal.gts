@@ -724,7 +724,7 @@ export class ${className} extends ${exportName} {
   });
 }
 
-function convertToClassName(input) {
+function convertToClassName(input: string) {
   // \p{L}: a letter
   let invalidLeadingCharactersRemoved = camelCase(
     input.replace(/^[^\p{L}_$]+/u, ''),
