@@ -251,7 +251,7 @@ test.describe('Room messages', () => {
     expect(serializeCard.data.attributes.picture).toBeUndefined();
   });
 
-  test(`it does include patch function in message event when top-most card is writable and context is shared`, async ({
+  test(`it does include patch tool in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -268,49 +268,52 @@ test.describe('Room messages', () => {
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
-    expect(boxelMessageData.context.functions).toMatchObject([
+    expect(boxelMessageData.context.tools).toMatchObject([
       {
-        name: 'patchCard',
-        description:
-          'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making',
-        parameters: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-            },
-            card_id: {
-              type: 'string',
-              const: `${testHost}/mango`,
-            },
-            attributes: {
-              type: 'object',
-              properties: {
-                firstName: {
-                  type: 'string',
-                },
-                lastName: {
-                  type: 'string',
-                },
-                email: {
-                  type: 'string',
-                },
-                posts: {
-                  type: 'number',
-                },
-                thumbnailURL: {
-                  type: 'string',
+        type: 'function',
+        function: {
+          name: 'patchCard',
+          description:
+            'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making',
+          parameters: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+              },
+              card_id: {
+                type: 'string',
+                const: `${testHost}/mango`,
+              },
+              attributes: {
+                type: 'object',
+                properties: {
+                  firstName: {
+                    type: 'string',
+                  },
+                  lastName: {
+                    type: 'string',
+                  },
+                  email: {
+                    type: 'string',
+                  },
+                  posts: {
+                    type: 'number',
+                  },
+                  thumbnailURL: {
+                    type: 'string',
+                  },
                 },
               },
             },
+            required: ['card_id', 'attributes', 'description'],
           },
-          required: ['card_id', 'attributes', 'description'],
         },
       },
     ]);
   });
 
-  test(`it does not include patch function in message event for an open card that is not attached`, async ({
+  test(`it does not include patch tool in message event for an open card that is not attached`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -332,10 +335,10 @@ test.describe('Room messages', () => {
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
-    expect(boxelMessageData.context.functions).toMatchObject([]);
+    expect(boxelMessageData.context.tools).toMatchObject([]);
   });
 
-  test(`it does not include patch function in message event when top-most card is read-only`, async ({
+  test(`it does not include patch tool in message event when top-most card is read-only`, async ({
     page,
   }) => {
     // the base realm is a read-only realm
@@ -355,7 +358,7 @@ test.describe('Room messages', () => {
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
-    expect(boxelMessageData.context.functions).toMatchObject([]);
+    expect(boxelMessageData.context.tools).toMatchObject([]);
   });
 
   test('can send only a card as a message', async ({ page }) => {
@@ -886,16 +889,20 @@ test.describe('Room messages', () => {
       .click();
   });
 
-  test('displays error message if message is too large', async ({
-    page,
-  }) => {
+  test('displays error message if message is too large', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
     await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
     await page.locator('[data-test-send-message-btn]').click();
 
-    await expect(page.locator('[data-test-ai-assistant-message]')).toHaveCount(1);
-    await expect(page.locator('[data-test-card-error]')).toContainText('Message is too large');
-    await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(0);
+    await expect(page.locator('[data-test-ai-assistant-message]')).toHaveCount(
+      1,
+    );
+    await expect(page.locator('[data-test-card-error]')).toContainText(
+      'Message is too large',
+    );
+    await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(
+      0,
+    );
   });
 });
