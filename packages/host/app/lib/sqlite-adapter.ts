@@ -23,7 +23,10 @@ export default class SQLiteAdapter implements DBAdapter {
   // actually similar to "json_each_text" in postgres. i think we might need to
   // transform the SQL we run to deal with this difference.-
 
-  constructor(private schemaSQL?: string) {}
+  constructor(private schemaSQL?: string) {
+    // This is for testing purposes so that we can debug the DB
+    (globalThis as any).__dbAdapter = this;
+  }
 
   get isClosed() {
     return this.#isClosed;

@@ -357,13 +357,15 @@ export class Indexer {
     } else if ('range' in filter) {
       return this.rangeCondition(filter, on);
     } else if ('every' in filter) {
-      return every(
-        filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
-      );
+      return every([
+        ...(filter.on ? [this.typeCondition(filter.on)] : []),
+        ...filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
+      ]);
     } else if ('any' in filter) {
-      return any(
-        filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
-      );
+      return any([
+        ...(filter.on ? [this.typeCondition(filter.on)] : []),
+        ...filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
+      ]);
     } else {
       assertNever(filter);
     }
@@ -382,7 +384,7 @@ export class Indexer {
   private eqCondition(filter: EqFilter, on: CodeRef): CardExpression {
     on = filter.on ?? on;
     return every([
-      this.typeCondition(on),
+      ...(filter.on ? [this.typeCondition(filter.on)] : []),
       ...Object.entries(filter.eq).map(([key, value]) => {
         return this.fieldEqFilter(key, value, on);
       }),
@@ -395,7 +397,7 @@ export class Indexer {
   ): CardExpression {
     on = filter.on ?? on;
     return every([
-      this.typeCondition(on),
+      ...(filter.on ? [this.typeCondition(filter.on)] : []),
       ...Object.entries(filter.contains).map(([key, value]) => {
         return this.fieldLikeFilter(key, value, on);
       }),
@@ -405,7 +407,7 @@ export class Indexer {
   private notCondition(filter: NotFilter, on: CodeRef): CardExpression {
     on = filter.on ?? on;
     return every([
-      this.typeCondition(on),
+      ...(filter.on ? [this.typeCondition(filter.on)] : []),
       ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
     ]);
   }
@@ -413,7 +415,7 @@ export class Indexer {
   private rangeCondition(filter: RangeFilter, on: CodeRef): CardExpression {
     on = filter.on ?? on;
     return every([
-      this.typeCondition(on),
+      ...(filter.on ? [this.typeCondition(filter.on)] : []),
       ...Object.entries(filter.range).map(([key, filterValue]) => {
         return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
       }),

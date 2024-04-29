@@ -37,6 +37,8 @@ export default class PgAdapter implements DBAdapter {
       password,
       port,
     });
+    // This is for testing purposes so that we can debug the DB
+    (globalThis as any).__dbAdapter = this;
   }
 
   get isClosed() {
