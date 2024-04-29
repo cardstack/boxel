@@ -67,4 +67,8 @@ module('Unit | indexer', function (hooks) {
   test('returns undefined when getting a deleted entry', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
+
+  test('can perform invalidations for an instance with deps more than a thousand', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
 });

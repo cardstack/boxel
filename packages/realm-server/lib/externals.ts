@@ -84,6 +84,18 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
       return () => {};
     },
   });
+  virtualNetwork.shimModule(
+    'ember-provide-consume-context/components/context-consumer',
+    {
+      default: class {},
+    },
+  );
+  virtualNetwork.shimModule(
+    'ember-provide-consume-context/components/context-provider',
+    {
+      default: class {},
+    },
+  );
   // import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
   virtualNetwork.shimModule('ember-concurrency/-private/async-arrow-runtime', {
     default: () => {},

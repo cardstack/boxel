@@ -347,11 +347,11 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .dom('[data-test-field="guest"] [data-test-field="name"] input')
       .hasValue('Mama Leone');
     assert
-      .dom('[data-test-field="guest"] [data-test-plural-view-format="atom"]')
-      .exists('atom layout is rendered');
+      .dom('[data-test-field="guest"] [data-test-plural-view-format="edit"]')
+      .exists('plural layout is rendered');
     assert
       .dom('[data-test-field="guest"] [data-test-plural-view="containsMany"]')
-      .hasClass('atom-format', 'field has correct class');
+      .hasClass('edit-format', 'field has correct class');
     assert
       .dom(
         '[data-test-field="guest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
@@ -376,10 +376,10 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .dom('[data-test-field="guest2"] [data-test-field="name"] input')
       .hasValue('Papa Leone');
     assert
-      .dom('[data-test-field="guest2"] [data-test-plural-view-format="atom"]')
+      .dom('[data-test-field="guest2"] [data-test-plural-view-format="edit"]')
       .hasClass('empty', 'empty containsMany field has correct class');
     assert
-      .dom('[data-test-field="guest2"] [data-test-plural-view-format="atom"]')
+      .dom('[data-test-field="guest2"] [data-test-plural-view-format="edit"]')
       .hasText('', 'field is empty');
 
     assert
@@ -560,13 +560,13 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     assert.dom('[data-test-field="trips"] [data-test-add-new]').exists();
-
     await click('[data-test-links-to-many="countries"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
     await click(`[data-test-select="${testRealmURL}japan"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitFor('[card-catalog-modal]', { count: 0 });
+
     assert.dom('[data-test-pill-item]').exists({ count: 1 });
     assert.dom('[data-test-field="trips"]').containsText('Japan');
 

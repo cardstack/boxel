@@ -117,7 +117,7 @@ export interface RealmAdapter {
     },
   ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void>;
 
-  openFile(path: LocalPath, loader?: Loader): Promise<FileRef | undefined>;
+  openFile(path: LocalPath): Promise<FileRef | undefined>;
 
   exists(path: LocalPath): Promise<boolean>;
 
@@ -1211,7 +1211,6 @@ export class Realm {
       path,
       this.#adapter.openFile.bind(this.#adapter),
       fallbackExtensions,
-      this.loader,
     );
   }
 

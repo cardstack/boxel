@@ -23,7 +23,7 @@ interface CardPillSignature {
 
 export default class CardPill extends Component<CardPillSignature> {
   get component() {
-    return this.args.card.constructor.getComponent(this.args.card, 'atom');
+    return this.args.card.constructor.getComponent(this.args.card);
   }
 
   <template>
@@ -47,7 +47,7 @@ export default class CardPill extends Component<CardPillSignature> {
       </:icon>
       <:default>
         <div class='card-content' title={{@card.title}}>
-          <this.component @displayContainer={{false}} />
+          <this.component @format='atom' @displayContainer={{false}} />
         </div>
         {{#if @removeCard}}
           <IconButton

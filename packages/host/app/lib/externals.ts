@@ -17,6 +17,8 @@ import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/a
 import * as cssUrl from 'ember-css-url';
 import * as emberModifier2 from 'ember-modifier';
 import * as emberProvideConsumeContext from 'ember-provide-consume-context';
+import * as emberProvideConsumeContextContextConsumer from 'ember-provide-consume-context/components/context-consumer';
+import * as emberProvideConsumeContextContextProvider from 'ember-provide-consume-context/components/context-provider';
 import * as emberResources from 'ember-resources';
 import * as ethers from 'ethers';
 import * as flat from 'flat';
@@ -64,6 +66,14 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     'ember-provide-consume-context',
     emberProvideConsumeContext,
+  );
+  virtualNetwork.shimModule(
+    'ember-provide-consume-context/components/context-consumer',
+    emberProvideConsumeContextContextConsumer,
+  );
+  virtualNetwork.shimModule(
+    'ember-provide-consume-context/components/context-provider',
+    emberProvideConsumeContextContextProvider,
   );
   virtualNetwork.shimModule('flat', flat);
   virtualNetwork.shimModule('lodash', lodash);
