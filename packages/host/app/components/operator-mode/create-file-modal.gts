@@ -4,16 +4,15 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { capitalize } from '@ember/string';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import camelCase from 'camelcase';
 import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
-import camelCase from 'lodash/camelCase';
 
 import {
   FieldContainer,
@@ -731,7 +730,7 @@ export class ${className} extends ${exportName} {
 }
 
 function camelize(name: string) {
-  return capitalize(camelCase(name));
+  return camelCase(name, { pascalCase: true });
 }
 
 const SelectedTypePill: TemplateOnlyComponent<{
