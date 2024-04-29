@@ -77,18 +77,18 @@ export async function serializeCard(card: CardDef): Promise<CardResource> {
 
 // we can relax the resource here since we will be asserting an ID when we
 // setup the index
-type RelaxedIndexedCardsTable = Omit<BoxelIndexTable, 'pristine_doc'> & {
+type RelaxedBoxelIndexTable = Omit<BoxelIndexTable, 'pristine_doc'> & {
   pristine_doc: LooseCardResource;
 };
 
 export type TestIndexRow =
-  | (Pick<RelaxedIndexedCardsTable, 'url'> &
-      Partial<Omit<RelaxedIndexedCardsTable, 'url'>>)
+  | (Pick<RelaxedBoxelIndexTable, 'url'> &
+      Partial<Omit<RelaxedBoxelIndexTable, 'url'>>)
   | CardDef
   | {
       card: CardDef;
       data: Partial<
-        Omit<RelaxedIndexedCardsTable, 'url' | 'pristine_doc' | 'types'>
+        Omit<RelaxedBoxelIndexTable, 'url' | 'pristine_doc' | 'types'>
       >;
     };
 
@@ -124,8 +124,8 @@ export async function setupIndex(
   }
   let indexedCardsExpressions = await Promise.all(
     indexRows.map(async (r) => {
-      let row: Pick<RelaxedIndexedCardsTable, 'url'> &
-        Partial<Omit<RelaxedIndexedCardsTable, 'url'>>;
+      let row: Pick<RelaxedBoxelIndexTable, 'url'> &
+        Partial<Omit<RelaxedBoxelIndexTable, 'url'>>;
       if ('url' in r) {
         row = r;
       } else if ('card' in r) {

@@ -215,29 +215,39 @@ export class Indexer {
 
   async itemsThatReference(
     alias: string,
+    realmVersion: number,
   ): Promise<
     { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
   > {
-    // TODO we really need a solution to iterate through large invalidation
-    // result sets for this--pervious implementations ran into a bug that
-    // necessitated a cursor for large invalidations. But beware, there is no
-    // cursor support for SQLite in worker mode. Instead, implement paging for
-    // this query. we can probably do something similar to how we are paging the
-    // search() method using realm_version for stability between pages.
-    let rows = (await this.query([
-      `SELECT i.url, i.file_alias, i.type
-       FROM
-         boxel_index as i
-       CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element
-       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
-       WHERE`,
-      ...every([
-        [`deps_array_element =`, param(alias)],
-        realmVersionExpression({ useWorkInProgressIndex: true }),
-      ]),
-      'ORDER BY i.url COLLATE "POSIX"',
-    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'file_alias' | 'type'>[];
-    return rows.map(({ url, file_alias, type }) => ({
+    const pageSize = 1000;
+    let results: Pick<BoxelIndexTable, 'url' | 'file_alias' | 'type'>[] = [];
+    let rows: Pick<BoxelIndexTable, 'url' | 'file_alias' | 'type'>[] = [];
+    let pageNumber = 0;
+    do {
+      // SQLite does not support cursors when used in the worker thread since
+      // the API for using cursors cannot be serialized over the postMessage
+      // boundary. so we use a handcrafted paging approach that leverages
+      // realm_version to keep the result set stable across pages
+      rows = (await this.query([
+        'SELECT i.url, i.file_alias, i.type',
+        'FROM boxel_index as i',
+        'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
+        'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
+        'WHERE',
+        ...every([
+          [`deps_array_element =`, param(alias)],
+          realmVersionExpression({ withMaxVersion: realmVersion }),
+        ]),
+        'ORDER BY i.url COLLATE "POSIX"',
+        `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
+      ] as Expression)) as Pick<
+        BoxelIndexTable,
+        'url' | 'file_alias' | 'type'
+      >[];
+      results = [...results, ...rows];
+      pageNumber++;
+    } while (rows.length === pageSize);
+    return results.map(({ url, file_alias, type }) => ({
       url,
       alias: file_alias,
       type,
@@ -1057,7 +1067,10 @@ export class Batch {
   }
 
   private async calculateInvalidations(alias: string): Promise<string[]> {
-    let childInvalidations = await this.client.itemsThatReference(alias);
+    let childInvalidations = await this.client.itemsThatReference(
+      alias,
+      this.realmVersion,
+    );
     let invalidations = childInvalidations.map(({ url }) => url);
     let aliases = childInvalidations.map(({ alias: _alias }) => _alias);
     let results = [

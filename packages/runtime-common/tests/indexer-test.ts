@@ -5,6 +5,7 @@ import {
   type LooseCardResource,
   type DBAdapter,
   type SearchCardResult,
+  type BoxelIndexTable,
 } from '../index';
 import { type SharedTests } from '../helpers';
 import { setupIndex } from '../helpers/indexer';
@@ -891,6 +892,77 @@ const tests = Object.freeze({
     let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
     assert.strictEqual(entry, undefined, 'deleted entries return undefined');
   },
+
+  'can perform invalidations for an instance with deps more than a thousand':
+    async (assert, { indexer, adapter }) => {
+      let indexRows: (Pick<BoxelIndexTable, 'url'> &
+        Partial<Omit<BoxelIndexTable, 'url' | 'pristine_doc'>>)[] = [];
+      for (let i = 1; i <= 1002; i++) {
+        indexRows.push({
+          url: `${testRealmURL}${i}.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [...(i <= 1 ? [] : [`${testRealmURL}1.json`])],
+        });
+      }
+      indexRows.sort((a, b) => a.url.localeCompare(b.url));
+      await setupIndex(
+        indexer,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        indexRows,
+      );
+
+      let batch = await indexer.createBatch(new URL(testRealmURL));
+      let invalidations = await batch.invalidate(
+        new URL(`${testRealmURL}1.json`),
+      );
+
+      assert.ok(invalidations.length > 1000, 'Can invalidate more than 1000');
+      assert.deepEqual(
+        invalidations.sort(),
+        indexRows.map((r) => r.url),
+      );
+
+      let originalEntries = (await adapter.execute(
+        'SELECT url, realm_url, is_deleted FROM boxel_index WHERE realm_version = 1 ORDER BY url COLLATE "POSIX"',
+        { coerceTypes: { is_deleted: 'BOOLEAN' } },
+      )) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[];
+      assert.deepEqual(
+        originalEntries,
+        indexRows.map((indexRow) => ({
+          url: indexRow.url,
+          realm_url: indexRow.realm_url,
+          is_deleted: null,
+        })) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[],
+        'the "production" version of the index entries are unchanged',
+      );
+      let invalidatedEntries = (await adapter.execute(
+        'SELECT url, realm_url, is_deleted FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+        { coerceTypes: { is_deleted: 'BOOLEAN' } },
+      )) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[];
+      assert.deepEqual(
+        invalidatedEntries,
+        indexRows.map((indexRow) => ({
+          url: indexRow.url,
+          realm_url: indexRow.realm_url,
+          is_deleted: true,
+        })) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[],
+        'the "work-in-progress" version of the index entries have been marked as deleted',
+      );
+      let realmVersions = await adapter.execute(
+        'select * from realm_versions ORDER BY realm_url COLLATE "POSIX"',
+      );
+      assert.deepEqual(
+        realmVersions,
+        [
+          {
+            realm_url: `${testRealmURL}`,
+            current_version: 1,
+          },
+        ],
+        'the "production" realm versions are correct',
+      );
+    },
 } as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);
 
 export default tests;
