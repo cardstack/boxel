@@ -426,6 +426,14 @@ module('Unit | query', function (hooks) {
     });
   });
 
+  test('nulls are sorted to the end of search results', async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
   test('can get paginated results that are stable during index mutations', async function (assert) {
     await runSharedTest(queryTests, assert, {
       indexer,

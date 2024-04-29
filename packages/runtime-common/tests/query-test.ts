@@ -1497,6 +1497,92 @@ const tests = Object.freeze({
     );
   },
 
+  'nulls are sorted to the end of search results': async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: null,
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    {
+      let { cards: results, meta } = await indexer.search(
+        new URL(testRealmURL),
+        {
+          sort: [
+            {
+              on: type,
+              by: 'name',
+            },
+          ],
+        },
+        loader,
+      );
+
+      assert.strictEqual(
+        meta.page.total,
+        3,
+        'the total results meta is correct',
+      );
+      assert.deepEqual(
+        getIds(results),
+        [mango.id, vangogh.id, ringo.id],
+        'results are correct',
+      );
+    }
+    {
+      let { cards: results, meta } = await indexer.search(
+        new URL(testRealmURL),
+        {
+          sort: [
+            {
+              on: type,
+              by: 'name',
+              direction: 'desc',
+            },
+          ],
+        },
+        loader,
+      );
+
+      assert.strictEqual(
+        meta.page.total,
+        3,
+        'the total results meta is correct',
+      );
+      assert.deepEqual(
+        getIds(results),
+        [vangogh.id, mango.id, ringo.id],
+        'results are correct',
+      );
+    }
+  },
+
   'can get paginated results that are stable during index mutations': async (
     assert,
     { indexer, loader, testCards },
