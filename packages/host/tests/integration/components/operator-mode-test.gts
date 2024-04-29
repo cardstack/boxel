@@ -910,7 +910,7 @@ module('Integration | operator-mode', function (hooks) {
         .exists();
     });
 
-    test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
+    test('it only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
       await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
       await renderComponent(
         class TestDriver extends GlimmerComponent {
@@ -965,7 +965,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-ai-bot-retry-button]').exists();
       assert.dom('[data-test-command-apply]').doesNotExist();
       assert.dom('[data-test-person]').hasText('Fadhlan');
-      await percySnapshot(assert);
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error',
+      );
 
       await setCardInOperatorModeState(otherCardID);
       await waitFor('[data-test-person="Burcu"]');
@@ -977,7 +979,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Dave');
       assert.dom('[data-test-command-apply]').doesNotExist();
       assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
-      await percySnapshot(assert);
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
+      );
     });
 
     test('it can apply change to nested contains field', async function (assert) {
@@ -1358,14 +1362,18 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-room-error]').exists();
       assert.dom('[data-test-room]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isDisabled();
-      await percySnapshot(assert); // error state
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it can handle an error during room creation | error state',
+      );
 
       document.querySelector('[data-test-throw-room-error]')?.remove();
       await click('[data-test-room-error] > button');
       await waitFor('[data-test-room]');
       assert.dom('[data-test-room-error]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isEnabled();
-      await percySnapshot(assert); // new room state
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it can handle an error during room creation | new room state',
+      );
     });
 
     test('when opening ai panel it opens the most recent room', async function (assert) {
