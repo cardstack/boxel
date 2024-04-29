@@ -1792,6 +1792,9 @@ importers:
       '@types/qunit':
         specifier: ^2.11.3
         version: 2.11.3
+      concurrently:
+        specifier: ^8.2.2
+        version: 8.2.2
       dompurify:
         specifier: ^3.0.3
         version: 3.0.3
