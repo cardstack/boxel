@@ -891,14 +891,7 @@ const tests = Object.freeze({
       {
         filter: {
           on: type,
-          any: [
-            {
-              eq: { name: 'Mango' },
-            },
-            {
-              not: { eq: { name: 'Ringo' } },
-            },
-          ],
+          any: [{ eq: { name: 'Mango' } }, { eq: { name: 'Van Gogh' } }],
         },
       },
       loader,
