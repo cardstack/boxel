@@ -51,6 +51,7 @@ import {
   type CardResource,
   type Actions,
   type RealmInfo,
+  ResourceObject,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -58,8 +59,8 @@ import { initSharedState } from './shared-state';
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
 export const deserialize = Symbol.for('cardstack-deserialize');
+export const newDeserialize = Symbol.for('cardstack-new-deserialize');
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
-export const fieldDecorator = Symbol.for('cardstack-field-decorator');
 export const fieldType = Symbol.for('cardstack-field-type');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
 export const formatQuery = Symbol.for('cardstack-format-query');
@@ -70,6 +71,7 @@ export const realmURL = Symbol.for('cardstack-realm-url');
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
 const fieldDescription = Symbol.for('cardstack-field-description');
+const isPrimitive = Symbol.for('cardstack-is-primitive');
 
 export type BaseInstanceType<T extends BaseDefConstructor> = T extends {
   [primitive]: infer P;
@@ -737,6 +739,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     if (primitive in this.card) {
       return this.card[deserialize](value, relativeTo, doc);
     }
+    let resource: LooseCardResource;
     if (fieldMeta && Array.isArray(fieldMeta)) {
       throw new Error(
         `fieldMeta for contains field '${
@@ -744,22 +747,30 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         }' is an array: ${JSON.stringify(fieldMeta, null, 2)}`,
       );
     }
-    let meta: Partial<Meta> | undefined = fieldMeta;
-    let resource: LooseCardResource = {
-      attributes: value,
-      meta: makeMetaForField(meta, this.name, this.card),
-    };
-    if (relationships) {
-      resource.relationships = Object.fromEntries(
-        Object.entries(relationships)
-          .filter(([fieldName]) => fieldName.startsWith(`${this.name}.`))
-          .map(([fieldName, relationship]) => [
-            fieldName.startsWith(`${this.name}.`)
-              ? fieldName.substring(this.name.length + 1)
-              : fieldName,
-            relationship,
-          ]),
-      );
+    let meta = makeMetaForField(fieldMeta, this.name, this.card);
+    if (this.card[newDeserialize]) {
+      let partial = await this.card[newDeserialize](value);
+      resource = {
+        attributes: partial.attributes ?? {},
+        meta,
+      };
+    } else {
+      resource = {
+        attributes: value,
+        meta,
+      };
+      if (relationships) {
+        resource.relationships = Object.fromEntries(
+          Object.entries(relationships)
+            .filter(([fieldName]) => fieldName.startsWith(`${this.name}.`))
+            .map(([fieldName, relationship]) => [
+              fieldName.startsWith(`${this.name}.`)
+                ? fieldName.substring(this.name.length + 1)
+                : fieldName,
+              relationship,
+            ]),
+        );
+      }
     }
     return (await cardClassFromResource(resource, this.card, relativeTo))[
       deserialize
@@ -1549,7 +1560,47 @@ export const field = function (
   }
   return descriptor;
 } as unknown as PropertyDecorator;
-(field as any)[fieldDecorator] = undefined;
+
+export const newPrimitive = function <T>(
+  _target: BaseDefConstructor,
+  key: string | symbol,
+  { initializer }: { initializer?: () => T },
+) {
+  if (typeof key !== 'string') {
+    throw new Error('primitive fields must have a string key');
+  }
+  let initialValue: T | undefined = initializer?.();
+  const get = function (this: any): T | undefined {
+    console.log('newPrimitive get');
+    let deserialized = getDataBucket(this);
+    // this establishes that our field should rerender when cardTracking for this card changes
+    cardTracking.get(this);
+
+    if (deserialized.has(key)) {
+      return deserialized.get(key);
+    }
+    if (initialValue) {
+      deserialized.set(field.name, initialValue);
+      let i = initialValue;
+      initialValue = undefined;
+      return i;
+    }
+    return undefined;
+  };
+  (get as any)[isPrimitive] = true;
+  return {
+    get,
+    set(this: any, value: T) {
+      console.log('newPrimitive set', value);
+      initialValue = undefined;
+      let deserialized = getDataBucket(this);
+      deserialized.set(field.name, value);
+      notifySubscribers(this, key, value);
+      logger.log(recompute(this));
+    },
+    [isPrimitive]: true,
+  };
+} as unknown as PropertyDecorator;
 
 export function containsMany<FieldT extends FieldDefConstructor>(
   field: FieldT,
@@ -1718,6 +1769,8 @@ export class BaseDef {
     }
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
+
+  static [newDeserialize]?: (data: any) => Promise<Partial<ResourceObject>>;
 
   static getComponent(card: BaseDef, field?: Field) {
     return getComponent(card, field);
@@ -1978,23 +2031,30 @@ class IDField extends FieldDef {
 
 export class StringField extends FieldDef {
   static displayName = 'String';
-  static [primitive]: string;
+  @newPrimitive value: string | undefined;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      {{@model}}
+      {{@model.value}}
     </template>
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <BoxelInput @value={{@model}} @onInput={{@set}} />
+      <BoxelInput @value={{@model.value}} @onInput={{@set}} />
     </template>
   };
   static atom = class Atom extends Component<typeof this> {
     <template>
-      {{@model}}
+      {{@model.value}}
     </template>
   };
+  static async [newDeserialize](data: any): Promise<Partial<ResourceObject>> {
+    return {
+      attributes: {
+        value: data,
+      },
+    };
+  }
 }
 
 // TODO: This is a simple workaround until the thumbnailURL is converted into an actual image field
@@ -2529,6 +2589,24 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   return await _updateFromSerialized(instance, resource, doc, identityContext);
 }
 
+function getPrimitive<CardT extends BaseDefConstructor>(
+  card: CardT,
+  fieldName: string,
+): unknown | undefined {
+  let obj: object | null = card.prototype;
+  while (obj) {
+    let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
+    let result: Field<BaseDefConstructor> | undefined = (desc?.get as any)?.[
+      isPrimitive
+    ];
+    if (result !== undefined) {
+      return result;
+    }
+    obj = Reflect.getPrototypeOf(obj);
+  }
+  return undefined;
+}
+
 async function _updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   resource: LooseCardResource,
@@ -2571,28 +2649,32 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       } ?? {},
     ).map(async ([fieldName, value]) => {
       let field = getField(card, fieldName);
-      if (!field) {
-        // This happens when the instance has a field that is not in the definition. It can happen when
-        // instance or definition is updated and the other is not. In this case we will just ignore the
-        // mismatch and try to serialize it anyway so that the client can see still see the instance data
-        // and have a chance to fix it so that it adheres to the definiton
-        return [];
-      }
-      let relativeToVal = instance[relativeTo];
-      return [
-        fieldName,
-        await getDeserializedValue({
-          card,
-          loadedValue: loadedValues.get(fieldName),
+      if (field) {
+        let relativeToVal = instance[relativeTo];
+        return [
           fieldName,
-          value,
-          resource,
-          modelPromise: deferred.promise,
-          doc,
-          identityContext,
-          relativeTo: relativeToVal,
-        }),
-      ];
+          await getDeserializedValue({
+            card,
+            loadedValue: loadedValues.get(fieldName),
+            fieldName,
+            value,
+            resource,
+            modelPromise: deferred.promise,
+            doc,
+            identityContext,
+            relativeTo: relativeToVal,
+          }),
+        ];
+      }
+      let primitive = getPrimitive(card, fieldName);
+      if (primitive) {
+        return [fieldName, value]; // TODO pass value through primitive deserialize
+      }
+      // This happens when the instance has a field that is not in the definition. It can happen when
+      // instance or definition is updated and the other is not. In this case we will just ignore the
+      // mismatch and try to serialize it anyway so that the client can see still see the instance data
+      // and have a chance to fix it so that it adheres to the definiton
+      return [];
     }),
   )) as [keyof BaseInstanceType<T>, any][];
 
@@ -2669,6 +2751,10 @@ function makeMetaForField(
   };
 }
 
+// The value of a field could be a more specific type than the schema that declared it.
+// e.g. if you have a contains(PersonField), a FancyPerson could be stored within it,
+// and you would want to deserialized as FancyPerson when you instantiate it. The meta
+// in the resource carries this information.
 async function cardClassFromResource<CardT extends BaseDefConstructor>(
   resource: LooseCardResource | undefined,
   fallback: CardT,
