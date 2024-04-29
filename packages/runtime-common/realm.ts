@@ -255,6 +255,10 @@ export class Realm {
   readonly loaderTemplate: Loader;
   readonly paths: RealmPaths;
 
+  private get isDbIndexerEnabled() {
+    return Boolean((globalThis as any).__enablePgIndexer?.());
+  }
+
   get url(): string {
     return this.paths.url;
   }
@@ -430,22 +434,25 @@ export class Realm {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
-  // TODO bypass the operationQueue when dbIndex is enabled
   async write(
     path: LocalPath,
     contents: string,
     clientRequestId?: string | null,
   ): Promise<WriteResult> {
-    let deferred = new Deferred<WriteResult>();
-    this.#operationQueue.push({
-      type: 'write',
-      path,
-      contents,
-      clientRequestId,
-      deferred,
-    });
-    this.drainOperations();
-    return deferred.promise;
+    if (this.isDbIndexerEnabled) {
+      return await this.#write(path, contents, clientRequestId);
+    } else {
+      let deferred = new Deferred<WriteResult>();
+      this.#operationQueue.push({
+        type: 'write',
+        path,
+        contents,
+        clientRequestId,
+        deferred,
+      });
+      this.drainOperations();
+      return deferred.promise;
+    }
   }
 
   async #write(
@@ -516,7 +523,6 @@ export class Realm {
     return { isTracked: false, url };
   }
 
-  // TODO bypass the operationQueue when dbIndex is enabled
   async delete(path: LocalPath): Promise<void> {
     let deferred = new Deferred<void>();
     this.#operationQueue.push({
@@ -524,8 +530,12 @@ export class Realm {
       path,
       deferred,
     });
-    this.drainOperations();
-    return deferred.promise;
+    if (this.isDbIndexerEnabled) {
+      return await this.#delete(path);
+    } else {
+      this.drainOperations();
+      return deferred.promise;
+    }
   }
 
   async #delete(path: LocalPath): Promise<void> {

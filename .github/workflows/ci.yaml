@@ -175,6 +175,7 @@ jobs:
         if: always()
         with:
           junit_files: junit/host.xml
+          check_name: Host Tests (In-Memory Index) Test Results
 
   host-test-db-index:
     name: Host Tests - db index
@@ -210,6 +211,7 @@ jobs:
         if: always()
         with:
           junit_files: junit/host.xml
+          check_name: Host Tests (DB Index) Test Results
 
   matrix-client-test:
     name: Matrix Client Tests
