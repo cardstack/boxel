@@ -586,7 +586,7 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName}Parent {
   static displayName = "${this.displayName}";`);
     } else if (exportName === 'default') {
-      let parent = camelize(
+      let parent = camelCase(
         module
           .split('/')
           .pop()!
