@@ -20,6 +20,7 @@ export class RoomResource extends Resource<Args> {
   @service private declare matrixService: MatrixService;
 
   modify(_positional: never[], named: Args['named']) {
+    console.log(`in RoomResource#modify for ${named.roomId}`);
     this.loading = this.load.perform(named.roomId);
   }
 
