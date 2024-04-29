@@ -28,7 +28,7 @@ import {
   setupIntegrationTestRealm,
 } from '../helpers';
 
-const paths = new RealmPaths(testRealmURL);
+const paths = new RealmPaths(new URL(testRealmURL));
 const testModuleRealm = 'http://localhost:4202/test/';
 
 let loader: Loader;

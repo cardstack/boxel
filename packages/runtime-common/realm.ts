@@ -287,7 +287,7 @@ export class Realm {
     },
     opts?: Options,
   ) {
-    this.paths = new RealmPaths(url);
+    this.paths = new RealmPaths(new URL(url));
     let { username, password, url: matrixURL } = matrix;
     this.#matrixClient = new MatrixClient(matrixURL, username, password);
     this.#permissions = permissions;
@@ -1093,7 +1093,7 @@ export class Realm {
 
   private async upsertCardSource(request: Request): Promise<Response> {
     let { lastModified } = await this.write(
-      this.paths.local(request.url),
+      this.paths.local(new URL(request.url)),
       await request.text(),
     );
     return createResponse(this, null, {
@@ -1105,7 +1105,7 @@ export class Realm {
   private async getCardSourceOrRedirect(
     request: Request,
   ): Promise<ResponseWithNodeStream> {
-    let localName = this.paths.local(request.url);
+    let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
       '.json',
@@ -1124,7 +1124,7 @@ export class Realm {
   }
 
   private async removeCardSource(request: Request): Promise<Response> {
-    let localName = this.paths.local(request.url);
+    let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
       '.json',
@@ -1281,7 +1281,7 @@ export class Realm {
   }
 
   private async patchCard(request: Request): Promise<Response> {
-    let localPath = this.paths.local(request.url);
+    let localPath = this.paths.local(new URL(request.url));
     if (localPath.startsWith('_')) {
       return methodNotAllowed(this, request);
     }
@@ -1372,7 +1372,7 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
-    let localPath = this.paths.local(request.url);
+    let localPath = this.paths.local(new URL(request.url));
     if (localPath === '') {
       localPath = 'index';
     }
@@ -1468,7 +1468,7 @@ export class Realm {
 
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
-    let localPath: LocalPath = this.paths.local(request.url);
+    let localPath: LocalPath = this.paths.local(new URL(request.url));
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
     if (!entries) {
