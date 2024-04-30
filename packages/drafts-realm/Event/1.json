@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "subject": "Test Event",
+      "location": "Google Meet",
+      "startDate": "2024-04-18",
+      "endDate": "2024-04-14",
+      "startTime": "12:30",
+      "endTime": "15:22",
+      "eventType": "Call",
+      "description": "This is a sample meeting created for testing purposes",
+      "isReminderSet": true,
+      "title": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": "../Person/1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../event",
+        "name": "Event"
+      }
+    }
+  }
+}
