@@ -207,31 +207,6 @@ function isUrlLike(moduleIdentifier: string): boolean {
   );
 }
 
-async function getContentOfReadableStream(
-  requestBody: ReadableStream<Uint8Array> | null,
-): Promise<Uint8Array | null> {
-  if (requestBody) {
-    let isPending = true;
-    let arrayLength = 0;
-    let unit8Arrays = [];
-    let reader = requestBody.getReader();
-    do {
-      let readableResults = await reader.read();
-
-      if (readableResults.value) {
-        arrayLength += readableResults.value.length;
-        unit8Arrays.push(readableResults.value);
-      }
-
-      isPending = !readableResults.done;
-    } while (isPending);
-    let mergedArray = new Uint8Array(arrayLength);
-    unit8Arrays.forEach((array) => mergedArray.set(array));
-    return mergedArray;
-  }
-  return null;
-}
-
 async function buildRequest(url: string, originalRequest: Request) {
   if (url === originalRequest.url) {
     return originalRequest;
