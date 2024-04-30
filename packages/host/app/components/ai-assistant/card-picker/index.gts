@@ -18,7 +18,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    autoAttachedCard?: CardDef;
+    autoAttachedCards?: CardDef[];
     cardsToAttach: CardDef[] | undefined;
     chooseCard: (card: CardDef) => void;
     removeCard: (card: CardDef) => void;
@@ -143,8 +143,8 @@ export default class AiAssistantCardPicker extends Component<Signature> {
 
   private get cardsToDisplay() {
     let cards = this.args.cardsToAttach ?? [];
-    if (this.args.autoAttachedCard) {
-      cards = [...new Set([this.args.autoAttachedCard, ...cards])];
+    if (this.args.autoAttachedCards) {
+      cards = [...new Set([...this.args.autoAttachedCards, ...cards])];
     }
     return cards;
   }
@@ -173,6 +173,11 @@ export default class AiAssistantCardPicker extends Component<Signature> {
 
   @action
   private isAutoAttachedCard(card: CardDef) {
-    return this.args.autoAttachedCard?.id === card.id;
+    if (this.args.autoAttachedCards === undefined) {
+      return false;
+    }
+    return this.args.autoAttachedCards.find(({ id }) => {
+      return id === card.id;
+    });
   }
 }

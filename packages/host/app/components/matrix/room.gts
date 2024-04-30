@@ -74,7 +74,7 @@ export default class Room extends Component<Signature> {
             data-test-message-field={{this.room.roomId}}
           />
           <AiAssistantCardPicker
-            @autoAttachedCard={{this.autoAttachedCard}}
+            @autoAttachedCards={{this.autoAttachedCards}}
             @cardsToAttach={{this.cardsToAttach}}
             @chooseCard={{this.chooseCard}}
             @removeCard={{this.removeCard}}
@@ -210,8 +210,8 @@ export default class Room extends Component<Signature> {
     if (this.cardsToAttach) {
       cards.push(...this.cardsToAttach);
     }
-    if (this.autoAttachedCard) {
-      cards.push(this.autoAttachedCard);
+    if (this.autoAttachedCards.length > 0) {
+      cards.concat(this.autoAttachedCards);
     }
     this.doSendMessage.perform(
       this.messageToSend,
@@ -228,8 +228,18 @@ export default class Room extends Component<Signature> {
   }
 
   @action
+  private isAutoAttachedCard(card: CardDef) {
+    if (this.autoAttachedCards === undefined) {
+      return false;
+    }
+    return this.autoAttachedCards.find(({ id }) => {
+      return id === card.id;
+    });
+  }
+
+  @action
   private removeCard(card: CardDef) {
-    if (this.autoAttachedCard?.id === card.id) {
+    if (this.isAutoAttachedCard(card)) {
       this.autoAttachmentResource.clear();
     } else {
       const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
@@ -290,8 +300,11 @@ export default class Room extends Component<Signature> {
     return topMostCard;
   }
 
-  private get autoAttachedCard(): CardDef | undefined {
-    return this.autoAttachmentResource.card;
+  private get autoAttachedCards(): CardDef[] {
+    if (this.autoAttachmentResource.card !== undefined) {
+      return [this.autoAttachmentResource.card];
+    }
+    return [];
   }
 
   private get canSend() {
@@ -300,7 +313,7 @@ export default class Room extends Component<Signature> {
       Boolean(
         this.messageToSend ||
           this.cardsToAttach?.length ||
-          this.autoAttachedCard,
+          this.autoAttachedCards.length,
       ) &&
       !!this.room &&
       !this.room.messages.some((m) => this.isPendingMessage(m))
