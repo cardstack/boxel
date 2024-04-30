@@ -16,7 +16,6 @@ import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type {
   RoomField,
-  ReactionEvent,
   ReactionEventContent,
 } from 'https://cardstack.com/base/room';
 
@@ -85,6 +84,7 @@ function generateMockMatrixService(
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
+    failedCommandState: TrackedMap<string, Error> = new TrackedMap();
 
     async start(_auth?: any) {}
 
@@ -152,34 +152,12 @@ function generateMockMatrixService(
       }
     }
 
-    async getReactionKeyForEvent(roomId: string, eventId: string) {
-      let room = await this.rooms.get(roomId);
-      if (!room) {
-        throw new Error(`Room ${roomId} not found`);
-      }
-
-      let event = room.events
-        .filter(
-          (e) =>
-            e.type === 'm.reaction' &&
-            e.content['m.relates_to'].rel_type === 'm.annotation' &&
-            e.content['m.relates_to'].event_id === eventId,
-        )
-        .sort((a, b) => b.origin_server_ts - a.origin_server_ts)[0];
-      if (!event) {
-        return;
-      }
-
-      return (event as ReactionEvent).content['m.relates_to'].key;
-    }
-
     async sendEvent(roomId: string, eventType: string, content: any) {
       await addRoomEvent(this, {
         event_id: uuid(),
         room_id: roomId,
         type: eventType,
-        sender: '@testuser:staging',
-        state_key: '@testuser:staging',
+        sender: this.userId,
         origin_server_ts: Date.now(),
         content,
         status: null,

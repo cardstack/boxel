@@ -768,8 +768,13 @@ module('Integration | operator-mode', function (hooks) {
               patch: {
                 attributes: { firstName: 'Dave' },
               },
+              eventId: 'patch1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch1',
+          },
         },
         status: null,
       });
@@ -816,8 +821,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Evie' } },
+              eventId: 'room1-event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'room1-event1',
+          },
         },
         status: null,
       });
@@ -837,8 +847,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Jackie' } },
+              eventId: 'room1-event2',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'room1-event2',
+          },
         },
         status: null,
       });
@@ -858,8 +873,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { pet: null } },
+              eventId: 'room2-event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'room2-event1',
+          },
         },
         status: null,
       });
@@ -869,6 +889,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-message-idx="1"] [data-test-command-apply]');
       await click('[data-test-message-idx="1"] [data-test-command-apply]');
       await waitFor('[data-test-patch-card-idle]');
+
       assert
         .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
         .exists();
@@ -910,7 +931,7 @@ module('Integration | operator-mode', function (hooks) {
         .exists();
     });
 
-    test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
+    test('it only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
       await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
       await renderComponent(
         class TestDriver extends GlimmerComponent {
@@ -946,8 +967,13 @@ module('Integration | operator-mode', function (hooks) {
               patch: {
                 attributes: { firstName: 'Dave' },
               },
+              eventId: 'event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
         },
         status: null,
       });
@@ -965,7 +991,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-ai-bot-retry-button]').exists();
       assert.dom('[data-test-command-apply]').doesNotExist();
       assert.dom('[data-test-person]').hasText('Fadhlan');
-      await percySnapshot(assert);
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error',
+      );
 
       await setCardInOperatorModeState(otherCardID);
       await waitFor('[data-test-person="Burcu"]');
@@ -977,7 +1005,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Dave');
       assert.dom('[data-test-command-apply]').doesNotExist();
       assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
-      await percySnapshot(assert);
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
+      );
     });
 
     test('it can apply change to nested contains field', async function (assert) {
@@ -1003,8 +1033,9 @@ module('Integration | operator-mode', function (hooks) {
             address: { shippingInfo: { preferredCarrier: 'UPS' } },
           },
         },
+        eventId: 'event1',
       };
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
         state_key: 'state',
@@ -1017,6 +1048,10 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({ command: payload }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
         },
         status: null,
       });
@@ -1059,7 +1094,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-person="Fadhlan"]');
 
       let roomId = await openAiAssistant();
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
         state_key: 'state',
@@ -1075,8 +1110,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { pet: null } },
+              eventId: 'patch1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch1',
+          },
         },
         status: null,
       });
@@ -1090,7 +1130,7 @@ module('Integration | operator-mode', function (hooks) {
           `Failed to apply changes. The "pet" attribute does not exist on the card "${id}".`,
         );
 
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event2',
         room_id: roomId,
         state_key: 'state',
@@ -1106,8 +1146,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: {} },
+              eventId: 'patch2',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch2',
+          },
         },
         status: null,
       });
@@ -1121,7 +1166,7 @@ module('Integration | operator-mode', function (hooks) {
         .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
         .hasText(`Failed to apply changes. Patch failed.`);
 
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event3',
         room_id: roomId,
         state_key: 'state',
@@ -1144,8 +1189,13 @@ module('Integration | operator-mode', function (hooks) {
                   },
                 },
               },
+              eventId: 'patch3',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch3',
+          },
         },
         status: null,
       });
@@ -1191,8 +1241,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { firstName: 'Dave' } },
+              eventId: 'event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
         },
         status: null,
       });
@@ -1212,8 +1267,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { pet: 'Harry' } },
+              eventId: 'event2',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event2',
+          },
         },
         status: null,
       });
@@ -1233,8 +1293,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { firstName: 'Jackie' } },
+              eventId: 'event3',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event3',
+          },
         },
         status: null,
       });
@@ -1358,14 +1423,18 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-room-error]').exists();
       assert.dom('[data-test-room]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isDisabled();
-      await percySnapshot(assert); // error state
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it can handle an error during room creation | error state',
+      );
 
       document.querySelector('[data-test-throw-room-error]')?.remove();
       await click('[data-test-room-error] > button');
       await waitFor('[data-test-room]');
       assert.dom('[data-test-room-error]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isEnabled();
-      await percySnapshot(assert); // new room state
+      await percySnapshot(
+        'Integration | operator-mode > matrix | it can handle an error during room creation | new room state',
+      );
     });
 
     test('when opening ai panel it opens the most recent room', async function (assert) {
@@ -1879,8 +1948,13 @@ module('Integration | operator-mode', function (hooks) {
               patch: {
                 attributes: { firstName: 'Dave' },
               },
+              eventId: 'patch1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch1',
+          },
         },
         status: null,
       });

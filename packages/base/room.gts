@@ -247,11 +247,18 @@ class CommandType extends FieldDef {
   static [primitive]: 'patch';
 }
 
+type CommandStatus = 'applied' | 'ready';
+
+class CommandStatusField extends FieldDef {
+  static [primitive]: CommandStatus;
+}
+
 // Subclass, add a validator that checks the fields required?
 class PatchField extends FieldDef {
   @field commandType = contains(CommandType);
   @field payload = contains(PatchObjectField);
   @field eventId = contains(StringField);
+  @field status = contains(CommandStatusField);
 }
 
 // A map from a hash of roomId + card document to the first card fragment event id.
@@ -577,6 +584,13 @@ export class RoomField extends FieldDef {
               `cannot handle commands in room with type ${command.type}`,
             );
           }
+          let annotation = this.events.find(
+            (e) =>
+              e.type === 'm.reaction' &&
+              e.content['m.relates_to']?.rel_type === 'm.annotation' &&
+              e.content['m.relates_to']?.event_id === command.eventId,
+          ) as ReactionEvent | undefined;
+
           messageField = new MessageField({
             ...cardArgs,
             formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
@@ -584,6 +598,7 @@ export class RoomField extends FieldDef {
               eventId: event_id,
               commandType: command.type,
               payload: command,
+              status: annotation?.content['m.relates_to'].key ?? 'ready',
             }),
             isStreamingFinished: true,
           });
@@ -858,10 +873,13 @@ export interface CardMessageContent {
     attachedCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
-      functions: {
-        name: string;
-        description: string;
-        parameters: Schema;
+      tools: {
+        type: 'function';
+        function: {
+          name: string;
+          description: string;
+          parameters: Schema;
+        };
       }[];
       submode: string | undefined;
     };
