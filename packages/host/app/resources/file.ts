@@ -182,7 +182,6 @@ class _FileResource extends Resource<Args> {
     await realmSession.loaded;
 
     let self = this;
-    let rawName = response.url.split('/').pop();
 
     this.updateState({
       state: 'ready',
@@ -190,7 +189,7 @@ class _FileResource extends Resource<Args> {
       realmURL,
       content,
       realmSession,
-      name: rawName ? decodeURIComponent(rawName) : rawName!,
+      name: response.url.split('/').pop()!,
       size,
       url: response.url,
       write(content: string, flushLoader?: true) {
