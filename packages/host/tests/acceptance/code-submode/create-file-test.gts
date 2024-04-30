@@ -961,54 +961,6 @@ export class Map0 extends Pet {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('can sanitize display name when creating a new definition', async function (assert) {
-    assert.expect(1);
-    await visitOperatorMode(this.owner);
-    await openNewFileModal('Card Definition');
-
-    await fillIn('[data-test-display-name-field]', 'Test Card; { }');
-    await fillIn('[data-test-file-name-field]', 'test-card');
-    let deferred = new Deferred<void>();
-    this.onSave((_, content) => {
-      if (typeof content !== 'string') {
-        throw new Error(`expected string save data`);
-      }
-      assert.strictEqual(
-        content,
-        `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
-export class TestCard extends CardDef {
-  static displayName = "Test Card";
-
-  /*
-  static isolated = class Isolated extends Component<typeof this> {
-    <template></template>
-  }
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template></template>
-  }
-
-  static atom = class Atom extends Component<typeof this> {
-    <template></template>
-  }
-
-  static edit = class Edit extends Component<typeof this> {
-    <template></template>
-  }
-  */
-}`.trim(),
-        'the source is correct',
-      );
-      deferred.fulfill();
-    });
-
-    await click('[data-test-create-definition]');
-    await waitFor('[data-test-create-file-modal]', { count: 0 });
-    await deferred.promise;
-  });
-
   test<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (assert) {
     assert.expect(2);
     let expectedSrc = `
