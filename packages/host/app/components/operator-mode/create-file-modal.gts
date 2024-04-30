@@ -591,6 +591,7 @@ export class ${className} extends ${exportName}Parent {
           .split('/')
           .pop()!
           .replace(/\.[^.]+$/, ''),
+        { pascalCase: true },
       );
       // check for parent/className declaration collision
       parent = parent === className ? `${parent}Parent` : parent;
