@@ -7,6 +7,7 @@ import { assetsDir } from '@cardstack/runtime-common';
 const monacoFont = 'ade705761eb7e702770d.ttf';
 
 export function monacoMiddleware(assetsURL: URL) {
+  assetsURL = new URL('http://localhost:4201/base/__boxel/');
   let router = new Router();
   router.get(`/${monacoFont}`, (ctxt: Koa.Context) =>
     ctxt.redirect(new URL(`.${ctxt.path}`, assetsURL).href),
