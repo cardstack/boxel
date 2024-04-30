@@ -27,6 +27,8 @@ import NewSession from '../ai-assistant/new-session';
 
 import RoomMessage from './room-message';
 
+import type { StackItem } from '@cardstack/host/lib/stack-item';
+
 interface Signature {
   Args: {
     roomId: string;
@@ -118,7 +120,7 @@ export default class Room extends Component<Signature> {
   private roomResource = getRoom(this, () => this.args.roomId);
   private autoAttachmentResource = getAutoAttachment(
     this,
-    () => this.lastTopMostCard,
+    () => this.topMostStackItems,
     () => this.cardsToAttach,
   );
 
@@ -210,8 +212,10 @@ export default class Room extends Component<Signature> {
     if (this.cardsToAttach) {
       cards.push(...this.cardsToAttach);
     }
-    if (this.autoAttachedCards.length > 0) {
-      cards.concat(this.autoAttachedCards);
+    if (this.autoAttachedCards.size > 0) {
+      this.autoAttachedCards.forEach((card) => {
+        cards.push(card);
+      });
     }
     this.doSendMessage.perform(
       this.messageToSend,
@@ -229,28 +233,33 @@ export default class Room extends Component<Signature> {
 
   @action
   private isAutoAttachedCard(card: CardDef) {
-    if (this.autoAttachedCards === undefined) {
-      return false;
-    }
-    return this.autoAttachedCards.find(({ id }) => {
-      return id === card.id;
-    });
+    return this.autoAttachedCards.has(card);
+  }
+
+  @action
+  private isManuallyAttachedCard(card: CardDef) {
+    const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
+    return cardIndex != undefined && cardIndex !== -1;
   }
 
   @action
   private removeCard(card: CardDef) {
     if (this.isAutoAttachedCard(card)) {
-      this.autoAttachmentResource.clear();
-    } else {
+      this.autoAttachmentResource.onCardRemoval(card);
+    }
+    if (this.isManuallyAttachedCard(card)) {
       const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
       if (cardIndex != undefined && cardIndex !== -1) {
+        this.autoAttachmentResource.onCardRemoval(
+          this.cardsToAttach[cardIndex],
+        );
         this.cardsToAttach?.splice(cardIndex, 1);
       }
-      this.matrixService.cardsToSend.set(
-        this.args.roomId,
-        this.cardsToAttach?.length ? this.cardsToAttach : undefined,
-      );
     }
+    this.matrixService.cardsToSend.set(
+      this.args.roomId,
+      this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+    );
   }
   private doSendMessage = enqueueTask(
     async (
@@ -277,6 +286,10 @@ export default class Room extends Component<Signature> {
     },
   );
 
+  get topMostStackItems(): StackItem[] {
+    return this.operatorModeStateService.topMostStackItems();
+  }
+
   get lastTopMostCard() {
     let stackItems = this.operatorModeStateService.topMostStackItems();
     if (stackItems.length === 0) {
@@ -300,20 +313,16 @@ export default class Room extends Component<Signature> {
     return topMostCard;
   }
 
-  private get autoAttachedCards(): CardDef[] {
-    if (this.autoAttachmentResource.card !== undefined) {
-      return [this.autoAttachmentResource.card];
-    }
-    return [];
+  private get autoAttachedCards() {
+    return this.autoAttachmentResource.cards;
   }
 
   private get canSend() {
     return (
       !this.doSendMessage.isRunning &&
       Boolean(
-        this.messageToSend ||
-          this.cardsToAttach?.length ||
-          this.autoAttachedCards.length,
+        this.messageToSend || this.cardsToAttach?.length,
+        // this.autoAttachedCards.size !== 0, //querying before
       ) &&
       !!this.room &&
       !this.room.messages.some((m) => this.isPendingMessage(m))

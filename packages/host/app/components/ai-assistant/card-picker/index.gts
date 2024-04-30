@@ -14,11 +14,12 @@ import CardPill from '@cardstack/host/components/card-pill';
 import Pill from '@cardstack/host/components/pill';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { TrackedSet } from 'tracked-built-ins';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    autoAttachedCards?: CardDef[];
+    autoAttachedCards?: TrackedSet<CardDef>;
     cardsToAttach: CardDef[] | undefined;
     chooseCard: (card: CardDef) => void;
     removeCard: (card: CardDef) => void;
@@ -176,8 +177,6 @@ export default class AiAssistantCardPicker extends Component<Signature> {
     if (this.args.autoAttachedCards === undefined) {
       return false;
     }
-    return this.args.autoAttachedCards.find(({ id }) => {
-      return id === card.id;
-    });
+    return this.args.autoAttachedCards.has(card);
   }
 }

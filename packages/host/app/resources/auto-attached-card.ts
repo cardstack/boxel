@@ -1,40 +1,87 @@
-import { tracked } from '@glimmer/tracking';
-
 import { Resource } from 'ember-resources';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
+import type { StackItem } from '@cardstack/host/lib/stack-item';
+import { TrackedSet } from 'tracked-built-ins';
+import { action } from '@ember/object';
+
 interface Args {
   named: {
-    lastTopMostCard: CardDef | undefined; // top-most card from the card stack
+    stackItems: StackItem[];
     attachedCards: CardDef[] | undefined; // cards manually attached in ai panel
   };
 }
 
 /**
- * Manages the auto-attachment of the top-most card in consideration of user-actions of manually
+ * Manages the auto-attachment of cards within our stack consideration of user-actions of manually
  * removing and attaching new cards in the ai panel
  */
+// when removing manually added, it will be removed and not still auto-attached
+// when drilling down, it will be auto attached (unless already manually added)
+// removing auto-attached removes it. unless its opened in another stack
+// manually adding a card will thats open or a stack will mean its no longer auto-attached
+// opening two cards in stack will auto-attach both
+// clearing multiple cards work too
 
 export class AutoAttachment extends Resource<Args> {
-  @tracked card: CardDef | undefined;
-  private lastCard: CardDef | undefined;
+  cards: TrackedSet<CardDef> = new TrackedSet(); // auto-attached cards
+  private lastStackedItems: StackItem[] = [];
+  private lastRemovedCards: Set<string> = new Set(); // internal state, changed from the outside. It tracks, everytime a card is removed in the ai-panel
 
   modify(_positional: never[], named: Args['named']) {
-    const { lastTopMostCard, attachedCards } = named;
-    if (lastTopMostCard === undefined) {
-      this.card = undefined;
-      this.lastCard = undefined;
+    const { stackItems, attachedCards } = named;
+    if (stackItems.length === 0) {
       return;
     }
-    if (
-      this.isAlreadyAttached(lastTopMostCard, attachedCards) ||
-      this.wasPreviouslyCleared(lastTopMostCard)
-    ) {
-      this.card = undefined;
-      return;
+    if (this.stackItemsChanged(stackItems)) {
+      // we must be sure to clear the lastRemovedCards state so cards can be auto-attached again
+      // note: if two of the same cards are opened on separate stack, one will be auto-attached.
+      // If one is removed from one of the stacks, the card WILL be auto-attached.
+      this.lastRemovedCards.clear();
     }
-    this.card = lastTopMostCard;
+    this.cards.clear();
+    stackItems.forEach((item) => {
+      if (!this.hasRealmURL(item) || this.isIndexCard(item)) {
+        return;
+      }
+      if (
+        this.isAlreadyAttached(item.card, attachedCards) ||
+        this.wasPreviouslyRemoved(item.card)
+      ) {
+        return;
+      }
+      this.cards.add(item.card);
+    });
+    this.lastStackedItems = stackItems;
+  }
+
+  stackItemsChanged(stackItems: StackItem[]) {
+    if (stackItems.length !== this.lastStackedItems.length) {
+      return true;
+    }
+    for (let i = 0; i < stackItems.length; i++) {
+      if (stackItems[i].card.id !== this.lastStackedItems[i].card.id) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private hasRealmURL(stackItem: StackItem) {
+    let realmURL = stackItem.card[stackItem.api.realmURL];
+    if (!realmURL) {
+      return false;
+    }
+    return true;
+  }
+
+  private isIndexCard(stackItem: StackItem) {
+    let realmURL = stackItem.card[stackItem.api.realmURL];
+    if (stackItem.card.id === `${realmURL!.href}index`) {
+      return true;
+    }
+    return false;
   }
 
   private isAlreadyAttached(
@@ -47,27 +94,24 @@ export class AutoAttachment extends Resource<Args> {
     return attachedCards?.some((c) => c.id === lastTopMostCard.id);
   }
 
-  private wasPreviouslyCleared(lastTopMostCard: CardDef) {
-    if (this.lastCard === undefined) {
-      return false;
-    }
-    return this.lastCard.id === lastTopMostCard.id;
+  private wasPreviouslyRemoved(lastTopMostCard: CardDef) {
+    return this.lastRemovedCards.has(lastTopMostCard.id);
   }
 
-  clear() {
-    this.lastCard = this.card;
-    this.card = undefined;
+  @action
+  onCardRemoval(card: CardDef) {
+    this.lastRemovedCards.add(card.id);
   }
 }
 
 export function getAutoAttachment(
   parent: object,
-  lastTopMostCard: () => CardDef | undefined,
+  stackItems: () => StackItem[],
   attachedCards: () => CardDef[] | undefined,
 ) {
   return AutoAttachment.from(parent, () => ({
     named: {
-      lastTopMostCard: lastTopMostCard(),
+      stackItems: stackItems(),
       attachedCards: attachedCards(),
     },
   }));
