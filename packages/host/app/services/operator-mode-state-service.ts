@@ -156,7 +156,7 @@ export default class OperatorModeStateService extends Service {
     this.state.stacks[stackIndex].splice(itemIndex); // Remove anything above the item
 
     // If the resulting stack is now empty, remove it
-    if (this.stackIsEmpty(stackIndex) && this.state.stacks.length > 1) {
+    if (this.stackIsEmpty(stackIndex) && this.state.stacks.length >= 1) {
       this.state.stacks.splice(stackIndex, 1);
 
       // If we just removed the last item in the stack, and we also removed the stack because of that, we need
