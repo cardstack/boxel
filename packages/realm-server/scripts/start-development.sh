@@ -1,4 +1,13 @@
 #! /bin/sh
+
+check_postgres_ready() {
+  docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1
+}
+while ! check_postgres_ready; do
+  printf '.'
+  sleep 1
+done
+
 pnpm setup:base-assets
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \

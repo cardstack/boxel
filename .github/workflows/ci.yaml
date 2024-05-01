@@ -375,12 +375,11 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
       # TODO we shouldn't have to start matrix separately
-      - name: Start matrix
-        run: pnpm start:matrix &
-        working-directory: packages/realm-server
+      # - name: Start matrix
+      #   run: pnpm start:matrix &
+      #   working-directory: packages/realm-server
       - name: Start realm servers
-        # TODO run this in the background!!!!
-        run: PG_INDEXER=true pnpm start:all
+        run: PG_INDEXER=true pnpm start:all &
         working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users

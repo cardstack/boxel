@@ -1,4 +1,11 @@
 #! /bin/sh
+check_postgres_ready() {
+  docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1
+}
+while ! check_postgres_ready; do
+  printf '.'
+  sleep 1
+done
 
 NODE_ENV=test \
   PGPORT=5435 \
