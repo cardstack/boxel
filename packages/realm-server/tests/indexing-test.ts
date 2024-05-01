@@ -12,6 +12,7 @@ import {
   testRealm,
   setupCardLogs,
   setupBaseRealmServer,
+  setupDB,
 } from './helpers';
 import isEqual from 'lodash/isEqual';
 import { shimExternals } from '../lib/externals';
@@ -50,12 +51,16 @@ module('indexing', function (hooks) {
 
   setupBaseRealmServer(hooks, virtualNetwork);
 
-  hooks.beforeEach(async function () {
-    dir = dirSync().name;
-    realm = await createRealm(
-      dir,
-      {
-        'person.gts': `
+  setupDB(hooks, {
+    beforeEach: async (dbAdapter, queue) => {
+      dir = dirSync().name;
+      realm = await createRealm({
+        dir,
+        virtualNetwork,
+        dbAdapter,
+        queue,
+        fileSystem: {
+          'person.gts': `
         import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
@@ -68,7 +73,7 @@ module('indexing', function (hooks) {
           }
         }
       `,
-        'pet.gts': `
+          'pet.gts': `
         import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
@@ -76,7 +81,7 @@ module('indexing', function (hooks) {
           @field firstName = contains(StringCard);
         }
       `,
-        'fancy-person.gts': `
+          'fancy-person.gts': `
         import { contains, field } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
@@ -85,7 +90,7 @@ module('indexing', function (hooks) {
           @field favoriteColor = contains(StringCard);
         }
       `,
-        'post.gts': `
+          'post.gts': `
         import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
@@ -101,7 +106,7 @@ module('indexing', function (hooks) {
           }
         }
       `,
-        'boom.gts': `
+          'boom.gts': `
         import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
@@ -117,95 +122,93 @@ module('indexing', function (hooks) {
           }
         }
       `,
-        'mango.json': {
-          data: {
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './person',
-                name: 'Person',
+          'mango.json': {
+            data: {
+              attributes: {
+                firstName: 'Mango',
               },
-            },
-          },
-        },
-        'vangogh.json': {
-          data: {
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './person',
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'ringo.json': {
-          data: {
-            attributes: {
-              firstName: 'Ringo',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'post-1.json': {
-          data: {
-            attributes: {
-              message: 'Who wants to fetch?!',
-            },
-            relationships: {
-              author: {
-                links: {
-                  self: './vangogh',
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: './post',
-                name: 'Post',
+          },
+          'vangogh.json': {
+            data: {
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'ringo.json': {
+            data: {
+              attributes: {
+                firstName: 'Ringo',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'post-1.json': {
+            data: {
+              attributes: {
+                message: 'Who wants to fetch?!',
+              },
+              relationships: {
+                author: {
+                  links: {
+                    self: './vangogh',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './post',
+                  name: 'Post',
+                },
+              },
+            },
+          },
+          'boom.json': {
+            data: {
+              attributes: {
+                firstName: 'Boom!',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './boom',
+                  name: 'Boom',
+                },
+              },
+            },
+          },
+          'empty.json': {
+            data: {
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
               },
             },
           },
         },
-        'boom.json': {
-          data: {
-            attributes: {
-              firstName: 'Boom!',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './boom',
-                name: 'Boom',
-              },
-            },
-          },
-        },
-        'empty.json': {
-          data: {
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
-              },
-            },
-          },
-        },
-      },
-      undefined,
-      undefined,
-      virtualNetwork,
-    );
-    await realm.start();
+      });
+      await realm.start();
+    },
   });
 
   test('can store card pre-rendered html in the index', async function (assert) {

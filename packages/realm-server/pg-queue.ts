@@ -112,12 +112,13 @@ export default class PgQueue implements Queue {
   #isDestroyed = false;
 
   private pollInterval = 10000;
-  private pgClient = new PgAdapter();
   private handlers: Map<string, Function> = new Map();
   private notifiers: Map<number, Deferred<any>> = new Map();
 
   private jobRunner: WorkLoop | undefined;
   private notificationRunner: WorkLoop | undefined;
+
+  constructor(private pgClient: PgAdapter) {}
 
   private async query(expression: Expression) {
     return await query(this.pgClient, expression);
