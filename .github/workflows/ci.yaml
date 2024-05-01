@@ -150,6 +150,7 @@ jobs:
     #   group: boxel-host-test-in-memory-index${{ github.head_ref || github.run_id }}
     #   cancel-in-progress: true
     strategy:
+      fail-fast: false
       matrix:
         shardIndex: [1, 2, 3, 4, 5, 6]
     steps:
@@ -186,6 +187,7 @@ jobs:
     name: Host Tests - db index
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         shardIndex: [1, 2, 3, 4, 5, 6]
     # FIXME
