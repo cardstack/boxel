@@ -5,6 +5,7 @@ echo "starting register realm users"
 
 until $(curl --output /dev/null --silent --head --fail http://localhost:8008); do
   printf '.'
+  curl_output=$(curl --head --fail http://localhost:8008)
   sleep 5
 done
 echo "matrix server is up"
