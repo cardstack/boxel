@@ -1,6 +1,6 @@
 import Service from '@ember/service';
 
-import { type RealmAdapter } from '@cardstack/runtime-common';
+import { type Indexer, type RealmAdapter } from '@cardstack/runtime-common';
 import {
   SearchEntryWithErrors,
   type RunState,
@@ -19,6 +19,9 @@ export default class LocalIndexer extends Service {
   ) {}
   get adapter(): RealmAdapter {
     return {} as RealmAdapter;
+  }
+  get indexer(): Indexer {
+    return {} as Indexer;
   }
   async setEntry(_url: URL, _entry: SearchEntryWithErrors) {}
 }

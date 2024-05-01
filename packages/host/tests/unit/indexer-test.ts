@@ -5,30 +5,29 @@ import { runSharedTest } from '@cardstack/runtime-common/helpers';
 // eslint-disable-next-line ember/no-test-import-export
 import indexerTests from '@cardstack/runtime-common/tests/indexer-test';
 
-import ENV from '@cardstack/host/config/environment';
-import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-let { sqlSchema } = ENV;
+import { getDbAdapter } from '../helpers';
 
 module('Unit | indexer', function (hooks) {
   let adapter: SQLiteAdapter;
   let indexer: Indexer;
 
+  hooks.before(async function () {
+    adapter = await getDbAdapter();
+  });
+
   hooks.beforeEach(async function () {
-    adapter = new SQLiteAdapter(sqlSchema);
+    await adapter.reset();
     indexer = new Indexer(adapter);
     await indexer.ready();
   });
 
-  hooks.afterEach(async function () {
-    await indexer.teardown();
-  });
-
-  test('can perform invalidations for an index entry', async function (assert) {
+  test('can perform invalidations for a instance entry', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
-  test('does not create invalidation record for non-JSON invalidation', async function (assert) {
+  test('can perform invalidations for a module entry', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
@@ -48,11 +47,11 @@ module('Unit | indexer', function (hooks) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
-  test('can remove an index entry', async function (assert) {
+  test('can create a new generation of index entries', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
-  test('can create a new generation of index entries', async function (assert) {
+  test('can get an error doc', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
