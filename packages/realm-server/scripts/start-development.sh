@@ -3,10 +3,13 @@
 check_postgres_ready() {
   docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1
 }
-while ! check_postgres_ready; do
-  printf '.'
-  sleep 1
-done
+# remove this check after the feature flag is removed
+if [ -n "$PG_INDEXER" ]; then
+  while ! check_postgres_ready; do
+    printf '.'
+    sleep 1
+  done
+fi
 
 pnpm setup:base-assets
 NODE_ENV=development \

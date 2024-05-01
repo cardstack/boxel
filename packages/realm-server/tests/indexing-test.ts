@@ -61,67 +61,67 @@ module('indexing', function (hooks) {
         queue,
         fileSystem: {
           'person.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import StringCard from "https://cardstack.com/base/string";
 
-        export class Person extends CardDef {
-          @field firstName = contains(StringCard);
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h1><@fields.firstName/></h1>
-            </template>
-          }
-        }
-      `,
-          'pet.gts': `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-
-        export class Pet extends CardDef {
-          @field firstName = contains(StringCard);
-        }
-      `,
-          'fancy-person.gts': `
-        import { contains, field } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { Person } from "./person";
-
-        export class FancyPerson extends Person {
-          @field favoriteColor = contains(StringCard);
-        }
-      `,
-          'post.gts': `
-        import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-        import { Person } from "./person";
-
-        export class Post extends CardDef {
-          @field author = linksTo(Person);
-          @field message = contains(StringCard);
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h1><@fields.message/></h1>
-              <h2><@fields.author/></h2>
-            </template>
-          }
-        }
-      `,
-          'boom.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
-
-        export class Boom extends CardDef {
-          @field firstName = contains(StringCard);
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <h1><@fields.firstName/>{{this.boom}}</h1>
-            </template>
-            get boom() {
-              throw new Error('intentional error');
+            export class Person extends CardDef {
+              @field firstName = contains(StringCard);
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <h1><@fields.firstName/></h1>
+                </template>
+              }
             }
-          }
-        }
-      `,
+          `,
+          'pet.gts': `
+            import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+            import StringCard from "https://cardstack.com/base/string";
+
+            export class Pet extends CardDef {
+              @field firstName = contains(StringCard);
+            }
+          `,
+          'fancy-person.gts': `
+            import { contains, field } from "https://cardstack.com/base/card-api";
+            import StringCard from "https://cardstack.com/base/string";
+            import { Person } from "./person";
+
+            export class FancyPerson extends Person {
+              @field favoriteColor = contains(StringCard);
+            }
+          `,
+          'post.gts': `
+            import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import StringCard from "https://cardstack.com/base/string";
+            import { Person } from "./person";
+
+            export class Post extends CardDef {
+              @field author = linksTo(Person);
+              @field message = contains(StringCard);
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <h1><@fields.message/></h1>
+                  <h2><@fields.author/></h2>
+                </template>
+              }
+            }
+          `,
+          'boom.gts': `
+            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import StringCard from "https://cardstack.com/base/string";
+
+            export class Boom extends CardDef {
+              @field firstName = contains(StringCard);
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <h1><@fields.firstName/>{{this.boom}}</h1>
+                </template>
+                get boom() {
+                  throw new Error('intentional error');
+                }
+              }
+            }
+          `,
           'mango.json': {
             data: {
               attributes: {

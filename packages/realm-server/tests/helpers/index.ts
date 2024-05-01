@@ -67,12 +67,14 @@ export function setupDB(
     await dbAdapter?.close();
   };
 
-  // we need to pair before and after, and beforeEach and afterEach. within this
-  // setup function we can't mix before and beforeEach
+  // we need to pair before/after and beforeEach/afterEach. within this setup
+  // function we can't mix before/after with beforeEach/afterEach as that will
+  // result in an unbalanced DB lifecycle (e.g. creating a DB in the before hook and
+  // destroying in the afterEach hook)
   if (args.before) {
-    if (args.beforeEach) {
+    if (args.beforeEach || args.afterEach) {
       throw new Error(
-        `cannot pair a "beforeEach" hook with a "before" hook in setupDB--the DB setup must be balanced, you can either create a new DB in "before" or in "beforeEach" but not both`,
+        `cannot pair a "before" hook with a "beforeEach" or "afterEach" hook in setupDB--the DB setup must be balanced, you can either create a new DB in "before" or in "beforeEach" but not both`,
       );
     }
     hooks.before(async function () {
@@ -87,9 +89,9 @@ export function setupDB(
   }
 
   if (args.beforeEach) {
-    if (args.before) {
+    if (args.before || args.after) {
       throw new Error(
-        `cannot pair a "beforeEach" hook with a "before" hook in setupDB--the DB setup must be balanced, you can either create a new DB in "before" or in "beforeEach" but not both`,
+        `cannot pair a "beforeEach" hook with a "before" or "after" hook in setupDB--the DB setup must be balanced, you can either create a new DB in "before" or in "beforeEach" but not both`,
       );
     }
     hooks.beforeEach(async function () {
