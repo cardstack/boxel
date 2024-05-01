@@ -80,13 +80,13 @@
     "setup:drafts-in-deployment": "mkdir -p /persistent/drafts && cp --verbose --update --recursive ../drafts-realm/. /persistent/drafts/",
     "setup:published-in-deployment": "mkdir -p /persistent/published && cp --verbose --update --recursive ../published-realm/. /persistent/published/",
     "setup:base-assets": "ts-node --transpileOnly ./scripts/setup-base.ts",
-    "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
+    "start": "PGPORT=5435 PGDATABASE=boxel_dev NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "./scripts/start-base.sh",
     "start:test-realms": "./scripts/start-test-realms.sh",
     "start:base:root": "./scripts/start-base-root.sh",
     "start:drafts:root": "./scripts/start-drafts-root.sh",
-    "start:all": "PGPORT=5435 ./scripts/start-all.sh",
-    "start:without-matrix": "PGPORT=5435 ./scripts/start-without-matrix.sh",
+    "start:all": "./scripts/start-all.sh",
+    "start:without-matrix": "./scripts/start-without-matrix.sh",
     "start:staging": "./scripts/start-staging.sh",
     "start:development": "./scripts/start-development.sh",
     "start:production": "./scripts/start-production.sh",
@@ -98,7 +98,8 @@
     "lint:glint": "glint",
     "migrate": "PGDATABASE=boxel ./scripts/ensure-db-exists.sh && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres node-pg-migrate",
     "make-schema": "./scripts/schema-dump.sh",
-    "drop-db": "docker exec boxel-pg dropdb -U postgres -w boxel"
+    "drop-db": "docker exec boxel-pg dropdb -U postgres -w",
+    "drop-all-dbs": "./scripts/drop-all-dbs.sh"
   },
   "volta": {
     "extends": "../../package.json"

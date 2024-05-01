@@ -1,6 +1,11 @@
 #! /bin/sh
 
-NODE_ENV=development NODE_NO_WARNINGS=1 REALM_SECRET_SEED="shhh! it's a secret" ts-node \
+NODE_ENV=development \
+  NODE_NO_WARNINGS=1 \
+  PGPORT=5435 \
+  PGDATABASE=boxel_test_base_root \
+  REALM_SECRET_SEED="shhh! it's a secret" \
+  ts-node \
   --transpileOnly main \
   --port=4203 \
   \

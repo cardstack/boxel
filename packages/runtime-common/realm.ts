@@ -837,6 +837,8 @@ export class Realm {
     if (redirectResponse) {
       return redirectResponse;
     }
+    // allow any WIP index requests to query the index while it's building up
+    isLocal = isLocal || Boolean(request.headers.get('X-Boxel-Use-WIP-Index'));
 
     try {
       // local requests are allowed to query the realm as the index is being built up
