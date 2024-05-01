@@ -725,12 +725,20 @@ export class ${className} extends ${exportName} {
   });
 }
 
-function convertToClassName(input: string) {
+export function convertToClassName(input: string) {
   // \p{L}: a letter
   let invalidLeadingCharactersRemoved = camelCase(
     input.replace(/^[^\p{L}_$]+/u, ''),
     { pascalCase: true },
   );
+
+  if (!invalidLeadingCharactersRemoved) {
+    let prefixedInput = `Class${input}`;
+    invalidLeadingCharactersRemoved = camelCase(
+      prefixedInput.replace(/^[^\p{L}_$]+/u, ''),
+      { pascalCase: true },
+    );
+  }
 
   let className = invalidLeadingCharactersRemoved.replace(
     // \p{N}: a number
