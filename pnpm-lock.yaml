@@ -1142,8 +1142,8 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       camelcase:
-        specifier: ^8.0.0
-        version: 8.0.0
+        specifier: ^6.3.0
+        version: 6.3.0
       concurrently:
         specifier: ^8.2.2
         version: 8.2.2
@@ -1721,8 +1721,8 @@ importers:
         specifier: ^2.2.1
         version: 2.2.1
       camelcase:
-        specifier: ^8.0.0
-        version: 8.0.0
+        specifier: ^6.3.0
+        version: 6.3.0
       date-fns:
         specifier: ^2.28.0
         version: 2.28.0
@@ -9020,13 +9020,13 @@ packages:
     engines: {node: '>=6'}
     dev: true
 
+  /camelcase@6.3.0:
+    resolution: {integrity: sha512-Gmy6FhYlCY7uOElZUSbxo2UCDH8owEk996gkbrpsgGtrJLM3J7jGxl9Ic7Qwwj4ivOE5AWZWRMecDdF7hqGjFA==}
+    engines: {node: '>=10'}
+
   /camelcase@7.0.1:
     resolution: {integrity: sha512-xlx1yCK2Oc1APsPXDL2LdlNP6+uu8OCDdhOBSVT279M/S+y75O30C2VuD8T2ogdePBBl7PfPF4504tnLgX3zfw==}
     engines: {node: '>=14.16'}
-
-  /camelcase@8.0.0:
-    resolution: {integrity: sha512-8WB3Jcas3swSvjIeA2yvCJ+Miyz5l1ZmB6HFb9R1317dt9LCQoswg/BGrmAmkWVEszSrrg4RwmO46qIm2OEnSA==}
-    engines: {node: '>=16'}
 
   /can-symlink@1.0.0:
     resolution: {integrity: sha512-RbsNrFyhwkx+6psk/0fK/Q9orOUr9VMxohGd8vTa4djf4TGLfblBgUfqZChrZuW0Q+mz2eBPFLusw9Jfukzmhg==}
