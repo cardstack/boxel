@@ -19,7 +19,6 @@ import type EnvironmentService from '@cardstack/host/services/environment-servic
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
-  percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
@@ -28,7 +27,6 @@ import {
   setMonacoContent,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  waitForSyntaxHighlighting,
   waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
