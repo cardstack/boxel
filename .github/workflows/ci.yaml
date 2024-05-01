@@ -379,7 +379,8 @@ jobs:
         run: pnpm start:matrix &
         working-directory: packages/realm-server
       - name: Start realm servers
-        run: PG_INDEXER=true pnpm start:all &
+        # TODO run this in the background!!!!
+        run: PG_INDEXER=true pnpm start:all
         working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users
