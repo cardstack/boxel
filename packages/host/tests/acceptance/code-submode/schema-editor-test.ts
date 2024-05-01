@@ -578,6 +578,15 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
+    // There is some additional thing we are waiting on here, probably the
+    // card to load in the card resource, but I'm not too sure so using waitUntil instead
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-selected-field-display-name]')
+          ?.textContent?.includes('BigInteger'),
+    );
+
     await assert.dom('[data-test-selected-field-realm-icon] img').exists();
     await assert
       .dom('[data-test-selected-field-display-name]')
@@ -593,6 +602,15 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-select="https://cardstack.com/base/fields/date-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
+    // There is some additional thing we are waiting on here, probably the
+    // card to load in the card resource, but I'm not too sure so using waitUntil instead
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-selected-field-display-name]')
+          ?.textContent?.includes('Date'),
+    );
+
     await assert.dom('[data-test-selected-field-display-name]').hasText('Date');
     assert.dom('[data-test-save-field-button]').hasAttribute('disabled');
 

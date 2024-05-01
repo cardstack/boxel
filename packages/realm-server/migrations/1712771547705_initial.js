@@ -1,6 +1,8 @@
 exports.up = (pgm) => {
-  pgm.createTable('indexed_cards', {
-    card_url: { type: 'varchar', notNull: true },
+  pgm.createTable('boxel_index', {
+    url: { type: 'varchar', notNull: true },
+    file_alias: { type: 'varchar', notNull: true },
+    type: { type: 'varchar', notNull: true },
     realm_version: { type: 'integer', notNull: true },
     realm_url: { type: 'varchar', notNull: true },
     pristine_doc: 'jsonb',
@@ -13,12 +15,12 @@ exports.up = (pgm) => {
     indexed_at: 'bigint',
     is_deleted: 'boolean',
   });
-  pgm.sql('ALTER TABLE indexed_cards SET UNLOGGED');
-  pgm.addConstraint('indexed_cards', 'indexed_cards_pkey', {
-    primaryKey: ['card_url', 'realm_version'],
+  pgm.sql('ALTER TABLE boxel_index SET UNLOGGED');
+  pgm.addConstraint('boxel_index', 'boxel_index_pkey', {
+    primaryKey: ['url', 'realm_version'],
   });
-  pgm.createIndex('indexed_cards', ['realm_version']);
-  pgm.createIndex('indexed_cards', ['realm_url']);
+  pgm.createIndex('boxel_index', ['realm_version']);
+  pgm.createIndex('boxel_index', ['realm_url']);
 
   pgm.createTable('realm_versions', {
     realm_url: { type: 'varchar', notNull: true },
