@@ -122,6 +122,11 @@ pnpm drop-all-dbs
 
 You can then run `PGDATABASE=boxel_dev pnpm migrate up` (with `PGDATABASE` set accordingly) or just start the realm server (`PG_INDEXER=true pnpm start:all`) to create the database again.
 
+To interact with your local database directly you can use psql:
+```
+psql -h localhost -p 5435 -U postgres
+```
+
 #### DB Migrations
 When the realm server starts up it will automatically run DB migrations that live in the `packages/realm-server/migrations` folder. As part of development you may wish to run migrations manually as well as to create a new migration.
 
