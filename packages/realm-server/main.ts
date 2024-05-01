@@ -162,9 +162,13 @@ if (distURL) {
 
 (async () => {
   let realms: Realm[] = [];
-  let dbAdapter = new PgAdapter();
-  let queue = new PgQueue(dbAdapter);
-  await dbAdapter.startClient();
+  let dbAdapter: PgAdapter | undefined;
+  let queue: PgQueue | undefined;
+  if (process.env.PG_INDEXER) {
+    dbAdapter = new PgAdapter();
+    queue = new PgQueue(dbAdapter);
+    await dbAdapter.startClient();
+  }
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -203,18 +207,22 @@ if (distURL) {
         realmSecretSeed: REALM_SECRET_SEED,
         permissions: realmPermissions.users,
         virtualNetwork,
-        ...(process.env.PG_INDEXER ? { dbAdapter, queue } : {}),
+        // TODO remove this guard after the feature flag is removed
+        ...(dbAdapter && queue ? { dbAdapter, queue } : {}),
         onIndexer: async (indexer) => {
-          let worker = new Worker({
-            realmURL: new URL(url),
-            indexer,
-            queue,
-            realmAdapter,
-            runnerOptsManager: manager,
-            loader: virtualNetwork.createLoader(),
-            indexRunner: getRunner,
-          });
-          await worker.run();
+          // TODO remove this guard after the feature flag is removed
+          if (queue) {
+            let worker = new Worker({
+              realmURL: new URL(url),
+              indexer,
+              queue,
+              realmAdapter,
+              runnerOptsManager: manager,
+              loader: virtualNetwork.createLoader(),
+              indexRunner: getRunner,
+            });
+            await worker.run();
+          }
         },
       },
       {
