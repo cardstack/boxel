@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: deploy-ui-${{ inputs.environment }}-${{ github.head_ref || github.run_id }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Init
         uses: ./.github/actions/init

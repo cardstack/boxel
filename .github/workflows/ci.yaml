@@ -19,7 +19,7 @@ jobs:
       group: lint-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Lint AI Bot
         if: always()
@@ -89,7 +89,7 @@ jobs:
       group: ai-bot-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: AI Bot test suite
         run: pnpm test
@@ -102,7 +102,7 @@ jobs:
       group: boxel-motion-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Build boxel-motion
         run: pnpm build
@@ -118,7 +118,7 @@ jobs:
       group: boxel-ui-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Build boxel-ui
         run: pnpm build
@@ -134,7 +134,7 @@ jobs:
       group: boxel-ui-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Rebuild boxel-ui icons
         run: pnpm rebuild:icons
@@ -149,7 +149,7 @@ jobs:
       group: boxel-host-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Build boxel-ui
         run: pnpm build
@@ -185,7 +185,7 @@ jobs:
         shardIndex: [1, 2, 3, 4, 5, 6]
         shardTotal: [6]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
@@ -235,7 +235,7 @@ jobs:
       - name: Create a timestamp as a directory to store reports in
         id: timestampid
         run: echo "timestamp=$(date --utc +%Y%m%d_%H%M%SZ)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
 
       - name: Download blob reports from GitHub Actions Artifacts
@@ -297,7 +297,7 @@ jobs:
       group: realm-server-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Build boxel-ui
         run: pnpm build
@@ -328,7 +328,7 @@ jobs:
       boxel: ${{ steps.filter.outputs.boxel }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v2
         id: filter
         with:
