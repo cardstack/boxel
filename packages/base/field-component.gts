@@ -15,6 +15,8 @@ import {
 import {
   CardContextName,
   DefaultFormatContextName,
+  RealmSession,
+  RealmSessionContextName,
   getField,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -87,6 +89,20 @@ export class DefaultFormatProvider extends Component<DefaultFormatProviderSignat
   }
 }
 
+interface RealmSessionConsumerSignature {
+  Blocks: { default: [RealmSession | undefined] };
+}
+
+export class RealmSessionConsumer extends Component<RealmSessionConsumerSignature> {
+  @consume(RealmSessionContextName) declare realmSession:
+    | RealmSession
+    | undefined;
+
+  <template>
+    {{yield this.realmSession}}
+  </template>
+}
+
 const componentCache = initSharedState(
   'componentCache',
   () => new WeakMap<Box<BaseDef>, BoxComponent>(),
@@ -148,32 +164,63 @@ export function getBoxComponent(
     Args: { format?: Format; displayContainer?: boolean };
   }> = <template>
     <CardContextConsumer as |context|>
-      <DefaultFormatConsumer as |defaultFormat|>
-        {{#let (determineFormat @format defaultFormat) as |effectiveFormat|}}
-          {{#let
-            (lookupComponents effectiveFormat)
-            (if (eq @displayContainer false) false true)
-            as |c displayContainer|
-          }}
-            <DefaultFormatProvider
-              @value={{defaultFieldFormat effectiveFormat}}
-            >
-              {{#if (isCard model.value)}}
-                <CardContainer
-                  @displayBoundaries={{displayContainer}}
-                  class='field-component-card
-                    {{effectiveFormat}}-format display-container-{{displayContainer}}'
-                  {{context.cardComponentModifier
-                    card=model.value
-                    format=effectiveFormat
-                    fieldType=field.fieldType
-                    fieldName=field.name
-                  }}
-                  data-test-card-format={{effectiveFormat}}
-                  data-test-field-component-card
-                  {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-                  ...attributes
-                >
+      <RealmSessionConsumer as |realmSession|>
+        <DefaultFormatConsumer as |defaultFormat|>
+          {{#let (determineFormat @format defaultFormat) as |effectiveFormat|}}
+            {{#let
+              (lookupComponents effectiveFormat)
+              (if (eq @displayContainer false) false true)
+              as |c displayContainer|
+            }}
+              <DefaultFormatProvider
+                @value={{defaultFieldFormat effectiveFormat}}
+              >
+                {{#if (isCard model.value)}}
+                  <CardContainer
+                    @displayBoundaries={{displayContainer}}
+                    class='field-component-card
+                      {{effectiveFormat}}-format display-container-{{displayContainer}}'
+                    {{context.cardComponentModifier
+                      card=model.value
+                      format=effectiveFormat
+                      fieldType=field.fieldType
+                      fieldName=field.name
+                    }}
+                    data-test-card-format={{effectiveFormat}}
+                    data-test-field-component-card
+                    {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+                    ...attributes
+                  >
+                    <c.CardOrFieldFormatComponent
+                      @cardOrField={{cardOrField}}
+                      @model={{model.value}}
+                      @fields={{c.fields}}
+                      @format={{effectiveFormat}}
+                      @set={{model.set}}
+                      @fieldName={{model.name}}
+                      @context={{context}}
+                      @canEdit={{realmSession.canWrite}}
+                    />
+                  </CardContainer>
+                {{else if (isCompoundField model.value)}}
+                  <div
+                    data-test-compound-field-format={{effectiveFormat}}
+                    data-test-compound-field-component
+                    {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+                    ...attributes
+                  >
+                    <c.CardOrFieldFormatComponent
+                      @cardOrField={{cardOrField}}
+                      @model={{model.value}}
+                      @fields={{c.fields}}
+                      @format={{effectiveFormat}}
+                      @set={{model.set}}
+                      @fieldName={{model.name}}
+                      @context={{context}}
+                      @canEdit={{realmSession.canWrite}}
+                    />
+                  </div>
+                {{else}}
                   <c.CardOrFieldFormatComponent
                     @cardOrField={{cardOrField}}
                     @model={{model.value}}
@@ -182,40 +229,14 @@ export function getBoxComponent(
                     @set={{model.set}}
                     @fieldName={{model.name}}
                     @context={{context}}
+                    @canEdit={{realmSession.canWrite}}
                   />
-                </CardContainer>
-              {{else if (isCompoundField model.value)}}
-                <div
-                  data-test-compound-field-format={{effectiveFormat}}
-                  data-test-compound-field-component
-                  {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-                  ...attributes
-                >
-                  <c.CardOrFieldFormatComponent
-                    @cardOrField={{cardOrField}}
-                    @model={{model.value}}
-                    @fields={{c.fields}}
-                    @format={{effectiveFormat}}
-                    @set={{model.set}}
-                    @fieldName={{model.name}}
-                    @context={{context}}
-                  />
-                </div>
-              {{else}}
-                <c.CardOrFieldFormatComponent
-                  @cardOrField={{cardOrField}}
-                  @model={{model.value}}
-                  @fields={{c.fields}}
-                  @format={{effectiveFormat}}
-                  @set={{model.set}}
-                  @fieldName={{model.name}}
-                  @context={{context}}
-                />
-              {{/if}}
-            </DefaultFormatProvider>
+                {{/if}}
+              </DefaultFormatProvider>
+            {{/let}}
           {{/let}}
-        {{/let}}
-      </DefaultFormatConsumer>
+        </DefaultFormatConsumer>
+      </RealmSessionConsumer>
     </CardContextConsumer>
     <style>
       .field-component-card.embedded-format {

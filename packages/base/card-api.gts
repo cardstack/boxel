@@ -1873,6 +1873,7 @@ export type BaseDefComponent = ComponentLike<{
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    canEdit?: boolean;
   };
 }>;
 
@@ -2715,6 +2716,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    canEdit?: boolean;
   };
 };
 

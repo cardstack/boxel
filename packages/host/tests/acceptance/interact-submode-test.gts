@@ -14,7 +14,7 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 
 import {
   baseRealm,
@@ -122,6 +122,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
+      @field favoriteTreat = contains(StringField);
       @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
@@ -132,6 +133,25 @@ module('Acceptance | interact submode tests', function (hooks) {
           <h3 data-test-pet={{@model.name}}>
             <@fields.name />
           </h3>
+        </template>
+      };
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <GridContainer class='container'>
+            <h2><@fields.title /></h2>
+            <div>
+              <div>Favorite Treat: <@fields.favoriteTreat /></div>
+              <div data-test-editable-meta>
+                {{#if @canEdit}}
+                  <@fields.title />
+                  is editable.
+                {{else}}
+                  <@fields.title />
+                  is NOT editable.
+                {{/if}}
+              </div>
+            </div>
+          </GridContainer>
         </template>
       };
     }
@@ -895,6 +915,37 @@ module('Acceptance | interact submode tests', function (hooks) {
         assert.dom('[data-test-edit-button]').doesNotExist();
       });
 
+      test('the card format components are informed whether it is editable', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('Mango is NOT editable');
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealm2URL}Pet/ringo`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('Ringo is editable');
+      });
       test('the delete item is not present in "..." menu of stack item', async function (assert) {
         await visitOperatorMode({
           stacks: [
