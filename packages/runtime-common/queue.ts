@@ -1,4 +1,4 @@
-import { PgPrimitive } from './index';
+import { type PgPrimitive } from './index';
 import { Deferred } from './deferred';
 
 export interface QueueOpts {

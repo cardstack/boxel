@@ -41,6 +41,8 @@ export * from './queue';
 export * from './expression';
 export * from './indexer';
 export * from './db';
+export * from './worker';
+export * from './stream';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
