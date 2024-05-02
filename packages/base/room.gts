@@ -873,10 +873,13 @@ export interface CardMessageContent {
     attachedCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
-      functions: {
-        name: string;
-        description: string;
-        parameters: Schema;
+      tools: {
+        type: 'function';
+        function: {
+          name: string;
+          description: string;
+          parameters: Schema;
+        };
       }[];
       submode: string | undefined;
     };

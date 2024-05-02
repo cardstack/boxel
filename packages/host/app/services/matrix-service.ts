@@ -401,7 +401,7 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = markdownToHtml(body);
-    let functions = [];
+    let tools = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
@@ -413,7 +413,7 @@ export default class MatrixService extends Service {
       attachedOpenCards = attachedCards.filter((c) =>
         (context?.openCardIds ?? []).includes(c.id),
       );
-      // Generate function calls for patching currently open cards permitted for modification
+      // Generate tool calls for patching currently open cards permitted for modification
       for (let attachedOpenCard of attachedOpenCards) {
         let patchSpec = generateCardPatchCallSpecification(
           attachedOpenCard.constructor as typeof CardDef,
@@ -428,22 +428,25 @@ export default class MatrixService extends Service {
           patchSpec = { attributes: patchSpec };
         }
         if (realmSession.canWrite) {
-          functions.push({
-            name: 'patchCard',
-            description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-            parameters: {
-              type: 'object',
-              properties: {
-                description: {
-                  type: 'string',
+          tools.push({
+            type: 'function',
+            function: {
+              name: 'patchCard',
+              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+              parameters: {
+                type: 'object',
+                properties: {
+                  card_id: {
+                    type: 'string',
+                    const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+                  },
+                  description: {
+                    type: 'string',
+                  },
+                  ...patchSpec,
                 },
-                card_id: {
-                  type: 'string',
-                  const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-                },
-                ...patchSpec,
+                required: ['card_id', 'attributes', 'description'],
               },
-              required: ['card_id', 'attributes', 'description'],
             },
           });
         }
@@ -487,7 +490,7 @@ export default class MatrixService extends Service {
         attachedCardsEventIds,
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
-          functions,
+          tools,
           submode,
         },
       },

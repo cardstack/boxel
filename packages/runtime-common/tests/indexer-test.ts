@@ -2,9 +2,10 @@ import {
   Indexer,
   internalKeyFor,
   baseCardRef,
-  type IndexedCardsTable,
   type LooseCardResource,
   type DBAdapter,
+  type SearchCardResult,
+  type BoxelIndexTable,
 } from '../index';
 import { type SharedTests } from '../helpers';
 import { setupIndex } from '../helpers/indexer';
@@ -13,7 +14,7 @@ import { testRealmURL } from '../helpers/const';
 const testRealmURL2 = `http://test-realm/test2/`;
 
 const tests = Object.freeze({
-  'can perform invalidations for an index entry': async (
+  'can perform invalidations for a instance entry': async (
     assert,
     { indexer, adapter },
   ) => {
@@ -25,37 +26,37 @@ const tests = Object.freeze({
       ],
       [
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}2.json`],
         },
         {
-          card_url: `${testRealmURL}2.json`,
+          url: `${testRealmURL}2.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}4.json`],
         },
         {
-          card_url: `${testRealmURL}3.json`,
+          url: `${testRealmURL}3.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}2.json`],
         },
         {
-          card_url: `${testRealmURL}4.json`,
+          url: `${testRealmURL}4.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [],
         },
         {
-          card_url: `${testRealmURL}5.json`,
+          url: `${testRealmURL}5.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [],
         },
         {
-          card_url: `${testRealmURL2}A.json`,
+          url: `${testRealmURL2}A.json`,
           realm_version: 5,
           realm_url: testRealmURL2,
           deps: [],
@@ -76,40 +77,40 @@ const tests = Object.freeze({
     ]);
 
     let originalEntries = await adapter.execute(
-      'SELECT card_url, realm_url, is_deleted FROM indexed_cards WHERE realm_version = 1 ORDER BY card_url COLLATE "POSIX"',
+      'SELECT url, realm_url, is_deleted FROM boxel_index WHERE realm_version = 1 ORDER BY url COLLATE "POSIX"',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
       originalEntries,
       [1, 2, 3, 4, 5].map((i) => ({
-        card_url: `${testRealmURL}${i}.json`,
+        url: `${testRealmURL}${i}.json`,
         realm_url: testRealmURL,
         is_deleted: null,
       })),
       'the "production" version of the index entries are unchanged',
     );
     let invalidatedEntries = await adapter.execute(
-      'SELECT card_url, realm_url, is_deleted FROM indexed_cards WHERE realm_version = 2 ORDER BY card_url COLLATE "POSIX"',
+      'SELECT url, realm_url, is_deleted FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
       invalidatedEntries,
       [1, 2, 3, 4].map((i) => ({
-        card_url: `${testRealmURL}${i}.json`,
+        url: `${testRealmURL}${i}.json`,
         realm_url: testRealmURL,
         is_deleted: true,
       })),
       'the "work-in-progress" version of the index entries have been marked as deleted',
     );
     let otherRealms = await adapter.execute(
-      `SELECT card_url, realm_url, realm_version, is_deleted FROM indexed_cards WHERE realm_url != '${testRealmURL}'`,
+      `SELECT url, realm_url, realm_version, is_deleted FROM boxel_index WHERE realm_url != '${testRealmURL}'`,
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
       otherRealms,
       [
         {
-          card_url: `${testRealmURL2}A.json`,
+          url: `${testRealmURL2}A.json`,
           realm_url: testRealmURL2,
           realm_version: 5,
           is_deleted: null,
@@ -136,26 +137,71 @@ const tests = Object.freeze({
     );
   },
 
-  'does not create invalidation record for non-JSON invalidation': async (
+  'can perform invalidations for a module entry': async (
     assert,
-    { indexer, adapter },
+    { indexer },
   ) => {
     await setupIndex(
       indexer,
-      [{ realm_url: testRealmURL, current_version: 1 }],
-      [],
+      [
+        { realm_url: testRealmURL, current_version: 1 },
+        { realm_url: testRealmURL2, current_version: 5 },
+      ],
+      [
+        {
+          url: `${testRealmURL}person.gts`,
+          file_alias: `${testRealmURL}person`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          url: `${testRealmURL}employee.gts`,
+          file_alias: `${testRealmURL}employee`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}person`],
+        },
+        {
+          url: `${testRealmURL}1.json`,
+          file_alias: `${testRealmURL}1.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}employee`],
+        },
+        {
+          url: `${testRealmURL}2.json`,
+          file_alias: `${testRealmURL}2.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}1.json`],
+        },
+        {
+          url: `${testRealmURL}3.json`,
+          file_alias: `${testRealmURL}3.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+      ],
     );
+
     let batch = await indexer.createBatch(new URL(testRealmURL));
     let invalidations = await batch.invalidate(
-      new URL(`${testRealmURL}module`),
+      new URL(`${testRealmURL}person.gts`),
     );
-    assert.deepEqual(invalidations.sort(), [`${testRealmURL}module`]);
-    let entries = await adapter.execute('SELECT card_url FROM indexed_cards');
-    assert.deepEqual(
-      entries,
-      [],
-      'an index entry was not created for a non-JSON URL',
-    );
+
+    assert.deepEqual(invalidations.sort(), [
+      `${testRealmURL}1.json`,
+      `${testRealmURL}2.json`,
+      `${testRealmURL}employee.gts`,
+      `${testRealmURL}person.gts`,
+    ]);
   },
 
   'only invalidates latest version of content': async (
@@ -167,37 +213,37 @@ const tests = Object.freeze({
       [{ realm_url: testRealmURL, current_version: 2 }],
       [
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}2.json`],
         },
         {
-          card_url: `${testRealmURL}2.json`,
+          url: `${testRealmURL}2.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}4.json`],
         },
         {
-          card_url: `${testRealmURL}2.json`,
+          url: `${testRealmURL}2.json`,
           realm_version: 2,
           realm_url: testRealmURL,
           deps: [],
         },
         {
-          card_url: `${testRealmURL}3.json`,
+          url: `${testRealmURL}3.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}2.json`],
         },
         {
-          card_url: `${testRealmURL}4.json`,
+          url: `${testRealmURL}4.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [],
         },
         {
-          card_url: `${testRealmURL}5.json`,
+          url: `${testRealmURL}5.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}4.json`],
@@ -215,13 +261,13 @@ const tests = Object.freeze({
       `${testRealmURL}5.json`,
     ]);
     let invalidatedEntries = await adapter.execute(
-      'SELECT card_url, realm_url, is_deleted FROM indexed_cards WHERE realm_version = 3 ORDER BY card_url COLLATE "POSIX"',
+      'SELECT url, realm_url, is_deleted FROM boxel_index WHERE realm_version = 3 ORDER BY url COLLATE "POSIX"',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
       invalidatedEntries,
       [4, 5].map((i) => ({
-        card_url: `${testRealmURL}${i}.json`,
+        url: `${testRealmURL}${i}.json`,
         realm_url: testRealmURL,
         is_deleted: true,
       })),
@@ -238,19 +284,19 @@ const tests = Object.freeze({
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [],
         },
         {
-          card_url: `${testRealmURL}2.json`,
+          url: `${testRealmURL}2.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}1.json`],
         },
         {
-          card_url: `${testRealmURL}3.json`,
+          url: `${testRealmURL}3.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}1.json`],
@@ -283,7 +329,7 @@ const tests = Object.freeze({
         [{ realm_url: testRealmURL, current_version: 1 }],
         [
           {
-            card_url: `${testRealmURL}1.json`,
+            url: `${testRealmURL}1.json`,
             realm_version: 1,
             realm_url: testRealmURL,
             deps: [],
@@ -315,7 +361,7 @@ const tests = Object.freeze({
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           pristine_doc: {
@@ -369,7 +415,7 @@ const tests = Object.freeze({
     });
 
     let versions = await adapter.execute(
-      `SELECT realm_version, pristine_doc, search_doc, deps, types FROM indexed_cards WHERE card_url = $1 ORDER BY realm_version`,
+      `SELECT realm_version, pristine_doc, search_doc, deps, types FROM boxel_index WHERE url = $1 ORDER BY realm_version`,
       {
         bind: [`${testRealmURL}1.json`],
         coerceTypes: {
@@ -443,7 +489,7 @@ const tests = Object.freeze({
     await batch.done();
 
     versions = await adapter.execute(
-      `SELECT realm_version, pristine_doc, search_doc, deps, types FROM indexed_cards WHERE card_url = $1 ORDER BY realm_version`,
+      `SELECT realm_version, pristine_doc, search_doc, deps, types FROM boxel_index WHERE url = $1 ORDER BY realm_version`,
       {
         bind: [`${testRealmURL}1.json`],
         coerceTypes: {
@@ -490,81 +536,6 @@ const tests = Object.freeze({
     );
   },
 
-  'can remove an index entry': async (assert, { indexer, adapter }) => {
-    await setupIndex(
-      indexer,
-      [{ realm_url: testRealmURL, current_version: 1 }],
-      [
-        {
-          card_url: `${testRealmURL}1.json`,
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [],
-        },
-      ],
-    );
-    let batch = await indexer.createBatch(new URL(testRealmURL));
-    await batch.invalidate(new URL(`${testRealmURL}1.json`));
-    await batch.deleteEntry(new URL(`${testRealmURL}1.json`));
-
-    let versions = await adapter.execute(
-      `SELECT realm_version, is_deleted FROM indexed_cards WHERE card_url = $1 ORDER BY realm_version`,
-      {
-        bind: [`${testRealmURL}1.json`],
-        coerceTypes: {
-          is_deleted: 'BOOLEAN',
-        },
-      },
-    );
-    assert.strictEqual(
-      versions.length,
-      2,
-      'correct number of versions exist for the entry before finishing the batch',
-    );
-
-    let [liveVersion, wipVersion] = versions;
-    assert.deepEqual(
-      liveVersion,
-      {
-        realm_version: 1,
-        is_deleted: null,
-      },
-      'live version of the doc has not changed',
-    );
-
-    assert.deepEqual(
-      wipVersion,
-      {
-        realm_version: 2,
-        is_deleted: true,
-      },
-      'WIP version of the doc exists',
-    );
-
-    await batch.done();
-    versions = await adapter.execute(
-      `SELECT realm_version, is_deleted FROM indexed_cards WHERE card_url = $1 ORDER BY realm_version`,
-      {
-        bind: [`${testRealmURL}1.json`],
-        coerceTypes: {
-          is_deleted: 'BOOLEAN',
-        },
-      },
-    );
-    assert.strictEqual(
-      versions.length,
-      2,
-      'correct number of versions exist for the entry after finishing the batch',
-    );
-
-    let [_, finalVersion] = versions;
-    assert.deepEqual(
-      finalVersion,
-      { realm_version: 2, is_deleted: true },
-      'final version of the doc exists',
-    );
-  },
-
   'can create a new generation of index entries': async (
     assert,
     { indexer, adapter },
@@ -574,22 +545,22 @@ const tests = Object.freeze({
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_version: 1,
           realm_url: testRealmURL,
         },
         {
-          card_url: `${testRealmURL}2.json`,
+          url: `${testRealmURL}2.json`,
           realm_version: 1,
           realm_url: testRealmURL,
         },
         {
-          card_url: `${testRealmURL}3.json`,
+          url: `${testRealmURL}3.json`,
           realm_version: 1,
           realm_url: testRealmURL,
         },
         {
-          card_url: `${testRealmURL2}A.json`,
+          url: `${testRealmURL2}A.json`,
           realm_version: 5,
           realm_url: testRealmURL2,
         },
@@ -600,50 +571,50 @@ const tests = Object.freeze({
     await batch.makeNewGeneration();
 
     let index = await adapter.execute(
-      'SELECT card_url, realm_url, realm_version, is_deleted FROM indexed_cards ORDER BY card_url COLLATE "POSIX", realm_version',
+      'SELECT url, realm_url, realm_version, is_deleted FROM boxel_index ORDER BY url COLLATE "POSIX", realm_version',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
       index,
       [
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_url: testRealmURL,
           realm_version: 1,
           is_deleted: null,
         },
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_url: testRealmURL,
           realm_version: 2,
           is_deleted: true,
         },
         {
-          card_url: `${testRealmURL}2.json`,
+          url: `${testRealmURL}2.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           is_deleted: null,
         },
         {
-          card_url: `${testRealmURL}2.json`,
+          url: `${testRealmURL}2.json`,
           realm_version: 2,
           realm_url: testRealmURL,
           is_deleted: true,
         },
         {
-          card_url: `${testRealmURL}3.json`,
+          url: `${testRealmURL}3.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           is_deleted: null,
         },
         {
-          card_url: `${testRealmURL}3.json`,
+          url: `${testRealmURL}3.json`,
           realm_version: 2,
           realm_url: testRealmURL,
           is_deleted: true,
         },
         {
-          card_url: `${testRealmURL2}A.json`,
+          url: `${testRealmURL2}A.json`,
           realm_version: 5,
           realm_url: testRealmURL2,
           is_deleted: null,
@@ -677,32 +648,32 @@ const tests = Object.freeze({
 
     await batch.done();
     index = await adapter.execute(
-      'SELECT card_url, realm_url, realm_version, is_deleted FROM indexed_cards ORDER BY card_url COLLATE "POSIX", realm_version',
+      'SELECT url, realm_url, realm_version, is_deleted FROM boxel_index ORDER BY url COLLATE "POSIX", realm_version',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
       index,
       [
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_url: testRealmURL,
           realm_version: 2,
           is_deleted: false,
         },
         {
-          card_url: `${testRealmURL}2.json`,
+          url: `${testRealmURL}2.json`,
           realm_version: 2,
           realm_url: testRealmURL,
           is_deleted: true,
         },
         {
-          card_url: `${testRealmURL}3.json`,
+          url: `${testRealmURL}3.json`,
           realm_version: 2,
           realm_url: testRealmURL,
           is_deleted: true,
         },
         {
-          card_url: `${testRealmURL2}A.json`,
+          url: `${testRealmURL2}A.json`,
           realm_version: 5,
           realm_url: testRealmURL2,
           is_deleted: null,
@@ -712,16 +683,46 @@ const tests = Object.freeze({
     );
   },
 
+  'can get an error doc': async (assert, { indexer }) => {
+    await setupIndex(indexer, [
+      {
+        url: `${testRealmURL}1.json`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        error_doc: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      },
+    ]);
+    let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
+    if (entry?.type === 'error') {
+      assert.deepEqual(entry, {
+        type: 'error',
+        error: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      });
+    } else {
+      assert.ok(false, `expected index entry to not be a card document`);
+    }
+  },
+
   'can get "production" index entry': async (assert, { indexer }) => {
     await setupIndex(
       indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           pristine_doc: {
+            id: `${testRealmURL}1`,
+            type: 'card',
             attributes: {
               name: 'Mango',
             },
@@ -760,31 +761,34 @@ const tests = Object.freeze({
       },
     });
 
-    let entry = await indexer.getIndexEntry(new URL(`${testRealmURL}1`));
-    assert.deepEqual(entry, {
-      card_url: `${testRealmURL}1.json`,
-      realm_version: 1,
-      realm_url: testRealmURL,
-      pristine_doc: {
-        attributes: {
-          name: 'Mango',
-        },
-        meta: {
-          adoptsFrom: {
-            module: `./person`,
-            name: 'Person',
+    let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
+    if (entry?.type === 'card') {
+      assert.deepEqual(entry, {
+        type: 'card',
+        realmVersion: 1,
+        realmURL: testRealmURL,
+        card: {
+          id: `${testRealmURL}1`,
+          type: 'card',
+          attributes: {
+            name: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `./person`,
+              name: 'Person',
+            },
           },
         },
-      },
-      is_deleted: null,
-      error_doc: null,
-      search_doc: null,
-      deps: null,
-      types: null,
-      indexed_at: null,
-      isolated_html: null,
-      embedded_html: null,
-    });
+        searchDoc: null,
+        deps: null,
+        types: null,
+        indexedAt: null,
+        isolatedHtml: null,
+      });
+    } else {
+      assert.ok(false, `expected index entry to not be an error document`);
+    }
   },
 
   'can get work in progress index entry': async (assert, { indexer }) => {
@@ -793,7 +797,7 @@ const tests = Object.freeze({
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           pristine_doc: {
@@ -835,36 +839,37 @@ const tests = Object.freeze({
       },
     });
 
-    let entry = await indexer.getIndexEntry(new URL(`${testRealmURL}1`), {
+    let entry = await indexer.getCard(new URL(`${testRealmURL}1`), {
       useWorkInProgressIndex: true,
     });
-    assert.ok(entry?.indexed_at, 'the indexed_at field was set');
-    delete (entry as Partial<IndexedCardsTable>)?.indexed_at;
-    assert.deepEqual(entry as Partial<IndexedCardsTable>, {
-      card_url: `${testRealmURL}1.json`,
-      realm_version: 2,
-      realm_url: testRealmURL,
-      pristine_doc: {
-        id: `${testRealmURL}1.json`,
+    if (entry?.type === 'card') {
+      assert.ok(entry?.indexedAt, 'the indexed_at field was set');
+      delete (entry as Partial<SearchCardResult>)?.indexedAt;
+      assert.deepEqual(entry as Omit<SearchCardResult, 'indexedAt'>, {
         type: 'card',
-        attributes: {
-          name: 'Van Gogh',
-        },
-        meta: {
-          adoptsFrom: {
-            module: `./person`,
-            name: 'Person',
+        realmVersion: 2,
+        realmURL: testRealmURL,
+        card: {
+          id: `${testRealmURL}1.json`,
+          type: 'card',
+          attributes: {
+            name: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `./person`,
+              name: 'Person',
+            },
           },
         },
-      },
-      is_deleted: false,
-      error_doc: null,
-      search_doc: { name: 'Van Gogh' },
-      deps: [],
-      types: [],
-      isolated_html: null,
-      embedded_html: null,
-    });
+        searchDoc: { name: 'Van Gogh' },
+        deps: [],
+        types: [],
+        isolatedHtml: null,
+      });
+    } else {
+      assert.ok(false, `expected index entry to not be an error document`);
+    }
   },
 
   'returns undefined when getting a deleted entry': async (
@@ -876,7 +881,7 @@ const tests = Object.freeze({
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
-          card_url: `${testRealmURL}1.json`,
+          url: `${testRealmURL}1.json`,
           realm_version: 1,
           realm_url: testRealmURL,
           is_deleted: true,
@@ -884,9 +889,80 @@ const tests = Object.freeze({
       ],
     );
 
-    let entry = await indexer.getIndexEntry(new URL(`${testRealmURL}1`));
+    let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
     assert.strictEqual(entry, undefined, 'deleted entries return undefined');
   },
+
+  'can perform invalidations for an instance with deps more than a thousand':
+    async (assert, { indexer, adapter }) => {
+      let indexRows: (Pick<BoxelIndexTable, 'url'> &
+        Partial<Omit<BoxelIndexTable, 'url' | 'pristine_doc'>>)[] = [];
+      for (let i = 1; i <= 1002; i++) {
+        indexRows.push({
+          url: `${testRealmURL}${i}.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [...(i <= 1 ? [] : [`${testRealmURL}1.json`])],
+        });
+      }
+      indexRows.sort((a, b) => a.url.localeCompare(b.url));
+      await setupIndex(
+        indexer,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        indexRows,
+      );
+
+      let batch = await indexer.createBatch(new URL(testRealmURL));
+      let invalidations = await batch.invalidate(
+        new URL(`${testRealmURL}1.json`),
+      );
+
+      assert.ok(invalidations.length > 1000, 'Can invalidate more than 1000');
+      assert.deepEqual(
+        invalidations.sort(),
+        indexRows.map((r) => r.url),
+      );
+
+      let originalEntries = (await adapter.execute(
+        'SELECT url, realm_url, is_deleted FROM boxel_index WHERE realm_version = 1 ORDER BY url COLLATE "POSIX"',
+        { coerceTypes: { is_deleted: 'BOOLEAN' } },
+      )) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[];
+      assert.deepEqual(
+        originalEntries,
+        indexRows.map((indexRow) => ({
+          url: indexRow.url,
+          realm_url: indexRow.realm_url,
+          is_deleted: null,
+        })) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[],
+        'the "production" version of the index entries are unchanged',
+      );
+      let invalidatedEntries = (await adapter.execute(
+        'SELECT url, realm_url, is_deleted FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+        { coerceTypes: { is_deleted: 'BOOLEAN' } },
+      )) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[];
+      assert.deepEqual(
+        invalidatedEntries,
+        indexRows.map((indexRow) => ({
+          url: indexRow.url,
+          realm_url: indexRow.realm_url,
+          is_deleted: true,
+        })) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[],
+        'the "work-in-progress" version of the index entries have been marked as deleted',
+      );
+      let realmVersions = await adapter.execute(
+        'select * from realm_versions ORDER BY realm_url COLLATE "POSIX"',
+      );
+      assert.deepEqual(
+        realmVersions,
+        [
+          {
+            realm_url: `${testRealmURL}`,
+            current_version: 1,
+          },
+        ],
+        'the "production" realm versions are correct',
+      );
+    },
 } as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);
 
 export default tests;
