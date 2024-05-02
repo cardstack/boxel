@@ -15,6 +15,7 @@ import {
   registerRealmUsers,
   selectCardFromCatalog,
   getRoomEvents,
+  setupTwoStackItems,
 } from '../helpers';
 import {
   synapseStart,
@@ -565,6 +566,208 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-view-all]').click();
     await expect(page.locator(`[data-test-view-all]`)).toHaveCount(0);
     await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(5);
+  });
+
+  test.describe('auto-attachment of cards in matrix room', () => {
+    test.beforeEach(async ({ page }) => {
+      await login(page, 'user1', 'pass');
+      await getRoomId(page);
+    });
+
+    test('displays auto-attached card (1 stack)', async ({ page }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+    });
+    test('manually attached card is not auto-attached', async ({ page }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await selectCardFromCatalog(page, testCard1);
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveCount(0);
+    });
+
+    test('manually attached card overwrites auto-attached card', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await selectCardFromCatalog(page, testCard1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveCount(0);
+    });
+    test('does not auto-attach index card', async ({ page }) => {
+      const indexCard = `${testHost}/index`;
+      await expect(
+        page.locator(`[data-test-stack-card="${indexCard}"]`),
+      ).toHaveCount(1); // The index card appears by default, we verify it exists here
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+    });
+    test('replaces auto-attached card when drilling down (1 stack)', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/jersey`;
+      const embeddedCard = `${testHost}/justin`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await expect(
+        page.locator(`[data-test-attached-card="${testCard1}"]`),
+      ).toHaveCount(1);
+      // await page
+      //   .locator(
+      //     `[data-test-overlay-card="${embeddedCard}"] .hover-button-embedded-card.preview`,
+      //   )
+      //   .click();
+      await page.locator('[data-test-card-format="embedded"]').click(); // click on embedded card
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await expect(
+        page.locator(`[data-test-attached-card="${embeddedCard}"]`),
+      ).toHaveCount(1);
+    });
+
+    test('auto-attached card will get auto-remove when closing a stack', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page
+        .locator(
+          `[data-test-stack-card='${testCard1}'] [data-test-close-button]`,
+        )
+        .click();
+
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+    });
+
+    test('can manually remove auto-attached card', async ({ page }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page
+        .locator(
+          `[data-test-attached-card='${testCard1}'] [data-test-remove-card-btn]`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+      await expect(
+        page.locator(
+          `[data-test-stack-card='${testCard1}'] [data-test-close-button]`,
+        ),
+      ).toHaveCount(1); //card still on stack
+    });
+
+    test('re-opening previously removed auto-attached card will auto attach again', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page
+        .locator(
+          `[data-test-attached-card='${testCard1}'] [data-test-remove-card-btn]`,
+        )
+        .click();
+      await page
+        .locator(
+          `[data-test-stack-card='${testCard1}'] [data-test-close-button]`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+    });
+
+    test('(2 stack) displays both top cards as auto-attached ', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/hassan`;
+      const testCard2 = `${testHost}/mango`;
+      await setupTwoStackItems(page, testCard1, testCard2);
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(2);
+      await expect(
+        page.locator(`[data-test-attached-card="${testCard1}"]`),
+      ).toHaveCount(1);
+      await expect(
+        page.locator(`[data-test-attached-card="${testCard2}"]`),
+      ).toHaveCount(1);
+      await page.locator(`[data-test-attached-card="${testCard1}"]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page.locator(`[data-test-attached-card="${testCard2}"]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+    });
+
+    test('(2 stack) if both top cards are the same, only one auto-attached pill', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await setupTwoStackItems(page, testCard1, testCard1);
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await expect(
+        page.locator(`[data-test-attached-card="${testCard1}"]`),
+      ).toHaveCount(1);
+      await page.locator(`[data-test-attached-card="${testCard1}"]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+    });
   });
 
   test('displays auto-attached card', async ({ page }) => {
