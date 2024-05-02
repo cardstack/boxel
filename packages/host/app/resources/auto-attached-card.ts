@@ -1,10 +1,12 @@
+import { action } from '@ember/object';
+
 import { Resource } from 'ember-resources';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { TrackedSet } from 'tracked-built-ins';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
-import { TrackedSet } from 'tracked-built-ins';
-import { action } from '@ember/object';
+
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {

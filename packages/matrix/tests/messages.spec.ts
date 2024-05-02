@@ -634,11 +634,6 @@ test.describe('Room messages', () => {
       await expect(
         page.locator(`[data-test-attached-card="${testCard1}"]`),
       ).toHaveCount(1);
-      // await page
-      //   .locator(
-      //     `[data-test-overlay-card="${embeddedCard}"] .hover-button-embedded-card.preview`,
-      //   )
-      //   .click();
       await page.locator('[data-test-card-format="embedded"]').click(); // click on embedded card
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
       await expect(

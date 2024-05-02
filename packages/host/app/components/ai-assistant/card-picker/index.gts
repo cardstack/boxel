@@ -5,6 +5,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
+import { TrackedSet } from 'tracked-built-ins';
+
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
 
@@ -14,7 +16,6 @@ import CardPill from '@cardstack/host/components/card-pill';
 import Pill from '@cardstack/host/components/pill';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { TrackedSet } from 'tracked-built-ins';
 
 interface Signature {
   Element: HTMLDivElement;

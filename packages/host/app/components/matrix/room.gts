@@ -8,6 +8,7 @@ import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
+import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { getRoom } from '@cardstack/host/resources/room';
 
@@ -26,8 +27,6 @@ import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 
 import RoomMessage from './room-message';
-
-import type { StackItem } from '@cardstack/host/lib/stack-item';
 
 interface Signature {
   Args: {
@@ -237,23 +236,18 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private isManuallyAttachedCard(card: CardDef) {
-    const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
-    return cardIndex != undefined && cardIndex !== -1;
-  }
-
-  @action
   private removeCard(card: CardDef) {
     if (this.isAutoAttachedCard(card)) {
       this.autoAttachmentResource.onCardRemoval(card);
-    }
-    if (this.isManuallyAttachedCard(card)) {
+    } else {
       const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
       if (cardIndex != undefined && cardIndex !== -1) {
-        this.autoAttachmentResource.onCardRemoval(
-          this.cardsToAttach[cardIndex],
-        );
-        this.cardsToAttach?.splice(cardIndex, 1);
+        if (this.cardsToAttach !== undefined) {
+          this.autoAttachmentResource.onCardRemoval(
+            this.cardsToAttach[cardIndex],
+          );
+          this.cardsToAttach.splice(cardIndex, 1);
+        }
       }
     }
     this.matrixService.cardsToSend.set(
@@ -321,8 +315,9 @@ export default class Room extends Component<Signature> {
     return (
       !this.doSendMessage.isRunning &&
       Boolean(
-        this.messageToSend || this.cardsToAttach?.length,
-        // this.autoAttachedCards.size !== 0, //querying before
+        this.messageToSend ||
+          this.cardsToAttach?.length ||
+          this.autoAttachedCards.size !== 0,
       ) &&
       !!this.room &&
       !this.room.messages.some((m) => this.isPendingMessage(m))
