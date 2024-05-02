@@ -14,14 +14,36 @@ export default class SQLiteAdapter implements DBAdapter {
   private _sqlite: typeof SQLiteWorker | undefined;
   private _dbId: string | undefined;
   private primaryKeys = new Map<string, string>();
+  private tables: string[] = [];
+  private start: Promise<void> | undefined;
+  #hasStarted = false;
+  #isClosed = false;
 
   // TODO: one difference that I'm seeing is that it looks like "json_each" is
   // actually similar to "json_each_text" in postgres. i think we might need to
   // transform the SQL we run to deal with this difference.-
 
-  constructor(private schemaSQL?: string) {}
+  constructor(private schemaSQL?: string) {
+    // This is for testing purposes so that we can debug the DB
+    (globalThis as any).__dbAdapter = this;
+  }
+
+  get isClosed() {
+    return this.#isClosed;
+  }
 
   async startClient() {
+    if (this.#hasStarted) {
+      return;
+    }
+    if (this.start) {
+      await this.start;
+      return;
+    }
+    let deferred = new Deferred<void>();
+    this.start = deferred.promise;
+
+    this.assertNotClosed();
     let ready = new Deferred<typeof SQLiteWorker>();
     const promisedWorker = sqlite3Worker1Promiser({
       onready: () => ready.fulfill(promisedWorker),
@@ -58,6 +80,11 @@ export default class SQLiteAdapter implements DBAdapter {
         throw e;
       }
 
+      this.tables = (
+        (await this.execute(
+          `SELECT name FROM pragma_table_list WHERE schema = 'main' AND name != 'sqlite_schema'`,
+        )) as { name: string }[]
+      ).map((r) => r.name);
       let pks = (await this.execute(
         `
         SELECT m.name AS table_name,
@@ -72,9 +99,12 @@ export default class SQLiteAdapter implements DBAdapter {
         this.primaryKeys.set(table_name, primary_keys);
       }
     }
+    this.#hasStarted = true;
+    deferred.fulfill();
   }
 
   async execute(sql: string, opts?: ExecuteOptions) {
+    this.assertNotClosed();
     sql = this.adjustSQL(sql);
     console.debug(
       `executing sql: ${sql}, with bindings: ${JSON.stringify(opts?.bind)}`,
@@ -83,7 +113,16 @@ export default class SQLiteAdapter implements DBAdapter {
   }
 
   async close() {
+    this.assertNotClosed();
     await this.sqlite('close', { dbId: this.dbId });
+    this.#isClosed = true;
+  }
+
+  async reset() {
+    this.assertNotClosed();
+    for (let table of this.tables) {
+      await this.execute(`DELETE FROM ${table};`);
+    }
   }
 
   private get sqlite() {
@@ -183,6 +222,14 @@ export default class SQLiteAdapter implements DBAdapter {
       .replace(/\.jsonb_value/g, '.value')
       .replace(/= 'null'::jsonb/g, 'IS NULL')
       .replace(/COLLATE "POSIX"/g, '');
+  }
+
+  private assertNotClosed() {
+    if (this.isClosed) {
+      throw new Error(
+        `Cannot perform operation, the db connection has been closed`,
+      );
+    }
   }
 }
 

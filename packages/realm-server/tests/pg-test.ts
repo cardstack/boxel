@@ -16,11 +16,13 @@ module('Postgres', function (hooks) {
         SELECT column_name
         FROM information_schema.columns
         WHERE table_schema = 'public'
-        AND table_name = 'indexed_cards'
+        AND table_name = 'boxel_index'
       `);
       let columns = result.map((r) => r.column_name);
       assert.deepEqual(columns, [
-        'card_url',
+        'url',
+        'file_alias',
+        'type',
         'realm_version',
         'realm_url',
         'pristine_doc',

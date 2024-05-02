@@ -27,14 +27,14 @@ const tests = Object.freeze({
     let { mango, vangogh, paper } = testCards;
     await setupIndex(indexer, [mango, vangogh, paper]);
 
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {},
       loader,
     );
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
     assert.deepEqual(
-      cards,
+      results,
       [
         await serializeCard(mango),
         await serializeCard(paper),
@@ -59,13 +59,64 @@ const tests = Object.freeze({
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
   },
 
+  'error docs are not included in results': async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh } = testCards;
+    await setupIndex(indexer, [
+      {
+        url: `${testRealmURL}1.json`,
+        type: 'error',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        pristine_doc: undefined,
+        types: [],
+        error_doc: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      },
+      {
+        url: `${testRealmURL}mango.json`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        pristine_doc: await serializeCard(mango),
+        types: await getTypes(mango),
+        error_doc: undefined,
+      },
+      {
+        url: `${testRealmURL}vangogh.json`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        pristine_doc: await serializeCard(vangogh),
+        types: await getTypes(vangogh),
+        error_doc: undefined,
+      },
+    ]);
+    let { cards: results, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {},
+      loader,
+    );
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(results),
+      [mango.id, vangogh.id],
+      'results are correct',
+    );
+  },
+
   'can filter by type': async (assert, { indexer, loader, testCards }) => {
     let { mango, vangogh, paper } = testCards;
 
     await setupIndex(indexer, [mango, vangogh, paper]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       { filter: { type } },
       loader,
@@ -73,7 +124,7 @@ const tests = Object.freeze({
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
-      getIds(cards),
+      getIds(results),
       [mango.id, vangogh.id],
       'results are correct',
     );
@@ -90,7 +141,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -102,7 +153,7 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+    assert.deepEqual(getIds(results), [mango.id], 'results are correct');
   },
 
   "can filter using 'eq' thru nested fields": async (
@@ -150,7 +201,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -163,7 +214,7 @@ const tests = Object.freeze({
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
-      getIds(cards),
+      getIds(results),
       [mango.id, vangogh.id],
       'results are correct',
     );
@@ -196,7 +247,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -208,7 +259,7 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
+    assert.deepEqual(getIds(results), [vangogh.id], 'results are correct');
   },
 
   "can use 'eq' to find 'null' values": async (
@@ -244,7 +295,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -256,7 +307,7 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [ringo.id], 'results are correct');
+    assert.deepEqual(getIds(results), [ringo.id], 'results are correct');
   },
 
   "can use 'eq' to match against number type": async (
@@ -286,7 +337,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -298,7 +349,7 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+    assert.deepEqual(getIds(results), [mango.id], 'results are correct');
   },
 
   "can use 'eq' to match against boolean type": async (
@@ -338,7 +389,7 @@ const tests = Object.freeze({
 
     let type = await personCardType(testCards);
     {
-      let { cards, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -354,10 +405,10 @@ const tests = Object.freeze({
         1,
         'the total results meta is correct',
       );
-      assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+      assert.deepEqual(getIds(results), [mango.id], 'results are correct');
     }
     {
-      let { cards, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -373,10 +424,10 @@ const tests = Object.freeze({
         1,
         'the total results meta is correct',
       );
-      assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
+      assert.deepEqual(getIds(results), [vangogh.id], 'results are correct');
     }
     {
-      let { cards, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -392,7 +443,7 @@ const tests = Object.freeze({
         1,
         'the total results meta is correct',
       );
-      assert.deepEqual(getIds(cards), [ringo.id], 'results are correct');
+      assert.deepEqual(getIds(results), [ringo.id], 'results are correct');
     }
   },
 
@@ -423,7 +474,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await simpleCatalogEntryType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -441,7 +492,7 @@ const tests = Object.freeze({
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.deepEqual(
-      getIds(cards),
+      getIds(results),
       [stringFieldEntry.id],
       'results are correct',
     );
@@ -476,7 +527,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await eventType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -490,7 +541,11 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [mangoBirthday.id], 'results are correct');
+    assert.deepEqual(
+      getIds(results),
+      [mangoBirthday.id],
+      'results are correct',
+    );
   },
 
   "can search with a 'not' filter": async (
@@ -526,7 +581,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -539,7 +594,7 @@ const tests = Object.freeze({
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
-      getIds(cards),
+      getIds(results),
       [ringo.id, vangogh.id],
       'results are correct',
     );
@@ -578,7 +633,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -591,7 +646,7 @@ const tests = Object.freeze({
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
-      getIds(cards),
+      getIds(results),
       [ringo.id, vangogh.id],
       'results are correct',
     );
@@ -630,7 +685,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -643,7 +698,7 @@ const tests = Object.freeze({
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
-      getIds(cards),
+      getIds(results),
       [mango.id, ringo.id],
       'results are correct',
     );
@@ -676,7 +731,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -688,7 +743,7 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+    assert.deepEqual(getIds(results), [mango.id], 'results are correct');
   },
 
   "can use a 'contains' filter to match 'null'": async (
@@ -716,7 +771,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -728,7 +783,7 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
+    assert.deepEqual(getIds(results), [vangogh.id], 'results are correct');
   },
 
   "can use 'every' to combine multiple filters": async (
@@ -776,7 +831,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -795,7 +850,7 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+    assert.deepEqual(getIds(results), [mango.id], 'results are correct');
   },
 
   "can use 'any' to combine multiple filters": async (
@@ -831,19 +886,12 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
           on: type,
-          any: [
-            {
-              eq: { name: 'Mango' },
-            },
-            {
-              not: { eq: { name: 'Ringo' } },
-            },
-          ],
+          any: [{ eq: { name: 'Mango' } }, { eq: { name: 'Van Gogh' } }],
         },
       },
       loader,
@@ -851,7 +899,7 @@ const tests = Object.freeze({
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
-      getIds(cards),
+      getIds(results),
       [mango.id, vangogh.id],
       'results are correct',
     );
@@ -975,7 +1023,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -987,7 +1035,7 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
+    assert.deepEqual(getIds(results), [vangogh.id], 'results are correct');
   },
 
   "it can filter on a nested field within a plural composite field using 'eq'":
@@ -1021,7 +1069,7 @@ const tests = Object.freeze({
 
       let type = await personCardType(testCards);
       {
-        let { cards, meta } = await indexer.search(
+        let { cards: results, meta } = await indexer.search(
           new URL(testRealmURL),
           {
             filter: {
@@ -1037,10 +1085,10 @@ const tests = Object.freeze({
           1,
           'the total results meta is correct',
         );
-        assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+        assert.deepEqual(getIds(results), [mango.id], 'results are correct');
       }
       {
-        let { cards, meta } = await indexer.search(
+        let { cards: results, meta } = await indexer.search(
           new URL(testRealmURL),
           {
             filter: {
@@ -1057,7 +1105,7 @@ const tests = Object.freeze({
           'the total results meta is correct',
         );
         assert.deepEqual(
-          getIds(cards),
+          getIds(results),
           [mango.id, vangogh.id],
           'results are correct',
         );
@@ -1091,7 +1139,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1103,7 +1151,7 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
+    assert.deepEqual(getIds(results), [vangogh.id], 'results are correct');
   },
 
   'it can match a leaf plural field nested in a plural composite field': async (
@@ -1139,7 +1187,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1151,7 +1199,7 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+    assert.deepEqual(getIds(results), [mango.id], 'results are correct');
   },
 
   'it can match thru a plural nested composite field that is field of a singular composite field':
@@ -1182,7 +1230,7 @@ const tests = Object.freeze({
       ]);
 
       let type = await personCardType(testCards);
-      let { cards, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -1198,7 +1246,7 @@ const tests = Object.freeze({
         1,
         'the total results meta is correct',
       );
-      assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
+      assert.deepEqual(getIds(results), [vangogh.id], 'results are correct');
     },
 
   "can return a single result for a card when there are multiple matches within a result's search doc":
@@ -1220,7 +1268,7 @@ const tests = Object.freeze({
       ]);
 
       let type = await personCardType(testCards);
-      let { cards, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           filter: {
@@ -1236,7 +1284,7 @@ const tests = Object.freeze({
         1,
         'the total results meta is correct',
       );
-      assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+      assert.deepEqual(getIds(results), [mango.id], 'results are correct');
     },
 
   'can perform query against WIP version of the index': async (
@@ -1272,7 +1320,7 @@ const tests = Object.freeze({
     );
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1291,7 +1339,7 @@ const tests = Object.freeze({
       'the realm version queried is correct',
     );
     assert.deepEqual(
-      getIds(cards),
+      getIds(results),
       [mango.id, vangogh.id],
       'results are correct',
     );
@@ -1326,7 +1374,7 @@ const tests = Object.freeze({
     );
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         filter: {
@@ -1343,7 +1391,7 @@ const tests = Object.freeze({
       1,
       'the realm version queried is correct',
     );
-    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+    assert.deepEqual(getIds(results), [mango.id], 'results are correct');
   },
 
   'can sort search results': async (assert, { indexer, loader, testCards }) => {
@@ -1376,7 +1424,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         sort: [
@@ -1391,7 +1439,7 @@ const tests = Object.freeze({
 
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
     assert.deepEqual(
-      getIds(cards),
+      getIds(results),
       [mango.id, ringo.id, vangogh.id],
       'results are correct',
     );
@@ -1427,7 +1475,7 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         sort: [
@@ -1443,10 +1491,96 @@ const tests = Object.freeze({
 
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
     assert.deepEqual(
-      getIds(cards),
+      getIds(results),
       [vangogh.id, ringo.id, mango.id],
       'results are correct',
     );
+  },
+
+  'nulls are sorted to the end of search results': async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: null,
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    {
+      let { cards: results, meta } = await indexer.search(
+        new URL(testRealmURL),
+        {
+          sort: [
+            {
+              on: type,
+              by: 'name',
+            },
+          ],
+        },
+        loader,
+      );
+
+      assert.strictEqual(
+        meta.page.total,
+        3,
+        'the total results meta is correct',
+      );
+      assert.deepEqual(
+        getIds(results),
+        [mango.id, vangogh.id, ringo.id],
+        'results are correct',
+      );
+    }
+    {
+      let { cards: results, meta } = await indexer.search(
+        new URL(testRealmURL),
+        {
+          sort: [
+            {
+              on: type,
+              by: 'name',
+              direction: 'desc',
+            },
+          ],
+        },
+        loader,
+      );
+
+      assert.strictEqual(
+        meta.page.total,
+        3,
+        'the total results meta is correct',
+      );
+      assert.deepEqual(
+        getIds(results),
+        [vangogh.id, mango.id, ringo.id],
+        'results are correct',
+      );
+    }
   },
 
   'can get paginated results that are stable during index mutations': async (
@@ -1467,7 +1601,7 @@ const tests = Object.freeze({
 
     // page 1
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexer.search(
+    let { cards: results, meta } = await indexer.search(
       new URL(testRealmURL),
       {
         page: { number: 0, size: 3 },
@@ -1491,7 +1625,7 @@ const tests = Object.freeze({
     } = meta;
     assert.strictEqual(total, 10, 'the total results meta is correct');
     assert.strictEqual(realmVersion, 1, 'the query realm version is correct');
-    assert.deepEqual(getIds(cards), [
+    assert.deepEqual(getIds(results), [
       `${testRealmURL}mango9`,
       `${testRealmURL}mango8`,
       `${testRealmURL}mango7`,
@@ -1499,7 +1633,7 @@ const tests = Object.freeze({
 
     {
       // page 2
-      let { cards, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           // providing the realm version received from the 1st page's meta keeps
@@ -1529,7 +1663,7 @@ const tests = Object.freeze({
         1,
         'the query realm version is correct',
       );
-      assert.deepEqual(getIds(cards), [
+      assert.deepEqual(getIds(results), [
         `${testRealmURL}mango6`,
         `${testRealmURL}mango5`,
         `${testRealmURL}mango4`,
@@ -1538,12 +1672,12 @@ const tests = Object.freeze({
 
     // mutate the index
     let batch = await indexer.createBatch(new URL(testRealmURL));
-    await batch.deleteEntry(new URL(`${testRealmURL}mango3.json`));
+    await batch.invalidate(new URL(`${testRealmURL}mango3.json`));
     await batch.done();
 
     {
       // page 3
-      let { cards, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           // providing the realm version received from the 1st page's meta keeps
@@ -1573,7 +1707,7 @@ const tests = Object.freeze({
         1,
         'the query realm version is correct',
       );
-      assert.deepEqual(getIds(cards), [
+      assert.deepEqual(getIds(results), [
         `${testRealmURL}mango3`, // this is actually removed in the current index
         `${testRealmURL}mango2`,
         `${testRealmURL}mango1`,
@@ -1583,7 +1717,7 @@ const tests = Object.freeze({
     // assert that a new search against the current index no longer contains the
     // removed card
     {
-      let { cards, meta } = await indexer.search(
+      let { cards: results, meta } = await indexer.search(
         new URL(testRealmURL),
         {
           sort: [
@@ -1606,7 +1740,7 @@ const tests = Object.freeze({
       } = meta;
       assert.strictEqual(total, 9, 'the total results meta is correct');
       assert.strictEqual(realmVersion, 2, 'the query realm version is correct');
-      assert.deepEqual(getIds(cards), [
+      assert.deepEqual(getIds(results), [
         `${testRealmURL}mango9`,
         `${testRealmURL}mango8`,
         `${testRealmURL}mango7`,
