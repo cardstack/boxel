@@ -16,16 +16,9 @@ interface Args {
 }
 
 /**
- * Manages the auto-attachment of cards within our stack consideration of user-actions of manually
+ * Manages the auto-attachment of cards within our stack in consideration of user-actions of manually
  * removing and attaching new cards in the ai panel
  */
-// when removing manually added, it will be removed and not still auto-attached
-// when drilling down, it will be auto attached (unless already manually added)
-// removing auto-attached removes it. unless its opened in another stack
-// manually adding a card will thats open or a stack will mean its no longer auto-attached
-// opening two cards in stack will auto-attach both
-// clearing multiple cards work too
-
 export class AutoAttachment extends Resource<Args> {
   cards: TrackedSet<CardDef> = new TrackedSet(); // auto-attached cards
   private lastStackedItems: StackItem[] = [];
