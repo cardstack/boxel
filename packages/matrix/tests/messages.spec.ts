@@ -586,6 +586,13 @@ test.describe('Room messages', () => {
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: testCard1, title: 'Hassan' }],
+        },
+      ]);
     });
     test('manually attached card is not auto-attached', async ({ page }) => {
       const testCard1 = `${testHost}/hassan`;
@@ -593,6 +600,13 @@ test.describe('Room messages', () => {
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
       await page.locator(`[data-test-attached-card]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveCount(0);
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: testCard1, title: 'Hassan' }],
+        },
+      ]);
     });
 
     test('manually attached card overwrites auto-attached card', async ({
@@ -612,6 +626,13 @@ test.describe('Room messages', () => {
       await selectCardFromCatalog(page, testCard1);
       await page.locator(`[data-test-attached-card]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveCount(0);
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: testCard1, title: 'Hassan' }],
+        },
+      ]);
     });
     test('does not auto-attach index card', async ({ page }) => {
       const indexCard = `${testHost}/index`;
@@ -639,6 +660,13 @@ test.describe('Room messages', () => {
       await expect(
         page.locator(`[data-test-attached-card="${embeddedCard}"]`),
       ).toHaveCount(1);
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: embeddedCard, title: 'Justin T' }],
+        },
+      ]);
     });
 
     test('auto-attached card will get auto-remove when closing a stack', async ({
@@ -683,9 +711,7 @@ test.describe('Room messages', () => {
         .click();
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
       await expect(
-        page.locator(
-          `[data-test-stack-card='${testCard1}'] [data-test-close-button]`,
-        ),
+        page.locator(`[data-test-stack-card='${testCard1}']`),
       ).toHaveCount(1); //card still on stack
     });
 
@@ -724,6 +750,13 @@ test.describe('Room messages', () => {
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: testCard1, title: 'Hassan' }],
+        },
+      ]);
     });
 
     test('(2 stack) displays both top cards as auto-attached ', async ({
@@ -747,6 +780,16 @@ test.describe('Room messages', () => {
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [
+            { id: testCard1, title: 'Hassan' },
+            { id: testCard2, title: 'Mango' },
+          ],
+        },
+      ]);
     });
 
     test('(2 stack) if both top cards are the same, only one auto-attached pill', async ({
@@ -762,6 +805,13 @@ test.describe('Room messages', () => {
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: testCard1, title: 'Hassan' }],
+        },
+      ]);
     });
   });
 
