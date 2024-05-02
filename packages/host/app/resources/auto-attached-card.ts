@@ -41,6 +41,10 @@ export class AutoAttachment extends Resource<Args> {
     }
     this.cards.clear();
     stackItems.forEach((item) => {
+      if (item === undefined) {
+        // TODO: another place where stackItems = [undefined]. Pls remove after finding root cause
+        return;
+      }
       if (!this.hasRealmURL(item) || this.isIndexCard(item)) {
         return;
       }
@@ -68,6 +72,9 @@ export class AutoAttachment extends Resource<Args> {
   }
 
   private hasRealmURL(stackItem: StackItem) {
+    // if (!('card' in stackItem )) {
+    //   return false;
+    // }
     let realmURL = stackItem.card[stackItem.api.realmURL];
     if (!realmURL) {
       return false;
