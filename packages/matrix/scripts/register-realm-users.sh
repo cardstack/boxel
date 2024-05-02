@@ -1,7 +1,7 @@
 #! /bin/sh
 
 COUNT=0
-MAX_ATTEMPTS=10
+MAX_ATTEMPTS=20
 
 until $(curl --output /dev/null --silent --head --fail http://localhost:8008); do
   printf '.'
