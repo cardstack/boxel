@@ -32,7 +32,12 @@
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
-      "include": ["../base/**", "../boxel-ui/addon/**"]
+      "include": [
+        "../drafts-realm/**",
+        "../published-realm/**",
+        "../base/**",
+        "../boxel-ui/addon/**"
+      ]
     }
   },
   "exclude": ["../base/__boxel/**/*"]
