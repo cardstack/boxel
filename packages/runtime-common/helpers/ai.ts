@@ -12,12 +12,33 @@ type ArraySchema = {
   uniqueItems?: boolean;
 };
 
-type ObjectSchema = {
+export type ObjectSchema = {
   type: 'object';
   properties: {
     [fieldName: string]: Schema;
   };
-  required?: string[];
+};
+
+export type RelationshipSchema = {
+  type: 'object';
+  properties: {
+    links: {
+      type: 'object';
+      properties: {
+        self: { type: 'null' | 'string' };
+      };
+      required: ['self'];
+    };
+  };
+  required: ['links'];
+};
+
+export type RelationshipsSchema = {
+  type: 'object';
+  properties: {
+    [fieldName: string]: RelationshipSchema;
+  };
+  required: string[]; // fieldName array;
 };
 
 type DateSchema = {
@@ -54,6 +75,7 @@ export type Schema =
   | EmptySchema
   | ArraySchema
   | ObjectSchema
+  | RelationshipSchema
   | DateSchema
   | NumberSchema
   | StringSchema
@@ -142,6 +164,7 @@ function generatePatchCallSpecification(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
+  relationshipsOnly = false,
 ): Schema | undefined {
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
@@ -150,42 +173,71 @@ function generatePatchCallSpecification(
 
   // If it's not a primitive, it contains other fields
   // and should be represented by an object
-  let schema: ObjectSchema = {
-    type: 'object',
-    properties: {},
-  };
+  let schema: ObjectSchema | RelationshipsSchema;
+  if (relationshipsOnly) {
+    schema = {
+      type: 'object',
+      properties: {},
+      required: [],
+    };
+  } else {
+    schema = {
+      type: 'object',
+      properties: {},
+    };
+  }
 
   const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
     usedFieldsOnly: false,
   });
 
-  //
   for (let [fieldName, field] of Object.entries(fields)) {
     // We're generating patch data, so computeds should be skipped
-    // as should any linksTo or linksToMany fields
+    // Currently also skipping linksToMany fields
     if (
       field.computeVia ||
       field.fieldType == 'linksTo' ||
       field.fieldType == 'linksToMany'
     ) {
-      continue;
+      if (relationshipsOnly && field.fieldType == 'linksTo') {
+        (schema as RelationshipsSchema).required.push(fieldName);
+        schema.properties[fieldName] = {
+          type: 'object',
+          properties: {
+            links: {
+              type: 'object',
+              properties: {
+                self: { type: 'null' || 'string' },
+              },
+              required: ['self'],
+            },
+          },
+          required: ['links'],
+        };
+      } else {
+        continue;
+      }
     }
-    const fieldSchema = generatePatchCallSpecification(
-      field.card,
-      cardApi,
-      mappings,
-    );
-    // This happens when we have no known schema for the field type
-    if (fieldSchema == undefined) {
-      continue;
-    }
-    if (field.fieldType == 'containsMany') {
-      schema.properties[fieldName] = {
-        type: 'array',
-        items: fieldSchema,
-      };
-    } else if (field.fieldType == 'contains') {
-      schema.properties[fieldName] = fieldSchema;
+
+    if (!relationshipsOnly) {
+      const fieldSchema = generatePatchCallSpecification(
+        field.card,
+        cardApi,
+        mappings,
+      );
+      // This happens when we have no known schema for the field type
+      if (fieldSchema == undefined) {
+        continue;
+      }
+
+      if (field.fieldType == 'containsMany') {
+        schema.properties[fieldName] = {
+          type: 'array',
+          items: fieldSchema,
+        };
+      } else if (field.fieldType == 'contains') {
+        schema.properties[fieldName] = fieldSchema;
+      }
     }
   }
   return schema;
@@ -215,6 +267,18 @@ export function generateCardPatchCallSpecification(
       properties: {},
     };
   } else {
-    return schema;
+    let relationships = generatePatchCallSpecification(
+      def,
+      cardApi,
+      mappings,
+      true,
+    );
+    if (!(relationships as RelationshipsSchema).required.length) {
+      return schema;
+    }
+    return {
+      attributes: schema,
+      relationships,
+    };
   }
 }

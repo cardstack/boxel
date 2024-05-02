@@ -100,7 +100,7 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
+  patchCard = task({ enqueue: true }, async (id: string, patch: any) => {
     let stackItems = this.state?.stacks.flat() ?? [];
     if (
       !stackItems.length ||
@@ -111,6 +111,7 @@ export default class OperatorModeStateService extends Service {
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
+        let { attributes, relationships } = patch;
         if (attributes && document.data.attributes) {
           for (let key of Object.keys(attributes)) {
             if (!(key in document.data.attributes)) {
@@ -123,6 +124,10 @@ export default class OperatorModeStateService extends Service {
         document.data.attributes = {
           ...document.data.attributes,
           ...attributes,
+        };
+        document.data.relationships = {
+          ...document.data.relationships,
+          ...relationships,
         };
 
         await this.cardService.patchCard(item.card, document, attributes);

@@ -424,6 +424,9 @@ export default class MatrixService extends Service {
           card: () => attachedOpenCard,
         });
         await realmSession.loaded;
+        if (!('attributes' in patchSpec)) {
+          patchSpec = { attributes: patchSpec };
+        }
         if (realmSession.canWrite) {
           functions.push({
             name: 'patchCard',
@@ -438,7 +441,7 @@ export default class MatrixService extends Service {
                   type: 'string',
                   const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
                 },
-                attributes: patchSpec,
+                ...patchSpec,
               },
               required: ['card_id', 'attributes', 'description'],
             },
