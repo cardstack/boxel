@@ -42,6 +42,7 @@ module('Integration | realm', function (hooks) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
   });
+
   setupServerSentEvents(hooks);
   setupLocalIndexing(hooks);
   setupCardLogs(
@@ -750,7 +751,10 @@ module('Integration | realm', function (hooks) {
 
     let { data: cards } = await searchIndex.search({
       filter: {
-        on: { module: `http://localhost:4202/test/person`, name: 'Person' },
+        on: {
+          module: `http://localhost:4202/test/person`,
+          name: 'Person',
+        },
         eq: { firstName: 'Van Gogh' },
       },
     });
@@ -940,7 +944,9 @@ module('Integration | realm', function (hooks) {
             id: `${testRealmURL}jackie`,
             attributes: { firstName: 'Jackie' },
             relationships: {
-              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
+              'pets.0': {
+                links: { self: `${testRealmURL}dir/van-gogh` },
+              },
               friend: { links: { self: `${testRealmURL}dir/friend` } },
             },
             meta: {
@@ -964,7 +970,9 @@ module('Integration | realm', function (hooks) {
             data: {
               type: 'card',
               relationships: {
-                'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
+                'pets.0': {
+                  links: { self: `${testRealmURL}dir/van-gogh` },
+                },
               },
               meta: {
                 adoptsFrom: {
@@ -1141,7 +1149,9 @@ module('Integration | realm', function (hooks) {
             id: `${testRealmURL}jackie`,
             attributes: { firstName: 'Jackie' },
             relationships: {
-              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
+              'pets.0': {
+                links: { self: `${testRealmURL}dir/van-gogh` },
+              },
               friend: { links: { self: `${testRealmURL}dir/friend` } },
             },
             meta: {
@@ -1165,7 +1175,9 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               relationships: {
                 'pets.0': { links: { self: `${testRealmURL}dir/mango` } },
-                'pets.1': { links: { self: `${testRealmURL}dir/van-gogh` } },
+                'pets.1': {
+                  links: { self: `${testRealmURL}dir/van-gogh` },
+                },
               },
               meta: {
                 adoptsFrom: {
@@ -1286,7 +1298,9 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               relationships: {
                 'pets.0': { links: { self: `${testRealmURL}dir/mango` } },
-                'pets.1': { links: { self: `${testRealmURL}dir/van-gogh` } },
+                'pets.1': {
+                  links: { self: `${testRealmURL}dir/van-gogh` },
+                },
               },
               meta: {
                 adoptsFrom: {
@@ -1373,7 +1387,9 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Jackie' },
             relationships: {
               'pets.0': { links: { self: `${testRealmURL}dir/mango` } },
-              'pets.1': { links: { self: `${testRealmURL}dir/van-gogh` } },
+              'pets.1': {
+                links: { self: `${testRealmURL}dir/van-gogh` },
+              },
             },
             meta: {
               adoptsFrom: {
@@ -1483,7 +1499,9 @@ module('Integration | realm', function (hooks) {
             id: `${testRealmURL}jackie`,
             attributes: { firstName: 'Jackie' },
             relationships: {
-              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
+              'pets.0': {
+                links: { self: `${testRealmURL}dir/van-gogh` },
+              },
               friend: { links: { self: `${testRealmURL}dir/friend` } },
             },
             meta: {
@@ -1544,7 +1562,10 @@ module('Integration | realm', function (hooks) {
         },
         friend: {
           links: { self: `./dir/different-friend` },
-          data: { id: `${testRealmURL}dir/different-friend`, type: 'card' },
+          data: {
+            id: `${testRealmURL}dir/different-friend`,
+            type: 'card',
+          },
         },
       },
       meta: {
@@ -1618,7 +1639,9 @@ module('Integration | realm', function (hooks) {
             id: `${testRealmURL}jackie`,
             attributes: { firstName: 'Jackie' },
             relationships: {
-              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
+              'pets.0': {
+                links: { self: `${testRealmURL}dir/van-gogh` },
+              },
               friend: { links: { self: `${testRealmURL}dir/friend` } },
             },
             meta: {
@@ -1680,7 +1703,10 @@ module('Integration | realm', function (hooks) {
         },
         friend: {
           links: { self: `./dir/different-friend` },
-          data: { id: `${testRealmURL}dir/different-friend`, type: 'card' },
+          data: {
+            id: `${testRealmURL}dir/different-friend`,
+            type: 'card',
+          },
         },
       },
       meta: {
