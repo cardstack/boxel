@@ -439,7 +439,7 @@ export default class CardService extends Service {
 
   getRealmURLFor(url: URL) {
     for (let realmURL of this.realmURLs) {
-      let path = new RealmPaths(realmURL);
+      let path = new RealmPaths(new URL(realmURL));
       if (path.inRealm(url)) {
         return new URL(realmURL);
       }

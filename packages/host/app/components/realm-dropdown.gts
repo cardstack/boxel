@@ -158,7 +158,7 @@ export default class RealmDropdown extends Component<Signature> {
     if (this.args.selectedRealmURL) {
       selectedRealm = this.realms.find(
         (realm) =>
-          realm.path === new RealmPaths(this.args.selectedRealmURL as URL).url,
+          realm.path === new RealmPaths(this.args.selectedRealmURL!).url,
       );
     }
     if (selectedRealm) {
