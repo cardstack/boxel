@@ -71,7 +71,7 @@ export default class LoaderService extends Service {
     }
 
     // We have to get public readable status
-    // before we instatiate realm resource and load realm token.
+    // before we instantiate realm resource and load realm token.
     // Because we don't want to do authentication
     // for GET request to publicly readable realm.
     let isPublicReadable = await this.realmInfoService.isPublicReadable(

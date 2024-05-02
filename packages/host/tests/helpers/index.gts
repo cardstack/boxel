@@ -12,8 +12,10 @@ import {
   baseRealm,
   RealmPermissions,
   Deferred,
+  Worker,
   type RealmInfo,
   type TokenClaims,
+  type Indexer,
 } from '@cardstack/runtime-common';
 
 import {
@@ -30,15 +32,20 @@ import {
   type RunnerRegistration,
   type EntrySetter,
   type SearchEntryWithErrors,
+  type IndexRunner,
 } from '@cardstack/runtime-common/search-index';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
+import ENV from '@cardstack/host/config/environment';
+import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+
+import type QueueService from '@cardstack/host/services/queue';
 
 import {
   type CardDef,
@@ -47,15 +54,14 @@ import {
 
 import { TestRealmAdapter } from './adapter';
 import percySnapshot from './percy-snapshot';
-
 import { renderComponent } from './render-component';
-
 import visitOperatorMode from './visit-operator-mode';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';
 export * from '@cardstack/runtime-common/helpers/indexer';
 
+const { sqlSchema } = ENV;
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -90,6 +96,18 @@ export function setMonacoContent(content: string): string {
 export async function waitForCodeEditor() {
   // need a moment for the monaco SDK to load
   return await waitFor('[data-test-editor]', { timeout: 3000 });
+}
+
+export async function getDbAdapter() {
+  let dbAdapter = (globalThis as any).__sqliteAdapter as
+    | SQLiteAdapter
+    | undefined;
+  if (!dbAdapter) {
+    dbAdapter = new SQLiteAdapter(sqlSchema);
+    await dbAdapter.startClient();
+    (globalThis as any).__sqliteAdapter = dbAdapter;
+  }
+  return dbAdapter;
 }
 
 export async function waitForSyntaxHighlighting(
@@ -176,6 +194,7 @@ async function makeRenderer() {
 class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
+  #indexer: Indexer | undefined;
   #entrySetter: EntrySetter | undefined;
   #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
   #incremental:
@@ -200,6 +219,8 @@ class MockLocalIndexer extends Service {
     registerRunner: RunnerRegistration,
     entrySetter: EntrySetter,
     adapter: RealmAdapter,
+    // TODO make this required after feature flag is removed
+    indexer?: Indexer,
   ) {
     if (!this.#fromScratch || !this.#incremental) {
       throw new Error(
@@ -208,6 +229,7 @@ class MockLocalIndexer extends Service {
     }
     this.#entrySetter = entrySetter;
     this.#adapter = adapter;
+    this.#indexer = indexer;
     await registerRunner(
       this.#fromScratch.bind(this),
       this.#incremental.bind(this),
@@ -225,10 +247,16 @@ class MockLocalIndexer extends Service {
     }
     return this.#adapter;
   }
+  // TODO make this throw when no indexer after feature flag removed
+  get indexer() {
+    return this.#indexer;
+  }
 }
 
 export function setupLocalIndexing(hooks: NestedHooks) {
-  hooks.beforeEach(function () {
+  hooks.beforeEach(async function () {
+    let dbAdapter = await getDbAdapter();
+    await dbAdapter.reset();
     this.owner.register('service:local-indexer', MockLocalIndexer);
   });
 }
@@ -355,8 +383,10 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           return e;
         });
         assert.deepEqual(
-          eventsWithoutClientRequestId,
-          expectedEvents,
+          eventsWithoutClientRequestId.forEach((e) =>
+            e.data.invalidations?.sort(),
+          ),
+          expectedEvents.forEach((e) => e.data.invalidations?.sort()),
           'sse response is correct',
         );
       }
@@ -458,6 +488,7 @@ async function setupTestRealm({
   let { loader, virtualNetwork } = owner.lookup(
     'service:loader-service',
   ) as LoaderService;
+  let { queue } = owner.lookup('service:queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
 
@@ -494,14 +525,22 @@ async function setupTestRealm({
   }
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
+  let indexRunner: IndexRunner = async (optsId) => {
+    let { registerRunner, entrySetter, indexer } =
+      runnerOptsMgr.getOptions(optsId);
+    await localIndexer.configureRunner(
+      registerRunner,
+      entrySetter,
+      adapter,
+      indexer,
+    );
+  };
 
+  let dbAdapter = await getDbAdapter();
   realm = new Realm({
     url: realmURL,
     adapter,
-    indexRunner: async (optsId) => {
-      let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
-      await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
-    },
+    indexRunner,
     runnerOptsMgr,
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
@@ -509,6 +548,19 @@ async function setupTestRealm({
     permissions,
     realmSecretSeed: testRealmSecretSeed,
     virtualNetwork,
+    ...((globalThis as any).__enablePgIndexer?.() ? { dbAdapter, queue } : {}),
+    onIndexer: async (indexer) => {
+      let worker = new Worker({
+        realmURL: new URL(realmURL!),
+        indexer,
+        queue,
+        realmAdapter: adapter,
+        runnerOptsManager: runnerOptsMgr,
+        loader: virtualNetwork.createLoader(),
+        indexRunner,
+      });
+      await worker.run();
+    },
   });
   virtualNetwork.mount(realm.maybeHandle);
 

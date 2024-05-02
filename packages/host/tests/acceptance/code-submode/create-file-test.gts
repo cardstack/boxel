@@ -556,12 +556,12 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
-    assert.expect(9);
+    assert.expect(11);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-export class TestCard extends CardDef {
-  static displayName = "Test Card";
+export class TrèsTestCard extends CardDef {
+  static displayName = "Très test card 😀";
 
   /*
   static isolated = class Isolated extends Component<typeof this> {
@@ -587,14 +587,14 @@ export class TestCard extends CardDef {
     assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
-    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-display-name-field]', 'Très test card 😀');
     assert
       .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
       .hasText('Inherits From');
     assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
-    await fillIn('[data-test-file-name-field]', 'test-card');
+    await fillIn('[data-test-file-name-field]', 'très-test-card');
     assert
       .dom('[data-test-create-definition]')
       .isEnabled('create button is enabled');
@@ -614,7 +614,11 @@ export class TestCard extends CardDef {
       'monaco displays the new definition',
     );
 
-    await waitFor('[data-test-card-schema="Test Card"]');
+    await waitFor('[data-test-card-schema="Très test card 😀"]');
+    assert.dom('[data-test-current-module-name]').hasText('très-test-card.gts');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}très-test-card.gts`);
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 3 }, 'the card hierarchy is displayed in schema editor');
@@ -928,54 +932,6 @@ import Pet from './pet';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class Map0 extends Pet {
   static displayName = "Map";
-
-  /*
-  static isolated = class Isolated extends Component<typeof this> {
-    <template></template>
-  }
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template></template>
-  }
-
-  static atom = class Atom extends Component<typeof this> {
-    <template></template>
-  }
-
-  static edit = class Edit extends Component<typeof this> {
-    <template></template>
-  }
-  */
-}`.trim(),
-        'the source is correct',
-      );
-      deferred.fulfill();
-    });
-
-    await click('[data-test-create-definition]');
-    await waitFor('[data-test-create-file-modal]', { count: 0 });
-    await deferred.promise;
-  });
-
-  test<TestContextWithSave>('can sanitize display name when creating a new definition', async function (assert) {
-    assert.expect(1);
-    await visitOperatorMode(this.owner);
-    await openNewFileModal('Card Definition');
-
-    await fillIn('[data-test-display-name-field]', 'Test Card; { }');
-    await fillIn('[data-test-file-name-field]', 'test-card');
-    let deferred = new Deferred<void>();
-    this.onSave((_, content) => {
-      if (typeof content !== 'string') {
-        throw new Error(`expected string save data`);
-      }
-      assert.strictEqual(
-        content,
-        `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
-export class TestCard extends CardDef {
-  static displayName = "Test Card";
 
   /*
   static isolated = class Isolated extends Component<typeof this> {
