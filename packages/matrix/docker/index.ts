@@ -71,7 +71,8 @@ export function dockerCreateNetwork(args: {
   return new Promise<void>((resolve, reject) => {
     childProcess.execFile(
       'docker',
-      ['network', 'create', '--subnet=172.20.0.0/16', args.networkName],
+      // FIXME remove deliberate typo
+      ['nextwork', 'create', '--subnet=172.20.0.0/16', args.networkName],
       { encoding: 'utf8' },
       (err, _stdout, stderr) => {
         if (err) {
