@@ -98,29 +98,34 @@ module('Integration | card-basics', function (hooks) {
 
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          {{@model.firstName}}
-          {{@model.title}}
+          {{@model.firstName.value}}
+          {{@model.title.value}}
           {{@model.number}}
           {{@model.ref.module}}
           {{@model.ref.name}}
           {{@model.boolean}}
           {{#each @model.languagesSpoken as |language|}}
-            {{language}}
+            {{language.value}}
           {{/each}}
         </template>
       };
     }
     let card = new Person();
-    card.firstName = 'arthur';
+    card.firstName = new StringField({ value: 'arthur' });
     card.number = 42;
     card.boolean = true;
-    card.languagesSpoken = ['english', 'japanese'];
+    card.languagesSpoken = [
+      new StringField({ value: 'english' }),
+      new StringField({ value: 'japanese' }),
+    ];
     card.ref = { module: `${testRealmURL}person`, name: 'Person' };
-    let readName: string = card.firstName;
+    let readName: string | undefined = card.firstName.value;
     assert.strictEqual(readName, 'arthur');
     let readNumber: number = card.number;
     assert.strictEqual(readNumber, 42);
-    let readLanguages: string[] = card.languagesSpoken;
+    let readLanguages: (string | undefined)[] = card.languagesSpoken.map(
+      (f) => f.value,
+    );
     assert.deepEqual(readLanguages, ['english', 'japanese']);
     let readRef: CodeRef = card.ref;
     assert.deepEqual(readRef, {
@@ -1775,7 +1780,10 @@ module('Integration | card-basics', function (hooks) {
     }
     loader.shimModule(`${testRealmURL}test-cards`, { Person });
 
-    let mango = new Person({ firstName: 'Mango', isCool: true });
+    let mango = new Person({
+      firstName: 'Mango',
+      isCool: true,
+    });
     let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),

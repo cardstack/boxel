@@ -60,6 +60,7 @@ export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
 export const deserialize = Symbol.for('cardstack-deserialize');
 export const newDeserialize = Symbol.for('cardstack-new-deserialize');
+export const cast = Symbol.for('cardstack-cast');
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldType = Symbol.for('cardstack-field-type');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
@@ -403,6 +404,9 @@ function getter<CardT extends BaseDefConstructor>(
       field.computeVia.constructor.name !== 'AsyncFunction'
     ) {
       value = field.computeVia.bind(instance)();
+      if (value != null) {
+        value = field.validate(instance, value);
+      }
       deserialized.set(field.name, value);
     } else if (
       !deserialized.has(field.name) &&
@@ -790,9 +794,13 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       // todo: primitives could implement a validation symbol
     } else {
       if (value != null && !(value instanceof this.card)) {
-        throw new Error(
-          `tried set ${value} as field ${this.name} but it is not an instance of ${this.card.name}`,
-        );
+        if (this.card[cast]) {
+          return this.card[cast](value);
+        } else {
+          throw new Error(
+            `tried set ${value} as field ${this.name} but it is not an instance of ${this.card.name}`,
+          );
+        }
       }
     }
     return value;
@@ -1571,7 +1579,6 @@ export const newPrimitive = function <T>(
   }
   let initialValue: T | undefined = initializer?.();
   const get = function (this: any): T | undefined {
-    console.log('newPrimitive get');
     let deserialized = getDataBucket(this);
     // this establishes that our field should rerender when cardTracking for this card changes
     cardTracking.get(this);
@@ -1580,7 +1587,7 @@ export const newPrimitive = function <T>(
       return deserialized.get(key);
     }
     if (initialValue) {
-      deserialized.set(field.name, initialValue);
+      deserialized.set(key, initialValue);
       let i = initialValue;
       initialValue = undefined;
       return i;
@@ -1594,7 +1601,7 @@ export const newPrimitive = function <T>(
       console.log('newPrimitive set', value);
       initialValue = undefined;
       let deserialized = getDataBucket(this);
-      deserialized.set(field.name, value);
+      deserialized.set(key, value);
       notifySubscribers(this, key, value);
       logger.log(recompute(this));
     },
@@ -1771,6 +1778,10 @@ export class BaseDef {
   }
 
   static [newDeserialize]?: (data: any) => Promise<Partial<ResourceObject>>;
+  static [cast]?: <T extends BaseDefConstructor>(
+    this: T,
+    data: any,
+  ) => BaseInstanceType<T>;
 
   static getComponent(card: BaseDef, field?: Field) {
     return getComponent(card, field);
@@ -2055,19 +2066,22 @@ export class StringField extends FieldDef {
       },
     };
   }
+  static [cast](this: any, value: string) {
+    return new this({ value: value });
+  }
 }
 
 // TODO: This is a simple workaround until the thumbnailURL is converted into an actual image field
 export class MaybeBase64Field extends StringField {
   static embedded = class Embedded extends Component<typeof this> {
     get isBase64() {
-      return this.args.model?.startsWith('data:');
+      return this.args.model.value?.startsWith('data:');
     }
     <template>
       {{#if this.isBase64}}
         <em>(Base64 encoded value)</em>
       {{else}}
-        {{@model}}
+        {{@model.value}}
       {{/if}}
     </template>
   };
@@ -2402,6 +2416,7 @@ function serializeCardResource(
 ): LooseCardResource {
   let adoptsFrom = identifyCard(model.constructor, opts?.maybeRelativeURL);
   if (!adoptsFrom) {
+    debugger;
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
   let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
@@ -3027,6 +3042,9 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
 
   //Only update the value of computed field.
   if (field?.computeVia) {
+    if (result != null) {
+      result = field.validate(instance, result);
+    }
     deserialized.set(fieldName as string, result);
   }
   return result;
