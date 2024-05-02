@@ -31,9 +31,6 @@ export class AutoAttachment extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     const { stackItems, attachedCards } = named;
-    if (stackItems.length === 0) {
-      return;
-    }
     if (this.stackItemsChanged(stackItems)) {
       // we must be sure to clear the lastRemovedCards state so cards can be auto-attached again
       // note: if two of the same cards are opened on separate stack, one will be auto-attached.
