@@ -4,6 +4,7 @@ import {
   baseRealm,
   LooseSingleCardDocument,
   Realm,
+  RealmPermissions,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -12,10 +13,13 @@ import {
   testRealm,
   setupCardLogs,
   setupBaseRealmServer,
+  runTestRealmServer,
+  runBaseRealmServer,
 } from './helpers';
 import isEqual from 'lodash/isEqual';
 import { shimExternals } from '../lib/externals';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
+import { Server } from 'http';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -554,6 +558,125 @@ module('indexing', function (hooks) {
         moduleErrors: 0,
       }),
       'indexed correct number of files',
+    );
+  });
+});
+
+module('permissioned realm', function (hooks) {
+  let testRealm1URL = new URL('http://127.0.0.1:4447/');
+  let testRealm2URL = new URL('http://127.0.0.1:4448/');
+
+  let virtualNetwork: VirtualNetwork;
+  let testRealm2: Realm;
+  let testRealmServer1: Server;
+  let testRealmServer2: Server;
+  let baseRealmServer: Server;
+
+  // We want 2 different realm users to test authorization between them - these names are selected because they are already available in the test environment (via register-realm-users.ts)
+  let matrixUser1 = 'test_realm';
+  let matrixUser2 = 'node-test_realm';
+
+  hooks.beforeEach(async function () {
+    virtualNetwork = new VirtualNetwork();
+    virtualNetwork.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/'),
+    );
+    baseRealmServer = await runBaseRealmServer(virtualNetwork);
+  });
+
+  hooks.afterEach(function () {
+    testRealmServer1.close();
+    testRealmServer2.close();
+    baseRealmServer.close();
+  });
+
+  // the realm which the other realm is trying to read from
+  let runProviderRealmServer = async (permissions: RealmPermissions) => {
+    ({ testRealmServer: testRealmServer1 } = await runTestRealmServer(
+      virtualNetwork,
+      dirSync().name,
+      {
+        'article.gts': `
+          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+          export class Article extends CardDef {
+            @field title = contains(StringCard);
+          }
+        `,
+      },
+      testRealm1URL,
+      permissions,
+      {
+        url: new URL(`http://localhost:8008`),
+        username: matrixUser1,
+        password: 'password',
+      },
+    ));
+  };
+
+  let runConsumerRealmServer = async (permissions: RealmPermissions) => {
+    ({ testRealmServer: testRealmServer2, testRealm: testRealm2 } =
+      await runTestRealmServer(
+        virtualNetwork,
+        dirSync().name,
+        {
+          'website.gts': `
+            import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+            import { Article } from "${testRealm1URL.href}article" // importing from another realm;
+            export class Website extends CardDef {
+              @field linkedArticle = linksTo(Article);
+            }`,
+          'website-1.json': {
+            data: {
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './website',
+                  name: 'Website',
+                },
+              },
+            },
+          },
+        },
+        testRealm2URL,
+        permissions,
+        {
+          url: new URL(`http://localhost:8008`),
+          username: matrixUser2,
+          password: 'password',
+        },
+      ));
+  };
+
+  test('has no module errors when trying to index a card from another realm when it has permission to read', async function (assert) {
+    await runProviderRealmServer({
+      '@node-test_realm:localhost': ['read'],
+    }); // Consumer is authorized to read from provider
+    await runConsumerRealmServer({ '*': ['read', 'write'] });
+
+    assert.ok(
+      isEqual(testRealm2.searchIndex.stats, {
+        instancesIndexed: 1,
+        instanceErrors: 0,
+        moduleErrors: 0,
+      }),
+      'has no module errors',
+    );
+  });
+
+  test('has a module error when trying to index a module from another realm when it has no permission to read', async function (assert) {
+    await runProviderRealmServer({ nobody: ['read', 'write'] }); // Consumer's matrix user not authorized to read from provider
+    await runConsumerRealmServer({ '*': ['read', 'write'] });
+
+    // Error during indexing will be: "Authorization error: Insufficient permissions to perform this action"
+    assert.ok(
+      isEqual(testRealm2.searchIndex.stats, {
+        instanceErrors: 1,
+        instancesIndexed: 0,
+        moduleErrors: 1,
+      }),
+      'has a module error',
     );
   });
 });

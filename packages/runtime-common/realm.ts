@@ -67,6 +67,7 @@ import typescriptPlugin from '@babel/plugin-transform-typescript';
 import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
 import {
   AuthenticationError,
+  AuthenticationErrorMessages,
   AuthorizationError,
   Method,
   RouteTable,
@@ -88,6 +89,8 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
+
+import { RealmAuthHandler } from './realm-auth-handler';
 
 export type RealmInfo = {
   name: string;
@@ -249,7 +252,19 @@ export class Realm {
   #operationQueue: Operation[] = [];
   #realmSecretSeed: string;
   #permissions: RealmPermissions;
+  #realmAuthHandler: RealmAuthHandler;
   #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
+  #publicEndpoints: RouteTable<true> = new Map([
+    [
+      SupportedMimeType.Session,
+      new Map([['POST' as Method, new Map([['/_session', true]])]]),
+    ],
+    [
+      SupportedMimeType.JSONAPI,
+      new Map([['GET' as Method, new Map([['/_readiness-check', true]])]]),
+    ],
+  ]);
+
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -314,8 +329,17 @@ export class Realm {
     let loader = virtualNetwork.createLoader();
     adapter.setLoader?.(loader);
 
+    this.#realmAuthHandler = new RealmAuthHandler(
+      this.#matrixClient,
+      loader,
+      url,
+    );
     this.loaderTemplate = loader;
+    this.loaderTemplate.registerURLHandler(
+      this.#realmAuthHandler.fetchWithAuth,
+    );
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
+
     this.#adapter = adapter;
     this.#onIndexer = onIndexer;
     this.#searchIndex = new SearchIndex({
@@ -377,12 +401,25 @@ export class Realm {
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
       )
-      .get('/.*', SupportedMimeType.HTML, this.respondWithHTML.bind(this));
+      .get('/.*', SupportedMimeType.HTML, this.respondWithHTML.bind(this))
+      .get(
+        '/_readiness-check',
+        SupportedMimeType.RealmInfo,
+        this.readinessCheck.bind(this),
+      );
 
     this.#deferStartup = opts?.deferStartUp ?? false;
     if (!opts?.deferStartUp) {
       this.#startedUp.fulfill((() => this.#startup())());
     }
+  }
+
+  private async readinessCheck() {
+    await this.ready;
+    return createResponse(this, null, {
+      headers: { 'content-type': 'text/html' },
+      status: 200,
+    });
   }
 
   // it's only necessary to call this when the realm is using a deferred startup
@@ -858,13 +895,13 @@ export class Realm {
       }
     } catch (e) {
       if (e instanceof AuthenticationError) {
-        return new Response(`Authentication error: ${e.message}`, {
+        return new Response(`${e.message}`, {
           status: 401,
         });
       }
 
       if (e instanceof AuthorizationError) {
-        return new Response(`Authorization error: ${e.message}`, {
+        return new Response(`${e.message}`, {
           status: 403,
         });
       }
@@ -1045,26 +1082,8 @@ export class Realm {
     request: Request,
     neededPermission: 'read' | 'write',
   ) {
-    let endpointsWithoutAuthNeeded: RouteTable<true> = new Map([
-      // authentication endpoint
-      [
-        SupportedMimeType.Session,
-        new Map([['POST' as Method, new Map([['/_session', true]])]]),
-      ],
-      // SSE endpoint
-      [
-        SupportedMimeType.EventStream,
-        new Map([['GET' as Method, new Map([['/_message', true]])]]),
-      ],
-      // serve a text/html endpoint
-      [
-        SupportedMimeType.HTML,
-        new Map([['GET' as Method, new Map([['/.*', true]])]]),
-      ],
-    ]);
-
     if (
-      lookupRouteTable(endpointsWithoutAuthNeeded, this.paths, request) ||
+      lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
       request.method === 'HEAD' ||
       // If the realm is public readable or writable, do not require a JWT
       (neededPermission === 'read' &&
@@ -1077,7 +1096,9 @@ export class Realm {
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
-      throw new AuthenticationError("Missing 'Authorization' header");
+      throw new AuthenticationError(
+        AuthenticationErrorMessages.MissingAuthHeader,
+      );
     }
     let tokenString = authorizationString.replace('Bearer ', ''); // Parse the JWT
 
@@ -1096,7 +1117,7 @@ export class Realm {
         JSON.stringify(permissions.sort())
       ) {
         throw new AuthenticationError(
-          'User permissions have been updated. Please refresh the token',
+          AuthenticationErrorMessages.PermissionMismatch,
         );
       }
 
@@ -1107,11 +1128,11 @@ export class Realm {
       }
     } catch (e) {
       if (e instanceof TokenExpiredError) {
-        throw new AuthenticationError('Token expired');
+        throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
 
       if (e instanceof JsonWebTokenError) {
-        throw new AuthenticationError('Invalid token');
+        throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
 
       throw e;
