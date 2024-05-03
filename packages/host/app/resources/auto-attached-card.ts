@@ -34,10 +34,6 @@ export class AutoAttachment extends Resource<Args> {
     }
     this.cards.clear();
     stackItems.forEach((item) => {
-      if (item === undefined) {
-        // TODO: another place where stackItems = [undefined]. Pls remove after finding root cause
-        return;
-      }
       if (!this.hasRealmURL(item) || this.isIndexCard(item)) {
         return;
       }
