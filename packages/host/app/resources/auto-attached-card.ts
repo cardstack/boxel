@@ -10,7 +10,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {
-    stackItems: StackItem[];
+    topMostStackItems: StackItem[];
     attachedCards: CardDef[] | undefined; // cards manually attached in ai panel
   };
 }
@@ -25,15 +25,15 @@ export class AutoAttachment extends Resource<Args> {
   private lastRemovedCards: Set<string> = new Set(); // internal state, changed from the outside. It tracks, everytime a card is removed in the ai-panel
 
   modify(_positional: never[], named: Args['named']) {
-    const { stackItems, attachedCards } = named;
-    if (this.stackItemsChanged(stackItems)) {
+    const { topMostStackItems, attachedCards } = named;
+    if (this.stackItemsChanged(topMostStackItems)) {
       // we must be sure to clear the lastRemovedCards state so cards can be auto-attached again
       // note: if two of the same cards are opened on separate stack, one will be auto-attached.
       // If one is removed from one of the stacks, the card WILL be auto-attached.
       this.lastRemovedCards.clear();
     }
     this.cards.clear();
-    stackItems.forEach((item) => {
+    topMostStackItems.forEach((item) => {
       if (!this.hasRealmURL(item) || this.isIndexCard(item)) {
         return;
       }
@@ -45,15 +45,15 @@ export class AutoAttachment extends Resource<Args> {
       }
       this.cards.add(item.card);
     });
-    this.lastStackedItems = stackItems;
+    this.lastStackedItems = topMostStackItems;
   }
 
-  stackItemsChanged(stackItems: StackItem[]) {
-    if (stackItems.length !== this.lastStackedItems.length) {
+  stackItemsChanged(topMostStackItems: StackItem[]) {
+    if (topMostStackItems.length !== this.lastStackedItems.length) {
       return true;
     }
-    for (let i = 0; i < stackItems.length; i++) {
-      if (stackItems[i].card.id !== this.lastStackedItems[i].card.id) {
+    for (let i = 0; i < topMostStackItems.length; i++) {
+      if (topMostStackItems[i].card.id !== this.lastStackedItems[i].card.id) {
         return true;
       }
     }
@@ -98,12 +98,12 @@ export class AutoAttachment extends Resource<Args> {
 
 export function getAutoAttachment(
   parent: object,
-  stackItems: () => StackItem[],
+  topMostStackItems: () => StackItem[],
   attachedCards: () => CardDef[] | undefined,
 ) {
   return AutoAttachment.from(parent, () => ({
     named: {
-      stackItems: stackItems(),
+      topMostStackItems: topMostStackItems(),
       attachedCards: attachedCards(),
     },
   }));
