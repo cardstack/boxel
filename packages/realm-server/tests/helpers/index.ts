@@ -8,6 +8,7 @@ import {
   RealmPermissions,
   VirtualNetwork,
   Worker,
+  type MatrixConfig,
   type Queue,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
@@ -23,7 +24,7 @@ export * from '@cardstack/runtime-common/helpers/indexer';
 
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
-const testMatrix = {
+const testMatrix: MatrixConfig = {
   url: new URL(`http://localhost:8008`),
   username: 'node-test_realm',
   password: 'password',
@@ -114,12 +115,14 @@ export async function createRealm({
   virtualNetwork,
   queue,
   dbAdapter,
+  matrixConfig = testMatrix,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
   realmURL?: string;
   permissions?: RealmPermissions;
   virtualNetwork: VirtualNetwork;
+  matrixConfig?: MatrixConfig;
   queue: Queue;
   dbAdapter: PgAdapter;
 }): Promise<Realm> {
@@ -146,7 +149,7 @@ export async function createRealm({
     runnerOptsMgr: manager,
     getIndexHTML: async () =>
       readFileSync(join(distPath, 'index.html')).toString(),
-    matrix: testMatrix,
+    matrix: matrixConfig,
     permissions,
     realmSecretSeed: "shhh! it's a secret",
     virtualNetwork,
@@ -214,6 +217,7 @@ export async function runTestRealmServer({
   virtualNetwork,
   queue,
   dbAdapter,
+  matrixConfig,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -222,6 +226,7 @@ export async function runTestRealmServer({
   virtualNetwork: VirtualNetwork;
   queue: Queue;
   dbAdapter: PgAdapter;
+  matrixConfig?: MatrixConfig;
 }) {
   let testRealm = await createRealm({
     dir,
@@ -229,6 +234,7 @@ export async function runTestRealmServer({
     realmURL: realmURL.href,
     permissions,
     virtualNetwork,
+    matrixConfig,
     queue,
     dbAdapter,
   });

@@ -124,7 +124,7 @@ export default class RealmInfoService extends Service {
 
   fetchAllKnownRealmInfos = restartableTask(async () => {
     let paths = this.cardService.realmURLs.map(
-      (path) => new RealmPaths(path).url,
+      (path) => new RealmPaths(new URL(path)).url,
     );
     let token = waiter.beginAsync();
     try {

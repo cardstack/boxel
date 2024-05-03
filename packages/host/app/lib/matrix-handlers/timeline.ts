@@ -25,7 +25,7 @@ export function onTimeline(context: Context) {
 
 export function onUpdateEventStatus(context: Context) {
   return (e: MatrixEvent, _room: Room, maybeOldEventId?: unknown) => {
-    if (typeof maybeOldEventId !== 'string' || !e.status) {
+    if (typeof maybeOldEventId !== 'string') {
       return;
     }
     context.timelineQueue.push({ event: e, oldEventId: maybeOldEventId });

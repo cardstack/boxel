@@ -1266,7 +1266,7 @@ module('Realm Server', function (hooks) {
 
         // verify file serialization is correct
         {
-          let localPath = new RealmPaths(testRealmURL).local(id);
+          let localPath = new RealmPaths(testRealmURL).local(new URL(id));
           let jsonFile = `${join(dir.name, localPath)}.json`;
           let doc = JSON.parse(
             readFileSync(jsonFile, { encoding: 'utf8' }),
