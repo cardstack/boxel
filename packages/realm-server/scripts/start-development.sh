@@ -1,15 +1,8 @@
 #! /bin/sh
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPTS_DIR/wait-for-pg.sh"
 
-check_postgres_ready() {
-  docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1
-}
-# remove this check after the feature flag is removed
-if [ -n "$PG_INDEXER" ]; then
-  while ! check_postgres_ready; do
-    printf '.'
-    sleep 1
-  done
-fi
+wait_for_postgres
 
 pnpm setup:base-assets
 NODE_ENV=development \
