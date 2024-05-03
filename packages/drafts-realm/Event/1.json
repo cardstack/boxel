@@ -4,20 +4,17 @@
     "attributes": {
       "subject": "Test Event",
       "location": "Google Meet",
-      "startDate": "2024-04-18",
-      "endDate": "2024-04-14",
-      "startTime": "12:30",
-      "endTime": "15:22",
+      "startDateTime": "2024-07-11T04:31:00.000Z",
+      "endDateTime": null,
       "eventType": "Call",
       "description": "This is a sample meeting created for testing purposes",
-      "isReminderSet": true,
-      "title": null,
+      "title": "salam",
       "thumbnailURL": null
     },
     "relationships": {
       "assignee": {
         "links": {
-          "self": "../Person/1"
+          "self": null
         }
       }
     },
