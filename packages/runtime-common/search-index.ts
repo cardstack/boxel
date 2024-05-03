@@ -201,7 +201,6 @@ export class SearchIndex {
     queue?: Queue;
   }) {
     if (this.isDbIndexerEnabled) {
-      console.debug(`search index is using db index`);
       if (!dbAdapter) {
         throw new Error(
           `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,

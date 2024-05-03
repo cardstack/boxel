@@ -58,16 +58,12 @@ module('Acceptance | interact submode tests', function (hooks) {
           res: null,
         });
       }
-      let { headers, method } = req;
-      let body = await req.text();
+
+      let body = await req.clone().text();
       let res = onFetch(req, body) ?? null;
-      // need to return a new request since we just read the body
+
       return {
-        req: new Request(req.url, {
-          method,
-          headers,
-          ...(body ? { body } : {}),
-        }),
+        req,
         res,
       };
     };
@@ -995,7 +991,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           realmPermissions = { [testRealmURL]: ['read'] };
         });
 
-        test('retrieve a new JWT if recevive 401 error', async function (assert) {
+        test('retrieve a new JWT on  401 error', async function (assert) {
           let token = createJWT(
             {
               user: '@testuser:staging',
