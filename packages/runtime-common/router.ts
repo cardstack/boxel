@@ -14,6 +14,7 @@ export enum SupportedMimeType {
   Session = 'application/json',
   EventStream = 'text/event-stream',
   HTML = 'text/html',
+  JSONAPI = 'application/vnd.api+json',
 }
 
 function isHTTPMethod(method: unknown): method is Method {

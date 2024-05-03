@@ -253,6 +253,17 @@ export class Realm {
   #permissions: RealmPermissions;
   #realmAuthHandler: RealmAuthHandler;
   #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
+  #publicEndpoints: RouteTable<true> = new Map([
+    [
+      SupportedMimeType.Session,
+      new Map([['POST' as Method, new Map([['/_session', true]])]]),
+    ],
+    [
+      SupportedMimeType.JSONAPI,
+      new Map([['GET' as Method, new Map([['/_readiness-check', true]])]]),
+    ],
+  ]);
+
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -1070,30 +1081,8 @@ export class Realm {
     request: Request,
     neededPermission: 'read' | 'write',
   ) {
-    if (this.isRequestToPublicEndpoint(request)) {
-      return;
-    }
-
-    let endpointsWithoutAuthNeeded: RouteTable<true> = new Map([
-      // authentication endpoint
-      [
-        SupportedMimeType.Session,
-        new Map([['POST' as Method, new Map([['/_session', true]])]]),
-      ],
-      // SSE endpoint
-      [
-        SupportedMimeType.EventStream,
-        new Map([['GET' as Method, new Map([['/_message', true]])]]),
-      ],
-      // serve a text/html endpoint
-      [
-        SupportedMimeType.HTML,
-        new Map([['GET' as Method, new Map([['/.*', true]])]]),
-      ],
-    ]);
-
     if (
-      lookupRouteTable(endpointsWithoutAuthNeeded, this.paths, request) ||
+      lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
       request.method === 'HEAD' ||
       // If the realm is public readable or writable, do not require a JWT
       (neededPermission === 'read' &&
@@ -1775,19 +1764,6 @@ export class Realm {
 
   get isPublicReadable(): boolean {
     return this.#permissions['*']?.includes('read') ?? false;
-  }
-
-  publicEndpoints = [
-    { path: '/_session', method: 'POST' },
-    { path: '/_readiness-check', method: 'GET' },
-  ];
-
-  private isRequestToPublicEndpoint(request: Request) {
-    return !!this.publicEndpoints.find(
-      (endpoint) =>
-        request.url.endsWith(endpoint.path) &&
-        request.method === endpoint.method,
-    );
   }
 }
 
