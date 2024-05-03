@@ -61,9 +61,6 @@ export class AutoAttachment extends Resource<Args> {
   }
 
   private hasRealmURL(stackItem: StackItem) {
-    // if (!('card' in stackItem )) {
-    //   return false;
-    // }
     let realmURL = stackItem.card[stackItem.api.realmURL];
     if (!realmURL) {
       return false;
