@@ -43,6 +43,7 @@ export * from './indexer';
 export * from './db';
 export * from './worker';
 export * from './stream';
+export * from './realm';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
@@ -58,7 +59,6 @@ export const isNode =
   Object.prototype.toString.call((globalThis as any).process) ===
   '[object process]';
 
-export { Realm } from './realm';
 export { SupportedMimeType } from './router';
 export { VirtualNetwork, type ResponseWithNodeStream } from './virtual-network';
 export { RealmAuthHandler } from './realm-auth-handler';

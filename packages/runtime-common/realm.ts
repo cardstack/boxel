@@ -178,6 +178,12 @@ interface UpdateEvent {
   id?: string;
 }
 
+export interface MatrixConfig {
+  url: URL;
+  username: string;
+  password: string;
+}
+
 export type UpdateEventData =
   | FileAddedEventData
   | FileUpdatedEventData
@@ -308,7 +314,7 @@ export class Realm {
       indexRunner: IndexRunner;
       runnerOptsMgr: RunnerOptionsManager;
       getIndexHTML: () => Promise<string>;
-      matrix: { url: URL; username: string; password: string };
+      matrix: MatrixConfig;
       permissions: RealmPermissions;
       realmSecretSeed: string;
       dbAdapter?: DBAdapter;
@@ -874,11 +880,13 @@ export class Realm {
     if (redirectResponse) {
       return redirectResponse;
     }
-
     try {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
-        await this.ready;
+        // allow any WIP index requests to query the index while it's building up
+        if (!request.headers.get('X-Boxel-Use-WIP-Index')) {
+          await this.ready;
+        }
 
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
           request.method,
