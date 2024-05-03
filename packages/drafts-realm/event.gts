@@ -10,6 +10,7 @@ import {
   contains,
   CardDef,
   linksTo,
+  StringField
 } from 'https://cardstack.com/base/card-api';
 import TextAreaCard from '../base/text-area';
 import { FieldContainer, BoxelSelect } from '@cardstack/boxel-ui/components';
@@ -168,6 +169,11 @@ export class Event extends CardDef {
   @field endDateTime = contains(DateTimeCard);
   @field eventType = contains(StringCard);
   @field description = contains(TextAreaCard);
+  @field title = contains(StringField, {
+    computeVia(this: Event) {
+      return this.subject;
+    },
+  });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
