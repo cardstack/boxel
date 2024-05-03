@@ -148,6 +148,12 @@ test.describe('Room messages', () => {
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await page.locator('[data-test-choose-card-btn]').click();
+    await page
+      .locator(
+        `[data-test-realm="Test Workspace A"] [data-test-show-more-cards]`,
+      )
+      .click();
+    await page.locator('[data-test-view-all]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
@@ -182,6 +188,11 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
     await page.locator('[data-test-choose-card-btn]').click();
+    await page
+      .locator(
+        `[data-test-realm="Test Workspace A"] [data-test-show-more-cards]`,
+      )
+      .click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
@@ -225,6 +236,13 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
     await page.locator('[data-test-choose-card-btn]').click();
+
+    await page
+      .locator(
+        `[data-test-realm="Test Workspace A"] [data-test-show-more-cards]`,
+      )
+      .click();
+    await page.locator('[data-test-view-all]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
