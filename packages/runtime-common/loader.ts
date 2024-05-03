@@ -424,6 +424,9 @@ export class Loader {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Request {
+    if (urlOrRequest instanceof Request && !init) {
+      return urlOrRequest;
+    }
     return new Request(urlOrRequest, init);
   }
 
