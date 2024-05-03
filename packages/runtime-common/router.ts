@@ -63,7 +63,7 @@ export function lookupRouteTable<T>(
   }
 
   // we construct a new URL within RealmPath.local() param that strips off the query string
-  let requestPath = `/${paths.local(request.url)}`;
+  let requestPath = `/${paths.local(new URL(request.url))}`;
   // add a leading and trailing slashes back so we can match on routing rules for directories.
   requestPath =
     request.url.endsWith('/') && requestPath !== '/'

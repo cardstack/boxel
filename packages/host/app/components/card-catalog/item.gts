@@ -93,7 +93,7 @@ export default class CardCatalogItem extends Component<Signature> {
     if (!path) {
       return undefined;
     }
-    let realmPath = new RealmPaths(this.cardService.defaultURL.href);
+    let realmPath = new RealmPaths(this.cardService.defaultURL);
 
     if (/^(\.\.\/)+/.test(path)) {
       let localPath = new URL(path, realmPath.url).pathname.replace(/^\//, '');

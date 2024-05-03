@@ -15,8 +15,10 @@ import {
   type CodeRef,
   type CardResource,
   type Expression,
-  type IndexedCardsTable,
+  type BoxelIndexTable,
   type RealmVersionsTable,
+  LooseCardResource,
+  trimExecutableExtension,
 } from '../index';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -73,22 +75,28 @@ export async function serializeCard(card: CardDef): Promise<CardResource> {
   return api.serializeCard(card).data as CardResource;
 }
 
+// we can relax the resource here since we will be asserting an ID when we
+// setup the index
+type RelaxedBoxelIndexTable = Omit<BoxelIndexTable, 'pristine_doc'> & {
+  pristine_doc: LooseCardResource;
+};
+
 export type TestIndexRow =
-  | (Pick<IndexedCardsTable, 'card_url'> &
-      Partial<Omit<IndexedCardsTable, 'card_url'>>)
+  | (Pick<RelaxedBoxelIndexTable, 'url'> &
+      Partial<Omit<RelaxedBoxelIndexTable, 'url'>>)
   | CardDef
   | {
       card: CardDef;
       data: Partial<
-        Omit<IndexedCardsTable, 'card_url' | 'pristine_doc' | 'types'>
+        Omit<RelaxedBoxelIndexTable, 'url' | 'pristine_doc' | 'types'>
       >;
     };
 
 // There are 3 ways to setup an index:
-// 1. provide the raw data for each row in the indexed_cards table
-// 2. provide a card instance for each row in the indexed_cards table
+// 1. provide the raw data for each row in the boxel_index table
+// 2. provide a card instance for each row in the boxel_index table
 // 3. provide an object { card, data } where the card instance is used for each
-//    row in the indexed_cards table, as well as any additional fields that you
+//    row in the boxel_index table, as well as any additional fields that you
 //    wish to set from the `data` object.
 //
 // the realm version table will default to version 1 of the testRealmURL if no
@@ -116,27 +124,34 @@ export async function setupIndex(
   }
   let indexedCardsExpressions = await Promise.all(
     indexRows.map(async (r) => {
-      let row: Pick<IndexedCardsTable, 'card_url'> &
-        Partial<Omit<IndexedCardsTable, 'card_url'>>;
-      if ('card_url' in r) {
+      let row: Pick<RelaxedBoxelIndexTable, 'url'> &
+        Partial<Omit<RelaxedBoxelIndexTable, 'url'>>;
+      if ('url' in r) {
         row = r;
       } else if ('card' in r) {
         row = {
-          card_url: r.card.id,
+          url: r.card.id,
+          type: 'instance',
           pristine_doc: await serializeCard(r.card),
           types: await getTypes(r.card),
           ...r.data,
         };
       } else {
         row = {
-          card_url: r.id,
+          url: r.id,
+          type: 'instance',
           pristine_doc: await serializeCard(r),
           types: await getTypes(r),
         };
       }
-      row.card_url = !row.card_url.endsWith('.json')
-        ? `${row.card_url}.json`
-        : row.card_url;
+      row.url =
+        row.type === 'instance'
+          ? !row.url.endsWith('.json')
+            ? `${row.url}.json`
+            : row.url
+          : row.url;
+      row.file_alias = trimExecutableExtension(new URL(row.url)).href;
+      row.type = row.type ?? 'instance';
       return asExpressions(
         { ...defaultIndexEntry, ...row },
         {
@@ -155,7 +170,7 @@ export async function setupIndex(
 
   if (indexedCardsExpressions.length > 0) {
     await client.query([
-      `INSERT INTO indexed_cards`,
+      `INSERT INTO boxel_index`,
       ...addExplicitParens(
         separatedByCommas(indexedCardsExpressions[0].nameExpressions),
       ),
