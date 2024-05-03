@@ -1598,7 +1598,6 @@ export const newPrimitive = function <T>(
   return {
     get,
     set(this: any, value: T) {
-      console.log('newPrimitive set', value);
       initialValue = undefined;
       let deserialized = getDataBucket(this);
       deserialized.set(key, value);
@@ -1942,7 +1941,7 @@ class DefaultAtomViewTemplate extends GlimmerComponent<{
 }> {
   get text() {
     return (
-      this.args.model.title?.trim() ||
+      this.args.model.title?.value?.trim?.() ||
       `Untitled ${this.args.model.constructor.displayName}`
     );
   }

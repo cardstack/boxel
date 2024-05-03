@@ -38,7 +38,7 @@ class Edit extends Component<typeof Base64ImageField> {
     let reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
-      this.args.model.base64 = reader.result as string;
+      this.args.model.base64 = new StringField({ value: reader.result });
     };
     reader.onerror = (error) => {
       this.error = String(error);
@@ -72,7 +72,7 @@ class Edit extends Component<typeof Base64ImageField> {
     <div class='base64-edit'>
       <FieldContainer @label='Image' data-test-field='base64'>
         <div class='image-field'>
-          {{#if @model.base64}}
+          {{#if @model.base64.value}}
             <div class='preview-wrapper'>
               {{#if this.needsHeight}}
                 <div data-test-height-warning class='height-warning'>
@@ -85,10 +85,10 @@ class Edit extends Component<typeof Base64ImageField> {
               {{else if this.usesActualSize}}
                 <img
                   data-test-actual-img
-                  src={{sanitizeBase64 @model.base64}}
+                  src={{sanitizeBase64 @model.base64.value}}
                   height={{@model.height}}
                   width={{@model.width}}
-                  alt={{@model.altText}}
+                  alt={{@model.altText.value}}
                 />
               {{else}}
                 <div
@@ -98,11 +98,11 @@ class Edit extends Component<typeof Base64ImageField> {
                   <div
                     data-test-contain-cover-img
                     role='img'
-                    aria-label={{@model.altText}}
+                    aria-label={{@model.altText.value}}
                     class='preview'
                     style={{cssForBase64
                       (hash
-                        base64=@model.base64
+                        base64=@model.base64.value
                         size=@model.size
                         height=@model.height
                         width=@model.width
@@ -257,14 +257,14 @@ function getConstrainedImageSize(maxHeight: number) {
       return Math.min(maxHeight, this.args.model.height || 0) || maxHeight;
     }
     <template>
-      {{#if @model.base64}}
+      {{#if @model.base64.value}}
         <div
           data-test-contain-cover-img
           role='img'
-          aria-label={{@model.altText}}
+          aria-label={{@model.altText.value}}
           class='preview'
           style={{cssForBase64
-            (hash base64=@model.base64 size='contain' height=this.height)
+            (hash base64=@model.base64.value size='contain' height=this.height)
           }}
         >
         </div>
@@ -294,24 +294,24 @@ export class Base64ImageField extends FieldDef {
       return this.args.model.size === 'actual' || this.args.model.size == null;
     }
     <template>
-      {{#if @model.base64}}
+      {{#if @model.base64.value}}
         {{#if this.usesActualSize}}
           <img
             data-test-actual-img
-            src={{sanitizeBase64 @model.base64}}
+            src={{sanitizeBase64 @model.base64.value}}
             height={{@model.height}}
             width={{@model.width}}
-            alt={{@model.altText}}
+            alt={{@model.altText.value}}
           />
         {{else}}
           <div
             data-test-contain-cover-img
             role='img'
-            aria-label={{@model.altText}}
+            aria-label={{@model.altText.value}}
             class='preview'
             style={{cssForBase64
               (hash
-                base64=@model.base64
+                base64=@model.base64.value
                 size=@model.size
                 height=@model.height
                 width=@model.width
@@ -333,7 +333,10 @@ export class Base64ImageField extends FieldDef {
 }
 
 // from "ember-css-url"
-function sanitizeBase64(base64: string) {
+function sanitizeBase64(base64: string | undefined) {
+  if (!base64) {
+    return undefined;
+  }
   // sanitize the base64 by making sure there are no unencoded double quotes
   let encodedURL = base64.replace(/"/g, '%22');
   let match = /^([^:]+):/.exec(encodedURL);

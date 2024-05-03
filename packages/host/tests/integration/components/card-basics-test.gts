@@ -155,9 +155,9 @@ module('Integration | card-basics', function (hooks) {
       @field languagesSpoken = containsMany(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          {{@model.title}}
+          {{@model.title.value}}
           by
-          {{@model.author.firstName}}
+          {{@model.author.firstName.value}}
           speaks
           {{#each @model.author.languagesSpoken as |language|}}
             {{language}}
@@ -331,7 +331,7 @@ module('Integration | card-basics', function (hooks) {
       @field additionalGuestCount = contains(NumberField);
       @field title = contains(StringField, {
         computeVia: function (this: Guest) {
-          return `${this.name} - ${this.additionalGuestCount}`;
+          return `${this.name.value} - ${this.additionalGuestCount}`;
         },
       });
       static embedded = class Embedded extends Component<typeof this> {
@@ -401,7 +401,7 @@ module('Integration | card-basics', function (hooks) {
       @field additionalGuestCount = contains(NumberField);
       @field title = contains(StringField, {
         computeVia: function (this: Guest) {
-          return this.name;
+          return this.name.value;
         },
       });
     }
@@ -1254,7 +1254,7 @@ module('Integration | card-basics', function (hooks) {
       @field age = contains(NumberField);
       @field title = contains(StringField, {
         computeVia: function (this: Person) {
-          return `${this.firstName} ${this.lastName}`;
+          return `${this.firstName.value} ${this.lastName.value}`;
         },
       });
     }
@@ -1270,8 +1270,8 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-compound-field-component]').doesNotContainText('10');
     assert.dom('[data-test-compound-field-format="atom"]').exists();
 
-    person.firstName = '';
-    person.lastName = '';
+    person.firstName = new StringField({ value: '' });
+    person.lastName = new StringField({ value: '' });
     await renderCard(loader, person, 'atom');
     assert
       .dom('[data-test-compound-field-component]')
@@ -1330,7 +1330,9 @@ module('Integration | card-basics', function (hooks) {
 
     let mango = new Person({
       firstName: 'Mango',
-      languagesSpoken: ['english', 'japanese'],
+      languagesSpoken: ['english', 'japanese'].map(
+        (s) => new StringField({ value: s }),
+      ),
     });
 
     let root = await renderCard(loader, mango, 'isolated');
@@ -1883,11 +1885,11 @@ module('Integration | card-basics', function (hooks) {
             <label data-test-field='author'>Author <@fields.author /></label>
           </fieldset>
 
-          <div data-test-output='title'>{{@model.title}}</div>
+          <div data-test-output='title'>{{@model.title.value}}</div>
           <div data-test-output='reviews'>{{@model.reviews}}</div>
           <div
             data-test-output='author.firstName'
-          >{{@model.author.firstName}}</div>
+          >{{@model.author.firstName.value}}</div>
         </template>
       };
     }
@@ -2029,7 +2031,7 @@ module('Integration | card-basics', function (hooks) {
           <@fields.posts />
           <ul data-test-output>
             {{#each @model.posts as |post|}}
-              <li>{{post.title}}</li>
+              <li>{{post.title.value}}</li>
             {{/each}}
           </ul>
         </template>
@@ -2165,7 +2167,7 @@ module('Integration | card-basics', function (hooks) {
       @field flag = contains(StringField);
       @field title = contains(StringField, {
         computeVia: function (this: Country) {
-          return `${this.flag} ${this.countryName}`;
+          return `${this.flag.value} ${this.countryName.value}`;
         },
       });
       static embedded = class Embedded extends Component<typeof this> {
