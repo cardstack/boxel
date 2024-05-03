@@ -92,18 +92,8 @@ export default class LoaderService extends Service {
     }
 
     request.headers.set('Authorization', realmSession.rawRealmToken);
-    let body;
-    if (request.body && !request.bodyUsed) {
-      body =
-        request.headers.get('content-type') === 'application/json'
-          ? JSON.stringify(await request.json())
-          : await request.text();
-    }
-    let response = await this.loader.fetch(request.url, {
-      method: request.method,
-      headers: new Headers(request.headers),
-      body,
-    });
+
+    let response = await this.loader.fetch(request);
 
     // We will get a 401 from the server in three cases. When the token is invalid,
     // the JWT is expired, and the permissions in the JWT payload differ
@@ -115,11 +105,7 @@ export default class LoaderService extends Service {
         return null;
       }
       request.headers.set('Authorization', realmSession.rawRealmToken);
-      response = await this.loader.fetch(request.url, {
-        method: request.method,
-        headers: new Headers(request.headers),
-        body,
-      });
+      response = await this.loader.fetch(request);
     }
 
     return response;
