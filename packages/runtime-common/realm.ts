@@ -30,6 +30,9 @@ import {
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
+  type DBAdapter,
+  type Queue,
+  type Indexer,
 } from './index';
 import merge from 'lodash/merge';
 import flatMap from 'lodash/flatMap';
@@ -249,10 +252,15 @@ export class Realm {
   #realmSecretSeed: string;
   #permissions: RealmPermissions;
   #realmAuthHandler: RealmAuthHandler;
+  #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
   readonly paths: RealmPaths;
+
+  private get isDbIndexerEnabled() {
+    return Boolean((globalThis as any).__enablePgIndexer?.());
+  }
 
   get url(): string {
     return this.paths.url;
@@ -270,13 +278,18 @@ export class Realm {
     {
       url,
       adapter,
+      // TODO remove this after feature flag is removed
       indexRunner,
+      // TODO remove this after feature flag is removed
       runnerOptsMgr,
       getIndexHTML,
       matrix,
       realmSecretSeed,
       permissions,
+      dbAdapter,
+      queue,
       virtualNetwork,
+      onIndexer,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -286,11 +299,14 @@ export class Realm {
       matrix: { url: URL; username: string; password: string };
       permissions: RealmPermissions;
       realmSecretSeed: string;
+      dbAdapter?: DBAdapter;
+      queue?: Queue;
       virtualNetwork: VirtualNetwork;
+      onIndexer?: (indexer: Indexer) => Promise<void>;
     },
     opts?: Options,
   ) {
-    this.paths = new RealmPaths(url);
+    this.paths = new RealmPaths(new URL(url));
     let { username, password, url: matrixURL } = matrix;
     this.#matrixClient = new MatrixClient(matrixURL, username, password);
     this.#permissions = permissions;
@@ -313,13 +329,16 @@ export class Realm {
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
 
     this.#adapter = adapter;
-    this.#searchIndex = new SearchIndex(
-      this,
-      this.#adapter.readdir.bind(this.#adapter),
-      this.readFileAsText.bind(this),
-      indexRunner,
-      runnerOptsMgr,
-    );
+    this.#onIndexer = onIndexer;
+    this.#searchIndex = new SearchIndex({
+      realm: this,
+      readdir: this.#adapter.readdir.bind(this.#adapter),
+      readFileAsText: this.readFileAsText.bind(this),
+      runner: indexRunner,
+      runnerOptsManager: runnerOptsMgr,
+      dbAdapter,
+      queue,
+    });
 
     this.#router = new Router(new URL(url))
       .post('/', SupportedMimeType.CardJson, this.createCard.bind(this))
@@ -445,16 +464,20 @@ export class Realm {
     contents: string,
     clientRequestId?: string | null,
   ): Promise<WriteResult> {
-    let deferred = new Deferred<WriteResult>();
-    this.#operationQueue.push({
-      type: 'write',
-      path,
-      contents,
-      clientRequestId,
-      deferred,
-    });
-    this.drainOperations();
-    return deferred.promise;
+    if (this.isDbIndexerEnabled) {
+      return await this.#write(path, contents, clientRequestId);
+    } else {
+      let deferred = new Deferred<WriteResult>();
+      this.#operationQueue.push({
+        type: 'write',
+        path,
+        contents,
+        clientRequestId,
+        deferred,
+      });
+      this.drainOperations();
+      return deferred.promise;
+    }
   }
 
   async #write(
@@ -532,8 +555,12 @@ export class Realm {
       path,
       deferred,
     });
-    this.drainOperations();
-    return deferred.promise;
+    if (this.isDbIndexerEnabled) {
+      return await this.#delete(path);
+    } else {
+      this.drainOperations();
+      return deferred.promise;
+    }
   }
 
   async #delete(path: LocalPath): Promise<void> {
@@ -583,7 +610,7 @@ export class Realm {
   async #startup() {
     await Promise.resolve();
     await this.#warmUpCache();
-    await this.#searchIndex.run();
+    await this.#searchIndex.run(this.#onIndexer);
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
   }
 
@@ -1122,7 +1149,7 @@ export class Realm {
 
   private async upsertCardSource(request: Request): Promise<Response> {
     let { lastModified } = await this.write(
-      this.paths.local(request.url),
+      this.paths.local(new URL(request.url)),
       await request.text(),
     );
     return createResponse(this, null, {
@@ -1134,7 +1161,7 @@ export class Realm {
   private async getCardSourceOrRedirect(
     request: Request,
   ): Promise<ResponseWithNodeStream> {
-    let localName = this.paths.local(request.url);
+    let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
       '.json',
@@ -1153,7 +1180,7 @@ export class Realm {
   }
 
   private async removeCardSource(request: Request): Promise<Response> {
-    let localName = this.paths.local(request.url);
+    let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
       '.json',
@@ -1310,7 +1337,7 @@ export class Realm {
   }
 
   private async patchCard(request: Request): Promise<Response> {
-    let localPath = this.paths.local(request.url);
+    let localPath = this.paths.local(new URL(request.url));
     if (localPath.startsWith('_')) {
       return methodNotAllowed(this, request);
     }
@@ -1401,13 +1428,20 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
-    let localPath = this.paths.local(request.url);
+    let localPath = this.paths.local(new URL(request.url));
     if (localPath === '') {
       localPath = 'index';
     }
 
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
+    );
+
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
-    let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
+    let maybeError = await this.#searchIndex.card(url, {
+      loadLinks: true,
+      useWorkInProgressIndex,
+    });
     if (!maybeError) {
       return notFound(this, request);
     }
@@ -1497,7 +1531,7 @@ export class Realm {
 
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
-    let localPath: LocalPath = this.paths.local(request.url);
+    let localPath: LocalPath = this.paths.local(new URL(request.url));
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
     if (!entries) {
@@ -1556,9 +1590,12 @@ export class Realm {
   }
 
   private async search(request: Request): Promise<Response> {
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
+    );
     let doc = await this.#searchIndex.search(
       parseQueryString(new URL(request.url).search.slice(1)),
-      { loadLinks: true },
+      { loadLinks: true, useWorkInProgressIndex },
     );
     return createResponse(this, JSON.stringify(doc, null, 2), {
       headers: { 'content-type': SupportedMimeType.CardJson },

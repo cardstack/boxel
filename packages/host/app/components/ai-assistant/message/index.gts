@@ -215,6 +215,8 @@ export default class AiAssistantMessage extends Component<Signature> {
       .is-error .content .cards > :deep(.card-pill .boxel-card-container) {
         background: var(--boxel-200);
         color: var(--boxel-500);
+        max-height: 300px;
+        overflow: auto;
       }
 
       .content > :deep(.patch-message) {

@@ -217,7 +217,7 @@ module('indexing', function (hooks) {
       new URL(`${testRealm}mango`),
     );
     assert.strictEqual(
-      trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
+      trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
       cleanWhiteSpace(`<h1> Mango </h1>`),
       'pre-rendered html is correct',
     );
@@ -240,12 +240,12 @@ module('indexing', function (hooks) {
       let entry = await realm.searchIndex.card(new URL(`${testRealm}vangogh`));
       if (entry?.type === 'doc') {
         assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-        let { html } =
+        let { isolatedHtml } =
           (await realm.searchIndex.searchEntry(
             new URL(`${testRealm}vangogh`),
           )) ?? {};
         assert.strictEqual(
-          trimCardContainer(stripScopedCSSAttributes(html!)),
+          trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
           cleanWhiteSpace(`<h1> Van Gogh </h1>`),
         );
       } else {

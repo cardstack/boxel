@@ -58,16 +58,12 @@ module('Acceptance | interact submode tests', function (hooks) {
           res: null,
         });
       }
-      let { headers, method } = req;
-      let body = await req.text();
+
+      let body = await req.clone().text();
       let res = onFetch(req, body) ?? null;
-      // need to return a new request since we just read the body
+
       return {
-        req: new Request(req.url, {
-          method,
-          headers,
-          ...(body ? { body } : {}),
-        }),
+        req,
         res,
       };
     };
@@ -526,32 +522,31 @@ module('Acceptance | interact submode tests', function (hooks) {
         openDirs: {},
       });
 
-      await waitFor('[data-test-pet="Mango"]');
-      await click('[data-test-pet="Mango"]');
-
-      // The stack should be reflected in the URL
-      assert.strictEqual(
-        currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({
-            stacks: [
-              [
-                {
-                  id: `${testRealmURL}Person/fadhlan`,
-                  format: 'isolated',
-                },
-                {
-                  id: `${testRealmURL}Pet/mango`,
-                  format: 'isolated',
-                },
-              ],
+      await waitFor('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
+      await click('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
+      let expectedURL = `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        stringify({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Person/fadhlan`,
+                format: 'isolated',
+              },
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'isolated',
+              },
             ],
-            submode: 'interact',
-            fileView: 'inspector',
-            openDirs: {},
-          })!,
-        )}`,
-      );
+          ],
+          submode: 'interact',
+          fileView: 'inspector',
+          openDirs: {},
+        })!,
+      )}`;
+      // There is some additional thing we are waiting on here, probably the
+      // card to load in the card resource, but I'm not too sure so using waitUntil instead
+      await waitUntil(() => currentURL() === expectedURL);
+      assert.strictEqual(currentURL(), expectedURL);
 
       // Click Edit on the top card
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
@@ -637,6 +632,13 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+      // There is some additional thing we are waiting on here, probably the
+      // card to load in the card resource, but I'm not too sure so using waitUntil instead
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-operator-mode-stack="0"]')
+          ?.textContent?.includes('Mango'),
+      );
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -682,6 +684,13 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Close the only card in the 1st stack
       await click(
         '[data-test-operator-mode-stack="0"] [data-test-close-button]',
+      );
+      // There is some additional thing we are waiting on here, probably the
+      // card to load in the card resource, but I'm not too sure so using waitUntil instead
+      await waitUntil(
+        () =>
+          document.querySelectorAll('[data-test-operator-mode-stack]')
+            .length === 1,
       );
 
       // There is now only 1 stack and the buttons to add a neighbor stack are back
@@ -742,6 +751,14 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Click on a recent search
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+      // There is some additional thing we are waiting on here, probably the
+      // card to load in the card resource, but I'm not too sure so using waitUntil instead
+      await waitUntil(
+        () =>
+          document.querySelectorAll(
+            '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
+          ).length === 0,
+      );
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -974,7 +991,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           realmPermissions = { [testRealmURL]: ['read'] };
         });
 
-        test('retrieve a new JWT if recevive 401 error', async function (assert) {
+        test('retrieve a new JWT on  401 error', async function (assert) {
           let token = createJWT(
             {
               user: '@testuser:staging',
@@ -1047,6 +1064,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('the edit button respects the realm permissions of the cards in differing realms', async function (assert) {
+      assert.expect(10);
       await visitOperatorMode({
         stacks: [
           [
@@ -1287,6 +1305,16 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Click on a recent search
       await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
+      // There is some additional thing we are waiting on here, probably the
+      // card to load in the card resource, but I'm not too sure so using waitUntil instead
+      await waitUntil(() =>
+        document
+          .querySelector(
+            '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
+          )
+          ?.textContent?.includes('Fadhlan'),
+      );
+
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });

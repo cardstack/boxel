@@ -207,31 +207,6 @@ function isUrlLike(moduleIdentifier: string): boolean {
   );
 }
 
-async function getContentOfReadableStream(
-  requestBody: ReadableStream<Uint8Array> | null,
-): Promise<Uint8Array | null> {
-  if (requestBody) {
-    let isPending = true;
-    let arrayLength = 0;
-    let unit8Arrays = [];
-    let reader = requestBody.getReader();
-    do {
-      let readableResults = await reader.read();
-
-      if (readableResults.value) {
-        arrayLength += readableResults.value.length;
-        unit8Arrays.push(readableResults.value);
-      }
-
-      isPending = !readableResults.done;
-    } while (isPending);
-    let mergedArray = new Uint8Array(arrayLength);
-    unit8Arrays.forEach((array) => mergedArray.set(array));
-    return mergedArray;
-  }
-  return null;
-}
-
 async function buildRequest(url: string, originalRequest: Request) {
   if (url === originalRequest.url) {
     return originalRequest;
@@ -240,7 +215,7 @@ async function buildRequest(url: string, originalRequest: Request) {
   // To reach the goal of creating a new Request but with a different url it is
   // usually enough to create a new Request object with the new url and the same
   // properties as the original request, but there are issues when the body is
-  // a ReadableStream - browser reports the following error:
+  // a ReadableStream - Chrome browser, for example, reports the following error:
   // "TypeError: Failed to construct 'Request': The `duplex` member must be
   // specified for a request with a streaming body." Even adding the `duplex`
   // property will not fix the issue - the browser request being made to
@@ -250,9 +225,11 @@ async function buildRequest(url: string, originalRequest: Request) {
   // the new url and the body as a Uint8Array.
 
   let body = null;
-  if (originalRequest.body) {
-    body = await getContentOfReadableStream(originalRequest.clone().body);
+
+  if (['POST', 'PUT', 'PATCH'].includes(originalRequest.method)) {
+    body = await originalRequest.clone().text();
   }
+
   return new Request(url, {
     method: originalRequest.method,
     headers: originalRequest.headers,

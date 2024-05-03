@@ -5,6 +5,7 @@ import {
   type Expression,
   expressionToSql,
   logger,
+  Deferred,
 } from '@cardstack/runtime-common';
 import migrate from 'node-pg-migrate';
 import { join } from 'path';
@@ -22,6 +23,9 @@ function config() {
 
 export default class PgAdapter implements DBAdapter {
   private pool: Pool;
+  private start: Promise<void> | undefined;
+  #hasStarted = false;
+  #isClosed = false;
 
   constructor() {
     let { user, host, database, password, port } = config();
@@ -33,10 +37,29 @@ export default class PgAdapter implements DBAdapter {
       password,
       port,
     });
+    // This is for testing purposes so that we can debug the DB
+    (globalThis as any).__dbAdapter = this;
+  }
+
+  get isClosed() {
+    return this.#isClosed;
   }
 
   async startClient() {
+    if (this.#hasStarted) {
+      return;
+    }
+    if (this.start) {
+      await this.start;
+      return;
+    }
+    let deferred = new Deferred<void>();
+    this.start = deferred.promise;
+
     await this.migrateDb();
+
+    this.#hasStarted = true;
+    deferred.fulfill();
   }
 
   async close() {
