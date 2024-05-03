@@ -3,6 +3,12 @@ import { Realm, RealmPaths, logger } from './index';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
+export enum AuthenticationErrorMessages {
+  MissingAuthHeader = 'Missing Authorization header',
+  PermissionMismatch = "User permissions in the JWT payload do not match the server's permissions", // Could happen if the user's permissions were changed during the life of the JWT
+  TokenExpired = 'Token expired',
+  TokenInvalid = 'Token invalid',
+}
 
 type Handler = (request: Request) => Promise<Response>;
 export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';

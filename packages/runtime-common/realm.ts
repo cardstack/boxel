@@ -67,6 +67,7 @@ import typescriptPlugin from '@babel/plugin-transform-typescript';
 import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
 import {
   AuthenticationError,
+  AuthenticationErrorMessages,
   AuthorizationError,
   Method,
   RouteTable,
@@ -894,13 +895,13 @@ export class Realm {
       }
     } catch (e) {
       if (e instanceof AuthenticationError) {
-        return new Response(`Authentication error: ${e.message}`, {
+        return new Response(`${e.message}`, {
           status: 401,
         });
       }
 
       if (e instanceof AuthorizationError) {
-        return new Response(`Authorization error: ${e.message}`, {
+        return new Response(`${e.message}`, {
           status: 403,
         });
       }
@@ -1095,7 +1096,9 @@ export class Realm {
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
-      throw new AuthenticationError("Missing 'Authorization' header");
+      throw new AuthenticationError(
+        AuthenticationErrorMessages.MissingAuthHeader,
+      );
     }
     let tokenString = authorizationString.replace('Bearer ', ''); // Parse the JWT
 
@@ -1114,7 +1117,7 @@ export class Realm {
         JSON.stringify(permissions.sort())
       ) {
         throw new AuthenticationError(
-          'User permissions have been updated. Please refresh the token',
+          AuthenticationErrorMessages.PermissionMismatch,
         );
       }
 
@@ -1125,11 +1128,11 @@ export class Realm {
       }
     } catch (e) {
       if (e instanceof TokenExpiredError) {
-        throw new AuthenticationError('Token expired');
+        throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
 
       if (e instanceof JsonWebTokenError) {
-        throw new AuthenticationError('Invalid token');
+        throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
 
       throw e;
