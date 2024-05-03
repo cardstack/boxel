@@ -85,12 +85,14 @@ module('Integration | operator-mode', function (hooks) {
 
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
+    localStorage.removeItem('recent-files');
     localStorage.removeItem('aiPanelCurrentRoomId');
     localStorage.removeItem('aiPanelNewSessionId');
   });
 
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
+    localStorage.removeItem('recent-files');
     localStorage.removeItem('aiPanelCurrentRoomId');
     localStorage.removeItem('aiPanelNewSessionId');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
