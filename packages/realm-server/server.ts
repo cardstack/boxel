@@ -23,12 +23,13 @@ import {
   fullRequestURL,
 } from './middleware';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
-import { monacoMiddleware } from './middleware/monaco';
 import './lib/externals';
 import { nodeStreamToText } from './stream';
 import mime from 'mime-types';
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
+
+const monacoFont = 'ade705761eb7e702770d.ttf';
 
 interface Options {
   assetsURL?: URL;
@@ -52,6 +53,16 @@ export class RealmServer {
     virtualNetwork.mount(async (request: Request) => {
       let url = new URL(request.url);
       let path = url.pathname;
+      let isMonacoFont = path === `/${monacoFont}`;
+
+      if (isMonacoFont) {
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: this.assetsURL.href + `/${monacoFont}`,
+          },
+        }) as ResponseWithNodeStream;
+      }
 
       if (path.startsWith(`/${assetsDir}`)) {
         let redirectURL = new URL(
@@ -116,7 +127,6 @@ export class RealmServer {
 
         await next();
       })
-      .use(monacoMiddleware(this.assetsURL))
       .use(convertAcceptHeaderQueryParam)
       .use(httpBasicAuth)
       .use(router.routes())
