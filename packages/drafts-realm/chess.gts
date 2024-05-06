@@ -14,10 +14,24 @@ import {
 
 import Modifier from 'ember-modifier';
 
-class ChessboardModifier extends Modifier {
-  modify(element: HTMLElement) {
+type ChessboardModifierSignature = {
+  Args: {
+    Named: {
+      fen?: string;
+    };
+  };
+  Element: HTMLElement;
+};
+
+class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    { fen }: ChessboardModifierSignature['Args']['Named'],
+  ) {
+    debugger;
     new Chessboard(element, {
-      position: FEN.start,
+      position: fen ?? FEN.start,
       style: {
         pieces: {
           file: 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/assets/pieces/standard.svg',
@@ -28,12 +42,14 @@ class ChessboardModifier extends Modifier {
 }
 
 interface Signature {
-  Args: {};
+  Args: {
+    fen?: string;
+  };
 }
 
 class ChessboardComponent extends Component<Signature> {
   <template>
-    <div id='board' {{ChessboardModifier}}>
+    <div id='board' {{ChessboardModifier fen=this.args.fen}}>
     </div>
     <style>
       #board {
@@ -423,18 +439,21 @@ class ChessboardComponent extends Component<Signature> {
 export class Chess extends CardDef {
   static displayName = 'Chess';
 
+  @field fen = contains(StringCard);
+
+  get fenString() {
+    return this.fen;
+  }
+
   static isolated = class Isolated extends BoxelComponent<typeof this> {
     get display() {
-      return lodash.kebabCase('MagnusCarlsen');
+      return lodash.kebabCase('BobbyFischer');
     }
-
-    @field firstName = contains(StringCard);
-
     <template>
       <div>
         {{this.display}}
       </div>
-      <ChessboardComponent />
+      <ChessboardComponent @fen={{this.args.model.fen}} />
     </template>
   };
 }
