@@ -441,17 +441,19 @@ export class Chess extends CardDef {
 
   @field fen = contains(StringCard);
 
-  get fenString() {
-    return this.fen;
-  }
+  @field title = contains(StringCard, {
+    computeVia: function (this: Chess) {
+      return lodash.kebabCase('BobbyFischer');
+    },
+  });
 
   static isolated = class Isolated extends BoxelComponent<typeof this> {
-    get display() {
-      return lodash.kebabCase('BobbyFischer');
+    get fenString() {
+      return this.args.model.fen;
     }
     <template>
       <div>
-        {{this.display}}
+        {{this.fenString}}
       </div>
       <ChessboardComponent @fen={{this.args.model.fen}} />
     </template>
