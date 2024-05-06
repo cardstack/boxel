@@ -346,13 +346,6 @@ Common issues are:
         return;
       }
 
-      let initialMessage = await sendMessage(
-        client,
-        room,
-        'Thinking...',
-        undefined,
-      );
-
       let initial = await client.roomInitialSync(room!.roomId, 1000);
       let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
       log.info(eventList);
@@ -371,6 +364,13 @@ Common issues are:
           aiBotUserId,
         );
       }
+
+      let initialMessage = await sendMessage(
+        client,
+        room,
+        'Thinking...',
+        undefined,
+      );
 
       let unsent = 0;
       let sentCommands = 0;
