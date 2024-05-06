@@ -24,20 +24,25 @@ type ChessboardModifierSignature = {
 };
 
 class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
+  chessboard: any;
   modify(
     element: HTMLElement,
     _positional: [],
     { fen }: ChessboardModifierSignature['Args']['Named'],
   ) {
     debugger;
-    new Chessboard(element, {
-      position: fen ?? FEN.start,
-      style: {
-        pieces: {
-          file: 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/assets/pieces/standard.svg',
+    if (this.chessboard == undefined) {
+      this.chessboard = new Chessboard(element, {
+        position: fen ?? FEN.start,
+        style: {
+          pieces: {
+            file: 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/assets/pieces/standard.svg',
+          },
         },
-      },
-    });
+      });
+    } else {
+      this.chessboard.setPosition(fen);
+    }
   }
 }
 
