@@ -424,22 +424,30 @@ export class Loader {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Request {
-    if (urlOrRequest instanceof Request) {
+    if (urlOrRequest instanceof Request && !init) {
       return urlOrRequest;
-    } else {
-      return new Request(urlOrRequest, init);
     }
+    return new Request(urlOrRequest, init);
   }
 
   async fetch(
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
+    let mergedHeaders: HeadersInit =
+      urlOrRequest instanceof Request
+        ? headersFromRequest(urlOrRequest)
+        : init?.headers ?? {};
     try {
       for (let handler of this.urlHandlers) {
         let request = this.asRequest(urlOrRequest, init);
+        mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
+        setHeaders(request, mergedHeaders);
 
         let result = await handler(request);
+        // the handler is allowed to mutate the headers, so we merge any updated headers
+        mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
+
         if (result) {
           return await followRedirections(
             request,
@@ -458,13 +466,16 @@ export class Loader {
         return response;
       }
 
-      return await this.fetchImplementation(this.asRequest(urlOrRequest, init));
+      let request = this.asRequest(urlOrRequest, init);
+      setHeaders(request, mergedHeaders);
+      return await this.fetchImplementation(request);
     } catch (err: any) {
       let url =
         urlOrRequest instanceof Request
           ? urlOrRequest.url
           : String(urlOrRequest);
       this.log.error(`fetch failed for ${url}`, err);
+
       return new Response(`fetch failed for ${url}`, {
         status: 500,
         statusText: err.message,
@@ -739,6 +750,20 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
+}
+
+function headersFromRequest(request: Request): HeadersInit {
+  let headers: HeadersInit = {};
+  for (let [header, value] of request.headers.entries()) {
+    headers[header] = value;
+  }
+  return headers;
+}
+
+function setHeaders(request: Request, headers: HeadersInit) {
+  for (let [header, value] of Object.entries(headers)) {
+    request.headers.set(header, value);
+  }
 }
 
 async function maybeHandleScopedCSSRequest(req: Request) {

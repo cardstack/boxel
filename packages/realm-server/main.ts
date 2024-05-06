@@ -1,5 +1,10 @@
 import './setup-logger'; // This should be first
-import { Realm, VirtualNetwork, logger } from '@cardstack/runtime-common';
+import {
+  Realm,
+  Worker,
+  VirtualNetwork,
+  logger,
+} from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
@@ -11,6 +16,8 @@ import { shimExternals } from './lib/externals';
 import { type RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common/realm';
 import * as Sentry from '@sentry/node';
 import { setErrorReporter } from '@cardstack/runtime-common/realm';
+import PgAdapter from './pg-adapter';
+import PgQueue from './pg-queue';
 
 import fs from 'fs';
 
@@ -155,6 +162,14 @@ if (distURL) {
 
 (async () => {
   let realms: Realm[] = [];
+  let dbAdapter: PgAdapter | undefined;
+  let queue: PgQueue | undefined;
+  if (process.env.PG_INDEXER) {
+    dbAdapter = new PgAdapter();
+    queue = new PgQueue(dbAdapter);
+    await dbAdapter.startClient();
+  }
+
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
     let manager = new RunnerOptionsManager();
@@ -179,11 +194,11 @@ if (distURL) {
     );
 
     let realmPermissions = getRealmPermissions(url);
-
+    let realmAdapter = new NodeAdapter(resolve(String(path)));
     let realm = new Realm(
       {
         url,
-        adapter: new NodeAdapter(resolve(String(path))),
+        adapter: realmAdapter,
         indexRunner: getRunner,
         runnerOptsMgr: manager,
         getIndexHTML: async () =>
@@ -192,6 +207,23 @@ if (distURL) {
         realmSecretSeed: REALM_SECRET_SEED,
         permissions: realmPermissions.users,
         virtualNetwork,
+        // TODO remove this guard after the feature flag is removed
+        ...(dbAdapter && queue ? { dbAdapter, queue } : {}),
+        onIndexer: async (indexer) => {
+          // TODO remove this guard after the feature flag is removed
+          if (queue) {
+            let worker = new Worker({
+              realmURL: new URL(url),
+              indexer,
+              queue,
+              realmAdapter,
+              runnerOptsManager: manager,
+              loader: virtualNetwork.createLoader(),
+              indexRunner: getRunner,
+            });
+            await worker.run();
+          }
+        },
       },
       {
         deferStartUp: true,

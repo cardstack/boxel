@@ -55,16 +55,11 @@ module('Integration | card-copy', function (hooks) {
       if (!onFetch) {
         return Promise.resolve({ req, res: null });
       }
-      let { headers, method } = req;
-      let body = await req.text();
+
+      let body = await req.clone().text();
       onFetch(req, body);
-      // need to return a new request since we just read the body
       return {
-        req: new Request(req.url, {
-          method,
-          headers,
-          ...(body ? { body } : {}),
-        }),
+        req,
         res: null,
       };
     };

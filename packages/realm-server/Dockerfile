@@ -21,4 +21,5 @@ RUN CI=1 pnpm install -r --offline
 
 EXPOSE 3000
 
+# TODO need to set the PG ENV vars to connect to the DB in the command below
 CMD pnpm --filter "./packages/realm-server" $realm_server_script

@@ -1,5 +1,4 @@
-// TODO make sure to remove this from @cardstack/runtime-common deps
-import ignore, { Ignore } from 'ignore';
+import ignore, { type Ignore } from 'ignore';
 
 import flatMap from 'lodash/flatMap';
 import isEqual from 'lodash/isEqual';
@@ -16,6 +15,8 @@ import {
   trimExecutableExtension,
   hasExecutableExtension,
   SupportedMimeType,
+  Indexer,
+  Batch,
   type CodeRef,
   type RealmInfo,
 } from '@cardstack/runtime-common';
@@ -32,6 +33,7 @@ import {
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
   CardError,
+  isCardError,
   serializableError,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
@@ -64,20 +66,26 @@ type TypesWithErrors =
   | { type: 'error'; error: SerializedError };
 
 export class CurrentRun {
+  #invalidations: string[] = [];
   #instances: URLMap<SearchEntryWithErrors>;
   #modules = new Map<string, ModuleWithErrors>();
   #moduleWorkingCache = new Map<string, Promise<Module>>();
   #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
+  // TODO make this required after feature flag removed
+  #indexer: Indexer | undefined;
+  // TODO make this required after feature flag removed
+  #batch: Batch | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
-  #ignoreMapContents: URLMap<string>;
+  #ignoreData: Record<string, string>;
   #loader: Loader;
   #entrySetter: EntrySetter;
   #renderCard: RenderCard;
   #realmURL: URL;
   #realmInfo?: RealmInfo;
+  #isIndexing = false;
   readonly stats: Stats = {
     instancesIndexed: 0,
     instanceErrors: 0,
@@ -87,46 +95,65 @@ export class CurrentRun {
   constructor({
     realmURL,
     reader,
+    indexer,
     instances = new URLMap(),
     modules = new Map(),
     ignoreMap = new URLMap(),
-    ignoreMapContents = new URLMap(),
+    ignoreData = new Object(null) as Record<string, string>,
     loader,
     entrySetter,
     renderCard,
   }: {
     realmURL: URL;
     reader: Reader;
+    indexer?: Indexer;
     instances?: URLMap<SearchEntryWithErrors>;
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
-    ignoreMapContents?: URLMap<string>;
+    ignoreData?: Record<string, string>;
     loader: Loader;
     entrySetter: EntrySetter;
     renderCard: RenderCard;
   }) {
-    if ((globalThis as any).__enablePgIndexer?.()) {
-      log.debug(`current-run is using db index`);
-    }
+    this.#indexer = indexer;
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
     this.#realmURL = realmURL;
     this.#instances = instances;
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
-    this.#ignoreMapContents = ignoreMapContents;
+    this.#ignoreData = ignoreData;
     this.#loader = loader;
     this.#entrySetter = entrySetter;
     this.#renderCard = renderCard;
+
+    this.loader.prependURLHandlers([
+      async (req) => {
+        if (this.#isIndexing) {
+          req.headers.set('X-Boxel-Use-WIP-Index', 'true');
+        }
+        return null;
+      },
+    ]);
   }
 
   static async fromScratch(current: CurrentRun) {
-    let start = Date.now();
-    log.debug(`starting from scratch indexing`);
-    (globalThis as any).__currentRunLoader = current.#loader;
-    await current.visitDirectory(current.#realmURL);
-    (globalThis as any).__currentRunLoader = undefined;
-    log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
+    await current.whileIndexing(async () => {
+      let start = Date.now();
+      log.debug(`starting from scratch indexing`);
+      (globalThis as any).__currentRunLoader = current.loader;
+      if (isDbIndexerEnabled()) {
+        current.#batch = await current.indexer.createBatch(current.realmURL);
+        current.#invalidations = [];
+        await current.batch.makeNewGeneration();
+      }
+      await current.visitDirectory(current.realmURL);
+      if (isDbIndexerEnabled()) {
+        await current.batch.done();
+      }
+      (globalThis as any).__currentRunLoader = undefined;
+      log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
+    });
     return current;
   }
 
@@ -138,6 +165,7 @@ export class CurrentRun {
     loader,
     entrySetter,
     renderCard,
+    indexer,
     onInvalidation,
   }: {
     url: URL;
@@ -147,6 +175,9 @@ export class CurrentRun {
     loader: Loader;
     entrySetter: EntrySetter;
     renderCard: RenderCard;
+    indexer?: Indexer;
+    // TODO remove this after we remove the feature flag. this handler happens
+    // outside of the index job
     onInvalidation?: (invalidatedURLs: URL[]) => void;
   }) {
     let start = Date.now();
@@ -154,53 +185,110 @@ export class CurrentRun {
     (globalThis as any).__currentRunLoader = loader;
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
-    let ignoreMapContents = new URLMap(prev.ignoreMapContents);
+    let ignoreData = { ...prev.ignoreData };
+    let invalidations: URL[] = [];
     let modules = new Map(prev.modules);
-    instances.remove(new URL(url.href.replace(/\.json$/, '')));
 
-    let invalidations = flatMap(invalidate(url, modules, instances), (u) =>
-      // we only ever want to visit our own URL in the update case so we'll do
-      // that explicitly
-      u !== url.href && u !== trimExecutableExtension(url).href
-        ? [new URL(u)]
-        : [],
-    );
+    if (!isDbIndexerEnabled()) {
+      instances.remove(new URL(url.href.replace(/\.json$/, '')));
+      invalidations = flatMap(invalidate(url, modules, instances), (u) =>
+        // we only ever want to visit our own URL in the update case so we'll do
+        // that explicitly
+        u !== url.href && u !== trimExecutableExtension(url).href
+          ? [new URL(u)]
+          : [],
+      );
+    }
 
     let current = new this({
       realmURL: prev.realmURL,
       reader,
+      indexer,
       instances,
       modules,
       ignoreMap,
-      ignoreMapContents,
+      ignoreData,
       loader,
       entrySetter,
       renderCard,
     });
-    if (operation === 'update') {
-      await current.visitFile(url);
-    }
-    for (let invalidation of invalidations) {
-      await current.visitFile(invalidation);
-    }
-    (globalThis as any).__currentRunLoader = undefined;
-    log.debug(
-      `completed incremental indexing for ${url.href} in ${
-        Date.now() - start
-      }ms`,
-    );
-
-    if (onInvalidation) {
-      let urls = [url, ...invalidations].map(
-        (i) => new URL(i.href.replace(/\.json$/, '')),
+    if (isDbIndexerEnabled()) {
+      current.#batch = await current.indexer.createBatch(current.realmURL);
+      invalidations = (await current.batch.invalidate(url)).map(
+        (href) => new URL(href),
       );
-      onInvalidation(urls);
+      current.#invalidations = [...invalidations].map((url) => url.href);
     }
+
+    await current.whileIndexing(async () => {
+      if (operation === 'update') {
+        await current.tryToVisit(url);
+      }
+      for (let invalidation of invalidations) {
+        await current.tryToVisit(invalidation);
+      }
+
+      if (isDbIndexerEnabled()) {
+        await current.batch.done();
+      }
+
+      (globalThis as any).__currentRunLoader = undefined;
+      log.debug(
+        `completed incremental indexing for ${url.href} in ${
+          Date.now() - start
+        }ms`,
+      );
+      if (onInvalidation) {
+        let urls = [...new Set([url, ...invalidations].map((u) => u.href))].map(
+          (href) => new URL(href.replace(/\.json$/, '')),
+        );
+        onInvalidation(urls);
+      }
+    });
     return current;
+  }
+
+  private async tryToVisit(url: URL) {
+    try {
+      await this.visitFile(url);
+    } catch (err: any) {
+      if (isCardError(err) && err.status === 404) {
+        log.info(`tried to visit file ${url.href}, but it no longer exists`);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  private async whileIndexing(doIndexing: () => Promise<void>) {
+    this.#isIndexing = true;
+    await doIndexing();
+    this.#isIndexing = false;
+  }
+
+  // TODO we can get rid of this after the feature flag is removed. this is just
+  // some type sugar so we don't have to check to see if the indexer exists
+  // since ultimately it will be required.
+  private get indexer() {
+    if (!this.#indexer) {
+      throw new Error(`Indexer is missing`);
+    }
+    return this.#indexer;
+  }
+
+  private get batch() {
+    if (!this.#batch) {
+      throw new Error('Batch is missing');
+    }
+    return this.#batch;
   }
 
   get instances() {
     return this.#instances;
+  }
+
+  get invalidations() {
+    return [...this.#invalidations];
   }
 
   get modules() {
@@ -211,8 +299,8 @@ export class CurrentRun {
     return this.#ignoreMap;
   }
 
-  get ignoreMapContents() {
-    return this.#ignoreMapContents;
+  get ignoreData() {
+    return this.#ignoreData;
   }
 
   get realmURL() {
@@ -229,7 +317,7 @@ export class CurrentRun {
     );
     if (ignorePatterns && ignorePatterns.content) {
       this.#ignoreMap.set(url, ignore().add(ignorePatterns.content));
-      this.#ignoreMapContents.set(url, ignorePatterns.content);
+      this.#ignoreData[url.href] = ignorePatterns.content;
     }
 
     for await (let { path: innerPath, kind } of this.#reader.readdir(
@@ -316,6 +404,17 @@ export class CurrentRun {
       let deps = await (
         await this.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
+      if (isDbIndexerEnabled()) {
+        await this.batch.updateEntry(new URL(url), {
+          type: 'error',
+          error: {
+            status: 500,
+            detail: `encountered error loading module "${url.href}": ${err.message}`,
+            additionalErrors: null,
+            deps,
+          },
+        });
+      }
       this.#modules.set(url.href, {
         type: 'error',
         moduleURL: url.href,
@@ -430,10 +529,13 @@ export class CurrentRun {
         );
       }
 
+      // Add a "pseudo field" to the search doc for the card type. We use the
+      // "_" prefix to make a decent attempt to not pollute the userland
+      // namespace for cards
       if (cardType.displayName === 'Card') {
-        searchData.cardType = cardType.name;
+        searchData._cardType = cardType.name;
       } else {
-        searchData.cardType = cardType.displayName;
+        searchData._cardType = cardType.displayName;
       }
     } catch (err: any) {
       uncaughtError = err;
@@ -443,7 +545,7 @@ export class CurrentRun {
       typesMaybeError = await this.getTypes(cardType);
     }
     if (searchData && doc && typesMaybeError?.type === 'types') {
-      this.setInstance(instanceURL, {
+      await this.setInstance(instanceURL, {
         type: 'entry',
         entry: {
           resource: doc.data,
@@ -482,14 +584,18 @@ export class CurrentRun {
       log.warn(
         `encountered error indexing card instance ${path}: ${error.error.detail}`,
       );
-      this.setInstance(instanceURL, error);
+      await this.setInstance(instanceURL, error);
       deferred.fulfill();
     }
   }
 
-  private setInstance(instanceURL: URL, entry: SearchEntryWithErrors) {
-    this.#instances.set(instanceURL, entry);
-    this.#entrySetter(instanceURL, entry);
+  private async setInstance(instanceURL: URL, entry: SearchEntryWithErrors) {
+    if (isDbIndexerEnabled()) {
+      await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
+    } else {
+      this.#instances.set(instanceURL, entry);
+      this.#entrySetter(instanceURL, entry);
+    }
     if (entry.type === 'entry') {
       this.stats.instancesIndexed++;
     } else {
@@ -533,6 +639,16 @@ export class CurrentRun {
       url,
       consumes,
     };
+    if (isDbIndexerEnabled()) {
+      await this.batch.updateEntry(new URL(url), {
+        type: 'module',
+        module: {
+          deps: new Set(
+            consumes.map((d) => trimExecutableExtension(new URL(d)).href),
+          ),
+        },
+      });
+    }
     this.#modules.set(url, { type: 'module', module });
     deferred.fulfill(module);
   }
@@ -688,4 +804,15 @@ function invalidate(
   }
 
   return [...invalidationSet];
+}
+
+function isDbIndexerEnabled() {
+  return Boolean((globalThis as any).__enablePgIndexer?.());
+}
+
+function assertURLEndsWithJSON(url: URL): URL {
+  if (!url.href.endsWith('.json')) {
+    return new URL(`${url}.json`);
+  }
+  return url;
 }

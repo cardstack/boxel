@@ -46,8 +46,8 @@ export default class RecentFilesService extends Service {
     this.persistRecentFiles();
   }
 
-  addRecentFileUrl(url: string) {
-    if (!url) {
+  addRecentFileUrl(urlString: string) {
+    if (!urlString) {
       return;
     }
     // TODO this wont work when visiting files that come from multiple realms in
@@ -56,7 +56,9 @@ export default class RecentFilesService extends Service {
 
     if (realmURL) {
       let realmPaths = new RealmPaths(new URL(realmURL));
-      if (realmPaths.inRealm(new URL(url))) {
+      let url = new URL(urlString);
+
+      if (realmPaths.inRealm(url)) {
         this.addRecentFile(realmPaths.local(url));
       }
     }

@@ -567,19 +567,14 @@ export default class CreateFileModal extends Component<Signature> {
     let {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? this.selectedCatalogEntry)!; // we just checked above to make sure one of these exists
-    let className = camelize(this.displayName);
-    // make sure we don't collide with a javascript built-in object
-    if (typeof (globalThis as any)[className] !== 'undefined') {
-      className = `${className}0`;
-    }
+    let className = convertToClassName(this.displayName);
+
     let absoluteModule = new URL(module, this.selectedCatalogEntry?.id);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
       this.selectedRealmURL,
     );
-    // sanitize the name since it will be used in javascript code
-    let safeName = this.displayName.replace(/[^A-Za-z \d-_]/g, '').trim();
     let src: string[] = [];
 
     // There is actually only one possible declaration collision: `className` and `parent`,
@@ -589,13 +584,14 @@ export default class CreateFileModal extends Component<Signature> {
 import { ${exportName} as ${exportName}Parent } from '${moduleURL}';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName}Parent {
-  static displayName = "${safeName}";`);
+  static displayName = "${this.displayName}";`);
     } else if (exportName === 'default') {
-      let parent = camelize(
+      let parent = camelCase(
         module
           .split('/')
           .pop()!
           .replace(/\.[^.]+$/, ''),
+        { pascalCase: true },
       );
       // check for parent/className declaration collision
       parent = parent === className ? `${parent}Parent` : parent;
@@ -603,13 +599,13 @@ export class ${className} extends ${exportName}Parent {
 import ${parent} from '${moduleURL}';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${parent} {
-  static displayName = "${safeName}";`);
+  static displayName = "${this.displayName}";`);
     } else {
       src.push(`
 import { ${exportName} } from '${moduleURL}';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName} {
-  static displayName = "${safeName}";`);
+  static displayName = "${this.displayName}";`);
     }
     src.push(`\n  /*`);
     if (this.fileType.id === 'card-definition') {
@@ -729,8 +725,33 @@ export class ${className} extends ${exportName} {
   });
 }
 
-function camelize(name: string) {
-  return camelCase(name, { pascalCase: true });
+export function convertToClassName(input: string) {
+  // \p{L}: a letter
+  let invalidLeadingCharactersRemoved = camelCase(
+    input.replace(/^[^\p{L}_$]+/u, ''),
+    { pascalCase: true },
+  );
+
+  if (!invalidLeadingCharactersRemoved) {
+    let prefixedInput = `Class${input}`;
+    invalidLeadingCharactersRemoved = camelCase(
+      prefixedInput.replace(/^[^\p{L}_$]+/u, ''),
+      { pascalCase: true },
+    );
+  }
+
+  let className = invalidLeadingCharactersRemoved.replace(
+    // \p{N}: a number
+    /[^\p{L}\p{N}_$]+/gu,
+    '',
+  );
+
+  // make sure we don't collide with a javascript built-in object
+  if (typeof (globalThis as any)[className] !== 'undefined') {
+    className = `${className}0`;
+  }
+
+  return className;
 }
 
 const SelectedTypePill: TemplateOnlyComponent<{
