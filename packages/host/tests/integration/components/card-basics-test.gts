@@ -160,7 +160,7 @@ module('Integration | card-basics', function (hooks) {
           {{@model.author.firstName.value}}
           speaks
           {{#each @model.author.languagesSpoken as |language|}}
-            {{language}}
+            {{language.value}}
           {{/each}}
           {{@model.author.subscribers}}
           subscribers is cool
@@ -642,7 +642,7 @@ module('Integration | card-basics', function (hooks) {
     subscribeToChanges(mango, subscriber);
 
     try {
-      mango.firstName = 'Van Gogh';
+      mango.firstName.value = 'Van Gogh';
       assert.strictEqual(
         eventCount,
         1,
@@ -667,7 +667,7 @@ module('Integration | card-basics', function (hooks) {
       unsubscribeFromChanges(mango, subscriber);
     }
 
-    mango.firstName = 'Paper';
+    mango.firstName.value = 'Paper';
     assert.strictEqual(
       eventCount,
       1,
@@ -722,7 +722,7 @@ module('Integration | card-basics', function (hooks) {
     subscribeToChanges(mango, subscriber);
 
     try {
-      mango.favoriteColors.push('green');
+      mango.favoriteColors.push(new StringField({ value: 'green' }));
       await flushLogs();
       assert.strictEqual(
         eventCount,
@@ -748,7 +748,7 @@ module('Integration | card-basics', function (hooks) {
       unsubscribeFromChanges(mango, subscriber);
     }
 
-    mango.favoriteColors.push('red');
+    mango.favoriteColors.push(new StringField({ value: 'red ' }));
     await flushLogs();
     assert.strictEqual(
       eventCount,
@@ -935,7 +935,7 @@ module('Integration | card-basics', function (hooks) {
         'the fieldName was correctly specified in change event',
       );
       assert.deepEqual(
-        (changeEvent?.value as Pet[]).map((p) => p.firstName),
+        (changeEvent?.value as Pet[]).map((p) => p.firstName.value),
         ['Mango', 'Van Gogh'],
         'the field value was correctly specified in change event',
       );
@@ -956,7 +956,7 @@ module('Integration | card-basics', function (hooks) {
       'the fieldName was correctly specified in change event',
     );
     assert.deepEqual(
-      (changeEvent?.value as Pet[]).map((p) => p.firstName),
+      (changeEvent?.value as Pet[]).map((p) => p.firstName.value),
       ['Mango', 'Van Gogh'],
       'the field value was correctly specified in change event',
     );
@@ -1044,7 +1044,7 @@ module('Integration | card-basics', function (hooks) {
       @field friend = linksTo(() => Pet);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <div data-test-pet={{@model.firstName}}>
+          <div data-test-pet={{@model.firstName.value}}>
             <@fields.firstName />
             <@fields.friend />
           </div>
@@ -1423,7 +1423,9 @@ module('Integration | card-basics', function (hooks) {
 
     let mango = new Person({
       firstName: 'Mango',
-      languagesSpoken: ['english', 'japanese'],
+      languagesSpoken: ['english', 'japanese'].map(
+        (s) => new StringField({ value: s }),
+      ),
     });
 
     let root = await renderCard(loader, mango, 'isolated');
@@ -1605,7 +1607,7 @@ module('Integration | card-basics', function (hooks) {
     let child = new Person({ firstName: 'Arthur' });
     let root = await renderCard(loader, child, 'embedded');
     assert.dom(root.children[0]).containsText('Arthur');
-    child.firstName = 'Quint';
+    child.firstName.value = 'Quint';
     await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Quint');
   });
 
@@ -1623,7 +1625,9 @@ module('Integration | card-basics', function (hooks) {
     let person = new Person({ pets: ['Mango', 'Van Gogh'] });
     let root = await renderCard(loader, person, 'embedded');
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
-    person.pets = ['Van Gogh', 'Mango', 'Peachy'];
+    person.pets = ['Van Gogh', 'Mango', 'Peachy'].map(
+      (s) => new StringField({ value: s }),
+    );
     await waitUntil(
       () => cleanWhiteSpace(root.textContent!) === 'Van Gogh Mango Peachy',
     );
@@ -1643,7 +1647,7 @@ module('Integration | card-basics', function (hooks) {
     let person = new Person({ pets: ['Mango', 'Van Gogh'] });
     let root = await renderCard(loader, person, 'embedded');
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
-    person.pets[1] = 'Peachy';
+    person.pets[1].value = 'Peachy';
     await waitUntil(
       () => cleanWhiteSpace(root.textContent!) === 'Mango Peachy',
     );
@@ -1663,7 +1667,7 @@ module('Integration | card-basics', function (hooks) {
     let person = new Person({ pets: ['Mango', 'Van Gogh'] });
     let root = await renderCard(loader, person, 'embedded');
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
-    person.pets.push('Peachy');
+    person.pets.push(new StringField({ value: 'Peachy' }));
     await waitUntil(
       () => cleanWhiteSpace(root.textContent!) === 'Mango Van Gogh Peachy',
     );
@@ -1981,7 +1985,7 @@ module('Integration | card-basics', function (hooks) {
           <@fields.languagesSpoken />
           <ul data-test-output>
             {{#each @model.languagesSpoken as |language|}}
-              <li>{{language}}</li>
+              <li>{{language.value}}</li>
             {{/each}}
           </ul>
         </template>
@@ -1996,6 +2000,7 @@ module('Integration | card-basics', function (hooks) {
     // add english
     await click('[data-test-add-new]');
     await fillIn('[data-test-item="0"] input', 'english');
+    await this.pauseTest();
     assert.dom('[data-test-item]').exists({ count: 1 });
     assert.dom('[data-test-output]').hasText('english');
 
