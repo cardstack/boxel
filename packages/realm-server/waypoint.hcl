@@ -48,6 +48,9 @@ app "boxel-realm-server" {
         BASE_REALM_PASSWORD = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/BASE_REALM_PASSWORD"
         DRAFTS_REALM_PASSWORD = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/DRAFTS_REALM_PASSWORD"
         PUBLISHED_REALM_PASSWORD = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/PUBLISHED_REALM_PASSWORD"
+        PGDATABASE="arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/PGDATABASE"
+        PGPASSWORD="arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/PGPASSWORD"
+        PGUSER="arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/PGUSER"
       }
     }
   }
