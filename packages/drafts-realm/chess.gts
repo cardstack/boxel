@@ -6,10 +6,12 @@ import Component from '@glimmer/component';
 import StringCard from 'https://cardstack.com/base/string';
 import { contains, field } from 'https://cardstack.com/base/card-api';
 
+// @ts-ignore
 import lodash from 'https://cdn.jsdelivr.net/npm/lodash@4.17.21/+esm';
 import {
   Chessboard,
   FEN,
+  // @ts-ignore
 } from 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/+esm';
 
 import Modifier from 'ember-modifier';
@@ -35,6 +37,7 @@ class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
         position: fen ?? FEN.start,
         style: {
           pieces: {
+            // @ts-ignore
             file: 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/assets/pieces/standard.svg',
           },
         },
