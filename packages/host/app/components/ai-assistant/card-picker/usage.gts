@@ -6,8 +6,6 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import { TrackedArray } from 'tracked-built-ins';
 
-import { TrackedSet } from 'tracked-built-ins';
-
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -17,7 +15,7 @@ import AiAssistantCardPicker from './index';
 export default class AiAssistantCardPickerUsage extends Component {
   cards: TrackedArray<CardDef> = new TrackedArray([]);
   @tracked maxNumberOfCards: number | undefined = undefined;
-  @tracked autoAttachedCards?: TrackedSet<CardDef> = new TrackedSet();
+  @tracked autoAttachedCard: CardDef | undefined = undefined;
 
   @action chooseCard(card: CardDef) {
     if (!this.cards?.find((c) => c.id === card.id)) {
@@ -39,7 +37,7 @@ export default class AiAssistantCardPickerUsage extends Component {
       </:description>
       <:example>
         <AiAssistantCardPicker
-          @autoAttachedCards={{this.autoAttachedCards}}
+          @autoAttachedCard={{this.autoAttachedCard}}
           @cardsToAttach={{this.cards}}
           @chooseCard={{this.chooseCard}}
           @removeCard={{this.removeCard}}
@@ -56,7 +54,7 @@ export default class AiAssistantCardPickerUsage extends Component {
         <Args.Object
           @name='autoAttachedCard'
           @description='A card automatically attached to the message from the top of the stack.'
-          @value={{this.autoAttachedCards}}
+          @value={{this.autoAttachedCard}}
         />
         <Args.Action
           @name='chooseCard'
