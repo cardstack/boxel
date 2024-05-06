@@ -53,6 +53,7 @@ import {
   MockMatrixService,
 } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
+import { setupWindowMock } from 'ember-window-mock/test-support';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
@@ -81,6 +82,7 @@ module('Integration | operator-mode', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
+  setupWindowMock(hooks);
   let noop = () => {};
 
   hooks.afterEach(async function () {
