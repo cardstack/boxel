@@ -41,7 +41,7 @@ export default class DatetimeField extends FieldDef {
   static displayName = 'DateTime';
   static [primitive]: Date;
   static [serialize](date: Date) {
-    return date.toISOString();
+    return { type: 'custom' as const, value: date.toISOString() };
   }
 
   static async [deserialize]<T extends BaseDefConstructor>(

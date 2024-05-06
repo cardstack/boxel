@@ -132,6 +132,23 @@ export async function loadCard(
   throw err;
 }
 
+export function loaderForCard(card: unknown): Loader | undefined {
+  if (!isBaseDef(card)) {
+    return undefined;
+  }
+
+  let loader = Loader.getLoaderFor(card);
+  if (loader) {
+    return loader;
+  }
+
+  let local = localIdentities.get(card);
+  if (!local) {
+    return undefined;
+  }
+  return loaderForCard(local.card);
+}
+
 export function identifyCard(
   card: unknown,
   maybeRelativeURL?: ((possibleURL: string) => string) | null,

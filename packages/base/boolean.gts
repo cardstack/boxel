@@ -35,7 +35,7 @@ export default class BooleanField extends FieldDef {
   static [primitive]: boolean;
   static [useIndexBasedKey]: never;
   static [serialize](val: any) {
-    return Boolean(val);
+    return { type: 'custom' as const, value: Boolean(val) };
   }
 
   static async [deserialize]<T extends BaseDefConstructor>(

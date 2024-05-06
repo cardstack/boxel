@@ -37,7 +37,7 @@ class View extends Component<typeof DateField> {
 export default class DateField extends FieldDef {
   static [primitive]: Date;
   static [serialize](date: Date) {
-    return format(date, dateFormat);
+    return { type: 'custom' as const, value: format(date, dateFormat) };
   }
   static displayName = 'Date';
 

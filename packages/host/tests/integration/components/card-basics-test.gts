@@ -428,7 +428,6 @@ module('Integration | card-basics', function (hooks) {
       name: 'Marcus',
       additionalGuestCount: 1,
     });
-
     await saveCard(g1, `${testRealmURL}Guest/g1`, loader);
     await saveCard(g2, `${testRealmURL}Guest/g2`, loader);
 

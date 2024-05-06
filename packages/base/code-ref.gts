@@ -35,12 +35,13 @@ export default class CodeRefField extends FieldDef {
     _visited?: Set<string>,
     opts?: SerializeOpts,
   ) {
-    return {
+    let result = {
       ...codeRef,
       ...(opts?.maybeRelativeURL
         ? { module: opts.maybeRelativeURL(codeRef.module) }
         : {}),
     };
+    return { type: 'custom' as const, value: result };
   }
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,

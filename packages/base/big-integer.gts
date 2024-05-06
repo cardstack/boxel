@@ -70,7 +70,8 @@ export default class BigIntegerField extends FieldDef {
   static displayName = 'BigInteger';
   static [primitive]: bigint;
   static [serialize](val: bigint | null) {
-    return _serialize(val);
+    let result = _serialize(val);
+    return { type: 'custom' as const, value: result };
   }
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,

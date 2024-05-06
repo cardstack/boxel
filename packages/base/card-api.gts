@@ -33,6 +33,7 @@ import {
   isField,
   primitive,
   identifyCard,
+  loaderForCard,
   isCardDef,
   isCardInstance as _isCardInstance,
   loadCard,
@@ -60,6 +61,7 @@ export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
 export const deserialize = Symbol.for('cardstack-deserialize');
 export const newDeserialize = Symbol.for('cardstack-new-deserialize');
+export const newSerialize = Symbol.for('cardstack-new-serialize');
 export const cast = Symbol.for('cardstack-cast');
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldType = Symbol.for('cardstack-field-type');
@@ -491,8 +493,10 @@ class ContainsMany<FieldT extends FieldDefConstructor>
           [this.name]:
             values === null
               ? null
-              : values.map((value) =>
-                  callSerializeHook(this.card, value, doc, undefined, opts),
+              : values.map(
+                  (value) =>
+                    callSerializeHook(this.card, value, doc, undefined, opts)
+                      ?.value,
                 ),
         },
       };
@@ -503,7 +507,13 @@ class ContainsMany<FieldT extends FieldDefConstructor>
           ? null
           : values.map((value, index) => {
               let resource: JSONAPISingleResourceDocument['data'] =
-                callSerializeHook(this.card, value, doc, undefined, opts);
+                callSerializeHook(
+                  this.card,
+                  value,
+                  doc,
+                  undefined,
+                  opts,
+                )?.value;
               if (resource.relationships) {
                 for (let [fieldName, relationship] of Object.entries(
                   resource.relationships as Record<string, Relationship>,
@@ -692,42 +702,48 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     value: InstanceType<CardT>,
     doc: JSONAPISingleResourceDocument,
   ): JSONAPIResource {
-    let serialized: JSONAPISingleResourceDocument['data'] & {
-      meta: Record<string, any>;
-    } = callSerializeHook(this.card, value, doc);
-    if (primitive in this.card) {
-      return { attributes: { [this.name]: serialized } };
-    } else {
-      let resource: JSONAPIResource = {
+    let serialized = callSerializeHook(this.card, value, doc);
+    if (!serialized) {
+      return {
         attributes: {
-          [this.name]: serialized?.attributes,
+          [this.name]: null,
         },
       };
-      if (serialized == null) {
-        return resource;
+    }
+    if (serialized.type === 'custom') {
+      return { attributes: { [this.name]: serialized.value } };
+    }
+    let resource: JSONAPIResource = {
+      attributes: {
+        [this.name]: serialized.value.attributes,
+      },
+    };
+    if (serialized.value.relationships) {
+      resource.relationships = {};
+      for (let [fieldName, relationship] of Object.entries(
+        serialized.value.relationships as Record<string, Relationship>,
+      )) {
+        resource.relationships[`${this.name}.${fieldName}`] = relationship;
       }
-      if (serialized.relationships) {
-        resource.relationships = {};
-        for (let [fieldName, relationship] of Object.entries(
-          serialized.relationships as Record<string, Relationship>,
-        )) {
-          resource.relationships[`${this.name}.${fieldName}`] = relationship;
-        }
-      }
+    }
 
-      if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
+    let meta = Object.fromEntries(
+      Object.entries(serialized.value.meta).filter(([key]) => {
         // when our implementation matches the default we don't need to include
         // meta.adoptsFrom
-        delete serialized.meta.adoptsFrom;
-      }
+        return (
+          key !== 'adoptsFrom' ||
+          this.card !== Reflect.getPrototypeOf(value)!.constructor
+        );
+      }),
+    );
 
-      if (Object.keys(serialized.meta).length > 0) {
-        resource.meta = {
-          fields: { [this.name]: serialized.meta },
-        };
-      }
-      return resource;
+    if (Object.keys(meta).length > 0) {
+      resource.meta = {
+        fields: { [this.name]: meta },
+      };
     }
+    return resource;
   }
 
   async deserialize(
@@ -900,43 +916,50 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     }
     visited.add(value.id);
 
-    let serialized = callSerializeHook(this.card, value, doc, visited, opts) as
-      | (JSONAPIResource & { id: string; type: string })
-      | null;
-    if (serialized) {
-      if (!value[isSavedInstance]) {
-        throw new Error(
-          `the linksTo field '${this.name}' cannot be serialized with an unsaved card`,
-        );
-      }
-      let resource: JSONAPIResource = {
+    let serialized = callSerializeHook(this.card, value, doc, visited, opts);
+    if (!serialized) {
+      return {
         relationships: {
           [this.name]: {
-            links: {
-              self: makeRelativeURL(value.id, opts),
-            },
-            // we also write out the data form of the relationship
-            // which correlates to the included resource
-            data: { type: 'card', id: value.id },
+            links: { self: null },
           },
         },
       };
-      if (
-        !(doc.included ?? []).find((r) => r.id === value.id) &&
-        doc.data.id !== value.id
-      ) {
-        doc.included = doc.included ?? [];
-        doc.included.push(serialized);
-      }
-      return resource;
     }
-    return {
+    if (!value[isSavedInstance]) {
+      throw new Error(
+        `the linksTo field '${this.name}' cannot be serialized with an unsaved card`,
+      );
+    }
+    if (serialized.type === 'custom') {
+      throw new Error(
+        `the linksTo field '${this.name}' does not support custom serialization`,
+      );
+    }
+    let serializedValue = serialized.value as JSONAPIResource & {
+      id: string;
+      type: string;
+    };
+    let resource: JSONAPIResource = {
       relationships: {
         [this.name]: {
-          links: { self: null },
+          links: {
+            self: makeRelativeURL(value.id, opts),
+          },
+          // we also write out the data form of the relationship
+          // which correlates to the included resource
+          data: { type: 'card', id: value.id },
         },
       },
     };
+    if (
+      !(doc.included ?? []).find((r) => r.id === value.id) &&
+      doc.data.id !== value.id
+    ) {
+      doc.included = doc.included ?? [];
+      doc.included.push(serializedValue);
+    }
+    return resource;
   }
 
   async deserialize(
@@ -1259,22 +1282,38 @@ class LinksToMany<FieldT extends CardDefConstructor>
         return;
       }
       visited.add(value.id);
-      let serialized: JSONAPIResource & { id: string; type: string } =
-        callSerializeHook(this.card, value, doc, visited, opts);
+      let serialized = callSerializeHook(this.card, value, doc, visited, opts);
       if (!value[isSavedInstance]) {
         throw new Error(
           `the linksToMany field '${this.name}' cannot be serialized with an unsaved card`,
         );
       }
-      if (serialized.meta && Object.keys(serialized.meta).length === 0) {
-        delete serialized.meta;
+      if (!serialized) {
+        throw new Error(
+          `the linksToMany field '${this.name}' cannot be serialized with an unsaved card`,
+        );
+      }
+      if (serialized.type === 'custom') {
+        throw new Error(
+          `the linksToMany field '${this.name}' does not support custom serialization`,
+        );
+      }
+      let serializedValue = serialized.value as JSONAPIResource & {
+        id: string;
+        type: string;
+      };
+      if (
+        serializedValue.meta &&
+        Object.keys(serializedValue.meta).length === 0
+      ) {
+        delete serializedValue.meta;
       }
       if (
         !(doc.included ?? []).find((r) => r.id === value.id) &&
         doc.data.id !== value.id
       ) {
         doc.included = doc.included ?? [];
-        doc.included.push(serialized);
+        doc.included.push(serializedValue);
       }
       relationships[`${this.name}\.${i}`] = {
         links: {
@@ -1712,13 +1751,20 @@ export class BaseDef {
     doc: JSONAPISingleResourceDocument,
     visited?: Set<string>,
     opts?: SerializeOpts,
-  ): any {
+  ):
+    | { type: 'custom'; value: any }
+    | { type: 'resource'; value: LooseCardResource } {
     // note that primitive can only exist in field definition
     if (primitive in this) {
       // primitive cards can override this as need be
-      return value;
+      return { type: 'custom', value: value };
+    } else if (value[newSerialize]) {
+      return { type: 'custom', value: value[newSerialize]() ?? null };
     } else {
-      return serializeCardResource(value, doc, opts, visited);
+      return {
+        type: 'resource',
+        value: serializeCardResource(value, doc, opts, visited),
+      };
     }
   }
 
@@ -1777,6 +1823,7 @@ export class BaseDef {
   }
 
   static [newDeserialize]?: (data: any) => Promise<Partial<ResourceObject>>;
+  [newSerialize]?: () => any;
   static [cast]?: <T extends BaseDefConstructor>(
     this: T,
     data: any,
@@ -2068,6 +2115,10 @@ export class StringField extends FieldDef {
   static [cast](this: any, value: string) {
     return new this({ value: value });
   }
+
+  [newSerialize] = () => {
+    return this.value;
+  };
 }
 
 // TODO: This is a simple workaround until the thumbnailURL is converted into an actual image field
@@ -2415,7 +2466,6 @@ function serializeCardResource(
 ): LooseCardResource {
   let adoptsFrom = identifyCard(model.constructor, opts?.maybeRelativeURL);
   if (!adoptsFrom) {
-    debugger;
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
   let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
@@ -2473,7 +2523,7 @@ export function serializeCard(
   merge(doc, { data });
   if (!isSingleCardDocument(doc)) {
     throw new Error(
-      `Expected serialized card to be a SingleCardDocument, but is was: ${JSON.stringify(
+      `Expected serialized card to be a SingleCardDocument, but it was: ${JSON.stringify(
         doc,
         null,
         2,
@@ -2781,7 +2831,7 @@ async function cardClassFromResource<CardT extends BaseDefConstructor>(
     );
   }
   if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
-    let loader = Loader.getLoaderFor(fallback);
+    let loader = loaderForCard(fallback);
 
     if (!loader) {
       throw new Error('Could not find a loader, this should not happen');
@@ -3088,19 +3138,16 @@ export function getFields(
         return [];
       }
 
-      if (
-        !(primitive in maybeField.card) ||
-        maybeField.computeVia ||
-        !['contains', 'containsMany'].includes(maybeField.fieldType)
-      ) {
+      if (maybeField.computeVia) {
+        if (!opts?.includeComputeds) {
+          return [];
+        }
+      } else if (!['contains', 'containsMany'].includes(maybeField.fieldType)) {
         if (
           opts?.usedFieldsOnly &&
           !usedFields.includes(maybeFieldName) &&
           !maybeField.isUsed
         ) {
-          return [];
-        }
-        if (maybeField.computeVia && !opts?.includeComputeds) {
           return [];
         }
       }

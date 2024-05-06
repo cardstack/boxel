@@ -312,7 +312,11 @@ module('Integration | serialization', function (hooks) {
       `${realmURL}Person/vanGogh`,
       'ID can be updated for unsaved instance',
     );
-    assert.strictEqual(card.firstName, 'Van Gogh', 'the field can be updated');
+    assert.strictEqual(
+      card.firstName.value,
+      'Van Gogh',
+      'the field can be updated',
+    );
   });
 
   test('throws when updating the id of a saved instance from serialized data', async function (assert) {
@@ -740,16 +744,16 @@ module('Integration | serialization', function (hooks) {
     );
 
     assert.ok(card instanceof Person, 'card is an instance of person');
-    assert.strictEqual(card.firstName, 'Hassan');
+    assert.strictEqual(card.firstName.value, 'Hassan');
     let { pet } = card;
     if (pet instanceof Pet) {
       assert.strictEqual(isSaved(pet), true, 'Pet card is saved');
-      assert.strictEqual(pet.firstName, 'Mango');
+      assert.strictEqual(pet.firstName.value, 'Mango');
       let { favoriteToy } = pet;
       if (favoriteToy instanceof Toy) {
         assert.strictEqual(isSaved(favoriteToy), true, 'Toy card is saved');
         assert.strictEqual(
-          favoriteToy.description,
+          favoriteToy.description.value,
           'Toilet paper ghost: Poooo!',
         );
       } else {
@@ -1023,7 +1027,7 @@ module('Integration | serialization', function (hooks) {
       loader,
     );
     assert.ok(card instanceof Person, 'card is a Person');
-    assert.strictEqual(card.firstName, 'Hassan');
+    assert.strictEqual(card.firstName.value, 'Hassan');
     assert.strictEqual(card.pet, null, 'relationship is null');
   });
 
@@ -1105,12 +1109,12 @@ module('Integration | serialization', function (hooks) {
     );
 
     assert.ok(card instanceof Pet, 'card is an instance of pet');
-    assert.strictEqual(card.firstName, 'Jackie');
+    assert.strictEqual(card.firstName.value, 'Jackie');
 
     let { owner, favoriteToy, toys } = card;
     if (owner instanceof Person) {
       assert.strictEqual(isSaved(owner), true, 'Person card is saved');
-      assert.strictEqual(owner.firstName, 'Burcu');
+      assert.strictEqual(owner.firstName.value, 'Burcu');
     } else {
       assert.ok(false, '"owner" field value is not an instance of Person');
     }
@@ -1121,7 +1125,7 @@ module('Integration | serialization', function (hooks) {
       }
     });
     if (favoriteToy instanceof Toy) {
-      assert.strictEqual(favoriteToy.description, 'treat ball');
+      assert.strictEqual(favoriteToy.description.value, 'treat ball');
     } else {
       assert.ok(false, '"favoriteToy" field value is not an instance of Toy');
     }
@@ -1294,11 +1298,11 @@ module('Integration | serialization', function (hooks) {
       loader,
     );
     assert.ok(card instanceof Person, 'card is a Person');
-    assert.strictEqual(card.firstName, 'Hassan');
+    assert.strictEqual(card.firstName.value, 'Hassan');
     let { friend } = card;
     assert.ok(friend instanceof Person, 'friend is a Person');
     assert.ok(isSaved(friend), 'card is saved');
-    assert.strictEqual(friend.firstName, 'Mango');
+    assert.strictEqual(friend.firstName.value, 'Mango');
   });
 
   test('throws when serializing a linksTo relationship to an unsaved card', async function (assert) {
@@ -1446,14 +1450,14 @@ module('Integration | serialization', function (hooks) {
       loader,
     );
     if (card instanceof Person) {
-      assert.strictEqual(card.firstName, 'Hassan');
+      assert.strictEqual(card.firstName.value, 'Hassan');
       let { pet } = card;
       if (pet instanceof Pet) {
-        assert.strictEqual(pet.firstName, 'Mango');
+        assert.strictEqual(pet.firstName.value, 'Mango');
         let { favoriteToy } = pet;
         if (favoriteToy instanceof Toy) {
           assert.strictEqual(
-            favoriteToy.description,
+            favoriteToy.description.value,
             'Toilet paper ghost: Poooo!',
           );
         } else {
@@ -1573,13 +1577,13 @@ module('Integration | serialization', function (hooks) {
       loader,
     );
     if (card instanceof Person) {
-      assert.strictEqual(card.firstName, 'Hassan');
+      assert.strictEqual(card.firstName.value, 'Hassan');
       let { pet } = card;
       if (pet instanceof Pet) {
         let { favoriteToy } = pet;
         if (favoriteToy instanceof Toy) {
           assert.strictEqual(
-            favoriteToy.description,
+            favoriteToy.description.value,
             'Toilet paper ghost: Poooo!',
           );
         } else {
@@ -1712,17 +1716,17 @@ module('Integration | serialization', function (hooks) {
       loader,
     );
     if (card instanceof Person) {
-      assert.strictEqual(card.firstName, 'Hassan');
+      assert.strictEqual(card.firstName.value, 'Hassan');
       let { pets } = card;
       if (Array.isArray(pets)) {
         assert.strictEqual(pets.length, 1, 'correct number of pets');
         let [pet] = pets;
         if (pet instanceof Pet) {
-          assert.strictEqual(pet.firstName, 'Mango');
+          assert.strictEqual(pet.firstName.value, 'Mango');
           let { favoriteToy } = pet;
           if (favoriteToy instanceof Toy) {
             assert.strictEqual(
-              favoriteToy.description,
+              favoriteToy.description.value,
               'Toilet paper ghost: Poooo!',
             );
           } else {
@@ -1804,9 +1808,9 @@ module('Integration | serialization', function (hooks) {
         favorite,
         'relationship values share object equality',
       );
-      parent.firstName = 'Mariko';
+      parent.firstName.value = 'Mariko';
       assert.strictEqual(
-        favorite.firstName,
+        favorite.firstName.value,
         'Mariko',
         'instances that have object equality can be mutated',
       );
@@ -2112,11 +2116,11 @@ module('Integration | serialization', function (hooks) {
             <label data-test-field='author'>Author <@fields.author /></label>
           </fieldset>
 
-          <div data-test-output='title'>{{@model.title}}</div>
+          <div data-test-output='title'>{{@model.title.value}}</div>
           <div data-test-output='reviews'>{{@model.reviews}}</div>
           <div
             data-test-output='author.firstName'
-          >{{@model.author.firstName}}</div>
+          >{{@model.author.firstName.value}}</div>
         </template>
       };
     }
@@ -2361,11 +2365,11 @@ module('Integration | serialization', function (hooks) {
       );
 
       assert.ok(card instanceof Person, 'card is an instance of person');
-      assert.strictEqual(card.firstName, 'Burcu');
+      assert.strictEqual(card.firstName.value, 'Burcu');
       let { friendPet } = card;
       if (friendPet instanceof Pet) {
         assert.strictEqual(isSaved(friendPet), true, 'Pet card is saved');
-        assert.strictEqual(friendPet.name, 'Mango');
+        assert.strictEqual(friendPet.name.value, 'Mango');
       } else {
         assert.ok(false, '"friendPet" field value is not an instance of Pet');
       }
@@ -2479,7 +2483,7 @@ module('Integration | serialization', function (hooks) {
         loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
-      assert.strictEqual(card.firstName, 'Burcu');
+      assert.strictEqual(card.firstName.value, 'Burcu');
       assert.strictEqual(card.friendPet, null, 'relationship is null');
 
       let relationship = relationshipMeta(card, 'friendPet');
@@ -2924,10 +2928,10 @@ module('Integration | serialization', function (hooks) {
       new URL(realmURL),
       loader,
     ); // success is not blowing up
-    assert.strictEqual(post2.author.firstName, 'Mango');
+    assert.strictEqual(post2.author.firstName.value, 'Mango');
     let { author } = post2;
     if (author instanceof Employee) {
-      assert.strictEqual(author.department, 'wagging');
+      assert.strictEqual(author.department.value, 'wagging');
     } else {
       assert.ok(false, 'Not an employee');
     }
@@ -3033,24 +3037,24 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let post2 = await createFromSerialized<any>(
+    let post2 = await createFromSerialized<typeof Post>(
       payload.data,
       payload,
       new URL(realmURL),
       loader,
     ); // success is not blowing up
-    assert.strictEqual(post2.author.firstName, 'Mango');
-    assert.strictEqual(post2.author.loves.firstName, 'Van Gogh');
+    assert.strictEqual(post2.author.firstName.value, 'Mango');
+    assert.strictEqual((post2.author.loves as Pet).firstName.value, 'Van Gogh');
     let { author } = post2;
     if (author instanceof Employee) {
-      assert.strictEqual(author.department, 'wagging');
+      assert.strictEqual(author.department.value, 'wagging');
     } else {
       assert.ok(false, 'Not an employee');
     }
 
     let { loves } = author;
     if (loves instanceof Pet) {
-      assert.strictEqual(loves.firstName, 'Van Gogh');
+      assert.strictEqual(loves.firstName.value, 'Van Gogh');
     } else {
       assert.ok(false, 'Not a pet');
     }
@@ -3169,7 +3173,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let group2 = await createFromSerialized<any>(
+    let group2 = await createFromSerialized<typeof Group>(
       payload.data,
       payload,
       new URL(realmURL),
@@ -3178,12 +3182,12 @@ module('Integration | serialization', function (hooks) {
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
     assert.strictEqual(people.length, 2, 'array length is correct');
-    assert.strictEqual(people[0].firstName, 'Mango');
-    assert.strictEqual(people[1].firstName, 'Van Gogh');
+    assert.strictEqual(people[0].firstName.value, 'Mango');
+    assert.strictEqual(people[1].firstName.value, 'Van Gogh');
 
     let [first, second] = people;
     if (first instanceof Employee) {
-      assert.strictEqual(first.department, 'begging');
+      assert.strictEqual(first.department.value, 'begging');
     } else {
       assert.ok(false, 'Not an employee');
     }
@@ -3318,7 +3322,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let group2 = await createFromSerialized<any>(
+    let group2 = await createFromSerialized<typeof Group>(
       payload.data,
       payload,
       new URL(realmURL),
@@ -3327,16 +3331,16 @@ module('Integration | serialization', function (hooks) {
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
     assert.strictEqual(people.length, 1, 'array length is correct');
-    assert.strictEqual(people[0].firstName, 'Mango');
+    assert.strictEqual(people[0].firstName.value, 'Mango');
 
     let [first] = people;
     assert.ok(first instanceof Employee, 'Employee instance is correct');
 
-    let { roles } = first;
+    let { roles } = first as Employee;
     assert.ok(Array.isArray(roles), 'roles is an array');
     assert.strictEqual(roles.length, 2, 'array length is correct');
-    assert.strictEqual(roles[0].roleName, 'treat eater');
-    assert.strictEqual(roles[1].roleName, 'dog walker');
+    assert.strictEqual(roles[0].roleName.value, 'treat eater');
+    assert.strictEqual(roles[1].roleName.value, 'dog walker');
 
     let [role1, role2] = roles;
     assert.ok(role1 instanceof Role, 'Role instance is correct');
@@ -3431,14 +3435,17 @@ module('Integration | serialization', function (hooks) {
     );
 
     assert.ok(card instanceof Person, 'card is an instance of person');
-    assert.strictEqual(card.firstName, 'Hassan');
+    assert.strictEqual(card.firstName.value, 'Hassan');
     let { pet } = card;
     if (pet instanceof Pet) {
       assert.strictEqual(isSaved(pet), true, 'Pet card is saved');
-      assert.strictEqual(pet.firstName, 'Mango');
+      assert.strictEqual(pet.firstName.value, 'Mango');
       let { favorite } = pet;
       if (favorite instanceof Toy) {
-        assert.strictEqual(favorite.description, 'Toilet paper ghost: Poooo!');
+        assert.strictEqual(
+          favorite.description.value,
+          'Toilet paper ghost: Poooo!',
+        );
       } else {
         assert.ok(false, '"favorite" field value is not an instance of Toy');
       }
@@ -3486,7 +3493,7 @@ module('Integration | serialization', function (hooks) {
       new URL(realmURL),
       loader,
     );
-    assert.strictEqual(person.firstName, 'Mango');
+    assert.strictEqual(person.firstName.value, 'Mango');
     assert.deepEqual(
       serializeCard(person, { includeUnrenderedFields: true }),
       {
@@ -3563,8 +3570,8 @@ module('Integration | serialization', function (hooks) {
       new URL(realmURL),
       loader,
     );
-    assert.strictEqual(post.title, 'Things I Want to Chew');
-    assert.strictEqual(post.author.firstName, 'Mango');
+    assert.strictEqual(post.title.value, 'Things I Want to Chew');
+    assert.strictEqual(post.author.firstName.value, 'Mango');
     assert.deepEqual(
       serializeCard(post, { includeUnrenderedFields: true }),
       {
@@ -3667,10 +3674,10 @@ module('Integration | serialization', function (hooks) {
     );
     let posts = blog.posts;
     assert.strictEqual(posts.length, 2, 'number of posts is correct');
-    assert.strictEqual(posts[0].title, 'Things I Want to Chew');
-    assert.strictEqual(posts[0].author.firstName, 'Mango');
-    assert.strictEqual(posts[1].title, 'When Mango Steals My Bone');
-    assert.strictEqual(posts[1].author.firstName, 'Van Gogh');
+    assert.strictEqual(posts[0].title.value, 'Things I Want to Chew');
+    assert.strictEqual(posts[0].author.firstName.value, 'Mango');
+    assert.strictEqual(posts[1].title.value, 'When Mango Steals My Bone');
+    assert.strictEqual(posts[1].author.firstName.value, 'Van Gogh');
 
     assert.deepEqual(
       serializeCard(blog, { includeUnrenderedFields: true }),
@@ -3870,11 +3877,11 @@ module('Integration | serialization', function (hooks) {
       'editor certificate is correct',
     );
     assert.strictEqual(posts.length, 2, 'number of posts is correct');
-    assert.strictEqual(posts[0].title, 'Things I Want to Chew');
-    assert.strictEqual(posts[0].author.firstName, 'Mango');
+    assert.strictEqual(posts[0].title.value, 'Things I Want to Chew');
+    assert.strictEqual(posts[0].author.firstName.value, 'Mango');
     assert.strictEqual(posts[0].author.certificate.level, 20);
-    assert.strictEqual(posts[1].title, 'When Mango Steals My Bone');
-    assert.strictEqual(posts[1].author.firstName, 'Van Gogh');
+    assert.strictEqual(posts[1].title.value, 'When Mango Steals My Bone');
+    assert.strictEqual(posts[1].author.firstName.value, 'Van Gogh');
     assert.strictEqual(posts[1].author.certificate.level, 18);
 
     assert.deepEqual(
@@ -4110,10 +4117,10 @@ module('Integration | serialization', function (hooks) {
       let { default: StringField } = string;
 
       class Pet extends CardDef {
-        @field firstName = contains(StringField);
+        @field name = contains(StringField);
         @field title = contains(StringField, {
-          computeVia: function (this: Person) {
-            return this.firstName;
+          computeVia: function (this: Pet) {
+            return this.name;
           },
         });
       }
@@ -4129,10 +4136,10 @@ module('Integration | serialization', function (hooks) {
       loader.shimModule(`${realmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({
-        firstName: 'Mango',
+        name: 'Mango',
       });
       let vanGogh = new Pet({
-        firstName: 'Van Gogh',
+        name: 'Van Gogh',
       });
       let hassan = new Person({
         firstName: 'Hassan',
@@ -4175,7 +4182,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               description: null,
-              firstName: 'Mango',
+              name: 'Mango',
               thumbnailURL: null,
             },
             meta: {
@@ -4187,7 +4194,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               description: null,
-              firstName: 'Van Gogh',
+              name: 'Van Gogh',
               thumbnailURL: null,
             },
             meta: {
@@ -4277,7 +4284,7 @@ module('Integration | serialization', function (hooks) {
       );
 
       assert.ok(card instanceof Person, 'card is an instance of person');
-      assert.strictEqual(card.firstName, 'Hassan');
+      assert.strictEqual(card.firstName.value, 'Hassan');
 
       let { pets } = card;
       assert.ok(Array.isArray(pets), 'pets is an array');
@@ -4285,13 +4292,13 @@ module('Integration | serialization', function (hooks) {
       let [mango, vanGogh] = pets;
       if (mango instanceof Pet) {
         assert.strictEqual(isSaved(mango), true, 'Pet[0] card is saved');
-        assert.strictEqual(mango.firstName, 'Mango');
+        assert.strictEqual(mango.firstName.value, 'Mango');
       } else {
         assert.ok(false, '"pets[0]" is not an instance of Pet');
       }
       if (vanGogh instanceof Pet) {
         assert.strictEqual(isSaved(vanGogh), true, 'Pet[1] card is saved');
-        assert.strictEqual(vanGogh.firstName, 'Van Gogh');
+        assert.strictEqual(vanGogh.firstName.value, 'Van Gogh');
       } else {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
@@ -4457,17 +4464,17 @@ module('Integration | serialization', function (hooks) {
         loader,
       );
       if (card instanceof Person) {
-        assert.strictEqual(card.firstName, 'Hassan');
+        assert.strictEqual(card.firstName.value, 'Hassan');
         let { pets } = card;
         if (Array.isArray(pets)) {
           assert.strictEqual(pets.length, 1, 'correct number of pets');
           let [pet] = pets;
           if (pet instanceof Pet) {
-            assert.strictEqual(pet.firstName, 'Mango');
+            assert.strictEqual(pet.firstName.value, 'Mango');
             let { favoriteToy } = pet;
             if (favoriteToy instanceof Toy) {
               assert.strictEqual(
-                favoriteToy.description,
+                favoriteToy.description.value,
                 'Toilet paper ghost: Poooo!',
               );
             } else {
@@ -4598,7 +4605,7 @@ module('Integration | serialization', function (hooks) {
         loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
-      assert.strictEqual(card.firstName, 'Hassan');
+      assert.strictEqual(card.firstName.value, 'Hassan');
       assert.deepEqual(card.pets, [], 'relationship is an empty array');
     });
 
@@ -4930,21 +4937,21 @@ module('Integration | serialization', function (hooks) {
         loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
-      assert.strictEqual(card.firstName, 'Hassan');
+      assert.strictEqual(card.firstName.value, 'Hassan');
 
       let [mango, vanGogh] = card.friends;
       assert.ok(mango instanceof Person, `${mango.id} is a Person`);
       assert.ok(isSaved(mango), `${mango.id} is saved`);
-      assert.strictEqual(mango.firstName, 'Mango');
+      assert.strictEqual(mango.firstName.value, 'Mango');
 
       assert.ok(vanGogh instanceof Person, `${vanGogh.id} is a Person`);
       assert.ok(isSaved(vanGogh), `${vanGogh.id} is saved`);
-      assert.strictEqual(vanGogh.firstName, 'Van Gogh');
+      assert.strictEqual(vanGogh.firstName.value, 'Van Gogh');
 
       let [hassan] = vanGogh.friends;
       assert.ok(hassan instanceof Person, `${hassan.id} is a Person`);
       assert.ok(isSaved(hassan), `${hassan.id} is saved`);
-      assert.strictEqual(hassan.firstName, 'Hassan');
+      assert.strictEqual(hassan.firstName.value, 'Hassan');
     });
   });
 
@@ -5156,20 +5163,20 @@ module('Integration | serialization', function (hooks) {
         loader,
       );
       assert.ok(card instanceof Person, 'card is an instance of person');
-      assert.strictEqual(card.firstName, 'Burcu');
+      assert.strictEqual(card.firstName.value, 'Burcu');
       let { friendPets } = card;
       assert.ok(Array.isArray(friendPets), 'pets is an array');
       assert.strictEqual(friendPets.length, 2, 'pets has 2 items');
       let [mango, vanGogh] = friendPets;
       if (mango instanceof Pet) {
         assert.strictEqual(isSaved(mango), true, 'Pet[0] card is saved');
-        assert.strictEqual(mango.name, 'Mango');
+        assert.strictEqual(mango.name.value, 'Mango');
       } else {
         assert.ok(false, '"pets[0]" is not an instance of Pet');
       }
       if (vanGogh instanceof Pet) {
         assert.strictEqual(isSaved(vanGogh), true, 'Pet[1] card is saved');
-        assert.strictEqual(vanGogh.name, 'Van Gogh');
+        assert.strictEqual(vanGogh.name.value, 'Van Gogh');
       } else {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
@@ -5275,7 +5282,7 @@ module('Integration | serialization', function (hooks) {
       );
 
       assert.ok(card instanceof Person, 'card is a Person');
-      assert.strictEqual(card.firstName, 'Burcu');
+      assert.strictEqual(card.firstName.value, 'Burcu');
       assert.deepEqual(card.friendPets, [], 'relationship is an empty array');
     });
 
