@@ -8,6 +8,7 @@ import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
+import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { getRoom } from '@cardstack/host/resources/room';
 
@@ -74,7 +75,7 @@ export default class Room extends Component<Signature> {
             data-test-message-field={{this.room.roomId}}
           />
           <AiAssistantCardPicker
-            @autoAttachedCard={{this.autoAttachedCard}}
+            @autoAttachedCards={{this.autoAttachedCards}}
             @cardsToAttach={{this.cardsToAttach}}
             @chooseCard={{this.chooseCard}}
             @removeCard={{this.removeCard}}
@@ -118,7 +119,7 @@ export default class Room extends Component<Signature> {
   private roomResource = getRoom(this, () => this.args.roomId);
   private autoAttachmentResource = getAutoAttachment(
     this,
-    () => this.lastTopMostCard,
+    () => this.topMostStackItems,
     () => this.cardsToAttach,
   );
 
@@ -210,8 +211,10 @@ export default class Room extends Component<Signature> {
     if (this.cardsToAttach) {
       cards.push(...this.cardsToAttach);
     }
-    if (this.autoAttachedCard) {
-      cards.push(this.autoAttachedCard);
+    if (this.autoAttachedCards.size > 0) {
+      this.autoAttachedCards.forEach((card) => {
+        cards.push(card);
+      });
     }
     this.doSendMessage.perform(
       this.messageToSend,
@@ -228,19 +231,29 @@ export default class Room extends Component<Signature> {
   }
 
   @action
+  private isAutoAttachedCard(card: CardDef) {
+    return this.autoAttachedCards.has(card);
+  }
+
+  @action
   private removeCard(card: CardDef) {
-    if (this.autoAttachedCard?.id === card.id) {
-      this.autoAttachmentResource.clear();
+    if (this.isAutoAttachedCard(card)) {
+      this.autoAttachmentResource.onCardRemoval(card);
     } else {
       const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
       if (cardIndex != undefined && cardIndex !== -1) {
-        this.cardsToAttach?.splice(cardIndex, 1);
+        if (this.cardsToAttach !== undefined) {
+          this.autoAttachmentResource.onCardRemoval(
+            this.cardsToAttach[cardIndex],
+          );
+          this.cardsToAttach.splice(cardIndex, 1);
+        }
       }
-      this.matrixService.cardsToSend.set(
-        this.args.roomId,
-        this.cardsToAttach?.length ? this.cardsToAttach : undefined,
-      );
     }
+    this.matrixService.cardsToSend.set(
+      this.args.roomId,
+      this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+    );
   }
   private doSendMessage = enqueueTask(
     async (
@@ -267,6 +280,10 @@ export default class Room extends Component<Signature> {
     },
   );
 
+  get topMostStackItems(): StackItem[] {
+    return this.operatorModeStateService.topMostStackItems();
+  }
+
   get lastTopMostCard() {
     let stackItems = this.operatorModeStateService.topMostStackItems();
     if (stackItems.length === 0) {
@@ -290,8 +307,8 @@ export default class Room extends Component<Signature> {
     return topMostCard;
   }
 
-  private get autoAttachedCard(): CardDef | undefined {
-    return this.autoAttachmentResource.card;
+  private get autoAttachedCards() {
+    return this.autoAttachmentResource.cards;
   }
 
   private get canSend() {
@@ -300,7 +317,7 @@ export default class Room extends Component<Signature> {
       Boolean(
         this.messageToSend ||
           this.cardsToAttach?.length ||
-          this.autoAttachedCard,
+          this.autoAttachedCards.size !== 0,
       ) &&
       !!this.room &&
       !this.room.messages.some((m) => this.isPendingMessage(m))

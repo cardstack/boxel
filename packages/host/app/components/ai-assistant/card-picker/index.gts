@@ -5,6 +5,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
+import { TrackedSet } from 'tracked-built-ins';
+
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
 
@@ -18,7 +20,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    autoAttachedCard?: CardDef;
+    autoAttachedCards?: TrackedSet<CardDef>;
     cardsToAttach: CardDef[] | undefined;
     chooseCard: (card: CardDef) => void;
     removeCard: (card: CardDef) => void;
@@ -143,8 +145,8 @@ export default class AiAssistantCardPicker extends Component<Signature> {
 
   private get cardsToDisplay() {
     let cards = this.args.cardsToAttach ?? [];
-    if (this.args.autoAttachedCard) {
-      cards = [...new Set([this.args.autoAttachedCard, ...cards])];
+    if (this.args.autoAttachedCards) {
+      cards = [...new Set([...this.args.autoAttachedCards, ...cards])];
     }
     return cards;
   }
@@ -173,6 +175,9 @@ export default class AiAssistantCardPicker extends Component<Signature> {
 
   @action
   private isAutoAttachedCard(card: CardDef) {
-    return this.args.autoAttachedCard?.id === card.id;
+    if (this.args.autoAttachedCards === undefined) {
+      return false;
+    }
+    return this.args.autoAttachedCards.has(card);
   }
 }

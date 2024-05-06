@@ -5,5 +5,6 @@ node_modules
 .tmp
 .dist
 /junit
+/playwright-report
 .eslintcache
 schema_tmp.sql

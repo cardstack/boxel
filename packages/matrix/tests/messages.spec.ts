@@ -15,6 +15,7 @@ import {
   registerRealmUsers,
   selectCardFromCatalog,
   getRoomEvents,
+  setupTwoStackItems,
 } from '../helpers';
 import {
   synapseStart,
@@ -147,6 +148,11 @@ test.describe('Room messages', () => {
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await page.locator('[data-test-choose-card-btn]').click();
+    await page
+      .locator(
+        `[data-test-realm="Test Workspace A"] [data-test-show-more-cards]`,
+      )
+      .click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
@@ -181,6 +187,11 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
     await page.locator('[data-test-choose-card-btn]').click();
+    await page
+      .locator(
+        `[data-test-realm="Test Workspace A"] [data-test-show-more-cards]`,
+      )
+      .click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
@@ -224,6 +235,12 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
     await page.locator('[data-test-choose-card-btn]').click();
+
+    await page
+      .locator(
+        `[data-test-realm="Test Workspace A"] [data-test-show-more-cards]`,
+      )
+      .click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
@@ -567,170 +584,251 @@ test.describe('Room messages', () => {
     await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(5);
   });
 
-  test('displays auto-attached card', async ({ page }) => {
-    const testCard1 = `${testHost}/hassan`;
-    const testCard2 = `${testHost}/mango`;
+  test.describe('auto-attachment of cards in matrix room', () => {
+    test.beforeEach(async ({ page }) => {
+      await login(page, 'user1', 'pass');
+      await getRoomId(page);
+    });
 
-    await login(page, 'user1', 'pass');
+    test('displays auto-attached card (1 stack)', async ({ page }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: testCard1, title: 'Hassan' }],
+        },
+      ]);
+    });
+    test('manually attached card is not auto-attached', async ({ page }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await selectCardFromCatalog(page, testCard1);
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveCount(0);
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: testCard1, title: 'Hassan' }],
+        },
+      ]);
+    });
 
-    await page
-      .locator(
-        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
-      )
-      .click();
-    // Make sure we've got an open room
-    await getRoomId(page);
+    test('manually attached card overwrites auto-attached card', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await selectCardFromCatalog(page, testCard1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveCount(0);
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: testCard1, title: 'Hassan' }],
+        },
+      ]);
+    });
+    test('does not auto-attach index card', async ({ page }) => {
+      const indexCard = `${testHost}/index`;
+      await expect(
+        page.locator(`[data-test-stack-card="${indexCard}"]`),
+      ).toHaveCount(1); // The index card appears by default, we verify it exists here
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+    });
+    test('replaces auto-attached card when drilling down (1 stack)', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/jersey`;
+      const embeddedCard = `${testHost}/justin`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await expect(
+        page.locator(`[data-test-attached-card="${testCard1}"]`),
+      ).toHaveCount(1);
+      await page.locator('[data-test-card-format="embedded"]').click(); // click on embedded card
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await expect(
+        page.locator(`[data-test-attached-card="${embeddedCard}"]`),
+      ).toHaveCount(1);
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: embeddedCard, title: 'Justin T' }],
+        },
+      ]);
+    });
 
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-    await page.locator(`[data-test-attached-card]`).hover();
-    await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
-      'Topmost card is shared automatically',
-    );
+    test('auto-attached card will get auto-remove when closing a stack', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page
+        .locator(
+          `[data-test-stack-card='${testCard1}'] [data-test-close-button]`,
+        )
+        .click();
 
-    await selectCardFromCatalog(page, testCard2);
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(2);
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+    });
 
-    // Do not auto-attach a card if it has been selected
-    await page
-      .locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`)
-      .click();
-    await page
-      .locator(
-        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard2}']`,
-      )
-      .click();
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+    test('can manually remove auto-attached card', async ({ page }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page
+        .locator(
+          `[data-test-attached-card='${testCard1}'] [data-test-remove-card-btn]`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+      await expect(
+        page.locator(`[data-test-stack-card='${testCard1}']`),
+      ).toHaveCount(1); //card still on stack
+    });
 
-    await page
-      .locator(`[data-test-stack-card='${testCard2}'] [data-test-close-button]`)
-      .click();
-    await page
-      .locator(
-        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
-      )
-      .click();
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(2);
+    test('re-opening previously removed auto-attached card will auto attach again', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page
+        .locator(
+          `[data-test-attached-card='${testCard1}'] [data-test-remove-card-btn]`,
+        )
+        .click();
+      await page
+        .locator(
+          `[data-test-stack-card='${testCard1}'] [data-test-close-button]`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+      await page
+        .locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+        )
+        .click();
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: testCard1, title: 'Hassan' }],
+        },
+      ]);
+    });
 
-    await page.locator('[data-test-send-message-btn]').click();
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        cards: [
-          { id: testCard1, title: 'Hassan' },
-          { id: testCard2, title: 'Mango' },
-        ],
-      },
-    ]);
-  });
+    test('(2 stack) displays both top cards as auto-attached ', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/hassan`;
+      const testCard2 = `${testHost}/mango`;
+      await setupTwoStackItems(page, testCard1, testCard2);
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(2);
+      await expect(
+        page.locator(`[data-test-attached-card="${testCard1}"]`),
+      ).toHaveCount(1);
+      await expect(
+        page.locator(`[data-test-attached-card="${testCard2}"]`),
+      ).toHaveCount(1);
+      await page.locator(`[data-test-attached-card="${testCard1}"]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page.locator(`[data-test-attached-card="${testCard2}"]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [
+            { id: testCard1, title: 'Hassan' },
+            { id: testCard2, title: 'Mango' },
+          ],
+        },
+      ]);
+    });
 
-  test('does not auto attach index card', async ({ page }) => {
-    const testCard1 = `${testHost}/hassan`;
-
-    await login(page, 'user1', 'pass');
-    // Make sure we've got an open room
-    await getRoomId(page);
-
-    // assert nothing attached
-
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
-
-    // Opening a card should result in it being auto-attached
-    await page
-      .locator(
-        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
-      )
-      .click();
-
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-    await page.locator(`[data-test-attached-card]`).hover();
-    await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
-      'Topmost card is shared automatically',
-    );
-
-    // close card
-    await page
-      .locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`)
-      .click();
-
-    // Should have no cards attached again
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
-
-    // Fill in a message
-
-    await page.locator('[data-test-message-field]').fill('This is a message');
-
-    await page.locator('[data-test-send-message-btn]').click();
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        message: 'This is a message',
-        cards: [],
-      },
-    ]);
-  });
-
-  test('can remove auto-attached card', async ({ page }) => {
-    const testCard1 = `${testHost}/hassan`;
-    const testCard2 = `${testHost}/mango`;
-    const testCard3 = `${testHost}/type-examples`;
-
-    await login(page, 'user1', 'pass');
-    await page
-      .locator(
-        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
-      )
-      .click();
-    // Make sure we've got an open room
-    await getRoomId(page);
-
-    // If user removes the auto-attached card,
-    // and then opens another card in the stack,
-    // the card will be attached automatically.
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-    await page
-      .locator(
-        `[data-test-attached-card='${testCard1}'] [data-test-remove-card-btn]`,
-      )
-      .click();
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
-    // If user removes the auto-attached card
-    // pops the card from the stack
-    // adding the same card back to the stack will attach it again
-    await page
-      .locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`)
-      .click();
-    await page
-      .locator(
-        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
-      )
-      .click();
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-    await page
-      .locator(`[data-test-stack-card='${testCard1}'] [data-test-close-button]`)
-      .click();
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
-
-    await page
-      .locator(
-        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard2}']`,
-      )
-      .click();
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-    await page
-      .locator(
-        `[data-test-attached-card='${testCard2}'] [data-test-remove-card-btn]`,
-      )
-      .click();
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
-    await selectCardFromCatalog(page, testCard3);
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-    await page.locator('[data-test-send-message-btn]').click();
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        cards: [{ id: testCard3, title: 'Type Examples' }],
-      },
-    ]);
+    test('(2 stack) if both top cards are the same, only one auto-attached pill', async ({
+      page,
+    }) => {
+      const testCard1 = `${testHost}/hassan`;
+      await setupTwoStackItems(page, testCard1, testCard1);
+      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await expect(
+        page.locator(`[data-test-attached-card="${testCard1}"]`),
+      ).toHaveCount(1);
+      await page.locator(`[data-test-attached-card="${testCard1}"]`).hover();
+      await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
+        'Topmost card is shared automatically',
+      );
+      await page.locator('[data-test-send-message-btn]').click();
+      await assertMessages(page, [
+        {
+          from: 'user1',
+          cards: [{ id: testCard1, title: 'Hassan' }],
+        },
+      ]);
+    });
   });
 
   test('it can send the prompts on new-session room as chat message on click', async ({
