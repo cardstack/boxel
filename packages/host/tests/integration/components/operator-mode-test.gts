@@ -13,6 +13,7 @@ import {
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
+import { setupWindowMock } from 'ember-window-mock/test-support';
 import { EventStatus } from 'matrix-js-sdk';
 import { module, test, skip } from 'qunit';
 
@@ -53,7 +54,6 @@ import {
   MockMatrixService,
 } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
