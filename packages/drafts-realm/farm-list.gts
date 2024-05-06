@@ -1,7 +1,7 @@
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+
 export class FarmList extends CardDef {
-  static displayName = "Farm List";
+  static displayName = 'Farm List';
 
   /*
   static isolated = class Isolated extends Component<typeof this> {
@@ -19,5 +19,6 @@ export class FarmList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
   */
 }
