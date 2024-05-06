@@ -30,7 +30,6 @@ class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
     _positional: [],
     { fen }: ChessboardModifierSignature['Args']['Named'],
   ) {
-    debugger;
     if (this.chessboard == undefined) {
       this.chessboard = new Chessboard(element, {
         position: fen ?? FEN.start,
