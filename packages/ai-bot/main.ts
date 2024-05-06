@@ -324,122 +324,143 @@ Common issues are:
   client.on(
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
-      let eventBody = event.getContent().body;
-      if (!room) {
-        return;
-      }
-      log.info('(%s) %s :: %s', room?.name, event.getSender(), eventBody);
+      try {
+        let eventBody = event.getContent().body;
+        if (!room) {
+          return;
+        }
+        log.info('(%s) %s :: %s', room?.name, event.getSender(), eventBody);
 
-      if (event.event.origin_server_ts! < startTime) {
-        return;
-      }
-      if (toStartOfTimeline) {
-        return; // don't print paginated results
-      }
-      if (event.getType() !== 'm.room.message') {
-        return; // only print messages
-      }
-      if (event.getContent().msgtype === 'org.boxel.cardFragment') {
-        return; // don't respond to card fragments, we just gather these in our history
-      }
-      if (event.getSender() === aiBotUserId) {
-        return;
-      }
+        if (event.event.origin_server_ts! < startTime) {
+          return;
+        }
+        if (toStartOfTimeline) {
+          return; // don't print paginated results
+        }
+        if (event.getType() !== 'm.room.message') {
+          return; // only print messages
+        }
+        if (event.getContent().msgtype === 'org.boxel.cardFragment') {
+          return; // don't respond to card fragments, we just gather these in our history
+        }
+        if (event.getSender() === aiBotUserId) {
+          return;
+        }
 
-      let initial = await client.roomInitialSync(room!.roomId, 1000);
-      let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
-      log.info(eventList);
+        let initial = await client.roomInitialSync(room!.roomId, 1000);
+        let eventList = (initial!.messages?.chunk ||
+          []) as DiscreteMatrixEvent[];
+        log.info(eventList);
 
-      log.info('Total event list', eventList.length);
-      let history: DiscreteMatrixEvent[] = constructHistory(eventList);
-      log.info("Compressed into just the history that's ", history.length);
+        log.info('Total event list', eventList.length);
+        let history: DiscreteMatrixEvent[] = constructHistory(eventList);
+        log.info("Compressed into just the history that's ", history.length);
 
-      // To assist debugging, handle explicit commands
-      if (eventBody.startsWith('debug:')) {
-        return await handleDebugCommands(
-          eventBody,
+        // To assist debugging, handle explicit commands
+        if (eventBody.startsWith('debug:')) {
+          return await handleDebugCommands(
+            eventBody,
+            client,
+            room,
+            history,
+            aiBotUserId,
+          );
+        }
+
+        let initialMessage = await sendMessage(
           client,
           room,
-          history,
-          aiBotUserId,
+          'Thinking...',
+          undefined,
         );
-      }
 
-      let initialMessage = await sendMessage(
-        client,
-        room,
-        'Thinking...',
-        undefined,
-      );
-
-      let unsent = 0;
-      let sentCommands = 0;
-      let thinkingMessageReplaced = false;
-      const runner = getResponse(history, aiBotUserId)
-        .on('content', async (_delta, snapshot) => {
-          unsent += 1;
-          if (unsent > 5) {
-            unsent = 0;
-            await sendMessage(
-              client,
-              room,
-              cleanContent(snapshot),
-              initialMessage.event_id,
-            );
-          }
-          thinkingMessageReplaced = true;
-        })
-        // Messages can have both content and tool calls
-        // We handle tool calls here
-        .on('message', async (msg) => {
-          if (msg.role === 'assistant') {
-            for (const toolCall of msg.tool_calls || []) {
-              const functionCall = toolCall.function;
-              console.log('Function call', toolCall);
-              let args;
-              try {
-                args = JSON.parse(functionCall.arguments);
-              } catch (error) {
-                Sentry.captureException(error);
-                return await sendError(
-                  client,
-                  room,
-                  error,
-                  thinkingMessageReplaced ? undefined : initialMessage.event_id,
-                );
-              }
-              if (functionCall.name === 'patchCard') {
-                sentCommands += 1;
-                await sendOption(
-                  client,
-                  room,
-                  args,
-                  thinkingMessageReplaced ? undefined : initialMessage.event_id,
-                );
-                thinkingMessageReplaced = true;
+        let unsent = 0;
+        let sentCommands = 0;
+        let thinkingMessageReplaced = false;
+        const runner = getResponse(history, aiBotUserId)
+          .on('content', async (_delta, snapshot) => {
+            unsent += 1;
+            if (unsent > 5) {
+              unsent = 0;
+              await sendMessage(
+                client,
+                room,
+                cleanContent(snapshot),
+                initialMessage.event_id,
+              );
+            }
+            thinkingMessageReplaced = true;
+          })
+          // Messages can have both content and tool calls
+          // We handle tool calls here
+          .on('message', async (msg) => {
+            if (msg.role === 'assistant') {
+              for (const toolCall of msg.tool_calls || []) {
+                const functionCall = toolCall.function;
+                console.log('Function call', toolCall);
+                let args;
+                try {
+                  args = JSON.parse(functionCall.arguments);
+                } catch (error) {
+                  Sentry.captureException(error);
+                  return await sendError(
+                    client,
+                    room,
+                    error,
+                    thinkingMessageReplaced
+                      ? undefined
+                      : initialMessage.event_id,
+                  );
+                }
+                if (functionCall.name === 'patchCard') {
+                  sentCommands += 1;
+                  await sendOption(
+                    client,
+                    room,
+                    args,
+                    thinkingMessageReplaced
+                      ? undefined
+                      : initialMessage.event_id,
+                  );
+                  thinkingMessageReplaced = true;
+                }
               }
             }
-          }
-        })
-        .on('error', async (error: OpenAIError) => {
-          Sentry.captureException(error);
+          })
+          .on('error', async (error: OpenAIError) => {
+            Sentry.captureException(error);
+            return await sendError(
+              client,
+              room,
+              error,
+              initialMessage.event_id,
+            );
+          });
+        // We also need to catch the error when getting the final content
+        let finalContent = await runner.finalContent().catch(async (error) => {
           return await sendError(client, room, error, initialMessage.event_id);
         });
-      // We also need to catch the error when getting the final content
-      let finalContent = await runner.finalContent().catch(async (error) => {
-        return await sendError(client, room, error, initialMessage.event_id);
-      });
-      if (finalContent) {
-        finalContent = cleanContent(finalContent);
-        await sendMessage(client, room, finalContent, initialMessage.event_id, {
-          isStreamingFinished: true,
-        });
-      }
+        if (finalContent) {
+          finalContent = cleanContent(finalContent);
+          await sendMessage(
+            client,
+            room,
+            finalContent,
+            initialMessage.event_id,
+            {
+              isStreamingFinished: true,
+            },
+          );
+        }
 
-      if (shouldSetRoomTitle(eventList, aiBotUserId, sentCommands)) {
-        return await setTitle(client, room, history, aiBotUserId);
+        if (shouldSetRoomTitle(eventList, aiBotUserId, sentCommands)) {
+          return await setTitle(client, room, history, aiBotUserId);
+        }
+        return;
+      } catch (e) {
+        log.error(e);
+        Sentry.captureException(e);
       }
-      return;
     },
   );
 
