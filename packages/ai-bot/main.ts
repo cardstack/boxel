@@ -447,5 +447,6 @@ Common issues are:
   log.info('client started');
 })().catch((e) => {
   log.error(e);
+  Sentry.captureException(e);
   process.exit(1);
 });
