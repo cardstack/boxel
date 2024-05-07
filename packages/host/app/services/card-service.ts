@@ -261,23 +261,31 @@ export default class CardService extends Service {
   // we return undefined if the card changed locally while the save was in-flight
   async patchCard(
     card: CardDef,
-    doc: LooseSingleCardDocument,
-    patchAttributes: Record<string, any>,
+    patch: Record<string, any>,
     loader?: Loader,
   ): Promise<CardDef | undefined> {
     let api = await this.getAPI(loader);
-    let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
+
+    let document = await this.serializeCard(card);
+    let existingDoc = Object.assign({}, document);
+    document.data = {
+      ...document.data,
+      ...patch,
+    };
+    let updatedCard = await api.updateFromSerialized<typeof CardDef>(
+      card,
+      document,
+    );
+
+    let updatedDoc = await this.serializeCard(updatedCard);
+    if (!this.isPatchApplied(updatedDoc.data, patch)) {
+      await api.updateFromSerialized(card, existingDoc);
+      throw new Error('Patch failed.');
+    }
+
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
-    let savedCard = await this.saveModel(this, updatedCard);
-
-    if (savedCard && patchAttributes) {
-      let savedDoc = await this.serializeCard(savedCard);
-      if (!this.isPatchApplied(savedDoc.data.attributes, patchAttributes)) {
-        throw new Error('Patch failed.');
-      }
-    }
-    return savedCard;
+    return await this.saveModel(this, updatedCard);
   }
 
   private isPatchApplied(
@@ -307,6 +315,10 @@ export default class CardService extends Service {
           return false;
         }
       } else if (!isEqual(val, value)) {
+        let maybeURL = new URL(val, value);
+        if (maybeURL.href === value) {
+          return true;
+        }
         return false;
       }
     }
