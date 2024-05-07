@@ -110,6 +110,7 @@ async function sendOption(
         id: id,
         patch: {
           attributes: patch['attributes'],
+          relationships: patch['relationships'],
         },
         eventId: eventToUpdate,
       },
