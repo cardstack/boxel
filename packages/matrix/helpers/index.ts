@@ -264,8 +264,8 @@ export async function createRoomWithMessage(page: Page, message?: string) {
 export async function getRoomId(page: Page) {
   await page.locator(`[data-test-room-settled]`).waitFor();
   let roomId = await page
-    .locator('[data-test-room]')
-    .getAttribute('data-test-room');
+    .locator('[data-test-room-raw-id]')
+    .getAttribute('data-test-room-raw-id');
   if (roomId == null) {
     throw new Error('room ID is not found');
   }
