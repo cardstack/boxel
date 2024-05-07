@@ -25,13 +25,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     let { field, contains, CardDef, Component } = await loader.import<

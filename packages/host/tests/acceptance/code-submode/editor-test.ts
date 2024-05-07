@@ -48,20 +48,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
     realmPermissions = { [testRealmURL]: ['read', 'write'] };
 
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;
-
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
 
     window.localStorage.setItem(
       'recent-files',

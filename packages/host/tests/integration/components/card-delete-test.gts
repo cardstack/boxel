@@ -79,13 +79,8 @@ module('Integration | card-delete', function (hooks) {
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
   setupWindowMock(hooks);
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-cards');
-  });
 
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-cards');
-
     setCardInOperatorModeState = async (
       leftCards: string[],
       rightCards: string[] = [],

@@ -414,12 +414,7 @@ module('Acceptance | code submode tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;

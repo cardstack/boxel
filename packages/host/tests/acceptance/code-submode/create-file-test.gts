@@ -219,12 +219,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
     realmPermissions = {
       [baseRealm.url]: ['read'],
       [testRealmURL]: ['read', 'write'],

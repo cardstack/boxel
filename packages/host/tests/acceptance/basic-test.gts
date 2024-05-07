@@ -21,13 +21,7 @@ module('Acceptance | basic tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupWindowMock(hooks);
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
-
     let loaderService = this.owner.lookup(
       'service:loader-service',
     ) as LoaderService;

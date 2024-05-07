@@ -86,18 +86,7 @@ module('Integration | operator-mode', function (hooks) {
   setupWindowMock(hooks);
   let noop = () => {};
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
-    window.localStorage.removeItem('aiPanelCurrentRoomId');
-    window.localStorage.removeItem('aiPanelNewSessionId');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
-    window.localStorage.removeItem('aiPanelCurrentRoomId');
-    window.localStorage.removeItem('aiPanelNewSessionId');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     matrixService = this.owner.lookup(
       'service:matrixService',
