@@ -724,8 +724,8 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       await waitFor('[data-test-room-settled]');
       let roomId = document
-        .querySelector('[data-test-room]')
-        ?.getAttribute('data-test-room');
+        .querySelector('[data-test-room-raw-id]')
+        ?.getAttribute('data-test-room-raw-id');
       if (!roomId) {
         throw new Error('Expected a room ID');
       }
