@@ -109,6 +109,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     let {
       field,
       contains,
+      containsMany,
       linksTo,
       linksToMany,
       CardDef,
@@ -123,6 +124,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       static displayName = 'Pet';
       @field name = contains(StringField);
       @field favoriteTreat = contains(StringField);
+
       @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
@@ -187,6 +189,14 @@ module('Acceptance | interact submode tests', function (hooks) {
             <@fields.country />
           </h3>
           <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
+
+          <div data-test-editable-meta>
+            {{#if @canEdit}}
+              address is editable.
+            {{else}}
+              address is NOT editable.
+            {{/if}}
+          </div>
         </template>
       };
 
@@ -225,7 +235,9 @@ module('Acceptance | interact submode tests', function (hooks) {
           return this.firstName;
         },
       });
-      @field address = contains(Address);
+      @field primaryAddress = contains(Address);
+      @field additionalAddresses = containsMany(Address);
+
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h2 data-test-person={{@model.firstName}}>
@@ -238,8 +250,10 @@ module('Acceptance | interact submode tests', function (hooks) {
           <@fields.pet />
           Friends:
           <@fields.friends />
-          Address:
-          <@fields.address />
+          Primary Address:
+          <@fields.primaryAddress />
+          Additional Adresses:
+          <@fields.additionalAddresses />
         </template>
       };
     }
@@ -274,6 +288,24 @@ module('Acceptance | interact submode tests', function (hooks) {
               remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
             }),
           }),
+          additionalAddresses: [
+            new Address({
+              city: 'Jakarta',
+              country: 'Indonesia',
+              shippingInfo: new ShippingInfo({
+                preferredCarrier: 'FedEx',
+                remarks: `Make sure to deliver to the back door`,
+              }),
+            }),
+            new Address({
+              city: 'Bali',
+              country: 'Indonesia',
+              shippingInfo: new ShippingInfo({
+                preferredCarrier: 'UPS',
+                remarks: `Call ahead to make sure someone is home`,
+              }),
+            }),
+          ],
           pet: mangoPet,
         }),
         'grid.json': new CardsGrid(),
@@ -300,6 +332,16 @@ module('Acceptance | interact submode tests', function (hooks) {
         'Person/hassan.json': new Person({
           firstName: 'Hassan',
           pet: mangoPet,
+          additionalAddresses: [
+            new Address({
+              city: 'New York',
+              country: 'USA',
+              shippingInfo: new ShippingInfo({
+                preferredCarrier: 'DHL',
+                remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+              }),
+            }),
+          ],
         }),
       },
     });
@@ -945,6 +987,79 @@ module('Acceptance | interact submode tests', function (hooks) {
         assert
           .dom('[data-test-editable-meta]')
           .containsText('Ringo is editable');
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Person/fadhlan`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('address is NOT editable');
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Person/fadhlan`,
+                format: 'edit',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom("[data-test-contains-many='additionalAddresses'] input:enabled")
+          .doesNotExist();
+
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-remove]",
+          )
+          .doesNotExist();
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-add-new]",
+          )
+          .doesNotExist();
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealm2URL}Person/hassan`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('address is editable');
+
+        await click('[data-test-operator-mode-stack] [data-test-edit-button]');
+
+        assert
+          .dom("[data-test-contains-many='additionalAddresses'] input:disabled")
+          .doesNotExist();
+
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-remove]",
+          )
+          .exists();
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-add-new]",
+          )
+          .exists();
       });
       test('the delete item is not present in "..." menu of stack item', async function (assert) {
         await visitOperatorMode({
