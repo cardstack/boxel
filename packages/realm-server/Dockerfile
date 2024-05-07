@@ -6,7 +6,7 @@ ENV realm_server_script=$realm_server_script
 
 WORKDIR /realm-server
 
-RUN apt-get update && apt-get install -y ca-certificates curl unzip
+RUN apt-get update && apt-get install -y ca-certificates curl unzip postgresql
 RUN npm install -g pnpm@8.10.5
 
 COPY pnpm-lock.yaml ./
@@ -21,5 +21,4 @@ RUN CI=1 pnpm install -r --offline
 
 EXPOSE 3000
 
-# TODO need to set the PG ENV vars to connect to the DB in the command below
 CMD pnpm --filter "./packages/realm-server" $realm_server_script

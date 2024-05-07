@@ -29,6 +29,7 @@ import ResizablePanelGroup, {
   ResizeHandle,
 } from './components/resizable-panel-group/index.gts';
 import type { PanelContext } from './components/resizable-panel-group/panel.gts';
+import BoxelSelect from './components/select/index.gts';
 import Tooltip from './components/tooltip/index.gts';
 
 export {
@@ -44,6 +45,7 @@ export {
   BoxelInputValidationState,
   BoxelInputValidationStates,
   BoxelMessage,
+  BoxelSelect,
   Button,
   CardContainer,
   CircleSpinner,
