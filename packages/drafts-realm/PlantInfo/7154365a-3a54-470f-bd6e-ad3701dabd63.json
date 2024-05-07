@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "commonName": [
+        "Swamp Milkweed",
+        "Rose Milkweed"
+      ],
+      "scientificName": "Asclepias incarnata",
+      "lightReq": {
+        "fieldDisplayName": "Light Level",
+        "displayValues": [
+          "Full Sun",
+          "Partial Sun",
+          "Partial Shade",
+          "Full Shade"
+        ],
+        "selectedValue": "Full Sun"
+      },
+      "title": "Swamp Milkweed",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../plant-info",
+        "name": "PlantInfo"
+      }
+    }
+  }
+}
