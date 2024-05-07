@@ -49,14 +49,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { expiresInSec: () => sessionExpirationSec });
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
     sessionExpirationSec = 60 * 60;
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)

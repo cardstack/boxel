@@ -1,7 +1,6 @@
 import { visit, currentURL, triggerEvent, waitFor } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
-import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
@@ -25,13 +24,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     let { field, contains, CardDef, Component } = await loader.import<

@@ -7,7 +7,6 @@ import {
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
-import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
@@ -231,13 +230,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
-
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     ({ realm } = await setupAcceptanceTestRealm({
