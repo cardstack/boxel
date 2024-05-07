@@ -344,7 +344,7 @@ export class CurrentRun {
       return;
     }
     let start = Date.now();
-    log.debug(`begin visiting file ${url.href}`);
+    console.log(`begin visiting file ${url.href}`);
     if (
       hasExecutableExtension(url.href) ||
       // handle modules with no extension too
@@ -389,7 +389,9 @@ export class CurrentRun {
         }
       }
     }
-    log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
+    console.log(
+      `completed visiting file ${url.href} in ${Date.now() - start}ms`,
+    );
   }
 
   private async indexCardSource(url: URL): Promise<void> {

@@ -20,7 +20,7 @@ import { md5 } from 'super-fast-md5';
 import {
   isCardResource,
   executableExtensions,
-  hasExecutableExtension,
+  // hasExecutableExtension,
   isNode,
   isSingleCardDocument,
   baseRealm,
@@ -35,7 +35,7 @@ import {
   type Indexer,
 } from './index';
 import merge from 'lodash/merge';
-import flatMap from 'lodash/flatMap';
+// import flatMap from 'lodash/flatMap';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import {
@@ -627,7 +627,7 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#warmUpCache();
+    // await this.#warmUpCache();
     await this.#searchIndex.run(this.#onIndexer);
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
   }
@@ -635,26 +635,26 @@ export class Realm {
   // Take advantage of the fact that the base realm modules are static (for now)
   // and cache the transpiled js for all the base realm modules so that all
   // consuming realms can benefit from this work
-  async #warmUpCache() {
-    if (this.url !== baseRealm.url) {
-      return;
-    }
+  // async #warmUpCache() {
+  //   if (this.url !== baseRealm.url) {
+  //     return;
+  //   }
 
-    let entries = await this.recursiveDirectoryEntries(new URL(this.url));
-    let modules = flatMap(entries, (e) =>
-      e.kind === 'file' && hasExecutableExtension(e.path) ? [e.path] : [],
-    );
-    for (let mod of modules) {
-      let handle = await this.#adapter.openFile(mod);
-      if (!handle) {
-        this.#log.error(
-          `cannot open file ${mod} when warming up transpilation cache`,
-        );
-        continue;
-      }
-      this.makeJS(await fileContentToText(handle), handle.path);
-    }
-  }
+  //   let entries = await this.recursiveDirectoryEntries(new URL(this.url));
+  //   let modules = flatMap(entries, (e) =>
+  //     e.kind === 'file' && hasExecutableExtension(e.path) ? [e.path] : [],
+  //   );
+  //   for (let mod of modules) {
+  //     let handle = await this.#adapter.openFile(mod);
+  //     if (!handle) {
+  //       this.#log.error(
+  //         `cannot open file ${mod} when warming up transpilation cache`,
+  //       );
+  //       continue;
+  //     }
+  //     this.makeJS(await fileContentToText(handle), handle.path);
+  //   }
+  // }
 
   get ready(): Promise<void> {
     return this.#startedUp.promise;
