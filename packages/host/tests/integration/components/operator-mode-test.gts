@@ -13,6 +13,7 @@ import {
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
+import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { EventStatus } from 'matrix-js-sdk';
 import { module, test, skip } from 'qunit';
@@ -86,17 +87,17 @@ module('Integration | operator-mode', function (hooks) {
   let noop = () => {};
 
   hooks.afterEach(async function () {
-    localStorage.removeItem('recent-cards');
-    localStorage.removeItem('recent-files');
-    localStorage.removeItem('aiPanelCurrentRoomId');
-    localStorage.removeItem('aiPanelNewSessionId');
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('aiPanelCurrentRoomId');
+    window.localStorage.removeItem('aiPanelNewSessionId');
   });
 
   hooks.beforeEach(async function () {
-    localStorage.removeItem('recent-cards');
-    localStorage.removeItem('recent-files');
-    localStorage.removeItem('aiPanelCurrentRoomId');
-    localStorage.removeItem('aiPanelNewSessionId');
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('aiPanelCurrentRoomId');
+    window.localStorage.removeItem('aiPanelNewSessionId');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     matrixService = this.owner.lookup(
       'service:matrixService',
@@ -1488,7 +1489,7 @@ module('Integration | operator-mode', function (hooks) {
         );
 
       await click('[data-test-close-ai-assistant]');
-      localStorage.setItem(
+      window.localStorage.setItem(
         'aiPanelCurrentRoomId',
         "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
       );
@@ -1500,7 +1501,7 @@ module('Integration | operator-mode', function (hooks) {
           "test room 3 is the most recently created room and it's opened initially",
         );
 
-      localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
+      window.localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
     });
 
     test('can close past-sessions list on outside click', async function (assert) {

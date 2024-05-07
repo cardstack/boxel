@@ -2,6 +2,8 @@ import { waitUntil, waitFor, click, focus } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -76,12 +78,13 @@ module('Integration | card-delete', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
+  setupWindowMock(hooks);
   hooks.afterEach(async function () {
-    localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-cards');
   });
 
   hooks.beforeEach(async function () {
-    localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-cards');
 
     setCardInOperatorModeState = async (
       leftCards: string[],
