@@ -19,7 +19,7 @@ jobs:
       group: lint-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Lint AI Bot
         if: always()
@@ -89,7 +89,7 @@ jobs:
       group: ai-bot-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: AI Bot test suite
         run: pnpm test
@@ -102,7 +102,7 @@ jobs:
       group: boxel-motion-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Build boxel-motion
         run: pnpm build
@@ -118,7 +118,7 @@ jobs:
       group: boxel-ui-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Build boxel-ui
         run: pnpm build
@@ -134,7 +134,7 @@ jobs:
       group: boxel-ui-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Rebuild boxel-ui icons
         run: pnpm rebuild:icons
@@ -149,7 +149,7 @@ jobs:
       group: boxel-host-test-in-memory-index${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Build boxel-ui
         run: pnpm build
@@ -184,7 +184,7 @@ jobs:
       group: boxel-host-test-db-index${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Build boxel-ui
         run: PG_INDEXER=true pnpm build
@@ -222,7 +222,7 @@ jobs:
         shardIndex: [1, 2, 3, 4, 5, 6]
         shardTotal: [6]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
@@ -272,7 +272,7 @@ jobs:
       - name: Create a timestamp as a directory to store reports in
         id: timestampid
         run: echo "timestamp=$(date --utc +%Y%m%d_%H%M%SZ)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
 
       - name: Download blob reports from GitHub Actions Artifacts
@@ -301,7 +301,7 @@ jobs:
           echo "AWS_S3_BUCKET=cardstack-boxel-matrix-playwright-reports-staging" >> $GITHUB_ENV
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v3
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1
@@ -327,14 +327,14 @@ jobs:
             https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
             -d '{"context":"Matrix Playwright tests report","description":"","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
 
-  realm-server-test:
-    name: Realm Server Tests
+  realm-server-in-memory-index-test:
+    name: Realm Server Tests - in-memory index
     runs-on: ubuntu-latest
     concurrency:
-      group: realm-server-test-${{ github.head_ref || github.run_id }}
+      group: realm-server-in-memory-index-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Build boxel-ui
         run: pnpm build
@@ -357,6 +357,36 @@ jobs:
         run: pnpm test:dom
         working-directory: packages/realm-server
 
+  realm-server-db-index-test:
+    name: Realm Server Tests - db index
+    runs-on: ubuntu-latest
+    concurrency:
+      group: realm-server-db-index-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+      - name: Build host dist/ for fastboot
+        run: pnpm build
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+        working-directory: packages/host
+      - name: Start realm servers
+        run: PG_INDEXER=true pnpm start:all &
+        working-directory: packages/realm-server
+      - name: create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: realm server test suite
+        run: PG_INDEXER=true pnpm test:wait-for-servers
+        working-directory: packages/realm-server
+      - name: realm server DOM tests
+        run: PG_INDEXER=true pnpm test:dom
+        working-directory: packages/realm-server
+
   change-check:
     name: Check which packages changed
     if: github.ref == 'refs/heads/main'
@@ -365,7 +395,7 @@ jobs:
       boxel: ${{ steps.filter.outputs.boxel }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v2
         id: filter
         with:
@@ -396,7 +426,7 @@ jobs:
       - boxel-ui-test
       # don't forget to change this after we remove the feature flag
       - host-test-in-memory-index
-      - realm-server-test
+      - realm-server-in-memory-index-test
     uses: ./.github/workflows/manual-deploy.yml
     secrets: inherit
     with:

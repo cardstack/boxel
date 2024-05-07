@@ -16,7 +16,7 @@ export async function smtpStart(opts?: Options) {
   let portMapping = `${mailClientPort}:80`;
   await dockerCreateNetwork({ networkName: 'boxel' });
   const containerId = await dockerRun({
-    image: 'rnwood/smtp4dev',
+    image: 'rnwood/smtp4dev:v3.1',
     containerName: 'boxel-smtp',
     dockerParams: ['-p', portMapping, '--network=boxel'],
   });

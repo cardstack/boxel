@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import { prepareTestDB } from './helpers';
 
 import PgQueue from '../pg-queue';
+import PgAdapter from '../pg-adapter';
 
 import { type Queue } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
@@ -12,7 +13,7 @@ module('queue', function (hooks) {
 
   hooks.beforeEach(async function () {
     prepareTestDB();
-    queue = new PgQueue();
+    queue = new PgQueue(new PgAdapter());
     await queue.start();
   });
 
@@ -37,7 +38,7 @@ module('queue', function (hooks) {
   module('multiple queue clients', function (nestedHooks) {
     let queue2: Queue;
     nestedHooks.beforeEach(async function () {
-      queue2 = new PgQueue();
+      queue2 = new PgQueue(new PgAdapter());
       await queue2.start();
     });
 

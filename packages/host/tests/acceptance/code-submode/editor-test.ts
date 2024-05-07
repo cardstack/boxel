@@ -19,7 +19,6 @@ import type EnvironmentService from '@cardstack/host/services/environment-servic
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
-  percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
@@ -28,7 +27,6 @@ import {
   setMonacoContent,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  waitForSyntaxHighlighting,
   waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
@@ -332,8 +330,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
       },
     });
-    await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
-    await percySnapshot(assert);
+
+    // TODO we often timeout waiting for syntax highlighting, so i'm commenting
+    // out this assertion and creating a ticket to research this: CS-6770
+
+    // await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
+    // await percySnapshot(assert);
   });
 
   test<

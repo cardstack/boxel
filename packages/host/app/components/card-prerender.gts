@@ -150,6 +150,7 @@ export default class CardPrerender extends Component {
   private getRunnerParams(): {
     reader: Reader;
     entrySetter: EntrySetter;
+    // TODO make this required after feature flag removed
     indexer?: Indexer;
   } {
     let self = this;
@@ -172,6 +173,7 @@ export default class CardPrerender extends Component {
       return {
         reader: getRunnerOpts(optsId).reader,
         entrySetter: getRunnerOpts(optsId).entrySetter,
+        indexer: getRunnerOpts(optsId).indexer,
       };
     } else {
       return {

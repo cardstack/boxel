@@ -34,6 +34,7 @@ import {
   setupBaseRealmServer,
   runTestRealmServer,
   localBaseRealm,
+  setupDB,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -115,6 +116,35 @@ module('Realm Server', function (hooks) {
   let request: SuperTest<Test>;
   let dir: DirResult;
 
+  function setupPermissionedRealm(
+    hooks: NestedHooks,
+    permissions: RealmPermissions,
+  ) {
+    setupDB(hooks, {
+      beforeEach: async (dbAdapter, queue) => {
+        dir = dirSync();
+        copySync(join(__dirname, 'cards'), dir.name);
+        let virtualNetwork = new VirtualNetwork();
+        shimExternals(virtualNetwork);
+        virtualNetwork.addURLMapping(
+          new URL(baseRealm.url),
+          new URL(localBaseRealm),
+        );
+
+        ({ testRealm, testRealmServer } = await runTestRealmServer({
+          virtualNetwork,
+          dir: dir.name,
+          realmURL: testRealmURL,
+          permissions,
+          dbAdapter,
+          queue,
+        }));
+
+        request = supertest(testRealmServer);
+      },
+    });
+  }
+
   let virtualNetwork = new VirtualNetwork();
   let loader = virtualNetwork.createLoader();
 
@@ -138,12 +168,8 @@ module('Realm Server', function (hooks) {
 
   module('card GET request', function (_hooks) {
     module('public readable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            '*': ['read'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        '*': ['read'],
       });
 
       test('serves the request', async function (assert) {
@@ -195,12 +221,8 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            john: ['read'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        john: ['read'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -268,11 +290,8 @@ module('Realm Server', function (hooks) {
 
   module('card POST request', function (_hooks) {
     module('public writable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm({
-            '*': ['read', 'write'],
-          }));
+      setupPermissionedRealm(hooks, {
+        '*': ['read', 'write'],
       });
 
       test('serves the request', async function (assert) {
@@ -369,12 +388,8 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            john: ['read', 'write'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -453,11 +468,8 @@ module('Realm Server', function (hooks) {
 
   module('card PATCH request', function (_hooks) {
     module('public writable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm({
-            '*': ['read', 'write'],
-          }));
+      setupPermissionedRealm(hooks, {
+        '*': ['read', 'write'],
       });
 
       test('serves the request', async function (assert) {
@@ -564,11 +576,8 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm({
-            john: ['read', 'write'],
-          }));
+      setupPermissionedRealm(hooks, {
+        john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -640,11 +649,8 @@ module('Realm Server', function (hooks) {
 
   module('card DELETE request', function (_hooks) {
     module('public writable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm({
-            '*': ['read', 'write'],
-          }));
+      setupPermissionedRealm(hooks, {
+        '*': ['read', 'write'],
       });
 
       test('serves the request', async function (assert) {
@@ -716,11 +722,8 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm({
-            john: ['read', 'write'],
-          }));
+      setupPermissionedRealm(hooks, {
+        john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -764,12 +767,8 @@ module('Realm Server', function (hooks) {
 
   module('card source GET request', function (_hooks) {
     module('public readable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            '*': ['read'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        '*': ['read'],
       });
 
       test('serves the request', async function (assert) {
@@ -884,12 +883,8 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            john: ['read'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        john: ['read'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -937,11 +932,8 @@ module('Realm Server', function (hooks) {
 
   module('card-source DELETE request', function (_hooks) {
     module('public writable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm({
-            '*': ['read', 'write'],
-          }));
+      setupPermissionedRealm(hooks, {
+        '*': ['read', 'write'],
       });
 
       test('serves the request', async function (assert) {
@@ -1012,11 +1004,8 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm({
-            john: ['read', 'write'],
-          }));
+      setupPermissionedRealm(hooks, {
+        john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -1059,11 +1048,8 @@ module('Realm Server', function (hooks) {
 
   module('card-source POST request', function (_hooks) {
     module('public writable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request, dir } =
-          await setupPermissionedRealm({
-            '*': ['read', 'write'],
-          }));
+      setupPermissionedRealm(hooks, {
+        '*': ['read', 'write'],
       });
 
       test('serves a card-source POST request', async function (assert) {
@@ -1329,12 +1315,8 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            john: ['read', 'write'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -1389,12 +1371,8 @@ module('Realm Server', function (hooks) {
 
   module('directory GET request', function (_hooks) {
     module('public readable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            '*': ['read'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        '*': ['read'],
       });
 
       test('serves the request', async function (assert) {
@@ -1454,12 +1432,8 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            john: ['read'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        john: ['read'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -1519,12 +1493,8 @@ module('Realm Server', function (hooks) {
     };
 
     module('public readable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            '*': ['read'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        '*': ['read'],
       });
 
       test('serves a /_search GET request', async function (assert) {
@@ -1558,12 +1528,8 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            john: ['read'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        john: ['read'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -1610,12 +1576,8 @@ module('Realm Server', function (hooks) {
 
   module('_info GET request', function (_hooks) {
     module('public readable realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            '*': ['read'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        '*': ['read'],
       });
 
       test('serves the request', async function (assert) {
@@ -1654,12 +1616,8 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      hooks.beforeEach(async function () {
-        ({ testRealm, testRealmServer, request } = await setupPermissionedRealm(
-          {
-            john: ['read'],
-          },
-        ));
+      setupPermissionedRealm(hooks, {
+        john: ['read'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -1708,25 +1666,28 @@ module('Realm Server', function (hooks) {
     let testRealmServer2: Server;
 
     hooks.beforeEach(async function () {
-      ({ testRealm, testRealmServer, request, dir } =
-        await setupPermissionedRealm({
-          '*': ['read', 'write'],
-        }));
-
       shimExternals(virtualNetwork);
-
-      testRealmServer2 = (
-        await runTestRealmServer(
-          virtualNetwork,
-          dir.name,
-          undefined,
-          testRealm2URL,
-        )
-      ).testRealmServer;
     });
 
-    hooks.afterEach(async function () {
-      testRealmServer2.close();
+    setupPermissionedRealm(hooks, {
+      '*': ['read', 'write'],
+    });
+
+    setupDB(hooks, {
+      beforeEach: async (dbAdapter, queue) => {
+        testRealmServer2 = (
+          await runTestRealmServer({
+            virtualNetwork,
+            dir: dir.name,
+            realmURL: testRealm2URL,
+            dbAdapter,
+            queue,
+          })
+        ).testRealmServer;
+      },
+      afterEach: async () => {
+        testRealmServer2.close();
+      },
     });
 
     test('can dynamically load a card definition from own realm', async function (assert) {
@@ -2036,20 +1997,24 @@ module('Realm Server serving from root', function (hooks) {
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
-
-    testRealmServer = (
-      await runTestRealmServer(
-        virtualNetwork,
-        dir.name,
-        undefined,
-        testRealmURL,
-      )
-    ).testRealmServer;
-    request = supertest(testRealmServer);
   });
 
-  hooks.afterEach(function () {
-    testRealmServer.close();
+  setupDB(hooks, {
+    beforeEach: async (dbAdapter, queue) => {
+      testRealmServer = (
+        await runTestRealmServer({
+          virtualNetwork,
+          dir: dir.name,
+          realmURL: testRealmURL,
+          dbAdapter,
+          queue,
+        })
+      ).testRealmServer;
+      request = supertest(testRealmServer);
+    },
+    afterEach: async () => {
+      testRealmServer.close();
+    },
   });
 
   test('serves a root directory GET request', async function (assert) {
@@ -2239,21 +2204,24 @@ module('Realm Server serving from a subdirectory', function (hooks) {
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
-
-    testRealmServer = (
-      await runTestRealmServer(
-        virtualNetwork,
-        dir.name,
-        undefined,
-        new URL('http://127.0.0.1:4446/demo/'),
-      )
-    ).testRealmServer;
-
-    request = supertest(testRealmServer);
   });
 
-  hooks.afterEach(function () {
-    testRealmServer.close();
+  setupDB(hooks, {
+    beforeEach: async (dbAdapter, queue) => {
+      testRealmServer = (
+        await runTestRealmServer({
+          virtualNetwork,
+          dir: dir.name,
+          realmURL: new URL('http://127.0.0.1:4446/demo/'),
+          dbAdapter,
+          queue,
+        })
+      ).testRealmServer;
+      request = supertest(testRealmServer);
+    },
+    afterEach: async () => {
+      testRealmServer.close();
+    },
   });
 
   test('serves a subdirectory GET request that results in redirect', async function (assert) {
@@ -2278,27 +2246,3 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     );
   });
 });
-
-async function setupPermissionedRealm(permissions: RealmPermissions) {
-  let testRealm: Realm;
-  let testRealmServer: Server;
-  let request: SuperTest<Test>;
-
-  let dir = dirSync();
-  copySync(join(__dirname, 'cards'), dir.name);
-  let virtualNetwork = new VirtualNetwork();
-  shimExternals(virtualNetwork);
-  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-
-  ({ testRealm, testRealmServer } = await runTestRealmServer(
-    virtualNetwork,
-    dir.name,
-    undefined,
-    testRealmURL,
-    permissions,
-  ));
-
-  request = supertest(testRealmServer);
-
-  return { testRealm, testRealmServer, request, dir };
-}

@@ -115,9 +115,6 @@ export class CurrentRun {
     entrySetter: EntrySetter;
     renderCard: RenderCard;
   }) {
-    if (isDbIndexerEnabled()) {
-      log.info(`current-run is using db index`);
-    }
     this.#indexer = indexer;
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
