@@ -408,12 +408,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
     realmPermissions = { [testRealmURL]: ['read', 'write'] };
 
     // this seeds the loader used during index which obtains url mappings
