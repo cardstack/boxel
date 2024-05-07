@@ -9,7 +9,6 @@ import {
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
-import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';

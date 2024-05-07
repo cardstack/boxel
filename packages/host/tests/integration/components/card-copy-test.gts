@@ -3,7 +3,6 @@ import { waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
-import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import flatMap from 'lodash/flatMap';
 import { module, test } from 'qunit';
