@@ -201,19 +201,8 @@ if (distURL) {
         adapter: realmAdapter,
         indexRunner: getRunner,
         runnerOptsMgr: manager,
-        getIndexHTML: async () => {
-          console.log(
-            `=====> inside getIndexHTML callback: attempting to read file ${join(
-              distPath,
-              'index.html',
-            )}`,
-          );
-          let indexHTML = readFileSync(join(distPath, 'index.html')).toString();
-          console.log(
-            `=====> inside getIndexHTML callback: index.html file is: ${indexHTML}`,
-          );
-          return indexHTML;
-        },
+        getIndexHTML: async () =>
+          readFileSync(join(distPath, 'index.html')).toString(),
         matrix: { url: new URL(matrixURL), username, password },
         realmSecretSeed: REALM_SECRET_SEED,
         permissions: realmPermissions.users,

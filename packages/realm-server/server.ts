@@ -140,11 +140,6 @@ export class RealmServer {
 
   private serveIndex(): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
     return async (ctxt: Koa.Context, next: Koa.Next) => {
-      console.log(
-        `=====> inside serveIndex() middleware: realms: ${this.realms
-          .map((r) => r.url)
-          .join(',')} Accept Header: ${ctxt.header.accept}`,
-      );
       if (ctxt.header.accept?.includes('text/html') && this.realms.length > 0) {
         ctxt.type = 'html';
         ctxt.body = await this.realms[0].getIndexHTML({
