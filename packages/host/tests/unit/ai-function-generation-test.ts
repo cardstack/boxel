@@ -86,17 +86,19 @@ module('Unit | ai-function-generation-test', function (hooks) {
       mappings,
     );
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        stringField: { type: 'string' },
-        numberField: { type: 'number' },
-        booleanField: { type: 'boolean' },
-        dateField: { type: 'string', format: 'date' },
-        dateTimeField: { type: 'string', format: 'date-time' },
-        bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          stringField: { type: 'string' },
+          numberField: { type: 'number' },
+          booleanField: { type: 'boolean' },
+          dateField: { type: 'string', format: 'date' },
+          dateTimeField: { type: 'string', format: 'date-time' },
+          bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
+        },
       },
     });
   });
@@ -118,15 +120,17 @@ module('Unit | ai-function-generation-test', function (hooks) {
       mappings,
     );
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        containerField: {
-          type: 'object',
-          properties: {
-            innerStringField: { type: 'string' },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          containerField: {
+            type: 'object',
+            properties: {
+              innerStringField: { type: 'string' },
+            },
           },
         },
       },
@@ -150,15 +154,17 @@ module('Unit | ai-function-generation-test', function (hooks) {
       mappings,
     );
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        containerField: {
-          type: 'object',
-          properties: {
-            innerStringField: { type: 'array', items: { type: 'string' } },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          containerField: {
+            type: 'object',
+            properties: {
+              innerStringField: { type: 'array', items: { type: 'string' } },
+            },
           },
         },
       },
@@ -242,12 +248,14 @@ module('Unit | ai-function-generation-test', function (hooks) {
       mappings,
     );
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        keepField: { type: 'string' },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          keepField: { type: 'string' },
+        },
       },
     });
   });
@@ -271,12 +279,14 @@ module('Unit | ai-function-generation-test', function (hooks) {
       mappings,
     );
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        keepField: { type: 'string' },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          keepField: { type: 'string' },
+        },
       },
     });
   });
@@ -305,15 +315,17 @@ module('Unit | ai-function-generation-test', function (hooks) {
     );
 
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        containingField: {
-          type: 'object',
-          properties: {
-            keepField: { type: 'array', items: { type: 'string' } },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          containingField: {
+            type: 'object',
+            properties: {
+              keepField: { type: 'array', items: { type: 'string' } },
+            },
           },
         },
       },

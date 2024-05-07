@@ -424,9 +424,6 @@ export default class MatrixService extends Service {
           card: () => attachedOpenCard,
         });
         await realmSession.loaded;
-        if (!('attributes' in patchSpec)) {
-          patchSpec = { attributes: patchSpec };
-        }
         if (realmSession.canWrite) {
           tools.push({
             type: 'function',

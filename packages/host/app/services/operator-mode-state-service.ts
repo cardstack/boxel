@@ -6,6 +6,7 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
+import { merge } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
@@ -111,26 +112,8 @@ export default class OperatorModeStateService extends Service {
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
-        let { attributes, relationships } = patch;
-        if (attributes && document.data.attributes) {
-          for (let key of Object.keys(attributes)) {
-            if (!(key in document.data.attributes)) {
-              throw new Error(
-                `The "${key}" attribute does not exist on the card "${item.card.id}".`,
-              );
-            }
-          }
-        }
-        document.data.attributes = {
-          ...document.data.attributes,
-          ...attributes,
-        };
-        document.data.relationships = {
-          ...document.data.relationships,
-          ...relationships,
-        };
-
-        await this.cardService.patchCard(item.card, document, attributes);
+        document.data = merge(document.data, patch);
+        await this.cardService.patchCard(item.card, document, patch);
       }
     }
   });

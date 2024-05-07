@@ -75,7 +75,6 @@ export type Schema =
   | EmptySchema
   | ArraySchema
   | ObjectSchema
-  | RelationshipSchema
   | DateSchema
   | NumberSchema
   | StringSchema
@@ -165,7 +164,7 @@ function generatePatchCallSpecification(
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
   relationshipsOnly = false,
-): Schema | undefined {
+): Schema | RelationshipsSchema | undefined {
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
     return getPrimitiveType(def, mappings);
@@ -259,12 +258,16 @@ export function generateCardPatchCallSpecification(
   def: typeof CardAPI.CardDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
-): Schema {
+):
+  | { attributes: Schema }
+  | { attributes: Schema; relationships: RelationshipsSchema } {
   let schema = generatePatchCallSpecification(def, cardApi, mappings);
   if (schema == undefined) {
     return {
-      type: 'object',
-      properties: {},
+      attributes: {
+        type: 'object',
+        properties: {},
+      },
     };
   } else {
     let relationships = generatePatchCallSpecification(
@@ -273,8 +276,12 @@ export function generateCardPatchCallSpecification(
       mappings,
       true,
     );
-    if (!(relationships as RelationshipsSchema).required.length) {
-      return schema;
+    if (
+      !relationships ||
+      !('required' in relationships) ||
+      !relationships.required.length
+    ) {
+      return { attributes: schema };
     }
     return {
       attributes: schema,
