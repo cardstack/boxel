@@ -12,10 +12,9 @@ import {
   Chessboard,
   FEN,
   // @ts-ignore
-} from 'https://esm.run/cm-chessboard@8.7.3';
-// Old way of specifying esm 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/+esm';
+} from 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/+esm';
 // 'https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/Chessboard.js' //this url is much slower bcos there are separate request to js
-// You can use unpkg: 'https://unpkg.com/cm-chessboard@8.7.4/src/Chessboard.js';
+// You can use unpkg: 'https://unpkg.com/cm-chessboard@8.7.4/src/Chessboard.js'; //but its even slower
 
 import Modifier from 'ember-modifier';
 
@@ -38,10 +37,12 @@ class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
     if (this.chessboard == undefined) {
       this.chessboard = new Chessboard(element, {
         position: fen ?? FEN.start,
+        assetsUrl: 'https://cdn.jsdelivr.net/npm/cm-chessboard@latest/assets/',
         style: {
+          cssClass: 'green',
           pieces: {
             // @ts-ignore
-            file: 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/assets/pieces/standard.svg',
+            file: 'pieces/staunty.svg',
           },
         },
       });
