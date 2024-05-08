@@ -2,26 +2,20 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Dropdown",
-      "description": "Catalog entry for Dropdown field",
+      "title": "Plant Info",
+      "description": "Catalog entry for Plant Info card",
       "ref": {
-        "module": "../dropdown",
-        "name": "Dropdown"
+        "module": "../plant-info",
+        "name": "PlantInfo"
       },
-      "demo": {
-        "options": [
-          "Yes",
-          "No",
-          "Maybe"
-        ]
-      }
+      "demo": {}
     },
     "meta": {
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "../dropdown",
-            "name": "Dropdown"
+            "module": "../plant-info",
+            "name": "PlantInfo"
           }
         }
       },
