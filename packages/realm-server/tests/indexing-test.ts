@@ -185,6 +185,26 @@ module('indexing', function (hooks) {
               },
             },
           },
+          'bad-link.json': {
+            data: {
+              attributes: {
+                message: 'I have a bad link',
+              },
+              relationships: {
+                author: {
+                  links: {
+                    self: 'http://localhost:9000/this-is-a-link-to-nowhere',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './post',
+                  name: 'Post',
+                },
+              },
+            },
+          },
           'boom.json': {
             data: {
               attributes: {
@@ -257,6 +277,22 @@ module('indexing', function (hooks) {
           `expected search entry to be a document but was: ${entry?.error.detail}`,
         );
       }
+    }
+  });
+
+  test('can make an error doc for a card that has a link to a URL that is not a card', async function (assert) {
+    let entry = await realm.searchIndex.card(new URL(`${testRealm}bad-link`));
+    if (entry?.type === 'error') {
+      assert.strictEqual(
+        entry.error.detail,
+        'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed for http://localhost:9000/this-is-a-link-to-nowhere',
+      );
+      assert.deepEqual(entry.error.deps, [
+        `${testRealm}post`,
+        `http://localhost:9000/this-is-a-link-to-nowhere`,
+      ]);
+    } else {
+      assert.ok('false', 'expected search entry to be an error document');
     }
   });
 
