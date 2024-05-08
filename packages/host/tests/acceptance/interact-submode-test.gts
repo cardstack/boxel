@@ -307,6 +307,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             }),
           ],
           pet: mangoPet,
+          friends: [mangoPet],
         }),
         'grid.json': new CardsGrid(),
         'index.json': new CardsGrid(),
@@ -342,6 +343,7 @@ module('Acceptance | interact submode tests', function (hooks) {
               }),
             }),
           ],
+          friends: [mangoPet],
         }),
       },
     });
@@ -1029,6 +1031,17 @@ module('Acceptance | interact submode tests', function (hooks) {
           )
           .doesNotExist();
 
+        assert
+          .dom("[data-test-field='pet'] [data-test-remove-card]")
+          .doesNotExist();
+
+        assert
+          .dom("[data-test-field='friends'] [data-test-add-new]")
+          .doesNotExist();
+        assert
+          .dom("[data-test-field='friends'] [data-test-remove-card]")
+          .doesNotExist();
+
         await visitOperatorMode({
           stacks: [
             [
@@ -1055,10 +1068,17 @@ module('Acceptance | interact submode tests', function (hooks) {
             "[data-test-contains-many='additionalAddresses'] [data-test-remove]",
           )
           .exists();
+
         assert
           .dom(
             "[data-test-contains-many='additionalAddresses'] [data-test-add-new]",
           )
+          .exists();
+
+        assert.dom("[data-test-field='pet'] [data-test-remove-card]").exists();
+        assert.dom("[data-test-field='friends'] [data-test-add-new]").exists();
+        assert
+          .dom("[data-test-field='friends'] [data-test-remove-card]")
           .exists();
       });
       test('the delete item is not present in "..." menu of stack item', async function (assert) {
