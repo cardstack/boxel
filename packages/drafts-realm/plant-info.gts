@@ -6,7 +6,7 @@ import {
   StringField,
   contains,
 } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+// import { Component } from 'https://cardstack.com/base/card-api';
 
 class LightRequirementDropdown extends DropdownField {
   static displayName = 'Light Requirement';
@@ -19,7 +19,7 @@ class LightRequirementDropdown extends DropdownField {
 }
 
 class ToxicityDropdown extends DropdownField {
-  static displayName = 'Toxicity for Dogs';
+  static displayName = 'Toxicity';
   static _options = ['Toxic', 'Non-Toxic', 'No Information'];
   @field options = containsMany(StringField, {
     computeVia: function () {
@@ -66,5 +66,6 @@ export class PlantInfo extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
   */
 }
