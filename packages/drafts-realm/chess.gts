@@ -11,6 +11,7 @@ import lodash from 'https://cdn.jsdelivr.net/npm/lodash@4.17.21/+esm';
 import {
   Chessboard,
   FEN,
+  INPUT_EVENT_TYPE,
   // @ts-ignore
 } from 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/+esm';
 // 'https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/Chessboard.js' //this url is much slower bcos there are separate request to js
@@ -26,6 +27,28 @@ type ChessboardModifierSignature = {
   };
   Element: HTMLElement;
 };
+
+function inputHandler(event: any) {
+  console.log(event);
+  switch (event.type) {
+    case INPUT_EVENT_TYPE.moveInputStarted:
+      console.log(`moveInputStarted: ${event.squareFrom}`);
+      return true; // false cancels move
+    case INPUT_EVENT_TYPE.validateMoveInput:
+      console.log(`validateMoveInput: ${event.squareFrom}-${event.squareTo}`);
+      return true; // false cancels move
+    case INPUT_EVENT_TYPE.moveInputCanceled:
+      console.log(`moveInputCanceled`);
+      break;
+    case INPUT_EVENT_TYPE.moveInputFinished:
+      console.log(`moveInputFinished`);
+      break;
+    case INPUT_EVENT_TYPE.movingOverSquare:
+      console.log(`movingOverSquare: ${event.squareTo}`);
+      break;
+  }
+  return;
+}
 
 class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
   chessboard: any;
@@ -46,6 +69,7 @@ class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
           },
         },
       });
+      this.chessboard.enableMoveInput(inputHandler);
     } else {
       this.chessboard.setPosition(fen);
     }
