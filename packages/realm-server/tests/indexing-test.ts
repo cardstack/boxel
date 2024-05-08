@@ -366,7 +366,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
-        instanceErrors: 3, // 1 post, 2 persons
+        instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
         moduleErrors: 3, // post, fancy person, person
       }),
       'indexed correct number of files',
@@ -396,7 +396,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 3, // 1 post and 2 persons
-        instanceErrors: 0,
+        instanceErrors: 1,
         moduleErrors: 0,
       }),
       'indexed correct number of files',
@@ -467,7 +467,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 1,
-        instanceErrors: 0,
+        instanceErrors: 1,
         moduleErrors: 0,
       }),
       'indexed correct number of files',
@@ -506,7 +506,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 3,
-        instanceErrors: 0,
+        instanceErrors: 1,
         moduleErrors: 0,
       }),
       'indexed correct number of files',
@@ -555,7 +555,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
-        instanceErrors: 1,
+        instanceErrors: 2,
         moduleErrors: 0,
       }),
       'indexed correct number of files',
@@ -593,7 +593,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 1,
-        instanceErrors: 0,
+        instanceErrors: 1,
         moduleErrors: 0,
       }),
       'indexed correct number of files',
