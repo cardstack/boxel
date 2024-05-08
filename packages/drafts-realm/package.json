@@ -6,7 +6,8 @@
   "devDependencies": {
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "@types/lodash": "^4.14.182"
+    "@types/lodash": "^4.14.182",
+    "ember-modifier": "^4.1.0"
   },
   "scripts": {}
 }
