@@ -12,7 +12,10 @@ import {
   Chessboard,
   FEN,
   // @ts-ignore
-} from 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/+esm';
+} from 'esm.run/cm-chessboard@8.7.3/+esm';
+// Old way of specifying esm 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/+esm';
+// 'https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/Chessboard.js' //this url is much slower bcos there are separate request to js
+// You can use unpkg: 'https://unpkg.com/cm-chessboard@8.7.4/src/Chessboard.js';
 
 import Modifier from 'ember-modifier';
 
@@ -64,6 +67,7 @@ class ChessboardComponent extends Component<Signature> {
       }
     </style>
     {{! needs unscoped or global }}
+    {{! import 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.4/assets/chessboard.css'; }}
     <style unscoped>
       .cm-chessboard .board.input-enabled .square {
         cursor: pointer;
