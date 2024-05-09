@@ -1739,6 +1739,7 @@ module('Integration | card-basics', function (hooks) {
     });
 
     await renderCard(loader, helloWorld, 'edit');
+    await this.pauseTest();
     assert.dom('[data-test-field="title"]').hasText('Title');
     assert.dom('[data-test-field="title"] input').hasValue('My Post');
     assert
