@@ -79,7 +79,7 @@ export default class DateField extends FieldDef {
       if (!this.args.model) {
         return;
       }
-      return DateField[serialize](this.args.model);
+      return DateField[serialize](this.args.model).value;
     }
   };
 }

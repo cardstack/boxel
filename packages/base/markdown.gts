@@ -6,7 +6,7 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 class View extends Component<typeof MarkdownField> {
   <template>
     <div>
-      {{{markdownToHtml @model}}}
+      {{{markdownToHtml @model.value}}}
     </div>
   </template>
 }
@@ -18,12 +18,15 @@ export default class MarkdownField extends StringField {
   static atom = View;
 
   static edit = class Edit extends Component<typeof this> {
+    set = (val: string | undefined) => {
+      this.args.model.value = val;
+    };
     <template>
       <BoxelInput
         class='boxel-text-area'
         @type='textarea'
-        @value={{@model}}
-        @onInput={{@set}}
+        @value={{@model.value}}
+        @onInput={{this.set}}
       />
     </template>
   };

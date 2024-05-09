@@ -13,7 +13,7 @@ import percySnapshot from '@percy/ember';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
 import { setupRenderingTest } from 'ember-qunit';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
@@ -650,12 +650,12 @@ module('Integration | card-basics', function (hooks) {
       );
       assert.deepEqual(
         changeEvent?.instance,
-        mango,
+        mango.firstName,
         'the instance was correctly specified in change event',
       );
       assert.strictEqual(
         changeEvent?.fieldName,
-        'firstName',
+        'value',
         'the fieldName was correctly specified in change event',
       );
       assert.strictEqual(
@@ -675,7 +675,7 @@ module('Integration | card-basics', function (hooks) {
     );
     assert.strictEqual(
       changeEvent?.fieldName,
-      'firstName',
+      'value',
       'the fieldName was correctly specified in change event',
     );
     assert.strictEqual(
@@ -685,7 +685,7 @@ module('Integration | card-basics', function (hooks) {
     );
   });
 
-  test('can subscribe and unsubscribe to card instance containsMany field changes', async function (assert) {
+  test('can subscribe and unsubscribe to card instance containsMany field array mutation', async function (assert) {
     let {
       field,
       contains,
@@ -739,10 +739,15 @@ module('Integration | card-basics', function (hooks) {
         'favoriteColors',
         'the fieldName was correctly specified in change event',
       );
-      assert.deepEqual(
-        changeEvent?.value,
-        ['brown', 'green'],
-        'the field value was correctly specified in change event',
+      assert.strictEqual(
+        changeEvent?.value[0].value,
+        'brown',
+        'the field value was correctly specified in change event (0)',
+      );
+      assert.strictEqual(
+        changeEvent?.value[1].value,
+        'green',
+        'the field value was correctly specified in change event (1)',
       );
     } finally {
       unsubscribeFromChanges(mango, subscriber);
@@ -755,16 +760,72 @@ module('Integration | card-basics', function (hooks) {
       1,
       'the change event was fired the correct amount of times',
     );
-    assert.strictEqual(
-      changeEvent?.fieldName,
-      'favoriteColors',
-      'the fieldName was correctly specified in change event',
-    );
-    assert.deepEqual(
-      changeEvent?.value,
-      ['brown', 'green'],
-      'the field value was correctly specified in change event',
-    );
+  });
+
+  skip('can subscribe and unsubscribe to card instance containsMany field inner mutation', async function (assert) {
+    // Added this test to illustrate current bug; subscribing to changes does not handle
+    // ContainsMany properly
+    let {
+      field,
+      contains,
+      containsMany,
+      CardDef,
+      subscribeToChanges,
+      unsubscribeFromChanges,
+      flushLogs,
+    } = cardApi;
+    let { default: StringField } = string;
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field favoriteColors = containsMany(StringField);
+    }
+
+    let mango = new Person({
+      firstName: 'Mango',
+      favoriteColors: ['brown'],
+    });
+
+    let changeEvent:
+      | { instance: BaseDef; fieldName: string; value: any }
+      | undefined;
+    let eventCount = 0;
+    let subscriber = (instance: BaseDef, fieldName: string, value: any) => {
+      eventCount++;
+      changeEvent = {
+        instance,
+        fieldName,
+        value,
+      };
+    };
+    subscribeToChanges(mango, subscriber);
+
+    try {
+      mango.favoriteColors[0].value = 'maroon';
+      await flushLogs();
+      assert.strictEqual(
+        eventCount,
+        1,
+        'the change event was fired the correct amount of times',
+      );
+      assert.deepEqual(
+        changeEvent?.instance,
+        mango.firstName,
+        'the instance was correctly specified in change event',
+      );
+      assert.strictEqual(
+        changeEvent?.fieldName,
+        'value',
+        'the fieldName was correctly specified in change event',
+      );
+      assert.deepEqual(
+        changeEvent?.value,
+        'maroon',
+        'the field value was correctly specified in change event',
+      );
+    } finally {
+      unsubscribeFromChanges(mango, subscriber);
+    }
   });
 
   test('can subscribe and unsubscribe to card instance linksTo field changes', async function (assert) {
@@ -1923,12 +1984,15 @@ module('Integration | card-basics', function (hooks) {
           super(owner, args);
           this.counter = counter++;
         }
+        set = (val: string | undefined) => {
+          this.args.model.value = val;
+        };
         <template>
           <BoxelInput
             data-counter={{this.counter}}
             type='text'
-            @value={{@model}}
-            @onInput={{@set}}
+            @value={{@model.value}}
+            @onInput={{this.set}}
           />
         </template>
       };
@@ -2089,7 +2153,6 @@ module('Integration | card-basics', function (hooks) {
         parseISO('2021-05-30T10:45'),
       ],
     });
-
     await renderCard(loader, card, 'edit');
     assert
       .dom('[data-test-contains-many="dates"] [data-test-item]')

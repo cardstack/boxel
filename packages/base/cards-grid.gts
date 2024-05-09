@@ -47,7 +47,7 @@ class Isolated extends Component<typeof CardsGrid> {
             <div class='grid-card'>
               <div
                 class='grid-thumbnail'
-                style={{cssUrl 'background-image' card.thumbnailURL}}
+                style={{cssUrl 'background-image' card.thumbnailURL.value}}
               >
                 {{#unless card.thumbnailURL}}
                   <div
@@ -59,7 +59,7 @@ class Isolated extends Component<typeof CardsGrid> {
               <h3
                 class='grid-title'
                 data-test-cards-grid-item-title
-              >{{card.title}}</h3>
+              >{{card.title.value}}</h3>
               <h4
                 class='grid-display-name'
                 data-test-cards-grid-item-display-name

@@ -634,18 +634,20 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    value = value?.map((entry) => {
-      if (entry != null && !(entry instanceof this.card)) {
-        if (this.card[cast]) {
-          return this.card[cast](entry);
-        } else {
-          throw new Error(
-            `tried set ${entry} as field ${this.name} but it is not an instance of ${this.card.name}`,
-          );
+    if (!(primitive in this.card)) {
+      value = value?.map((entry) => {
+        if (entry != null && !(entry instanceof this.card)) {
+          if (this.card[cast]) {
+            return this.card[cast](entry);
+          } else {
+            throw new Error(
+              `tried set ${entry} as field ${this.name} but it is not an instance of ${this.card.name}`,
+            );
+          }
         }
-      }
-      return entry;
-    });
+        return entry;
+      });
+    }
 
     return new WatchedArray((value) => {
       notifySubscribers(instance, this.name, value);
@@ -1883,7 +1885,11 @@ export function isCompoundField(card: any) {
   return (
     isCardOrField(card) &&
     'isFieldDef' in card.constructor &&
-    !(primitive in card)
+    !(primitive in card) &&
+    Object.keys(getFields(card)).length
+    // TODO: we added the getFields condition while refactoring to new kinds of primitives.
+    // It would be better to not do this by removing the need for
+    // isCompoundField
   );
 }
 
