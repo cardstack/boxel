@@ -4,6 +4,7 @@
     "attributes": {
       "lat": 49.89752818254307,
       "lon": -97.13997495986952,
+      "tileserverUrl": "https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png",
       "title": "Winnipeg",
       "description": null,
       "thumbnailURL": null

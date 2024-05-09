@@ -1,5 +1,6 @@
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
+import StringField from 'https://cardstack.com/base/string';
 import {
   Component,
   contains,
@@ -13,9 +14,18 @@ export class LeafletMap extends CardDef {
   @field lat = contains(NumberField);
   @field lon = contains(NumberField);
 
+  @field tileserverUrl = contains(StringField);
+
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <figure {{LeafletModifier lat=@model.lat lon=@model.lon}} class='map'>
+      <figure
+        {{LeafletModifier
+          lat=@model.lat
+          lon=@model.lon
+          tileserverUrl=@model.tileserverUrl
+        }}
+        class='map'
+      >
         Map loading for
         {{@model.lat}},
         {{@model.lon}}
@@ -48,6 +58,8 @@ export class LeafletMap extends CardDef {
     <template></template>
   }
 
+
+
   */
 }
 
@@ -57,6 +69,7 @@ interface LeafletModifierSignature {
     Named: {
       lat: number;
       lon: number;
+      tileserverUrl?: string;
     };
   };
 }
@@ -64,7 +77,7 @@ interface LeafletModifierSignature {
 class LeafletModifier extends Modifier<LeafletModifierSignature> {
   HTMLElement: element = null;
 
-  modify(element, [], { lat, lon }) {
+  modify(element, [], { lat, lon, tileserverUrl }) {
     fetch('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js')
       .then((r) => r.text())
       .then((t) => {
@@ -72,7 +85,7 @@ class LeafletModifier extends Modifier<LeafletModifierSignature> {
         var map = L.map(element).setView([lat, lon], 13);
 
         L.tileLayer(
-          'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png',
+          tileerverUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         ).addTo(map);
       });
   }
