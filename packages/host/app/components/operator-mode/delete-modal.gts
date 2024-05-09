@@ -142,7 +142,7 @@ export default class DeleteModal extends Component<Signature> {
 
     return {
       type: 'card',
-      name: this.item.title,
+      name: this.item.title.value,
       id: this.item.id,
     };
   }
