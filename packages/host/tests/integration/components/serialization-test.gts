@@ -1,6 +1,7 @@
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 
 import parseISO from 'date-fns/parseISO';
+import { provide } from 'ember-provide-consume-context/test-support';
 import { setupRenderingTest } from 'ember-qunit';
 import { isAddress } from 'ethers';
 import { module, test } from 'qunit';
@@ -9,6 +10,7 @@ import {
   baseRealm,
   NotLoaded,
   type LooseSingleCardDocument,
+  RealmSessionContextName,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -36,6 +38,10 @@ module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function () {
+    provide(RealmSessionContextName, {
+      canWrite: true,
+    });
+
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
   });
