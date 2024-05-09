@@ -262,52 +262,65 @@ export default class CardService extends Service {
   async patchCard(
     card: CardDef,
     doc: LooseSingleCardDocument,
-    patchAttributes: Record<string, any>,
+    patchData: Record<string, any>,
     loader?: Loader,
   ): Promise<CardDef | undefined> {
     let api = await this.getAPI(loader);
+    let initialDoc = await this.serializeCard(card);
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
+    let updatedCardDoc = await this.serializeCard(updatedCard);
+
+    if (!this.isPatchApplied(updatedCardDoc.data, patchData, card.id)) {
+      await api.updateFromSerialized<typeof CardDef>(card, initialDoc);
+      throw new Error('Patch failed.');
+    }
+
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
-    let savedCard = await this.saveModel(this, updatedCard);
-
-    if (savedCard && patchAttributes) {
-      let savedDoc = await this.serializeCard(savedCard);
-      if (!this.isPatchApplied(savedDoc.data.attributes, patchAttributes)) {
-        throw new Error('Patch failed.');
-      }
-    }
-    return savedCard;
+    return await this.saveModel(this, updatedCard);
   }
 
   private isPatchApplied(
-    savedData: Record<string, any> | undefined,
+    cardData: Record<string, any> | undefined,
     patchData: Record<string, any>,
+    relativeTo: string,
   ): boolean {
-    if (!savedData || !patchData) {
+    if (!cardData || !patchData) {
       return false;
     }
-    if (isEqual(savedData, patchData)) {
+    if (isEqual(cardData, patchData)) {
       return true;
     }
     if (!Object.keys(patchData).length) {
       return false;
     }
-    for (let [key, value] of Object.entries(patchData)) {
-      if (!(key in savedData)) {
+    for (let [key, patchValue] of Object.entries(patchData)) {
+      if (!(key in cardData)) {
         return false;
       }
-      let val = savedData[key];
+      let cardValue = cardData[key];
       if (
-        !isEqual(val, value) &&
-        typeof val === 'object' &&
-        typeof value === 'object'
+        !isEqual(cardValue, patchValue) &&
+        typeof cardValue === 'object' &&
+        typeof patchValue === 'object'
       ) {
-        if (!this.isPatchApplied(val, value)) {
+        if (key === 'attributes' && !Object.keys(patchValue).length) {
+          continue;
+        }
+        if (!this.isPatchApplied(cardValue, patchValue, relativeTo)) {
           return false;
         }
-      } else if (!isEqual(val, value)) {
-        return false;
+      } else if (!isEqual(cardValue, patchValue)) {
+        try {
+          if (
+            new URL(cardValue, relativeTo).href ===
+            new URL(patchValue, relativeTo).href
+          ) {
+            return true;
+          }
+        } catch (e) {
+          return false;
+        }
       }
     }
     return true;
@@ -439,7 +452,7 @@ export default class CardService extends Service {
 
   getRealmURLFor(url: URL) {
     for (let realmURL of this.realmURLs) {
-      let path = new RealmPaths(realmURL);
+      let path = new RealmPaths(new URL(realmURL));
       if (path.inRealm(url)) {
         return new URL(realmURL);
       }

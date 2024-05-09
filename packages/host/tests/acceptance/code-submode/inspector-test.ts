@@ -408,12 +408,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
     realmPermissions = { [testRealmURL]: ['read', 'write'] };
 
     // this seeds the loader used during index which obtains url mappings
@@ -467,6 +462,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             },
           },
         },
+        'léame.md': 'hola mundo',
         'readme.md': 'hello world',
         'not-json.json': 'I am not JSON.',
         'Person/1.json': {
@@ -1226,21 +1222,21 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
-      codePath: `${testRealmURL}readme.md`,
+      codePath: `${testRealmURL}léame.md`,
     });
     await waitForCodeEditor();
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
 
     await waitFor(`[data-test-action-button="Delete"]`);
     await click('[data-test-action-button="Delete"]');
-    await waitFor(`[data-test-delete-modal="${testRealmURL}readme.md"]`);
+    await waitFor(`[data-test-delete-modal="${testRealmURL}l%C3%A9ame.md"]`);
     assert
       .dom('[data-test-delete-msg]')
-      .includesText('Delete the file readme.md?');
+      .includesText('Delete the file léame.md?');
     await click('[data-test-confirm-delete-button]');
     await waitFor('[data-test-empty-code-mode]');
 
-    let notFound = await adapter.openFile('readme.md');
+    let notFound = await adapter.openFile('léame.md');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });

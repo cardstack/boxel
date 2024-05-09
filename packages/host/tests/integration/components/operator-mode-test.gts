@@ -13,6 +13,8 @@ import {
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
 import { EventStatus } from 'matrix-js-sdk';
 import { module, test, skip } from 'qunit';
 
@@ -81,18 +83,10 @@ module('Integration | operator-mode', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
+  setupWindowMock(hooks);
   let noop = () => {};
 
-  hooks.afterEach(async function () {
-    localStorage.removeItem('recent-cards');
-    localStorage.removeItem('aiPanelCurrentRoomId');
-    localStorage.removeItem('aiPanelNewSessionId');
-  });
-
   hooks.beforeEach(async function () {
-    localStorage.removeItem('recent-cards');
-    localStorage.removeItem('aiPanelCurrentRoomId');
-    localStorage.removeItem('aiPanelNewSessionId');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     matrixService = this.owner.lookup(
       'service:matrixService',
@@ -768,8 +762,13 @@ module('Integration | operator-mode', function (hooks) {
               patch: {
                 attributes: { firstName: 'Dave' },
               },
+              eventId: 'patch1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch1',
+          },
         },
         status: null,
       });
@@ -816,8 +815,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Evie' } },
+              eventId: 'room1-event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'room1-event1',
+          },
         },
         status: null,
       });
@@ -837,8 +841,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Jackie' } },
+              eventId: 'room1-event2',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'room1-event2',
+          },
         },
         status: null,
       });
@@ -858,8 +867,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { pet: null } },
+              eventId: 'room2-event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'room2-event1',
+          },
         },
         status: null,
       });
@@ -869,6 +883,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-message-idx="1"] [data-test-command-apply]');
       await click('[data-test-message-idx="1"] [data-test-command-apply]');
       await waitFor('[data-test-patch-card-idle]');
+
       assert
         .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
         .exists();
@@ -946,8 +961,13 @@ module('Integration | operator-mode', function (hooks) {
               patch: {
                 attributes: { firstName: 'Dave' },
               },
+              eventId: 'event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
         },
         status: null,
       });
@@ -1007,8 +1027,9 @@ module('Integration | operator-mode', function (hooks) {
             address: { shippingInfo: { preferredCarrier: 'UPS' } },
           },
         },
+        eventId: 'event1',
       };
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
         state_key: 'state',
@@ -1021,6 +1042,10 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({ command: payload }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
         },
         status: null,
       });
@@ -1047,6 +1072,118 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-apply-state="applied"]').exists();
       assert.dom('[data-test-person]').hasText('Joy');
       assert.dom(`[data-test-preferredcarrier]`).hasText('UPS');
+      assert.dom(`[data-test-city="Bandung"]`).exists();
+      assert.dom(`[data-test-country="Indonesia"]`).exists();
+    });
+
+    test('it can apply change to a linksTo field', async function (assert) {
+      let id = `${testRealmURL}Person/fadhlan`;
+      await setCardInOperatorModeState(id);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person="Fadhlan"]');
+
+      let roomId = await openAiAssistant();
+      await addRoomEvent(matrixService, {
+        event_id: 'event0',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Removing pet and changing preferred carrier',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id,
+              patch: {
+                attributes: {
+                  address: { shippingInfo: { preferredCarrier: 'Fedex' } },
+                },
+                relationships: {
+                  pet: { links: { self: null } },
+                },
+              },
+              eventId: 'patch0',
+            },
+          }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch0',
+          },
+        },
+        status: null,
+      });
+
+      const stackCard = `[data-test-stack-card="${testRealmURL}Person/fadhlan"]`;
+
+      await waitFor('[data-test-command-apply="ready"]');
+      assert.dom(`${stackCard} [data-test-preferredcarrier="DHL"]`).exists();
+      assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
+
+      await click('[data-test-command-apply]');
+      await waitFor('[data-test-patch-card-idle]');
+      assert.dom('[data-test-apply-state="applied"]').exists();
+      assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
+      assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Link to pet and change preferred carrier',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id,
+              patch: {
+                attributes: {
+                  address: { shippingInfo: { preferredCarrier: 'UPS' } },
+                },
+                relationships: {
+                  pet: {
+                    links: { self: `${testRealmURL}Pet/mango` },
+                  },
+                },
+              },
+              eventId: 'patch1',
+            },
+          }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch1',
+          },
+        },
+        status: null,
+      });
+      await waitFor('[data-test-command-apply="ready"]');
+      assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
+      assert.dom(`${stackCard} [data-test-pet]`).doesNotExist();
+
+      await click('[data-test-command-apply]');
+      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+        .exists();
+      assert.dom(`${stackCard} [data-test-preferredcarrier="UPS"]`).exists();
+      assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
+      assert.dom(`${stackCard} [data-test-city="Bandung"]`).exists();
+      assert.dom(`${stackCard} [data-test-country="Indonesia"]`).exists();
     });
 
     test('it will throw error when patch code refers to nonexistent or incorrect field', async function (assert) {
@@ -1063,7 +1200,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-person="Fadhlan"]');
 
       let roomId = await openAiAssistant();
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
         state_key: 'state',
@@ -1079,8 +1216,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { pet: null } },
+              eventId: 'patch1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch1',
+          },
         },
         status: null,
       });
@@ -1090,42 +1232,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-apply-state="failed"]').exists();
       assert
         .dom(`[data-test-card-error]`)
-        .hasText(
-          `Failed to apply changes. The "pet" attribute does not exist on the card "${id}".`,
-        );
-
-      addRoomEvent(matrixService, {
-        event_id: 'event2',
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-        sender: '@aibot:localhost',
-        content: {
-          msgtype: 'org.boxel.command',
-          formatted_body: 'Remove all attributes from person card',
-          format: 'org.matrix.custom.html',
-          data: JSON.stringify({
-            command: {
-              type: 'patch',
-              id,
-              patch: { attributes: {} },
-            },
-          }),
-        },
-        status: null,
-      });
-      await waitFor('[data-test-command-apply]');
-      await click('[data-test-command-apply]');
-      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
-      assert
-        .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
-        .exists();
-      assert
-        .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
         .hasText(`Failed to apply changes. Patch failed.`);
 
-      addRoomEvent(matrixService, {
+      await addRoomEvent(matrixService, {
         event_id: 'event3',
         room_id: roomId,
         state_key: 'state',
@@ -1148,8 +1257,13 @@ module('Integration | operator-mode', function (hooks) {
                   },
                 },
               },
+              eventId: 'patch3',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch3',
+          },
         },
         status: null,
       });
@@ -1163,6 +1277,50 @@ module('Integration | operator-mode', function (hooks) {
         .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
         .hasText(`Failed to apply changes. Patch failed.`);
       assert.dom('[data-test-trips]').hasText('');
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event4',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Change preferred carrier',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id,
+              patch: {
+                attributes: {
+                  address: { shippingInfo: { carrier: 'UPS' } },
+                },
+              },
+              eventId: 'patch4',
+            },
+          }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch4',
+          },
+        },
+        status: null,
+      });
+
+      await waitFor('[data-test-command-apply="ready"]');
+      assert.dom('[data-test-preferredcarrier="DHL"]').exists();
+
+      await click('[data-test-command-apply]');
+      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
+      assert
+        .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
+        .exists();
+      assert
+        .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
+        .hasText(`Failed to apply changes. Patch failed.`);
+      assert.dom('[data-test-preferredcarrier="DHL"]').exists();
     });
 
     test('button states only apply to a single button in a chat room', async function (assert) {
@@ -1195,8 +1353,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { firstName: 'Dave' } },
+              eventId: 'event1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
         },
         status: null,
       });
@@ -1216,8 +1379,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { pet: 'Harry' } },
+              eventId: 'event2',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event2',
+          },
         },
         status: null,
       });
@@ -1237,8 +1405,13 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patch',
               id,
               patch: { attributes: { firstName: 'Jackie' } },
+              eventId: 'event3',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event3',
+          },
         },
         status: null,
       });
@@ -1423,7 +1596,7 @@ module('Integration | operator-mode', function (hooks) {
         );
 
       await click('[data-test-close-ai-assistant]');
-      localStorage.setItem(
+      window.localStorage.setItem(
         'aiPanelCurrentRoomId',
         "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
       );
@@ -1435,7 +1608,7 @@ module('Integration | operator-mode', function (hooks) {
           "test room 3 is the most recently created room and it's opened initially",
         );
 
-      localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
+      window.localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
     });
 
     test('can close past-sessions list on outside click', async function (assert) {
@@ -1887,8 +2060,13 @@ module('Integration | operator-mode', function (hooks) {
               patch: {
                 attributes: { firstName: 'Dave' },
               },
+              eventId: 'patch1',
             },
           }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'patch1',
+          },
         },
         status: null,
       });
@@ -3588,7 +3766,9 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-error]')
       .containsText('This resource does not exist');
-    await percySnapshot(assert);
+    // Percy is failing to capture this snapshot for some
+    // reason. creating issue for this CS-6780
+    // await percySnapshot(assert);
 
     await fillIn('[data-test-card-url-bar-input]', `Wrong URL`);
     await triggerKeyEvent(

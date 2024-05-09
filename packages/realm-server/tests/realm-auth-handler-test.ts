@@ -1,5 +1,6 @@
 import { Loader, RealmAuthHandler } from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import { module, test } from 'qunit';
 
 module('realm-auth-handler-test', function () {
@@ -163,14 +164,69 @@ module('realm-auth-handler-test', function () {
     assert.strictEqual(requestsMade[0].headers.get('Authorization'), null);
   });
 
-  test('retries once when auth endpoint returns 401 (token invalid which could indicate permissions changed on the target server)', async function (assert) {
+  test('retries once when the permissions in the token are outdated (could happen if the user permissions were changed during the life of the JWT)', async function (assert) {
     let requestsMade: Request[] = [];
     let loader = {
       fetch: async (request: Request, init?: RequestInit) => {
         request = new Request(request, init);
         requestsMade.push(request);
 
-        return new Response(null, {
+        return new Response(AuthenticationErrorMessages.PermissionMismatch, {
+          status: 401,
+          headers: {
+            'x-boxel-realm-url': 'http://another-test-realm/',
+          },
+        });
+      },
+    } as unknown as Loader;
+
+    let realmAuthHandler = new RealmAuthHandler(
+      matrixClient,
+      loader,
+      'http://test-realm/',
+    );
+
+    let bearerToken = 'Bearer token_1';
+    (realmAuthHandler as any).createRealmAuthClient = () => {
+      return {
+        getJWT: () => {
+          let token = bearerToken;
+          bearerToken = 'Bearer new_token_for_retry'; // Simulate a new token when this gets called again on retry
+          return token;
+        },
+      };
+    };
+
+    let request = new Request('http://another-test-realm/card');
+
+    await realmAuthHandler.fetchWithAuth(request);
+
+    assert.strictEqual(requestsMade.length, 3); // realm info request, actual request, and the retry
+    assert.strictEqual(requestsMade[0].method, 'HEAD');
+    assert.strictEqual(requestsMade[0].headers.get('Authorization'), null);
+
+    assert.strictEqual(requestsMade[1].method, 'GET');
+    assert.strictEqual(
+      requestsMade[1].headers.get('Authorization'),
+      'Bearer token_1',
+    );
+
+    assert.strictEqual(requestsMade.length, 3);
+    assert.strictEqual(requestsMade[2].method, 'GET');
+    assert.strictEqual(
+      requestsMade[2].headers.get('Authorization'),
+      'Bearer new_token_for_retry',
+    ); // It generated a new token for the retry
+  });
+
+  test('retries once when the token expired', async function (assert) {
+    let requestsMade: Request[] = [];
+    let loader = {
+      fetch: async (request: Request, init?: RequestInit) => {
+        request = new Request(request, init);
+        requestsMade.push(request);
+
+        return new Response(AuthenticationErrorMessages.TokenExpired, {
           status: 401,
           headers: {
             'x-boxel-realm-url': 'http://another-test-realm/',
@@ -217,5 +273,105 @@ module('realm-auth-handler-test', function () {
       requestsMade[2].headers.get('Authorization'),
       'Bearer new_token_for_retry',
     ); // It generated a new token for the retry
+  });
+
+  test('does not retry on 401 error when the token is invalid', async function (assert) {
+    let requestsMade: Request[] = [];
+    let loader = {
+      fetch: async (request: Request, init?: RequestInit) => {
+        request = new Request(request, init);
+        requestsMade.push(request);
+
+        return new Response(AuthenticationErrorMessages.TokenInvalid, {
+          status: 401,
+          headers: {
+            'x-boxel-realm-url': 'http://another-test-realm/',
+          },
+        });
+      },
+    } as unknown as Loader;
+
+    let realmAuthHandler = new RealmAuthHandler(
+      matrixClient,
+      loader,
+      'http://test-realm/',
+    );
+
+    let bearerToken = 'Bearer token_1';
+    (realmAuthHandler as any).createRealmAuthClient = () => {
+      return {
+        getJWT: () => {
+          let token = bearerToken;
+          bearerToken = 'Bearer new_token_for_retry'; // Simulate a new token when this gets called again on retry
+          return token;
+        },
+      };
+    };
+
+    let request = new Request('http://another-test-realm/card');
+
+    let response = await realmAuthHandler.fetchWithAuth(request);
+
+    assert.strictEqual(requestsMade.length, 2); // realm info request and the actual request, but no retry (2 requests made)
+    assert.strictEqual(requestsMade[0].method, 'HEAD');
+    assert.strictEqual(requestsMade[0].headers.get('Authorization'), null);
+
+    assert.strictEqual(requestsMade[1].method, 'GET');
+    assert.strictEqual(
+      requestsMade[1].headers.get('Authorization'),
+      'Bearer token_1',
+    );
+
+    assert.strictEqual(response!.status, 401);
+  });
+
+  test('does not retry on 401 error when the auth header is missing', async function (assert) {
+    let requestsMade: Request[] = [];
+    let loader = {
+      fetch: async (request: Request, init?: RequestInit) => {
+        request = new Request(request, init);
+        requestsMade.push(request);
+
+        return new Response(AuthenticationErrorMessages.MissingAuthHeader, {
+          status: 401,
+          headers: {
+            'x-boxel-realm-url': 'http://another-test-realm/',
+          },
+        });
+      },
+    } as unknown as Loader;
+
+    let realmAuthHandler = new RealmAuthHandler(
+      matrixClient,
+      loader,
+      'http://test-realm/',
+    );
+
+    let bearerToken = 'Bearer token_1';
+    (realmAuthHandler as any).createRealmAuthClient = () => {
+      return {
+        getJWT: () => {
+          let token = bearerToken;
+          bearerToken = 'Bearer new_token_for_retry'; // Simulate a new token when this gets called again on retry
+          return token;
+        },
+      };
+    };
+
+    let request = new Request('http://another-test-realm/card');
+
+    let response = await realmAuthHandler.fetchWithAuth(request);
+
+    assert.strictEqual(requestsMade.length, 2); // realm info request and the actual request, but no retry (2 requests made)
+    assert.strictEqual(requestsMade[0].method, 'HEAD');
+    assert.strictEqual(requestsMade[0].headers.get('Authorization'), null);
+
+    assert.strictEqual(requestsMade[1].method, 'GET');
+    assert.strictEqual(
+      requestsMade[1].headers.get('Authorization'),
+      'Bearer token_1',
+    );
+
+    assert.strictEqual(response!.status, 401);
   });
 });

@@ -44,7 +44,8 @@ export interface TableValuedEach {
 export interface TableValuedTree {
   kind: 'table-valued-tree';
   column: string;
-  path: string;
+  rootPath: string;
+  fieldPath: string;
   treeColumn: string;
 }
 
@@ -108,13 +109,15 @@ export function tableValuedEach(column: string): TableValuedEach {
 
 export function tableValuedTree(
   column: string,
-  path: string,
+  rootPath: string,
+  fieldPath: string,
   treeColumn: string,
 ): TableValuedTree {
   return {
     kind: 'table-valued-tree',
     column,
-    path,
+    rootPath,
+    fieldPath,
     treeColumn,
   };
 }
@@ -299,15 +302,15 @@ export function expressionToSql(query: Expression) {
       } else if (typeof element === 'string') {
         return element;
       } else if (element.kind === 'table-valued-tree') {
-        let { column, path, treeColumn } = element;
+        let { column, rootPath, fieldPath, treeColumn } = element;
         let field = trimBrackets(
-          path === '$' ? column : path.split('.').pop()!,
+          rootPath === '$' ? column : rootPath.split('.').pop()!,
         );
-        let key = `tree_${column}_${path}`;
+        let key = `tree_${column}_${fieldPath}`;
         let { name } = tableValuedFunctions.get(key) ?? {};
         if (!name) {
           name = `${field}${nonce++}_tree`;
-          let absolutePath = path === '$' ? '$' : `$.${path}`;
+          let absolutePath = rootPath === '$' ? '$' : `$.${rootPath}`;
 
           tableValuedFunctions.set(key, {
             name,

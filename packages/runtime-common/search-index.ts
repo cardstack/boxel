@@ -1,10 +1,20 @@
+import * as JSONTypes from 'json-typescript';
 import {
   baseRealm,
   SupportedMimeType,
   internalKeyFor,
   maxLinkDepth,
   maybeURL,
+  Indexer,
   type LooseCardResource,
+  type DBAdapter,
+  type Queue,
+  type QueryOptions,
+  type SearchCardResult,
+  type FromScratchArgs,
+  type FromScratchResult,
+  type IncrementalArgs,
+  type IncrementalResult,
 } from '.';
 import { Kind, Realm } from './realm';
 import { LocalPath, RealmPaths } from './paths';
@@ -20,7 +30,7 @@ import type {
 import { CardError, type SerializedError } from './error';
 import { URLMap } from './url-map';
 import flatMap from 'lodash/flatMap';
-import { type Ignore } from 'ignore';
+import ignore, { type Ignore } from 'ignore';
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CodeRef, getField, identifyCard, loadCard } from './code-ref';
@@ -42,7 +52,7 @@ export interface Reader {
   ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
 }
 
-export interface Stats {
+export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
   instanceErrors: number;
   moduleErrors: number;
@@ -52,9 +62,10 @@ export interface RunState {
   realmURL: URL;
   instances: URLMap<SearchEntryWithErrors>;
   ignoreMap: URLMap<Ignore>;
-  ignoreMapContents: URLMap<string>;
+  ignoreData: Record<string, string>;
   modules: Map<string, ModuleWithErrors>;
   stats: Stats;
+  invalidations: string[];
 }
 
 export type RunnerRegistration = (
@@ -74,6 +85,8 @@ export interface RunnerOpts {
   reader: Reader;
   entrySetter: EntrySetter;
   registerRunner: RunnerRegistration;
+  // TODO make this required after feature flag is removed
+  indexer?: Indexer;
 }
 export type IndexRunner = (optsId: number) => Promise<void>;
 
@@ -97,9 +110,9 @@ export type ModuleWithErrors =
   | { type: 'module'; module: Module }
   | { type: 'error'; moduleURL: string; error: SerializedError };
 
-interface Options {
+type Options = {
   loadLinks?: true;
-}
+} & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
 interface SearchResultDoc {
@@ -151,6 +164,10 @@ export class SearchIndex {
   runnerOptsMgr: RunnerOptionsManager;
   #reader: Reader;
   #index: CurrentIndex;
+  // TODO make this required after we remove the feature flag
+  #indexer: Indexer | undefined;
+  // TODO make this required after we remove the feature flag
+  #queue: Queue | undefined;
   #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
   #incremental:
     | ((
@@ -161,21 +178,37 @@ export class SearchIndex {
       ) => Promise<RunState>)
     | undefined;
 
-  constructor(
-    realm: Realm,
+  constructor({
+    realm,
+    readdir,
+    readFileAsText,
+    runner,
+    runnerOptsManager,
+    dbAdapter,
+    queue,
+  }: {
+    realm: Realm;
     readdir: (
       path: string,
-    ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
+    ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
     readFileAsText: (
       path: LocalPath,
       opts?: { withFallbacks?: true },
-    ) => Promise<{ content: string; lastModified: number } | undefined>,
-    runner: IndexRunner,
-    runnerOptsManager: RunnerOptionsManager,
-  ) {
-    if ((globalThis as any).__enablePgIndexer?.()) {
-      console.debug(`search index is using db index`);
+    ) => Promise<{ content: string; lastModified: number } | undefined>;
+    runner: IndexRunner;
+    runnerOptsManager: RunnerOptionsManager;
+    dbAdapter?: DBAdapter;
+    queue?: Queue;
+  }) {
+    if (this.isDbIndexerEnabled) {
+      if (!dbAdapter) {
+        throw new Error(
+          `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
+        );
+      }
+      this.#indexer = new Indexer(dbAdapter);
     }
+    this.#queue = queue;
     this.#realm = realm;
     this.#reader = { readdir, readFileAsText };
     this.runnerOptsMgr = runnerOptsManager;
@@ -184,15 +217,38 @@ export class SearchIndex {
       realmURL: new URL(realm.url),
       loader: Loader.cloneLoader(realm.loaderTemplate),
       ignoreMap: new URLMap(),
-      ignoreMapContents: new URLMap(),
+      ignoreData: new Object(null) as Record<string, string>,
       instances: new URLMap(),
       modules: new Map(),
+      invalidations: [],
       stats: {
         instancesIndexed: 0,
         instanceErrors: 0,
         moduleErrors: 0,
       },
     };
+  }
+
+  private get isDbIndexerEnabled() {
+    return Boolean((globalThis as any).__enablePgIndexer?.());
+  }
+
+  // TODO we can get rid of this after the feature flag is removed. this is just
+  // some type sugar so we don't have to check to see if the indexer exists
+  // since ultimately it will be required.
+  private get indexer() {
+    if (!this.#indexer) {
+      throw new Error(`Indexer is missing`);
+    }
+    return this.#indexer;
+  }
+
+  // TODO remove after feature flag, same reason as above
+  private get queue() {
+    if (!this.#queue) {
+      throw new Error(`Queue is missing`);
+    }
+    return this.#queue;
   }
 
   get stats() {
@@ -207,52 +263,126 @@ export class SearchIndex {
     return this.#index;
   }
 
-  async run() {
-    await this.setupRunner(async () => {
-      if (!this.#fromScratch) {
-        throw new Error(`Index runner has not been registered`);
+  async run(onIndexer?: (indexer: Indexer) => Promise<void>) {
+    if (this.isDbIndexerEnabled) {
+      await this.queue.start();
+      await this.indexer.ready();
+      if (onIndexer) {
+        await onIndexer(this.indexer);
       }
-      let current = await this.#fromScratch(this.#index.realmURL);
+
+      let args: FromScratchArgs = {
+        realmURL: this.#realm.url,
+      };
+      let job = await this.queue.publish<FromScratchResult>(
+        `from-scratch-index:${this.#realm.url}`,
+        args,
+      );
+      let { ignoreData, stats } = await job.done;
+      let ignoreMap = new URLMap<Ignore>();
+      for (let [url, contents] of Object.entries(ignoreData)) {
+        ignoreMap.set(new URL(url), ignore().add(contents));
+      }
+      // TODO clean this up after we remove feature flag. For now I'm just
+      // including the bare minimum to keep this from blowing up using the old APIs
       this.#index = {
-        ...this.#index, // don't clobber the instances that the entrySetter has already made
-        modules: current.modules,
-        ignoreMap: current.ignoreMap,
-        realmURL: current.realmURL,
-        stats: current.stats,
+        stats,
+        ignoreMap,
+        realmURL: new URL(this.#realm.url),
+        ignoreData,
+        instances: new URLMap(),
+        modules: new Map(),
+        invalidations: [],
         loader: Loader.cloneLoader(this.#realm.loaderTemplate),
       };
-    });
+    } else {
+      await this.setupRunner(async () => {
+        if (!this.#fromScratch) {
+          throw new Error(`Index runner has not been registered`);
+        }
+        let current = await this.#fromScratch(this.#index.realmURL);
+        this.#index = {
+          ...this.#index, // don't clobber the instances that the entrySetter has already made
+          modules: current.modules,
+          ignoreMap: current.ignoreMap,
+          realmURL: current.realmURL,
+          stats: current.stats,
+          loader: Loader.cloneLoader(this.#realm.loaderTemplate),
+        };
+      });
+    }
   }
 
   async update(
     url: URL,
     opts?: { delete?: true; onInvalidation?: (invalidatedURLs: URL[]) => void },
   ): Promise<void> {
-    await this.setupRunner(async () => {
-      if (!this.#incremental) {
-        throw new Error(`Index runner has not been registered`);
-      }
-      let current = await this.#incremental(
-        this.#index,
-        url,
-        opts?.delete ? 'delete' : 'update',
-        opts?.onInvalidation,
+    if (this.isDbIndexerEnabled) {
+      let args: IncrementalArgs = {
+        url: url.href,
+        realmURL: this.#realm.url,
+        operation: opts?.delete ? 'delete' : 'update',
+        ignoreData: { ...this.#index.ignoreData },
+      };
+      let job = await this.queue.publish<IncrementalResult>(
+        `incremental-index:${this.#realm.url}`,
+        args,
       );
+      let { invalidations, ignoreData, stats } = await job.done;
+      let ignoreMap = new URLMap<Ignore>();
+      for (let [url, contents] of Object.entries(ignoreData)) {
+        ignoreMap.set(new URL(url), ignore().add(contents));
+      }
+      // TODO clean this up after we remove feature flag. For now I'm just
+      // including the bare minimum to keep this from blowing up using the old APIs
       this.#index = {
-        // we overwrite the instances in the incremental update, as there may
-        // have been instance removals due to invalidation that the entrySetter
-        // cannot accommodate in its current form
-        instances: current.instances,
-        modules: current.modules,
-        ignoreMap: current.ignoreMap,
-        ignoreMapContents: current.ignoreMapContents,
-        realmURL: current.realmURL,
-        stats: current.stats,
+        stats,
+        ignoreMap,
+        ignoreData,
+        invalidations,
+        realmURL: new URL(this.#realm.url),
+        instances: new URLMap(),
+        modules: new Map(),
         loader: Loader.cloneLoader(this.#realm.loaderTemplate),
       };
-    });
+      if (opts?.onInvalidation) {
+        opts.onInvalidation(
+          invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+        );
+      }
+    } else {
+      await this.setupRunner(async () => {
+        if (!this.#incremental) {
+          throw new Error(`Index runner has not been registered`);
+        }
+        // TODO this should be published into the queue
+        let current = await this.#incremental(
+          this.#index,
+          url,
+          opts?.delete ? 'delete' : 'update',
+          opts?.onInvalidation,
+        );
+        // TODO we should handle onInvalidation here in the case where we are doing db based index
+
+        this.#index = {
+          // we overwrite the instances in the incremental update, as there may
+          // have been instance removals due to invalidation that the entrySetter
+          // cannot accommodate in its current form
+          instances: current.instances,
+          modules: current.modules,
+          ignoreMap: current.ignoreMap,
+          ignoreData: current.ignoreData,
+          realmURL: current.realmURL,
+          stats: current.stats,
+          invalidations: current.invalidations,
+          loader: Loader.cloneLoader(this.#realm.loaderTemplate),
+        };
+      });
+    }
   }
 
+  // TODO I think we can break this out into a different module specifically a
+  // queue handler for incremental and fromScratch indexing
   private async setupRunner(start: () => Promise<void>) {
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch: this.loader.fetch.bind(this.loader),
@@ -265,44 +395,96 @@ export class SearchIndex {
         this.#incremental = incremental;
         await start();
       },
+      ...(this.isDbIndexerEnabled
+        ? {
+            indexer: this.indexer,
+          }
+        : {}),
     });
     await this.#runner(optsId);
     this.runnerOptsMgr.removeOptions(optsId);
   }
 
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
-    let matcher = await this.buildMatcher(query.filter, {
-      module: `${baseRealm.url}card-api`,
-      name: 'CardDef',
-    });
-
-    let doc: CardCollectionDocument = {
-      data: flatMap([...this.#index.instances.values()], (maybeError) =>
-        maybeError.type !== 'error' ? [maybeError.entry] : [],
-      )
-        .filter(matcher)
-        .sort(this.buildSorter(query.sort))
-        .map((entry) => ({
-          ...entry.resource,
-          ...{ links: { self: entry.resource.id } },
+    let doc: CardCollectionDocument;
+    if (this.isDbIndexerEnabled) {
+      let { cards: data, meta: _meta } = await this.indexer.search(
+        new URL(this.#realm.url),
+        query,
+        this.loader,
+        opts,
+      );
+      doc = {
+        data: data.map((resource) => ({
+          ...resource,
+          ...{ links: { self: resource.id } },
         })),
-    };
+      };
 
-    let omit = doc.data.map((r) => r.id);
-    if (opts?.loadLinks) {
-      let included: CardResource<Saved>[] = [];
-      for (let resource of doc.data) {
-        included = await loadLinks({
-          realmURL: this.#index.realmURL,
-          instances: this.#index.instances,
-          loader: this.loader,
-          resource,
-          omit,
-          included,
-        });
+      let omit = doc.data.map((r) => r.id);
+      // TODO eventually the links will be cached in the index, and this will only
+      // fill in the included resources for links that were not cached (e.g.
+      // volatile fields)
+      if (opts?.loadLinks) {
+        let included: CardResource<Saved>[] = [];
+        for (let resource of doc.data) {
+          included = await this.loadLinks(
+            {
+              realmURL: this.#index.realmURL,
+              resource,
+              omit,
+              included,
+            },
+            opts,
+          );
+        }
+        if (included.length > 0) {
+          doc.included = included;
+        }
       }
-      if (included.length > 0) {
-        doc.included = included;
+    } else {
+      let matcher = await this.buildMatcher(query.filter, {
+        module: `${baseRealm.url}card-api`,
+        name: 'CardDef',
+      });
+
+      // fallback to always sorting by id
+      query.sort = query.sort ?? [];
+      query.sort.push({
+        by: 'id',
+        on: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+      });
+      doc = {
+        data: flatMap([...this.#index.instances.values()], (maybeError) =>
+          maybeError.type !== 'error' ? [maybeError.entry] : [],
+        )
+          .filter(matcher)
+          .sort(this.buildSorter(query.sort))
+          .map((entry) => ({
+            ...entry.resource,
+            ...{ links: { self: entry.resource.id } },
+          })),
+      };
+
+      let omit = doc.data.map((r) => r.id);
+      // TODO eventually the links will be cached in the index, and this will only
+      // fill in the included resources for links that were not cached (e.g.
+      // volatile fields)
+      if (opts?.loadLinks) {
+        let included: CardResource<Saved>[] = [];
+        for (let resource of doc.data) {
+          included = await loadLinksForInMemoryIndex({
+            realmURL: this.#index.realmURL,
+            instances: this.#index.instances,
+            loader: this.loader,
+            resource,
+            omit,
+            included,
+          });
+        }
+        if (included.length > 0) {
+          doc.included = included;
+        }
       }
     }
 
@@ -323,36 +505,97 @@ export class SearchIndex {
   }
 
   async card(url: URL, opts?: Options): Promise<SearchResult | undefined> {
-    let card = this.#index.instances.get(url);
-    if (!card) {
-      return undefined;
-    }
-    if (card.type === 'error') {
-      return card;
-    }
-    let doc: SingleCardDocument = {
-      data: { ...card.entry.resource, ...{ links: { self: url.href } } },
-    };
-    if (opts?.loadLinks) {
-      let included = await loadLinks({
-        realmURL: this.#index.realmURL,
-        instances: this.#index.instances,
-        loader: this.loader,
-        resource: doc.data,
-        omit: [doc.data.id],
-      });
-      if (included.length > 0) {
-        doc.included = included;
+    let doc: SingleCardDocument | undefined;
+    if (this.isDbIndexerEnabled) {
+      let maybeCard = await this.indexer.getCard(url, opts);
+      if (!maybeCard) {
+        return undefined;
+      }
+      if (maybeCard.type === 'error') {
+        return maybeCard;
+      }
+      doc = {
+        data: { ...maybeCard.card, ...{ links: { self: url.href } } },
+      };
+      if (!doc) {
+        throw new Error(
+          `bug: should never get here--search index doc is undefined`,
+        );
+      }
+      if (opts?.loadLinks) {
+        let included = await this.loadLinks(
+          {
+            realmURL: this.#index.realmURL,
+            resource: doc.data,
+            omit: [doc.data.id],
+          },
+          opts,
+        );
+        if (included.length > 0) {
+          doc.included = included;
+        }
+      }
+    } else {
+      let card = this.#index.instances.get(url);
+      if (!card) {
+        return undefined;
+      }
+      if (card.type === 'error') {
+        return card;
+      }
+      doc = {
+        data: { ...card.entry.resource, ...{ links: { self: url.href } } },
+      };
+
+      if (!doc) {
+        throw new Error(
+          `bug: should never get here--search index doc is undefined`,
+        );
+      }
+      if (opts?.loadLinks) {
+        let included = await loadLinksForInMemoryIndex({
+          realmURL: this.#index.realmURL,
+          instances: this.#index.instances,
+          loader: this.loader,
+          resource: doc.data,
+          omit: [doc.data.id],
+        });
+        if (included.length > 0) {
+          doc.included = included;
+        }
       }
     }
     return { type: 'doc', doc };
   }
 
   // this is meant for tests only
-  async searchEntry(url: URL): Promise<SearchEntry | undefined> {
-    let result = this.#index.instances.get(url);
-    if (result?.type !== 'error') {
-      return result?.entry;
+  async searchEntry(url: URL): Promise<SearchCardResult | undefined> {
+    if (this.isDbIndexerEnabled) {
+      let result = await this.indexer.getCard(url);
+      if (result?.type !== 'error') {
+        return result;
+      }
+    } else {
+      let result = this.#index.instances.get(url);
+      if (!result) {
+        return undefined;
+      }
+      if (result?.type !== 'error') {
+        return {
+          type: 'card',
+          card: result.entry.resource,
+          // search docs will now be persisted in JSONB objects--this means that
+          // `undefined` values will no longer be represented since `undefined`
+          // does not exist in JSON and it is not the same as `null`
+          searchDoc: JSON.parse(JSON.stringify(result.entry.searchData)),
+          isolatedHtml: result.entry.html ?? null,
+          realmVersion: -1,
+          realmURL: this.#realm.url,
+          types: result.entry.types,
+          indexedAt: 0,
+          deps: [...result.entry.deps],
+        };
+      }
     }
     return undefined;
   }
@@ -365,6 +608,118 @@ export class SearchIndex {
     return Boolean(
       entry.types?.find((t) => t === internalKeyFor(ref, undefined)), // assumes ref refers to absolute module URL
     );
+  }
+
+  // TODO The caller should provide a list of fields to be included via JSONAPI
+  // request. currently we just use the maxLinkDepth to control how deep to load
+  // links
+  private async loadLinks(
+    {
+      realmURL,
+      resource,
+      omit = [],
+      included = [],
+      visited = [],
+      stack = [],
+    }: {
+      realmURL: URL;
+      resource: LooseCardResource;
+      omit?: string[];
+      included?: CardResource<Saved>[];
+      visited?: string[];
+      stack?: string[];
+    },
+    opts?: Options,
+  ): Promise<CardResource<Saved>[]> {
+    if (resource.id != null) {
+      if (visited.includes(resource.id)) {
+        return [];
+      }
+      visited.push(resource.id);
+    }
+    let realmPath = new RealmPaths(realmURL);
+    for (let [fieldName, relationship] of Object.entries(
+      resource.relationships ?? {},
+    )) {
+      if (!relationship.links.self) {
+        continue;
+      }
+      let linkURL = new URL(
+        relationship.links.self,
+        resource.id ? new URL(resource.id) : realmURL,
+      );
+      let linkResource: CardResource<Saved> | undefined;
+      if (realmPath.inRealm(linkURL)) {
+        let maybeResult = await this.indexer.getCard(linkURL, opts);
+        linkResource =
+          maybeResult?.type === 'card' ? maybeResult.card : undefined;
+      } else {
+        let response = await this.loader.fetch(linkURL, {
+          headers: { Accept: SupportedMimeType.CardJson },
+        });
+        if (!response.ok) {
+          let cardError = await CardError.fromFetchResponse(
+            linkURL.href,
+            response,
+          );
+          throw cardError;
+        }
+        let json = await response.json();
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `instance ${
+              linkURL.href
+            } is not a card document. it is: ${JSON.stringify(json, null, 2)}`,
+          );
+        }
+        linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
+      }
+      let foundLinks = false;
+      // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
+      // index based on keeping track of the rendered fields and invalidate the
+      // index as consumed cards change
+      if (linkResource && stack.length <= maxLinkDepth) {
+        for (let includedResource of await this.loadLinks(
+          {
+            realmURL,
+            resource: linkResource,
+            omit,
+            included: [...included, linkResource],
+            visited,
+            stack: [...(resource.id != null ? [resource.id] : []), ...stack],
+          },
+          opts,
+        )) {
+          foundLinks = true;
+          if (
+            !omit.includes(includedResource.id) &&
+            !included.find((r) => r.id === includedResource.id)
+          ) {
+            included.push({
+              ...includedResource,
+              ...{ links: { self: includedResource.id } },
+            });
+          }
+        }
+      }
+      let relationshipId = maybeURL(relationship.links.self, resource.id);
+      if (!relationshipId) {
+        throw new Error(
+          `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
+        );
+      }
+      if (
+        foundLinks ||
+        omit.includes(relationshipId.href) ||
+        (relationshipId && included.find((i) => i.id === relationshipId!.href))
+      ) {
+        resource.relationships![fieldName].data = {
+          type: 'card',
+          id: relationshipId.href,
+        };
+      }
+    }
+    return included;
   }
 
   private async loadField(ref: CodeRef, fieldPath: string): Promise<Field> {
@@ -688,7 +1043,7 @@ export class SearchIndex {
 // TODO The caller should provide a list of fields to be included via JSONAPI
 // request. currently we just use the maxLinkDepth to control how deep to load
 // links
-export async function loadLinks({
+export async function loadLinksForInMemoryIndex({
   realmURL,
   instances,
   loader,
@@ -755,7 +1110,7 @@ export async function loadLinks({
     // index based on keeping track of the rendered fields and invalidate the
     // index as consumed cards change
     if (linkResource && stack.length <= maxLinkDepth) {
-      for (let includedResource of await loadLinks({
+      for (let includedResource of await loadLinksForInMemoryIndex({
         realmURL,
         instances,
         loader,

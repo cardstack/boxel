@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -59,11 +58,15 @@ class File extends Component<FileArgs> {
   }
 
   get fullUrl() {
-    return `${this.args.recentFile.realmURL}${this.args.recentFile.filePath}`;
+    return new URL(
+      `${this.args.recentFile.realmURL}${this.args.recentFile.filePath}`,
+    );
   }
 
   get isSelected() {
-    return this.operatorModeStateService.state.codePath?.href === this.fullUrl;
+    return (
+      this.operatorModeStateService.state.codePath?.href === this.fullUrl.href
+    );
   }
 
   <template>
@@ -72,9 +75,9 @@ class File extends Component<FileArgs> {
       {{! template-lint-disable require-presentational-children }}
       <li
         class='recent-file'
-        data-test-recent-file={{this.fullUrl}}
+        data-test-recent-file={{this.fullUrl.href}}
         role='button'
-        {{on 'click' (fn this.openFile this.fullUrl)}}
+        {{on 'click' this.openFile}}
       >
         <RealmInfoProvider @realmURL={{@recentFile.realmURL}}>
           <:ready as |realmInfo|>

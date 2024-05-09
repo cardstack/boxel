@@ -6,6 +6,7 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
+import { merge } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
@@ -100,7 +101,7 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
+  patchCard = task({ enqueue: true }, async (id: string, patch: any) => {
     let stackItems = this.state?.stacks.flat() ?? [];
     if (
       !stackItems.length ||
@@ -111,21 +112,8 @@ export default class OperatorModeStateService extends Service {
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
-        if (attributes && document.data.attributes) {
-          for (let key of Object.keys(attributes)) {
-            if (!(key in document.data.attributes)) {
-              throw new Error(
-                `The "${key}" attribute does not exist on the card "${item.card.id}".`,
-              );
-            }
-          }
-        }
-        document.data.attributes = {
-          ...document.data.attributes,
-          ...attributes,
-        };
-
-        await this.cardService.patchCard(item.card, document, attributes);
+        document.data = merge(document.data, patch);
+        await this.cardService.patchCard(item.card, document, patch);
       }
     }
   });
@@ -145,7 +133,7 @@ export default class OperatorModeStateService extends Service {
 
     let cardRealmUrl = await this.cardService.getRealmURL(card);
     let realmPaths = new RealmPaths(cardRealmUrl);
-    let cardPath = realmPaths.local(`${card.id}.json`);
+    let cardPath = realmPaths.local(new URL(`${card.id}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     await this.cardService.deleteCard(card);
   }
@@ -156,7 +144,7 @@ export default class OperatorModeStateService extends Service {
     this.state.stacks[stackIndex].splice(itemIndex); // Remove anything above the item
 
     // If the resulting stack is now empty, remove it
-    if (this.stackIsEmpty(stackIndex) && this.state.stacks.length > 1) {
+    if (this.stackIsEmpty(stackIndex) && this.state.stacks.length >= 1) {
       this.state.stacks.splice(stackIndex, 1);
 
       // If we just removed the last item in the stack, and we also removed the stack because of that, we need
@@ -226,7 +214,9 @@ export default class OperatorModeStateService extends Service {
   }
 
   topMostStackItems() {
-    return this.state.stacks.map((stack) => stack[stack.length - 1]);
+    return this.state.stacks
+      .filter((stack) => stack.length > 0)
+      .map((stack) => stack[stack.length - 1]);
   }
 
   stackIsEmpty(stackIndex: number) {

@@ -2,6 +2,7 @@ import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
 import { MatrixClient } from './matrix-client';
 import { RealmAuthClient } from './realm-auth-client';
 import { Loader } from './loader';
+import { AuthenticationErrorMessages } from './router';
 
 export class RealmAuthHandler {
   // Cached realm info to avoid fetching it multiple times for the same realm
@@ -102,7 +103,7 @@ export class RealmAuthHandler {
       isRequestToItself ||
       (targetRealm.isPublicReadable && request.method === 'GET')
     ) {
-      return null; // No need to add auth for GET to public readable realms
+      return null;
     } else {
       if (!this.matrixClient.isLoggedIn()) {
         await this.matrixClient.login();
@@ -112,12 +113,17 @@ export class RealmAuthHandler {
 
       let response = await this.loader.fetch(request);
 
-      // 401 can mean the following: Missing token, expired token, malformed token, permissions changed (jwt payload does not match server permissions)
-      // We make one retry if we get a 401 to make sure we have the latest permissions from the server
       if (response.status === 401 && retryOnAuthFail) {
-        this.visitedRealms.delete(visitedRealmURL!);
-        request.headers.delete('Authorization');
-        return this.fetchWithAuth(request, false);
+        let errorMessage = await response.text();
+        if (
+          errorMessage === AuthenticationErrorMessages.PermissionMismatch ||
+          errorMessage === AuthenticationErrorMessages.TokenExpired
+        ) {
+          this.visitedRealms.delete(visitedRealmURL!);
+          request.headers.delete('Authorization');
+
+          return this.fetchWithAuth(request, false);
+        }
       }
       return response;
     }

@@ -49,7 +49,6 @@ import type {
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
-  ReactionEvent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -86,6 +85,7 @@ export default class MatrixService extends Service {
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
+  failedCommandState: TrackedMap<string, Error> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
@@ -393,27 +393,6 @@ export default class MatrixService extends Service {
     }
   }
 
-  async getReactionKeyForEvent(roomId: string, eventId: string) {
-    let room = await this.rooms.get(roomId);
-    if (!room) {
-      throw new Error(`Room ${roomId} not found`);
-    }
-
-    let event = room.events
-      .filter(
-        (e) =>
-          e.type === 'm.reaction' &&
-          e.content['m.relates_to'].rel_type === 'm.annotation' &&
-          e.content['m.relates_to'].event_id === eventId,
-      )
-      .sort((a, b) => b.origin_server_ts - a.origin_server_ts)[0];
-    if (!event) {
-      return;
-    }
-
-    return (event as ReactionEvent).content['m.relates_to'].key;
-  }
-
   async sendMessage(
     roomId: string,
     body: string | undefined,
@@ -461,7 +440,7 @@ export default class MatrixService extends Service {
                   description: {
                     type: 'string',
                   },
-                  attributes: patchSpec,
+                  ...patchSpec,
                 },
                 required: ['card_id', 'attributes', 'description'],
               },

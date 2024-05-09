@@ -178,13 +178,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
-
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
@@ -192,6 +186,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
         'person.gts': personCardSource,
+        'français.json': '{}',
         'friend.gts': friendCardSource,
         'employee.gts': employeeCardSource,
         'in-this-file.gts': inThisFileSource,
@@ -278,7 +273,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       'recent-files',
       JSON.stringify([
         [testRealmURL, 'index.json'],
-        ['http://localhost:4202/test/', 'person.gts'],
+        ['http://localhost:4202/test/', 'français.json'],
         'a-non-url-to-ignore',
       ]),
     );
@@ -331,8 +326,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       .dom('[data-test-recent-file]:nth-child(1)')
       .containsText('index.json');
 
-    await waitFor('[data-test-file="person.gts"]');
-    await click('[data-test-file="person.gts"]');
+    await waitFor('[data-test-file="français.json"]');
+    await click('[data-test-file="français.json"]');
 
     assert
       .dom('[data-test-recent-file]:first-child')
@@ -347,7 +342,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
     assert
       .dom('[data-test-recent-file]:first-child')
-      .containsText('person.gts');
+      .containsText('français.json');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('Person/1.json');
@@ -356,9 +351,9 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
         [testRealmURL, 'index.json'],
-        [testRealmURL, 'person.gts'],
+        [testRealmURL, 'français.json'],
         [testRealmURL, 'Person/1.json'],
-        ['http://localhost:4202/test/', 'person.gts'],
+        ['http://localhost:4202/test/', 'français.json'],
       ],
     );
   });

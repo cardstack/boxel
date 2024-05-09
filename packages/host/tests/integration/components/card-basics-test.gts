@@ -2364,6 +2364,65 @@ module('Integration | card-basics', function (hooks) {
       /expected queryableValue for field type TestField to be scalar/,
     );
   });
+
+  test('Provide field descriptions', async function (assert) {
+    let {
+      field,
+      contains,
+      containsMany,
+      getFieldDescription,
+      linksTo,
+      linksToMany,
+      CardDef,
+      FieldDef,
+    } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
+    class Pet extends CardDef {
+      @field firstName = contains(StringField, {
+        description: 'The name of the pet',
+      });
+    }
+
+    class Guest extends CardDef {
+      @field name = contains(StringField, {
+        description: 'The name of the guest',
+      });
+      @field additionalGuestCount = contains(NumberField, {
+        description: 'The number of additional guests coming in this party',
+      });
+    }
+
+    class Hometown extends FieldDef {
+      @field city = contains(StringField, {
+        description: 'The city where the person was born',
+      });
+      @field country = contains(StringField, {
+        description: 'The country where the person was born',
+      });
+    }
+
+    class Person extends CardDef {
+      @field hometown = contains(Hometown, {
+        description: 'The place where the person was born',
+      });
+      @field languagesSpoken = containsMany(StringField, {
+        description: 'The languages the person speaks',
+      });
+      @field pet = linksTo(Pet, {
+        description: "The person's pet",
+      });
+      @field guests = linksToMany(Guest, {
+        description: 'The people the person has invited over',
+      });
+    }
+
+    assert.strictEqual(
+      'The place where the person was born',
+      getFieldDescription(Person, 'hometown'),
+    );
+  });
 });
 
 async function testString(label: string) {
