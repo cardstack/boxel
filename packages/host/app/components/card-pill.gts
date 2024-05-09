@@ -46,7 +46,7 @@ export default class CardPill extends Component<CardPillSignature> {
         </RealmInfoProvider>
       </:icon>
       <:default>
-        <div class='card-content' title={{@card.title}}>
+        <div class='card-content' title={{@card.title.value}}>
           <this.component @format='atom' @displayContainer={{false}} />
         </div>
         {{#if @removeCard}}

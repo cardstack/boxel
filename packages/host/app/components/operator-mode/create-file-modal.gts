@@ -760,7 +760,7 @@ const SelectedTypePill: TemplateOnlyComponent<{
   <Pill
     @inert={{true}}
     class='selected-type'
-    data-test-selected-type={{@entry.title}}
+    data-test-selected-type={{@entry.title.value}}
   >
     <:icon>
       <RealmInfoProvider @fileURL={{@entry.id}}>
@@ -773,7 +773,7 @@ const SelectedTypePill: TemplateOnlyComponent<{
       </RealmInfoProvider>
     </:icon>
     <:default>
-      {{@entry.title}}
+      {{@entry.title.value}}
     </:default>
   </Pill>
   <style>
