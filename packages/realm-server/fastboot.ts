@@ -21,7 +21,14 @@ export async function makeFastBootIndexRunner(
     __boxelErrorReporter: ErrorReporter;
   };
 
+  console.log(`Fastboot dist: ${dist}`);
+
+  let window = new JSDOM('', { pretendToBeVisual: true }).window;
+  window.screen = {};
+  window.devicePixelRatio = 1;
+
   if (typeof dist === 'string') {
+    console.log('in the string branch');
     distPath = dist;
     fastboot = new FastBoot({
       distPath,
@@ -35,10 +42,14 @@ export async function makeFastBootIndexRunner(
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,
+          atob,
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),
+          window,
+          document: window.document,
+          navigator: window.navigator,
         });
       },
     }) as FastBootInstance;
@@ -53,10 +64,14 @@ export async function makeFastBootIndexRunner(
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,
+          atob,
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),
+          window,
+          document: window.document,
+          navigator: window.navigator,
         });
       },
     ));

@@ -141,6 +141,7 @@
     "glimmer-scoped-css": "^0.4.1",
     "ignore": "^5.2.0",
     "indefinite": "^2.4.3",
+    "jsdom": "^21.1.1",
     "loader.js": "^4.7.0",
     "lodash": "^4.17.21",
     "loglevel": "^1.8.1",
