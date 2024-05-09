@@ -12,12 +12,13 @@ import {
 import percySnapshot from '@percy/ember';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
+import { provide } from 'ember-provide-consume-context/test-support';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, RealmSessionContextName } from '@cardstack/runtime-common';
 
 import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -59,6 +60,10 @@ module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
+    provide(RealmSessionContextName, {
+      canWrite: true,
+    });
+
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
   });
@@ -1739,7 +1744,6 @@ module('Integration | card-basics', function (hooks) {
     });
 
     await renderCard(loader, helloWorld, 'edit');
-    await this.pauseTest();
     assert.dom('[data-test-field="title"]').hasText('Title');
     assert.dom('[data-test-field="title"] input').hasValue('My Post');
     assert
