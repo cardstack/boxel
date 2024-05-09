@@ -61,7 +61,7 @@ export default class RoomMessage extends Component<Signature> {
     }
 
     // If message is streaming and hasn't been updated in the last minute, show a timeout message
-    if (Date.now() - Number(this.args.message.updated) > 60000) {
+    if (Date.now() - Number(this.args.message.updated) > 600000) {
       this.streamingTimeout = true;
       return;
     }
@@ -289,6 +289,7 @@ export default class RoomMessage extends Component<Signature> {
         payload.id,
         payload.patch,
       );
+      //here is reaction event
       await this.matrixService.sendReactionEvent(
         this.args.roomId,
         eventId,

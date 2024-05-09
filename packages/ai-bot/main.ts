@@ -14,10 +14,8 @@ import {
   getModifyPrompt,
   cleanContent,
   getTools,
-  getStartOfConversation,
-  shouldSetRoomTitle,
-  type OpenAIPromptMessage,
 } from './helpers';
+import { shouldSetRoomTitle, setTitle } from './lib/set-title';
 import { OpenAIError } from 'openai/error';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 import * as Sentry from '@sentry/node';
@@ -181,47 +179,6 @@ async function sendError(
   }
 }
 
-async function setTitle(
-  client: MatrixClient,
-  room: Room,
-  history: DiscreteMatrixEvent[],
-  userId: string,
-) {
-  let startOfConversation = [
-    {
-      role: 'system',
-      content: `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
-              Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
-              Explain the general actions and user intent.`,
-    } as OpenAIPromptMessage,
-    ...getStartOfConversation(history, userId),
-  ];
-  startOfConversation.push({
-    role: 'user',
-    content: 'Create a short title for this chat, limited to 6 words.',
-  });
-  try {
-    let result = await openai.chat.completions.create(
-      {
-        model: 'gpt-3.5-turbo-1106',
-        messages: startOfConversation,
-        stream: false,
-      },
-      {
-        maxRetries: 5,
-      },
-    );
-    let title = result.choices[0].message.content || 'no title';
-    // strip leading and trailing quotes
-    title = title.replace(/^"(.*)"$/, '$1');
-    log.info('Setting room title to', title);
-    return await client.setRoomName(room.roomId, title);
-  } catch (error) {
-    Sentry.captureException(error);
-    return await sendError(client, room, error, undefined);
-  }
-}
-
 async function handleDebugCommands(
   eventBody: string,
   client: MatrixClient,
@@ -246,7 +203,7 @@ async function handleDebugCommands(
   }
   // Use GPT to set the room title
   else if (eventBody.startsWith('debug:title:create')) {
-    return await setTitle(client, room, history, userId);
+    return await setTitle(openai, client, room, history, userId);
   } else if (eventBody.startsWith('debug:patch:')) {
     let patchMessage = eventBody.split('debug:patch:')[1];
     // If there's a card attached, we need to split it off to parse the json
@@ -332,6 +289,22 @@ Common issues are:
         }
         log.info('(%s) %s :: %s', room?.name, event.getSender(), eventBody);
 
+        let initial = await client.roomInitialSync(room!.roomId, 1000);
+        let eventList = (initial!.messages?.chunk ||
+          []) as DiscreteMatrixEvent[];
+        let history: DiscreteMatrixEvent[] = constructHistory(eventList);
+
+        if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
+          return await setTitle(
+            openai,
+            client,
+            room,
+            history,
+            aiBotUserId,
+            event,
+          );
+        }
+
         if (event.event.origin_server_ts! < startTime) {
           return;
         }
@@ -348,13 +321,9 @@ Common issues are:
           return;
         }
 
-        let initial = await client.roomInitialSync(room!.roomId, 1000);
-        let eventList = (initial!.messages?.chunk ||
-          []) as DiscreteMatrixEvent[];
         log.info(eventList);
 
         log.info('Total event list', eventList.length);
-        let history: DiscreteMatrixEvent[] = constructHistory(eventList);
         log.info("Compressed into just the history that's ", history.length);
 
         // To assist debugging, handle explicit commands
@@ -454,9 +423,6 @@ Common issues are:
           );
         }
 
-        if (shouldSetRoomTitle(eventList, aiBotUserId, sentCommands)) {
-          return await setTitle(client, room, history, aiBotUserId);
-        }
         return;
       } catch (e) {
         log.error(e);

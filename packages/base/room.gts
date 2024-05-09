@@ -775,6 +775,7 @@ interface LeaveEvent extends RoomStateEvent {
   };
 }
 
+//Here are some message events
 interface MessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
@@ -797,7 +798,7 @@ interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
-interface CommandEvent extends BaseMatrixEvent {
+export interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CommandMessageContent;
   unsigned: {
