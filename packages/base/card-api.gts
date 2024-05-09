@@ -630,10 +630,23 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     });
   }
 
-  validate(instance: BaseDef, value: any) {
+  validate(instance: BaseDef, value: any[] | undefined) {
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
+    value = value?.map((entry) => {
+      if (entry != null && !(entry instanceof this.card)) {
+        if (this.card[cast]) {
+          return this.card[cast](entry);
+        } else {
+          throw new Error(
+            `tried set ${entry} as field ${this.name} but it is not an instance of ${this.card.name}`,
+          );
+        }
+      }
+      return entry;
+    });
+
     return new WatchedArray((value) => {
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
@@ -1029,9 +1042,13 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   validate(_instance: CardDef, value: any) {
     // we can't actually place this in the constructor since that would break cards whose field type is themselves
     // so the next opportunity we have to test this scenario is during field assignment
-    if (primitive in this.card) {
+    if (!isCardDef(this.card)) {
       throw new Error(
-        `the linksTo field '${this.name}' contains a primitive card '${this.card.name}'`,
+        `the linksTo field '${
+          this.name
+        }' must be configured with a CardDef subclass, was '${
+          (this.card as any).name
+        }'`,
       );
     }
     if (value) {
@@ -2096,8 +2113,11 @@ export class StringField extends FieldDef {
     </template>
   };
   static edit = class Edit extends Component<typeof this> {
+    set = (value: string | undefined) => {
+      this.args.model.value = value;
+    };
     <template>
-      <BoxelInput @value={{@model.value}} @onInput={{@set}} />
+      <BoxelInput @value={{@model.value}} @onInput={{this.set}} />
     </template>
   };
   static atom = class Atom extends Component<typeof this> {

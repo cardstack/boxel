@@ -973,27 +973,15 @@ module('Integration | card-basics', function (hooks) {
     }
     loader.shimModule(`${testRealmURL}test-cards`, { Person });
 
-    try {
+    assert.throws(() => {
       new Person({ firstName: 'Hassan', pet: 'Mango' });
-      throw new Error('expected error was not thrown');
-    } catch (err: any) {
-      assert.ok(
-        err.message.match(/linksTo field 'pet' contains a primitive card/),
-        'cannot have a linkTo field that uses a primitive card',
-      );
-    }
+    }, /linksTo field 'pet' must be configured with a CardDef subclass, was 'StringField'/);
 
     let hassan = new Person({ firstName: 'Hassan' });
-    try {
+    assert.throws(() => {
       // @ts-expect-error Have to purposefully bypass type-checking in order to get into this runtime error state
       hassan.pet = 'Mango';
-      throw new Error('expected error was not thrown');
-    } catch (err: any) {
-      assert.ok(
-        err.message.match(/linksTo field 'pet' contains a primitive card/),
-        'cannot have a linkTo field that uses a primitive card',
-      );
-    }
+    }, /linksTo field 'pet' must be configured with a CardDef subclass, was 'StringField'/);
   });
 
   test('throws assigning linksTo field to a card that is not an instance of the field card', async function (assert) {
@@ -2000,7 +1988,6 @@ module('Integration | card-basics', function (hooks) {
     // add english
     await click('[data-test-add-new]');
     await fillIn('[data-test-item="0"] input', 'english');
-    await this.pauseTest();
     assert.dom('[data-test-item]').exists({ count: 1 });
     assert.dom('[data-test-output]').hasText('english');
 
