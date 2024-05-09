@@ -60,6 +60,7 @@ export class LeafletMap extends CardDef {
 
 
 
+
   */
 }
 
@@ -85,7 +86,7 @@ class LeafletModifier extends Modifier<LeafletModifierSignature> {
         var map = L.map(element).setView([lat, lon], 13);
 
         L.tileLayer(
-          tileerverUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          tileserverUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         ).addTo(map);
       });
   }
