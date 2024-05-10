@@ -20,7 +20,6 @@ import { RealmPaths } from './paths';
 import { Loader } from './loader';
 import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
-import { URLMap } from './url-map';
 import ignore, { type Ignore } from 'ignore';
 import {
   isSingleCardDocument,
@@ -91,9 +90,9 @@ export class SearchIndex {
 
   @Memoize()
   private get ignoreMap() {
-    let ignoreMap = new URLMap<Ignore>();
+    let ignoreMap = new Map<string, Ignore>();
     for (let [url, contents] of Object.entries(this.#ignoreData)) {
-      ignoreMap.set(new URL(url), ignore().add(contents));
+      ignoreMap.set(url, ignore().add(contents));
     }
     return ignoreMap;
   }
@@ -352,7 +351,7 @@ export class SearchIndex {
 
 export function isIgnored(
   realmURL: URL,
-  ignoreMap: URLMap<Ignore>,
+  ignoreMap: Map<string, Ignore>,
   url: URL,
 ): boolean {
   if (url.href === realmURL.href) {
@@ -366,7 +365,7 @@ export function isIgnored(
   }
   // Test URL against closest ignore. (Should the ignores cascade? so that the
   // child ignore extends the parent ignore?)
-  let ignoreURLs = [...ignoreMap.keys()].map((u) => u.href);
+  let ignoreURLs = [...ignoreMap.keys()];
   let matchingIgnores = ignoreURLs.filter((u) => url.href.includes(u));
   let ignoreURL = matchingIgnores.sort((a, b) => b.length - a.length)[0] as
     | string
@@ -374,7 +373,7 @@ export function isIgnored(
   if (!ignoreURL) {
     return false;
   }
-  let ignore = ignoreMap.get(new URL(ignoreURL))!;
+  let ignore = ignoreMap.get(ignoreURL)!;
   let realmPath = new RealmPaths(realmURL);
   let pathname = realmPath.local(url);
   return ignore.test(pathname).ignored;

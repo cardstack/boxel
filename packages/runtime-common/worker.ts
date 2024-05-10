@@ -1,5 +1,4 @@
 import * as JSONTypes from 'json-typescript';
-import ignore, { type Ignore } from 'ignore';
 import {
   Indexer,
   Loader,
@@ -10,7 +9,6 @@ import {
   type RealmAdapter,
 } from '.';
 import { Kind } from './realm';
-import { URLMap } from './url-map';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -216,10 +214,6 @@ export class Worker {
     return await this.prepareAndRunJob<IncrementalResult>(async () => {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
-      }
-      let ignoreMap = new URLMap<Ignore>();
-      for (let [url, contents] of Object.entries(args.ignoreData)) {
-        ignoreMap.set(new URL(url), ignore().add(contents));
       }
       let { ignoreData, stats, invalidations } = await this.#incremental(
         new URL(args.url),

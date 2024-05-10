@@ -38,7 +38,6 @@ import {
 } from '@cardstack/runtime-common/error';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import { isIgnored } from '@cardstack/runtime-common/search-index';
-import { URLMap } from '@cardstack/runtime-common/url-map';
 import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 
 import {
@@ -240,9 +239,9 @@ export class CurrentRun {
 
   @cached
   private get ignoreMap() {
-    let ignoreMap = new URLMap<Ignore>();
+    let ignoreMap = new Map<string, Ignore>();
     for (let [url, contents] of Object.entries(this.#ignoreData)) {
-      ignoreMap.set(new URL(url), ignore().add(contents));
+      ignoreMap.set(url, ignore().add(contents));
     }
     return ignoreMap;
   }
@@ -252,7 +251,7 @@ export class CurrentRun {
       this.#realmPaths.local(new URL('.gitignore', url)),
     );
     if (ignorePatterns && ignorePatterns.content) {
-      this.ignoreMap.set(url, ignore().add(ignorePatterns.content));
+      this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
       this.#ignoreData[url.href] = ignorePatterns.content;
     }
 
