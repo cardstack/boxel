@@ -48,7 +48,6 @@ import {
 } from './query';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
-import { type SearchEntryWithErrors } from './search-index';
 
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -829,6 +828,18 @@ export class Indexer {
   }
 }
 
+export interface SearchEntry {
+  resource: CardResource;
+  searchData: Record<string, any>;
+  isolatedHtml?: string;
+  types: string[];
+  deps: Set<string>;
+}
+
+export type SearchEntryWithErrors =
+  | { type: 'entry'; entry: SearchEntry }
+  | { type: 'error'; error: SerializedError };
+
 export class Batch {
   readonly ready: Promise<void>;
   private touched = new Set<string>();
@@ -870,7 +881,7 @@ export class Batch {
               type: 'instance',
               pristine_doc: entry.entry.resource,
               search_doc: entry.entry.searchData,
-              isolated_html: entry.entry.html,
+              isolated_html: entry.entry.isolatedHtml,
               deps: [...entry.entry.deps],
               types: entry.entry.types,
             }
@@ -1052,13 +1063,34 @@ export class Batch {
       ) {
         let message = `Invalidation conflict error in realm ${this.realmURL.href} version ${this.realmVersion}`;
         if (opts?.url && opts?.invalidations) {
-          message = `${message}: the invalidation ${
-            opts.url.href
-          } resulted in invalidation graph: ${JSON.stringify(
-            opts.invalidations,
-          )} that collides with unfinished indexing`;
+          message =
+            `${message}: the invalidation ${
+              opts.url.href
+            } resulted in invalidation graph: ${JSON.stringify(
+              opts.invalidations,
+            )} that collides with unfinished indexing. The most likely reason this happens is that there ` +
+            `was an error encountered during incremental indexing that prevented the indexing from completing ` +
+            `(and realm version increasing), then there was another incremental update to the same document ` +
+            `that collided with the WIP artifacts from the indexing that never completed. Removing the WIP ` +
+            `indexing artifacts (the rows(s) that triggered the unique constraint will solve the immediate ` +
+            `problem, but likely the issue that triggered the unfinished indexing will need to be fixed to ` +
+            `prevent this from happening in the future.`;
         } else if (opts?.isMakingNewGeneration) {
-          message = `${message}. created a new generation while there was still unfinished indexing`;
+          message =
+            // One thought is that we could make the new generation logic more
+            // resilient and scan the index for unfinished work before it starts
+            // (by looking for any items with a realm version number higher than
+            // the current version), and then use a realm version that is higher
+            // than any unfinished work. However, this might mask actual
+            // indexing bugs. Having the new generation logic more sensitive to
+            // unfinished indexing work should hopefully bring to light any
+            // future indexing bugs more readily.
+            `${message}. created a new generation while there was still unfinished indexing. ` +
+            `The most likely reason this happens is that there was an error encountered during incremental ` +
+            `indexing that prevented the indexing from completing (and realm version increasing), ` +
+            `then the realm was restarted and the left over WIP indexing artifact(s) collided with the ` +
+            `from-scratch indexing. To resolve this issue delete the WIP indexing artifacts (the row(s) ` +
+            `that triggered the unique constraint) and restart the realm.`;
         }
         throw new Error(message);
       }

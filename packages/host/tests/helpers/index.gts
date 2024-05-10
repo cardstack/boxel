@@ -13,9 +13,13 @@ import {
   RealmPermissions,
   Deferred,
   Worker,
+  RunnerOptionsManager,
   type RealmInfo,
   type TokenClaims,
   type Indexer,
+  type RunnerRegistration,
+  type IndexRunner,
+  type IndexResults,
 } from '@cardstack/runtime-common';
 
 import {
@@ -25,15 +29,6 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import { Realm } from '@cardstack/runtime-common/realm';
-
-import {
-  RunnerOptionsManager,
-  type RunState,
-  type RunnerRegistration,
-  type EntrySetter,
-  type SearchEntryWithErrors,
-  type IndexRunner,
-} from '@cardstack/runtime-common/search-index';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
@@ -195,39 +190,37 @@ class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
   #indexer: Indexer | undefined;
-  #entrySetter: EntrySetter | undefined;
-  #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
+  #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
   #incremental:
     | ((
-        prev: RunState,
         url: URL,
+        realmURL: URL,
         operation: 'update' | 'delete',
-      ) => Promise<RunState>)
+        ignoreData: Record<string, string>,
+      ) => Promise<IndexResults>)
     | undefined;
   setup(
-    fromScratch: (realmURL: URL) => Promise<RunState>,
+    fromScratch: (realmURL: URL) => Promise<IndexResults>,
     incremental: (
-      prev: RunState,
       url: URL,
+      realmURL: URL,
       operation: 'update' | 'delete',
-    ) => Promise<RunState>,
+      ignoreData: Record<string, string>,
+    ) => Promise<IndexResults>,
   ) {
     this.#fromScratch = fromScratch;
     this.#incremental = incremental;
   }
   async configureRunner(
     registerRunner: RunnerRegistration,
-    entrySetter: EntrySetter,
     adapter: RealmAdapter,
-    // TODO make this required after feature flag is removed
-    indexer?: Indexer,
+    indexer: Indexer,
   ) {
     if (!this.#fromScratch || !this.#incremental) {
       throw new Error(
         `fromScratch/incremental not registered with MockLocalIndexer`,
       );
     }
-    this.#entrySetter = entrySetter;
     this.#adapter = adapter;
     this.#indexer = indexer;
     await registerRunner(
@@ -235,20 +228,16 @@ class MockLocalIndexer extends Service {
       this.#incremental.bind(this),
     );
   }
-  async setEntry(url: URL, entry: SearchEntryWithErrors) {
-    if (!this.#entrySetter) {
-      throw new Error(`entrySetter not registered with MockLocalIndexer`);
-    }
-    this.#entrySetter(url, entry);
-  }
   get adapter() {
     if (!this.#adapter) {
       throw new Error(`adapter has not been set on MockLocalIndexer`);
     }
     return this.#adapter;
   }
-  // TODO make this throw when no indexer after feature flag removed
   get indexer() {
+    if (!this.#indexer) {
+      throw new Error(`indexer not registered with MockLocalIndexer`);
+    }
     return this.#indexer;
   }
 }
@@ -526,29 +515,22 @@ async function setupTestRealm({
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
   let indexRunner: IndexRunner = async (optsId) => {
-    let { registerRunner, entrySetter, indexer } =
-      runnerOptsMgr.getOptions(optsId);
-    await localIndexer.configureRunner(
-      registerRunner,
-      entrySetter,
-      adapter,
-      indexer,
-    );
+    let { registerRunner, indexer } = runnerOptsMgr.getOptions(optsId);
+    await localIndexer.configureRunner(registerRunner, adapter, indexer);
   };
 
   let dbAdapter = await getDbAdapter();
   realm = new Realm({
     url: realmURL,
     adapter,
-    indexRunner,
-    runnerOptsMgr,
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
     permissions,
     realmSecretSeed: testRealmSecretSeed,
     virtualNetwork,
-    ...((globalThis as any).__enablePgIndexer?.() ? { dbAdapter, queue } : {}),
+    dbAdapter,
+    queue,
     onIndexer: async (indexer) => {
       let worker = new Worker({
         realmURL: new URL(realmURL!),
@@ -556,7 +538,7 @@ async function setupTestRealm({
         queue,
         realmAdapter: adapter,
         runnerOptsManager: runnerOptsMgr,
-        loader: virtualNetwork.createLoader(),
+        loader: realm.loaderTemplate,
         indexRunner,
       });
       await worker.run();

@@ -1,6 +1,6 @@
 import { RealmPaths } from './paths';
 import { Loader, followRedirections } from './loader';
-import type { RunnerOpts } from './search-index';
+import type { RunnerOpts } from './worker';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
