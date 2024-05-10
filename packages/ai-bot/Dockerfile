@@ -1,4 +1,4 @@
-FROM node:18.6.0-slim
+FROM node:20.11.1-slim
 ARG CI=1
 RUN apt-get update && apt-get install -y python3 build-essential
 RUN npm install -g pnpm@8.10.5
