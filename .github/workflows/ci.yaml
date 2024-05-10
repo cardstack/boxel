@@ -183,6 +183,12 @@ jobs:
     concurrency:
       group: boxel-host-test-db-index${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: ["Chrome", "Firefox"]
+    env:
+      TESTEM_BROWSER: ${{ (startsWith(matrix.browser, 'Firefox') && 'Firefox') || matrix.browser }}
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
@@ -211,7 +217,7 @@ jobs:
         if: always()
         with:
           junit_files: junit/host.xml
-          check_name: Host Tests (DB Index) Test Results
+          check_name: ${{ matrix.browser }} Host Tests (DB Index) Test Results
 
   matrix-client-test:
     name: Matrix Client Tests
