@@ -24,7 +24,7 @@ const config = {
         '--window-size=1440,900',
       ].filter(Boolean),
     },
-    Firefox: ['-headless', '--width=1440', '--height=900'],
+    Firefox: ['--headless', '--width=1440', '--height=900'],
   },
 };
 
