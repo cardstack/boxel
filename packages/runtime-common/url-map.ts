@@ -1,3 +1,4 @@
+// TODO we don't need this anymore
 export class URLMap<T> {
   #map: Map<string, T>;
   constructor();
