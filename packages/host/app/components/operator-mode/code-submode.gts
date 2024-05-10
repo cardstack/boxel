@@ -16,6 +16,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 import { provide } from 'ember-provide-consume-context';
+
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
