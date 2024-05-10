@@ -1098,7 +1098,13 @@ export class Batch {
     }
   }
 
-  private async calculateInvalidations(alias: string): Promise<string[]> {
+  private async calculateInvalidations(
+    alias: string,
+    visited: string[] = [],
+  ): Promise<string[]> {
+    if (visited.includes(alias)) {
+      return [];
+    }
     let childInvalidations = await this.client.itemsThatReference(
       alias,
       this.realmVersion,
@@ -1109,7 +1115,9 @@ export class Batch {
       ...invalidations,
       ...flatten(
         await Promise.all(
-          aliases.map((alias) => this.calculateInvalidations(alias)),
+          aliases.map((a) =>
+            this.calculateInvalidations(a, [...visited, alias]),
+          ),
         ),
       ),
     ];
