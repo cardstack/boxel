@@ -6,7 +6,6 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { provide } from 'ember-provide-consume-context/test-support';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
 
@@ -29,6 +28,7 @@ import {
   setupLocalIndexing,
   saveCard,
   setupIntegrationTestRealm,
+  provideConsumeContext,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -43,7 +43,7 @@ module('Integration | card-editor', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    provide(RealmSessionContextName, {
+    provideConsumeContext(RealmSessionContextName, {
       canWrite: true,
     });
 

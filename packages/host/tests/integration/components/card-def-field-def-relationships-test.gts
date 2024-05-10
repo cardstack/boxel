@@ -1,6 +1,5 @@
 import { click, waitFor } from '@ember/test-helpers';
 
-import { provide } from 'ember-provide-consume-context/test-support';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
@@ -18,6 +17,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupIntegrationTestRealm,
+  provideConsumeContext,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent, renderCard } from '../../helpers/render-component';
@@ -48,7 +48,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
-    provide(RealmSessionContextName, {
+    provideConsumeContext(RealmSessionContextName, {
       canWrite: true,
     });
     loader = (this.owner.lookup('service:loader-service') as LoaderService)

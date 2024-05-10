@@ -12,7 +12,7 @@ import {
 import percySnapshot from '@percy/ember';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
-import { provide } from 'ember-provide-consume-context/test-support';
+
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
@@ -38,6 +38,7 @@ import {
   testRealmURL,
   setupCardLogs,
   saveCard,
+  provideConsumeContext,
 } from '../../helpers';
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
@@ -154,7 +155,7 @@ module('Integration | card-basics', function (hooks) {
 
   module('cards allowed to be edited', function (hooks) {
     hooks.beforeEach(function () {
-      provide(RealmSessionContextName, {
+      provideConsumeContext(RealmSessionContextName, {
         canWrite: true,
       });
     });

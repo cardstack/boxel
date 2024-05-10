@@ -1,7 +1,7 @@
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 
 import parseISO from 'date-fns/parseISO';
-import { provide } from 'ember-provide-consume-context/test-support';
+
 import { setupRenderingTest } from 'ember-qunit';
 import { isAddress } from 'ethers';
 import { module, test } from 'qunit';
@@ -18,7 +18,13 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
-import { p, cleanWhiteSpace, setupCardLogs, saveCard } from '../../helpers';
+import {
+  p,
+  cleanWhiteSpace,
+  setupCardLogs,
+  saveCard,
+  provideConsumeContext,
+} from '../../helpers';
 
 import { renderCard } from '../../helpers/render-component';
 
@@ -38,7 +44,7 @@ module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function () {
-    provide(RealmSessionContextName, {
+    provideConsumeContext(RealmSessionContextName, {
       canWrite: true,
     });
 

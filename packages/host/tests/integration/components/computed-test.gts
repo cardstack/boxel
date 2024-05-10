@@ -1,6 +1,5 @@
 import { waitUntil, fillIn, RenderingTestContext } from '@ember/test-helpers';
 
-import { provide } from 'ember-provide-consume-context/test-support';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
@@ -9,7 +8,12 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import { cleanWhiteSpace, testRealmURL, setupCardLogs } from '../../helpers';
+import {
+  cleanWhiteSpace,
+  testRealmURL,
+  setupCardLogs,
+  provideConsumeContext,
+} from '../../helpers';
 import { renderCard } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -22,7 +26,7 @@ module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    provide(RealmSessionContextName, {
+    provideConsumeContext(RealmSessionContextName, {
       canWrite: true,
     });
 
