@@ -6,7 +6,7 @@
         "name": "Best Bakery",
         "description": null,
         "logoURL": "../invoice-assets/vendor-logo-best-bakery.png",
-        "email": "contact@bestbakery.com",
+        "email": "contact@bestbakery",
         "cardXYZ": null
       },
       "contact": {
@@ -27,6 +27,37 @@
         "postalCode": "29577",
         "poBoxNumber": null,
         "country": null
+      },
+      "preferredPaymentMethod": {
+        "type": null,
+        "cryptoPayment": {
+          "toAddress": null
+        },
+        "wireTransfer": {
+          "iban": null,
+          "bic": null
+        }
+      },
+      "alternatePaymentMethod": [],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "preferredPaymentMethod.cryptoPayment.chain": {
+        "links": {
+          "self": null
+        }
+      },
+      "preferredPaymentMethod.cryptoPayment.token": {
+        "links": {
+          "self": null
+        }
+      },
+      "preferredPaymentMethod.wireTransfer.currency": {
+        "links": {
+          "self": null
+        }
       }
     },
     "meta": {

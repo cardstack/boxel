@@ -1,351 +1,250 @@
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import {
-  CardDef,
-  FieldDef,
-  field,
-  contains,
-} from 'https://cardstack.com/base/card-api';
+import { UserName } from './user-name';
+import { UserEmail } from './user-email';
+import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import {
-  BoxelSelect,
-  FieldContainer,
-  Label,
-  Message,
-  CardContainer,
-} from '@cardstack/boxel-ui/components';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 
-interface Salutation {
-  name: string;
+import {
+  FieldContainer,
+  CardContainer,
+  IconButton,
+} from '@cardstack/boxel-ui/components';
+import { Sparkle } from '@cardstack/boxel-ui/icons';
+import { tracked } from '@glimmer/tracking';
+
+class Isolated extends Component<typeof ContactForm> {
+  @tracked hasTitleField =
+    this.args.model.title && this.args.model.title.length > 0;
+
+  <template>
+    <div class='decorative-header'></div>
+
+    <CardContainer @displayBoundaries={{false}} class='card-container'>
+      {{#if this.hasTitleField}}
+        <h2><@fields.title /></h2>
+      {{/if}}
+
+      <div class='card-form-display'>
+        <IconButton
+          @icon={{Sparkle}}
+          @width='22px'
+          @height='22px'
+          @variant='undefined'
+          class='icon-profile'
+          aria-label='Profile'
+        />
+
+        <div class='contact-form-details'>
+          <div class='field-input'>
+            <label>Full Name: </label>
+            <@fields.name />
+          </div>
+
+          <div class='field-input'>
+            <label>Email: </label>
+            <@fields.email />
+          </div>
+
+          <div class='field-input'>
+            <label>Phone: </label>
+            <@fields.phone />
+          </div>
+
+          <div class='field-input'>
+            <label>Fax: </label>
+            <@fields.fax />
+          </div>
+
+          <div class='field-input'>
+            <label>Department: </label>
+            <@fields.department />
+          </div>
+        </div>
+      </div>
+
+    </CardContainer>
+
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Ubuntu+Sans:ital,wght@0,100..800;1,100..800&display=swap');
+      h2 {
+        font-family: 'Playfair Display', serif;
+        font-optical-sizing: auto;
+        font-size: 2.2rem;
+        margin: 0;
+      }
+      .card-container {
+        width: 100%;
+        padding: 1rem;
+        display: grid;
+        margin: auto;
+        gap: var(--boxel-sp-lg);
+      }
+
+      .card-form-display {
+        position: relative;
+      }
+
+      .icon-profile {
+        position: absolute;
+        top: 1px;
+        right: 1px;
+        width: 50px;
+        height: 50px;
+      }
+
+      .contact-form-details {
+        width: 100%;
+        padding: 3rem 2rem;
+        border: 1px solid var(--boxel-300);
+        border-radius: var(--boxel-border-radius-xl);
+        background-color: #eeeeee50;
+        display: grid;
+        gap: var(--boxel-sp-lg);
+        justify-content: center;
+        text-align: center;
+      }
+
+      .field-input {
+        display: flex;
+        gap: var(--boxel-sp-xxl);
+        font-size: 1rem;
+        flex-wrap: wrap;
+        min-width: 280px;
+      }
+
+      .field-input > label {
+        font-weight: 700;
+      }
+
+      .decorative-header {
+        background-image: url(https://i.imgur.com/PQuDAEo.jpg);
+        height: var(--boxel-sp-xl);
+        grid-column: 1 / span 2;
+        margin-bottom: var(--boxel-sp);
+      }
+      h2 {
+        margin-block-start: 0px;
+        margin-block-end: 0px;
+        margin: 0px;
+        text-align: center;
+      }
+
+      @media (min-width: 768px) {
+        .contact-form-details {
+          gap: var(--boxel-sp-xl);
+        }
+        .field-input {
+          gap: var(--boxel-sp);
+        }
+      }
+    </style>
+  </template>
 }
 
-export class userNameField extends FieldDef {
-  static displayName = 'User Name';
-  @field salutation = contains(StringField);
-  @field firstName = contains(StringField);
-  @field lastName = contains(StringField);
+class View extends Component<typeof ContactForm> {
+  <template>
+    <CardContainer @displayBoundaries={{true}} class='card-container'>
+      <IconButton
+        @icon={{Sparkle}}
+        @width='22px'
+        @height='22px'
+        @variant='undefined'
+        class='icon-profile'
+        aria-label='Profile'
+      />
+      <div class='content'>
+        <label>User</label>
+        <h2><@fields.name /></h2>
+      </div>
+    </CardContainer>
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <@fields.salutation />
-      <@fields.firstName />
-      <@fields.lastName />
-    </template>
-  };
+    <style>
+      .card-container {
+        padding: var(--boxel-sp-lg);
+        display: grid;
+        gap: var(--boxel-sp);
+        background-color: #eeeeee50;
+      }
+      .content {
+        color: var(--boxel-700);
+      }
+      h2 {
+        margin: 0px;
+      }
+      .icon-profile {
+        position: absolute;
+        top: 1px;
+        right: 1px;
+        width: 50px;
+        height: 50px;
+      }
+    </style>
+  </template>
+}
 
-  static edit = class Edit extends Component<typeof this> {
-    @tracked selectedSalutationType: Salutation | null = null;
+class Edit extends Component<typeof ContactForm> {
+  <template>
+    <CardContainer @displayBoundaries={{true}} class='card-container'>
+      <FieldContainer
+        @tag='label'
+        @label='Title'
+        @vertical={{true}}
+      ><@fields.title /></FieldContainer>
 
-    @tracked salutationType = [
-      { name: 'None' },
-      { name: 'Mr.' },
-      { name: 'Ms.' },
-      { name: 'Mrs.' },
-      { name: 'Dr.' },
-      { name: 'Prof.' },
-      { name: 'Mx.' },
-    ] as Array<Salutation>;
+      <FieldContainer @tag='label' @label='User' @vertical={{true}}>
+        <@fields.name />
+      </FieldContainer>
 
-    @action updateSalutationType(type: { name: string }) {
-      this.selectedSalutationType = type;
-      this.args.model.salutation = type.name;
-    }
+      <@fields.email />
 
-    <template>
-      <CardContainer @displayBoundaries={{true}} class='card-container'>
-        <FieldContainer @tag='label' @label='Salutation' @vertical={{true}}>
-          <BoxelSelect
-            @placeholder={{'Select'}}
-            @selected={{this.selectedSalutationType}}
-            @onChange={{this.updateSalutationType}}
-            @options={{this.salutationType}}
-            @dropdownClass='boxel-select-usage'
-            class='select'
-            as |item|
-          >
-            <div>{{item.name}}</div>
-          </BoxelSelect>
-        </FieldContainer>
-        <FieldContainer
-          @tag='label'
-          @label='First Name'
-          @vertical={{true}}
-        ><@fields.firstName /></FieldContainer>
-        <FieldContainer
-          @tag='label'
-          @label='Last Name'
-          @vertical={{true}}
-        ><@fields.lastName /></FieldContainer>
-      </CardContainer>
+      <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
+        <@fields.phone />
+      </FieldContainer>
 
-      <style>
-        .card-container {
-          padding: var(--boxel-sp-sm);
-          display: grid;
-          gap: var(--boxel-sp-sm);
-          grid-template-columns: 1fr;
-        }
-        .select {
-          padding: var(--boxel-sp-xs);
-        }
+      <FieldContainer @tag='label' @label='Fax' @vertical={{true}}><@fields.fax
+        /></FieldContainer>
 
-        @media (min-width: 768px) {
-          .card-container {
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-          }
-        }
-      </style>
-    </template>
-  };
+      <FieldContainer
+        @tag='label'
+        @label='Department'
+        @vertical={{true}}
+      ><@fields.department /></FieldContainer>
+    </CardContainer>
+
+    <style>
+      .card-container {
+        padding: var(--boxel-sp-lg);
+        display: grid;
+        gap: var(--boxel-sp);
+      }
+    </style>
+  </template>
 }
 
 export class ContactForm extends CardDef {
   @field title = contains(StringField, {
     description: `Contact Form Title`,
   });
-  @field email = contains(StringField, {
-    description: `User's email address`,
+  @field name = contains(UserName, {
+    description: `User's Full Name`,
   });
-  @field phone = contains(NumberField, {
+  @field email = contains(UserEmail, {
+    description: `User's Email`,
+  });
+  @field phone = contains(StringField, {
     description: `User's phone number`,
   });
-  @field userName = contains(userNameField, {
-    description: `User's Name`,
-  });
-  @field faxNumber = contains(NumberField, {
+
+  @field fax = contains(StringField, {
     description: `User's Fax Number`,
   });
   @field department = contains(StringField, {
     description: `User's Department`,
   });
+
   static displayName = 'Contact Form';
-
-  static edit = class Edit extends Component<typeof ContactForm> {
-    <template>
-      <CardContainer @displayBoundaries={{true}} class='card-container'>
-        <FieldContainer @tag='label' @label='User' @vertical={{true}}>
-          <@fields.userName />
-        </FieldContainer>
-
-        <FieldContainer
-          @tag='label'
-          @label='Title'
-          @vertical={{true}}
-        ><@fields.title /></FieldContainer>
-
-        <FieldContainer
-          @tag='label'
-          @label='Email'
-          @vertical={{true}}
-        ><@fields.email /></FieldContainer>
-
-        <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
-          <@fields.phone />
-        </FieldContainer>
-
-        <FieldContainer
-          @tag='label'
-          @label='Fax'
-          @vertical={{true}}
-        ><@fields.faxNumber /></FieldContainer>
-
-        <FieldContainer
-          @tag='label'
-          @label='Department'
-          @vertical={{true}}
-        ><@fields.department /></FieldContainer>
-      </CardContainer>
-
-      <style>
-        .card-container {
-          padding: var(--boxel-sp-lg);
-          display: grid;
-          gap: var(--boxel-sp);
-        }
-      </style>
-    </template>
-  };
-
-  /*
-  static isolated = class Isolated extends Component<typeof this> {
-    <template></template>
-  }
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template></template>
-  }
-
-  static atom = class Atom extends Component<typeof this> {
-    <template></template>
-  }
-
-  static edit = class Edit extends Component<typeof this> {
-    <template></template>
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  */
+  static isolated = Isolated;
+  static embedded = View;
+  static atom = View;
+  static edit = Edit;
 }

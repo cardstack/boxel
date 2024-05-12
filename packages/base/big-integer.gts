@@ -1,7 +1,6 @@
 import {
   primitive,
   Component,
-  serialize,
   FieldDef,
   BaseDefConstructor,
   deserialize,
@@ -11,20 +10,17 @@ import {
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 
-function _serialize(val: bigint | null): string | undefined {
-  return val == null ? undefined : String(val);
+function serialize(val: string | null): string | undefined {
+  return val ? val : undefined;
 }
 
-function _deserialize(string: string | null): bigint | null {
-  if (!string) {
-    return null;
-  }
-
+function _deserialize(string: string | null): string | null {
   let errorMessage = validate(string);
+
   if (errorMessage) {
     return null;
   } else {
-    return BigInt(string);
+    return string;
   }
 }
 

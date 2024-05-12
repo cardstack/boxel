@@ -3,15 +3,16 @@
     "type": "card",
     "attributes": {
       "title": "Application of Job",
-      "email": "lawyunglim1@gmail.com",
-      "phone": 103819962,
-      "userName": {
+      "name": {
+        "title": null,
         "salutation": "Mr.",
         "firstName": "Law",
-        "lastName": "Yung Lim"
+        "lastName": ""
       },
-      "faxNumber": null,
-      "department": "Frontend Developer",
+      "email": "lawyunglim1@gmail.com",
+      "phone": "0103819962",
+      "fax": "901234",
+      "department": "Frontend Development",
       "description": null,
       "thumbnailURL": null
     },
