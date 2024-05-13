@@ -50,7 +50,11 @@ import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
 import { type SearchEntryWithErrors } from './search-index';
 
-import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
+import type {
+  BaseDef,
+  Field,
+  Primitive,
+} from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmPaths } from './index';
 
@@ -153,7 +157,7 @@ export class Indexer {
   ): Promise<SearchResult | undefined> {
     let href = assertURLEndsWithJSON(url).href;
     let result = (await this.query([
-      `SELECT i.* 
+      `SELECT i.*
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
@@ -632,7 +636,7 @@ export class Indexer {
       loader,
       await loadFieldOrCard(type, loader),
       path,
-      [],
+      [] as Expression,
       // Leaf field handler
       async (_api, field, expression, fieldName, pathTraveled) => {
         // TODO we should probably add a new hook in our cards to support custom
@@ -713,33 +717,15 @@ export class Indexer {
     );
   }
 
-  private async walkFilterFieldPath(
+  private async walkFilterFieldPath<E extends Expression | CardExpression>(
     loader: Loader,
     cardOrField: typeof BaseDef,
     path: string,
-    expression: Expression,
-    handleLeafField: FilterFieldHandler<Expression>,
-    handleInteriorField?: FilterFieldHandlerWithEntryAndExit<Expression>,
+    expression: E,
+    handleLeafField: FilterFieldHandler<E>,
+    handleInteriorField?: FilterFieldHandlerWithEntryAndExit<E>,
     pathTraveled?: string[],
-  ): Promise<Expression>;
-  private async walkFilterFieldPath(
-    loader: Loader,
-    cardOrField: typeof BaseDef,
-    path: string,
-    expression: CardExpression,
-    handleLeafField: FilterFieldHandler<CardExpression>,
-    handleInteriorField?: FilterFieldHandlerWithEntryAndExit<CardExpression>,
-    pathTraveled?: string[],
-  ): Promise<CardExpression>;
-  private async walkFilterFieldPath(
-    loader: Loader,
-    cardOrField: typeof BaseDef,
-    path: string,
-    expression: Expression,
-    handleLeafField: FilterFieldHandler<any[]>,
-    handleInteriorField?: FilterFieldHandlerWithEntryAndExit<any[]>,
-    pathTraveled?: string[],
-  ): Promise<any> {
+  ): Promise<E> {
     let pathSegments = path.split('.');
     let isLeaf = pathSegments.length === 1;
     let currentSegment = pathSegments.shift()!;
@@ -749,7 +735,7 @@ export class Indexer {
     if (!api) {
       throw new Error(`could not load card API`);
     }
-    let field: Field;
+    let field: Field | Primitive | undefined;
     if (currentSegment === '_cardType') {
       // this is a little awkward--we have the need to treat '_cardType' as a
       // type of string field that we can query against from the index (e.g. the
@@ -766,6 +752,9 @@ export class Indexer {
     } else {
       let fields = api.getFields(cardOrField, { includeComputeds: true });
       field = fields[currentSegment];
+      if (!field) {
+        field = api.getPrimitive(cardOrField, currentSegment);
+      }
       if (!field) {
         throw new Error(
           `Your filter refers to nonexistent field "${currentSegment}" on type ${JSON.stringify(
@@ -790,11 +779,10 @@ export class Indexer {
         traveled,
       );
     } else {
-      let passThru: FilterFieldHandler<any[]> = async (
-        _api,
-        _fc,
-        e: Expression,
-      ) => e;
+      if (!('fieldType' in field)) {
+        throw new Error('guaranteed to be a field in this branch');
+      }
+      let passThru: FilterFieldHandler<E> = async (_api, _fc, e) => e;
       // when dealing with an interior field that is not a leaf path segment,
       // the entrance and exit hooks allow you to decorate the expression for
       // the interior field before the interior's antecedant segment's
@@ -1148,10 +1136,14 @@ function convertBracketsToWildCards(pathTraveled: string) {
   return pathTraveled.replace(/\[\]/g, '[%]');
 }
 
-function isFieldPlural(field: Field): boolean {
-  return (
-    field.fieldType === 'containsMany' || field.fieldType === 'linksToMany'
-  );
+function isFieldPlural(field: Field | Primitive): boolean {
+  if ('fieldType' in field) {
+    return (
+      field.fieldType === 'containsMany' || field.fieldType === 'linksToMany'
+    );
+  } else {
+    return false;
+  }
 }
 
 function assertURLEndsWithJSON(url: URL): URL {
@@ -1167,7 +1159,7 @@ function assertNever(value: never) {
 
 type FilterFieldHandler<T> = (
   api: typeof CardAPI,
-  field: Field,
+  field: Field | Primitive,
   expression: T,
   fieldName: string,
   pathTraveled: string,

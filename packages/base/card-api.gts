@@ -2353,10 +2353,14 @@ export function getQueryableValue(
 }
 
 export function formatQueryValue(
-  field: Field<typeof BaseDef>,
+  field: Field | Primitive,
   queryValue: any,
 ): any {
-  return field.card[formatQuery](queryValue);
+  if ('fieldType' in field) {
+    return field.card[formatQuery](queryValue);
+  }
+  // TODO: give primitives an opportunity to customize this
+  return queryValue;
 }
 
 function peekAtField(instance: BaseDef, fieldName: string): any {
@@ -2679,18 +2683,17 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   return await _updateFromSerialized(instance, resource, doc, identityContext);
 }
 
-function getPrimitive<CardT extends BaseDefConstructor>(
+export type Primitive = { _faketodo: 'primitive' };
+
+export function getPrimitive<CardT extends BaseDefConstructor>(
   card: CardT,
   fieldName: string,
-): unknown | undefined {
+): Primitive | undefined {
   let obj: object | null = card.prototype;
   while (obj) {
     let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
-    let result: Field<BaseDefConstructor> | undefined = (desc?.get as any)?.[
-      isPrimitive
-    ];
-    if (result !== undefined) {
-      return result;
+    if ((desc?.get as any)?.[isPrimitive]) {
+      return desc as unknown as Primitive;
     }
     obj = Reflect.getPrototypeOf(obj);
   }
