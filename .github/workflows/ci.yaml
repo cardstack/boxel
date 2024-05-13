@@ -364,7 +364,7 @@ jobs:
       group: realm-server-db-index-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Build boxel-ui
         run: pnpm build
