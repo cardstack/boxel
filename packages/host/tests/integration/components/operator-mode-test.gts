@@ -256,6 +256,11 @@ module('Integration | operator-mode', function (hooks) {
       static displayName = 'Friend';
       @field name = contains(StringField);
       @field friend = linksTo(() => Friend);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.name />
+        </template>
+      };
     }
 
     class Person extends CardDef {
@@ -2715,10 +2720,10 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
 
-    // Normally we'd have an assert like this at the end that may work,
+    // Normally we'd only have an assert like this at the end that may work,
     // but the rest of the application may be broken.
 
-    //assert.dom('[data-test-field="friend"]').containsText('Friend A');
+    assert.dom('[data-test-field="friend"]').containsText('Friend A');
 
     // Instead try and go somewhere else in the application to see if it's broken
     await waitFor('[data-test-submode-switcher]');
