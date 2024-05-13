@@ -14,7 +14,7 @@ interface Salutation {
 }
 
 class View extends Component<typeof UserName> {
-  get isValidValue() {
+  get isValidVal() {
     let { salutation, firstName, lastName } = this.args.model;
 
     if (!salutation || salutation === 'Select' || salutation === 'None')
@@ -25,7 +25,7 @@ class View extends Component<typeof UserName> {
   }
 
   <template>
-    {{#if this.isValidValue}}
+    {{#if this.isValidVal}}
       <@fields.fullName />
     {{else}}
       No User Found
@@ -105,9 +105,6 @@ class Edit extends Component<typeof UserName> {
 
 export class UserName extends FieldDef {
   static displayName = 'User Name';
-  @field title = contains(StringField, {
-    description: `Title`,
-  });
   @field salutation = contains(StringField, {
     description: `User's Salutation`,
   });

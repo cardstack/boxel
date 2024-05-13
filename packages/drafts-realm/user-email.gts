@@ -34,12 +34,8 @@ function isValidEmail(email: string): boolean {
   return true;
 }
 
-function validate(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  if (!isValidEmail(value)) {
+function validate(val: string | null): string | null {
+  if (!isValidEmail(val)) {
     return 'Invalid email format. Please use a valid email address format (e.g., example@example.com';
   }
 
@@ -107,9 +103,6 @@ class Edit extends Component<typeof UserEmail> {
 
 export class UserEmail extends FieldDef {
   static displayName = 'User Email';
-  @field title = contains(StringField, {
-    description: `Title`,
-  });
   @field email = contains(StringField, {
     description: `Email`,
   });

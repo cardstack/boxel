@@ -4,15 +4,14 @@
     "attributes": {
       "title": "Application of Job",
       "name": {
-        "title": null,
         "salutation": "Mr.",
         "firstName": "Law",
-        "lastName": ""
+        "lastName": "Yung Lim"
       },
       "email": "lawyunglim1@gmail.com",
       "phone": "0103819962",
-      "fax": "901234",
-      "department": "Frontend Development",
+      "fax": "+60 8000",
+      "department": "Frontend Department ",
       "description": null,
       "thumbnailURL": null
     },
