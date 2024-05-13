@@ -545,16 +545,20 @@ export class CurrentRun {
       typesMaybeError = await this.getTypes(cardType);
     }
     if (searchData && doc && typesMaybeError?.type === 'types') {
-      await this.setInstance(instanceURL, {
-        type: 'entry',
-        entry: {
-          resource: doc.data,
-          searchData,
-          html,
-          types: typesMaybeError.types,
-          deps: new Set(await this.loader.getConsumedModules(moduleURL)),
+      await this.setInstance(
+        instanceURL,
+        {
+          type: 'entry',
+          entry: {
+            resource: doc.data,
+            searchData,
+            html,
+            types: typesMaybeError.types,
+            deps: new Set(await this.loader.getConsumedModules(moduleURL)),
+          },
         },
-      });
+        deferred,
+      );
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
       let error: SearchEntryWithErrors;
       if (uncaughtError) {
@@ -581,14 +585,22 @@ export class CurrentRun {
       log.warn(
         `encountered error indexing card instance ${path}: ${error.error.detail}`,
       );
-      await this.setInstance(instanceURL, error);
+      await this.setInstance(instanceURL, error, deferred);
     }
     deferred.fulfill();
   }
 
-  private async setInstance(instanceURL: URL, entry: SearchEntryWithErrors) {
+  private async setInstance(
+    instanceURL: URL,
+    entry: SearchEntryWithErrors,
+    deferred: Deferred<void>,
+  ) {
     if (isDbIndexerEnabled()) {
-      await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
+      try {
+        await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
+      } catch (e) {
+        deferred.reject(e);
+      }
     } else {
       this.#instances.set(instanceURL, entry);
       this.#entrySetter(instanceURL, entry);
@@ -637,14 +649,18 @@ export class CurrentRun {
       consumes,
     };
     if (isDbIndexerEnabled()) {
-      await this.batch.updateEntry(new URL(url), {
-        type: 'module',
-        module: {
-          deps: new Set(
-            consumes.map((d) => trimExecutableExtension(new URL(d)).href),
-          ),
-        },
-      });
+      try {
+        await this.batch.updateEntry(new URL(url), {
+          type: 'module',
+          module: {
+            deps: new Set(
+              consumes.map((d) => trimExecutableExtension(new URL(d)).href),
+            ),
+          },
+        });
+      } catch (e) {
+        deferred.reject(e);
+      }
     }
     this.#modules.set(url, { type: 'module', module });
     deferred.fulfill(module);
