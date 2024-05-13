@@ -181,17 +181,17 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   );
 
   <template>
-    <div class='card-isolated-component'>
-      {{#if (and (bool @model) this.isPublicReadableRealm)}}
-        {{! @glint-ignore model should not be null}}
-        <Preview @card={{@model}} @format='isolated' />
-      {{else}}
-        <div>ERROR: cannot load card</div>
-      {{/if}}
-    </div>
-
     {{#if @controller.operatorModeEnabled}}
       <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
+    {{else}}
+      <div class='card-isolated-component'>
+        {{#if (and (bool @model) this.isPublicReadableRealm)}}
+          {{! @glint-ignore model should not be null}}
+          <Preview @card={{@model}} @format='isolated' />
+        {{else}}
+          <div>ERROR: cannot load card</div>
+        {{/if}}
+      </div>
     {{/if}}
 
     {{outlet}}

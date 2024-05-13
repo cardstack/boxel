@@ -3,6 +3,7 @@ import { waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
+import { setupWindowMock } from 'ember-window-mock/test-support';
 import flatMap from 'lodash/flatMap';
 import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
@@ -78,13 +79,9 @@ module('Integration | card-copy', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
-  hooks.afterEach(async function () {
-    localStorage.removeItem('recent-cards');
-  });
+  setupWindowMock(hooks);
 
   hooks.beforeEach(async function () {
-    localStorage.removeItem('recent-cards');
-
     setCardInOperatorModeState = async (
       leftCards: string[],
       rightCards: string[] = [],

@@ -185,6 +185,26 @@ module('indexing', function (hooks) {
               },
             },
           },
+          'bad-link.json': {
+            data: {
+              attributes: {
+                message: 'I have a bad link',
+              },
+              relationships: {
+                author: {
+                  links: {
+                    self: 'http://localhost:9000/this-is-a-link-to-nowhere',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './post',
+                  name: 'Post',
+                },
+              },
+            },
+          },
           'boom.json': {
             data: {
               attributes: {
@@ -260,6 +280,22 @@ module('indexing', function (hooks) {
     }
   });
 
+  test('can make an error doc for a card that has a link to a URL that is not a card', async function (assert) {
+    let entry = await realm.searchIndex.card(new URL(`${testRealm}bad-link`));
+    if (entry?.type === 'error') {
+      assert.strictEqual(
+        entry.error.detail,
+        'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed for http://localhost:9000/this-is-a-link-to-nowhere',
+      );
+      assert.deepEqual(entry.error.deps, [
+        `${testRealm}post`,
+        `http://localhost:9000/this-is-a-link-to-nowhere`,
+      ]);
+    } else {
+      assert.ok('false', 'expected search entry to be an error document');
+    }
+  });
+
   test('can incrementally index updated instance', async function (assert) {
     await realm.write(
       'mango.json',
@@ -330,7 +366,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
-        instanceErrors: 3, // 1 post, 2 persons
+        instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
         moduleErrors: 3, // post, fancy person, person
       }),
       'indexed correct number of files',
@@ -360,7 +396,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 3, // 1 post and 2 persons
-        instanceErrors: 0,
+        instanceErrors: 1,
         moduleErrors: 0,
       }),
       'indexed correct number of files',
@@ -431,7 +467,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 1,
-        instanceErrors: 0,
+        instanceErrors: 1,
         moduleErrors: 0,
       }),
       'indexed correct number of files',
@@ -470,7 +506,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 3,
-        instanceErrors: 0,
+        instanceErrors: 1,
         moduleErrors: 0,
       }),
       'indexed correct number of files',
@@ -519,7 +555,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
-        instanceErrors: 1,
+        instanceErrors: 2,
         moduleErrors: 0,
       }),
       'indexed correct number of files',
@@ -557,7 +593,7 @@ module('indexing', function (hooks) {
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
         instancesIndexed: 1,
-        instanceErrors: 0,
+        instanceErrors: 1,
         moduleErrors: 0,
       }),
       'indexed correct number of files',

@@ -76,20 +76,11 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
-    window.localStorage.removeItem('boxel-session');
-  });
-
   hooks.beforeEach(async function () {
     realmPermissions = {
       [testRealmURL]: ['read', 'write'],
       [testRealm2URL]: ['read', 'write'],
     };
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
-    window.localStorage.removeItem('boxel-session');
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;

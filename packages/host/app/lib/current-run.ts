@@ -555,10 +555,7 @@ export class CurrentRun {
           deps: new Set(await this.loader.getConsumedModules(moduleURL)),
         },
       });
-      deferred.fulfill();
-    }
-
-    if (uncaughtError || typesMaybeError?.type === 'error') {
+    } else if (uncaughtError || typesMaybeError?.type === 'error') {
       let error: SearchEntryWithErrors;
       if (uncaughtError) {
         error = {
@@ -585,8 +582,8 @@ export class CurrentRun {
         `encountered error indexing card instance ${path}: ${error.error.detail}`,
       );
       await this.setInstance(instanceURL, error);
-      deferred.fulfill();
     }
+    deferred.fulfill();
   }
 
   private async setInstance(instanceURL: URL, entry: SearchEntryWithErrors) {

@@ -9,7 +9,6 @@ import {
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
-import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
@@ -414,12 +413,7 @@ module('Acceptance | code submode tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;

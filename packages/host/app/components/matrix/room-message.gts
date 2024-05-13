@@ -287,7 +287,7 @@ export default class RoomMessage extends Component<Signature> {
     try {
       await this.operatorModeStateService.patchCard.perform(
         payload.id,
-        payload.patch.attributes,
+        payload.patch,
       );
       await this.matrixService.sendReactionEvent(
         this.args.roomId,

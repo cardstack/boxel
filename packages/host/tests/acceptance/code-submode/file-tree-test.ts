@@ -195,13 +195,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
     realmPermissions = { [testRealmURL]: ['read', 'write'] };
-    window.localStorage.removeItem('recent-files');
 
     const numStubFiles = 100;
     let stubFiles: Record<string, string> = {};
