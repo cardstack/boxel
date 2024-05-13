@@ -21,6 +21,4 @@ RUN CI=1 pnpm install -r --offline
 
 EXPOSE 3000
 
-RUN wget -qO - --header="X-Papertrail-Token: ${PAPERTRAIL_TOKEN}" "${PAPERTRAIL_URL}/setup.sh" | bash
-
-CMD pnpm --filter "./packages/realm-server" $realm_server_script
+CMD pnpm --filter "./packages/realm-server" $realm_server_script > ./log.txt 2>&1
