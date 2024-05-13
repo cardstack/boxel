@@ -61,6 +61,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type RenderCard } from '../services/render-service';
 
 // const log = logger('current-run');
+const log = (globalThis as any)._log as typeof console.log;
 
 type TypesWithErrors =
   | { type: 'types'; types: string[] }
@@ -141,7 +142,7 @@ export class CurrentRun {
   static async fromScratch(current: CurrentRun) {
     await current.whileIndexing(async () => {
       let start = Date.now();
-      console.log(`starting from scratch indexing`);
+      log(`starting from scratch indexing`);
       (globalThis as any).__currentRunLoader = current.loader;
       if (isDbIndexerEnabled()) {
         current.#batch = await current.indexer.createBatch(current.realmURL);
@@ -153,7 +154,7 @@ export class CurrentRun {
         await current.batch.done();
       }
       (globalThis as any).__currentRunLoader = undefined;
-      console.log(`completed from scratch indexing in ${Date.now() - start}ms`);
+      log(`completed from scratch indexing in ${Date.now() - start}ms`);
     });
     return current;
   }
@@ -182,7 +183,7 @@ export class CurrentRun {
     onInvalidation?: (invalidatedURLs: URL[]) => void;
   }) {
     let start = Date.now();
-    console.log(`starting from incremental indexing for ${url.href}`);
+    log(`starting from incremental indexing for ${url.href}`);
     (globalThis as any).__currentRunLoader = loader;
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
@@ -234,7 +235,7 @@ export class CurrentRun {
       }
 
       (globalThis as any).__currentRunLoader = undefined;
-      console.log(
+      log(
         `completed incremental indexing for ${url.href} in ${
           Date.now() - start
         }ms`,
@@ -254,7 +255,7 @@ export class CurrentRun {
       await this.visitFile(url);
     } catch (err: any) {
       if (isCardError(err) && err.status === 404) {
-        console.log(`tried to visit file ${url.href}, but it no longer exists`);
+        log(`tried to visit file ${url.href}, but it no longer exists`);
       } else {
         throw err;
       }
@@ -345,7 +346,7 @@ export class CurrentRun {
       return;
     }
     let start = Date.now();
-    console.log(`begin visiting file ${url.href}`);
+    log(`begin visiting file ${url.href}`);
     if (
       hasExecutableExtension(url.href) ||
       // handle modules with no extension too
@@ -390,9 +391,7 @@ export class CurrentRun {
         }
       }
     }
-    console.log(
-      `completed visiting file ${url.href} in ${Date.now() - start}ms`,
-    );
+    log(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
   }
 
   private async indexCardSource(url: URL): Promise<void> {
@@ -598,7 +597,7 @@ export class CurrentRun {
     entry: SearchEntryWithErrors,
     deferred: Deferred<void>,
   ) {
-    console.log(
+    log(
       `updating index entry: ${
         instanceURL.href
       }. db-indexer-enabled=${isDbIndexerEnabled()}`,
@@ -615,10 +614,10 @@ export class CurrentRun {
       this.#entrySetter(instanceURL, entry);
     }
     if (entry.type === 'entry') {
-      console.log(`successfully indexed ${instanceURL.href}`);
+      log(`successfully indexed ${instanceURL.href}`);
       this.stats.instancesIndexed++;
     } else {
-      console.log(`error document generated for ${instanceURL.href}`);
+      log(`error document generated for ${instanceURL.href}`);
       this.stats.instanceErrors++;
     }
   }

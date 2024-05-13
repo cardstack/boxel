@@ -38,6 +38,7 @@ export async function makeFastBootIndexRunner(
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
+          _log: console.log,
           jsdom: new JSDOM(''),
         });
       },
@@ -56,6 +57,7 @@ export async function makeFastBootIndexRunner(
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
+          _log: console.log,
           jsdom: new JSDOM(''),
         });
       },
