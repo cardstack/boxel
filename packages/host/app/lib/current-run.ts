@@ -35,6 +35,7 @@ import {
   CardError,
   isCardError,
   serializableError,
+  reportSentryError,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
@@ -598,7 +599,8 @@ export class CurrentRun {
     if (isDbIndexerEnabled()) {
       try {
         await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
-      } catch (e) {
+      } catch (e: any) {
+        reportSentryError(e);
         deferred.reject(e);
       }
     } else {
@@ -658,7 +660,8 @@ export class CurrentRun {
             ),
           },
         });
-      } catch (e) {
+      } catch (e: any) {
+        reportSentryError(e);
         deferred.reject(e);
       }
     }
