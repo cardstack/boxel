@@ -178,13 +178,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
-  hooks.afterEach(async function () {
-    window.localStorage.removeItem('recent-files');
-  });
-
   hooks.beforeEach(async function () {
-    window.localStorage.removeItem('recent-files');
-
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({

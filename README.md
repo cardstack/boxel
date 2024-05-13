@@ -115,12 +115,17 @@ Boxel uses a Postgres database. In development, the Postgres database runs withi
 
 When running tests we isolate the database between each test run by actually creating a new database for each test with a random database name (e.g. `test_db_1234567`). The test databases are dropped before the beginning of each test run.
 
-If you wish to drop the development database you can execute:
+If you wish to drop the development databases you can execute:
 ```
-pnpm drop-db
+pnpm drop-all-dbs
 ```
 
-You can then run `pnpm migrate up` or start the realm server to create the database again.
+You can then run `PGDATABASE=boxel_dev pnpm migrate up` (with `PGDATABASE` set accordingly) or just start the realm server (`PG_INDEXER=true pnpm start:all`) to create the database again.
+
+To interact with your local database directly you can use psql:
+```
+psql -h localhost -p 5435 -U postgres
+```
 
 #### DB Migrations
 When the realm server starts up it will automatically run DB migrations that live in the `packages/realm-server/migrations` folder. As part of development you may wish to run migrations manually as well as to create a new migration.

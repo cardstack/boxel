@@ -19,7 +19,8 @@ If the user request is unclear, you may ask clarifying questions. \
 You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
 If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
 \
-If you need access to the cards the user can see, you can ask them to attach the cards.';
+If you need access to the cards the user can see, you can ask them to attach the cards. \
+If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown.';
 
 type CommandMessage = {
   type: 'command';
@@ -319,8 +320,6 @@ export function getModifyPrompt(
 
 export function cleanContent(content: string) {
   content = content.trim();
-  content = content.replace(/```json/g, '');
-  content = content.replace(/`/g, '');
   if (content.endsWith('json')) {
     content = content.slice(0, -4);
   }

@@ -440,7 +440,7 @@ export default class MatrixService extends Service {
                   description: {
                     type: 'string',
                   },
-                  attributes: patchSpec,
+                  ...patchSpec,
                 },
                 required: ['card_id', 'attributes', 'description'],
               },

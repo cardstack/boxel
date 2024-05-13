@@ -424,11 +424,10 @@ export class Loader {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Request {
-    if (urlOrRequest instanceof Request) {
+    if (urlOrRequest instanceof Request && !init) {
       return urlOrRequest;
-    } else {
-      return new Request(urlOrRequest, init);
     }
+    return new Request(urlOrRequest, init);
   }
 
   async fetch(
@@ -476,6 +475,7 @@ export class Loader {
           ? urlOrRequest.url
           : String(urlOrRequest);
       this.log.error(`fetch failed for ${url}`, err);
+
       return new Response(`fetch failed for ${url}`, {
         status: 500,
         statusText: err.message,

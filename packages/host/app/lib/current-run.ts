@@ -115,9 +115,6 @@ export class CurrentRun {
     entrySetter: EntrySetter;
     renderCard: RenderCard;
   }) {
-    if (isDbIndexerEnabled()) {
-      log.info(`current-run is using db index`);
-    }
     this.#indexer = indexer;
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
@@ -558,10 +555,7 @@ export class CurrentRun {
           deps: new Set(await this.loader.getConsumedModules(moduleURL)),
         },
       });
-      deferred.fulfill();
-    }
-
-    if (uncaughtError || typesMaybeError?.type === 'error') {
+    } else if (uncaughtError || typesMaybeError?.type === 'error') {
       let error: SearchEntryWithErrors;
       if (uncaughtError) {
         error = {
@@ -588,8 +582,8 @@ export class CurrentRun {
         `encountered error indexing card instance ${path}: ${error.error.detail}`,
       );
       await this.setInstance(instanceURL, error);
-      deferred.fulfill();
     }
+    deferred.fulfill();
   }
 
   private async setInstance(instanceURL: URL, entry: SearchEntryWithErrors) {

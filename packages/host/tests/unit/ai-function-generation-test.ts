@@ -8,6 +8,9 @@ import { baseRealm } from '@cardstack/runtime-common';
 import {
   generateCardPatchCallSpecification,
   basicMappings,
+  type RelationshipSchema,
+  type RelationshipsSchema,
+  type ObjectSchema,
 } from '@cardstack/runtime-common/helpers/ai';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -83,17 +86,19 @@ module('Unit | ai-function-generation-test', function (hooks) {
       mappings,
     );
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        stringField: { type: 'string' },
-        numberField: { type: 'number' },
-        booleanField: { type: 'boolean' },
-        dateField: { type: 'string', format: 'date' },
-        dateTimeField: { type: 'string', format: 'date-time' },
-        bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          stringField: { type: 'string' },
+          numberField: { type: 'number' },
+          booleanField: { type: 'boolean' },
+          dateField: { type: 'string', format: 'date' },
+          dateTimeField: { type: 'string', format: 'date-time' },
+          bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
+        },
       },
     });
   });
@@ -115,15 +120,17 @@ module('Unit | ai-function-generation-test', function (hooks) {
       mappings,
     );
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        containerField: {
-          type: 'object',
-          properties: {
-            innerStringField: { type: 'string' },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          containerField: {
+            type: 'object',
+            properties: {
+              innerStringField: { type: 'string' },
+            },
           },
         },
       },
@@ -147,22 +154,24 @@ module('Unit | ai-function-generation-test', function (hooks) {
       mappings,
     );
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        containerField: {
-          type: 'object',
-          properties: {
-            innerStringField: { type: 'array', items: { type: 'string' } },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          containerField: {
+            type: 'object',
+            properties: {
+              innerStringField: { type: 'array', items: { type: 'string' } },
+            },
           },
         },
       },
     });
   });
 
-  test(`does not generate anything for linksTo`, async function (assert) {
+  test(`should support linksTo`, async function (assert) {
     let { field, contains, linksTo, CardDef } = cardApi;
     let { default: StringField } = string;
     class OtherCard extends CardDef {
@@ -173,6 +182,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       static displayName = 'TestCard';
       @field linkedCard = linksTo(OtherCard);
       @field simpleField = contains(StringField);
+      @field linkedCard2 = linksTo(OtherCard);
     }
 
     let schema = generateCardPatchCallSpecification(
@@ -180,15 +190,41 @@ module('Unit | ai-function-generation-test', function (hooks) {
       cardApi,
       mappings,
     );
-    assert.deepEqual(schema, {
+
+    let attributes: ObjectSchema = {
       type: 'object',
       properties: {
-        thumbnailURL: { type: 'string' },
+        simpleField: { type: 'string' },
         title: { type: 'string' },
         description: { type: 'string' },
-        simpleField: { type: 'string' },
+        thumbnailURL: { type: 'string' },
       },
-    });
+    };
+    let linkedRelationship: RelationshipSchema = {
+      type: 'object',
+      properties: {
+        links: {
+          type: 'object',
+          properties: {
+            self: { type: 'null' },
+          },
+          required: ['self'],
+        },
+      },
+      required: ['links'],
+    };
+    let relationships: RelationshipsSchema = {
+      type: 'object',
+      properties: {
+        linkedCard: linkedRelationship,
+        linkedCard2: linkedRelationship,
+      },
+      required: ['linkedCard', 'linkedCard2'],
+    };
+    assert.strictEqual(
+      JSON.stringify(schema),
+      JSON.stringify({ attributes, relationships }),
+    );
   });
 
   test(`skips over fields that can't be recognised`, async function (assert) {
@@ -212,12 +248,14 @@ module('Unit | ai-function-generation-test', function (hooks) {
       mappings,
     );
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        keepField: { type: 'string' },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          keepField: { type: 'string' },
+        },
       },
     });
   });
@@ -241,12 +279,14 @@ module('Unit | ai-function-generation-test', function (hooks) {
       mappings,
     );
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        keepField: { type: 'string' },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          keepField: { type: 'string' },
+        },
       },
     });
   });
@@ -275,15 +315,17 @@ module('Unit | ai-function-generation-test', function (hooks) {
     );
 
     assert.deepEqual(schema, {
-      type: 'object',
-      properties: {
-        thumbnailURL: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        containingField: {
-          type: 'object',
-          properties: {
-            keepField: { type: 'array', items: { type: 'string' } },
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          containingField: {
+            type: 'object',
+            properties: {
+              keepField: { type: 'array', items: { type: 'string' } },
+            },
           },
         },
       },

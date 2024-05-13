@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "commonName": [
+        "Swamp Milkweed",
+        "Pink Milkweed"
+      ],
+      "scientificName": "Asclepias incarnata",
+      "lightRequirement": [
+        {
+          "selectedValue": "Full Sun"
+        },
+        {
+          "selectedValue": "Partial Sun"
+        }
+      ],
+      "toxicityForDogs": {
+        "selectedValue": "Toxic"
+      },
+      "attracts": [
+        "Butterflies",
+        "Bees",
+        "Hummingbirds",
+        "Monarch Butterfly",
+        "Queen Butterfly"
+      ],
+      "height": "4'-5'",
+      "spacing": "3'",
+      "spread": "2'-3'",
+      "seasonOfInterest": [
+        {
+          "selectedValue": "Summer"
+        }
+      ],
+      "title": "Swamp Milkweed (Asclepias incarnata)",
+      "description": "An herbaceous perennial in the Apocynaceae (dogbane) family. It is native to eastern and central United States. It grows in wet sites but adapts to drier sites in moist clay or loam soils. The attractive pink to rose-purple flowers mature in mid-spring and last into early fall. Milkweed is an important food source for Monarch butterfly caterpillars.",
+      "thumbnailURL": "https://www.gardenia.net/wp-content/uploads/2023/05/Asclepias-incarnata-Swamp-Milkweed-780x520.webp"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../plant-info",
+        "name": "PlantInfo"
+      }
+    }
+  }
+}

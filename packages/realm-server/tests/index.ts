@@ -1,5 +1,6 @@
 import '../setup-logger'; // This should be first
 import './realm-server-test';
+import './realm-auth-handler-test';
 import './loader-test';
 import './indexing-test';
 import './indexer-test';

@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "fen": "r3k2r/1bq2ppp/p1ppbn2/1p2p3/QP2P3/P1N2N2/2PPBPPP/R4RK1 b kq - 2 12",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chess",
+        "name": "Chess"
+      }
+    }
+  }
+}

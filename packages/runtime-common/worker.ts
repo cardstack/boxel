@@ -87,7 +87,6 @@ export class Worker {
     this.runnerOptsMgr = runnerOptsManager;
     this.#runner = indexRunner;
     this.#loader = Loader.cloneLoader(loader);
-    this.#realmAdapter.setLoader?.(this.#loader);
   }
 
   async run() {

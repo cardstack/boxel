@@ -997,6 +997,9 @@ importers:
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.182
+      ember-modifier:
+        specifier: ^4.1.0
+        version: 4.1.0(ember-source@5.4.1)
 
   packages/host:
     devDependencies:
@@ -1793,6 +1796,12 @@ importers:
       '@babel/core':
         specifier: ^7.24.3
         version: 7.24.3(supports-color@8.1.1)
+      '@glint/environment-ember-loose':
+        specifier: 1.3.0
+        version: 1.3.0(@glimmer/component@1.1.2)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0)
+      '@glint/environment-ember-template-imports':
+        specifier: 1.3.0
+        version: 1.3.0(@glint/environment-ember-loose@1.3.0)(@glint/template@1.3.0)
       '@types/dompurify':
         specifier: ^3.0.2
         version: 3.0.2
@@ -1802,6 +1811,9 @@ importers:
       '@types/qunit':
         specifier: ^2.11.3
         version: 2.11.3
+      concurrently:
+        specifier: ^8.2.2
+        version: 8.2.2
       dompurify:
         specifier: ^3.0.3
         version: 3.0.3
@@ -12021,7 +12033,7 @@ packages:
       ember-source:
         optional: true
     dependencies:
-      '@embroider/addon-shim': 1.8.6
+      '@embroider/addon-shim': 1.8.7
       ember-cli-normalize-entity-name: 1.0.0
       ember-cli-string-utils: 1.1.0
       ember-source: 5.4.1(@babel/core@7.24.3)(@glimmer/component@1.1.2)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.89.0)
