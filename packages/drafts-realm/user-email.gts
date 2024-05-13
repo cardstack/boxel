@@ -35,6 +35,8 @@ function isValidEmail(email: string): boolean {
 }
 
 function validate(val: string | null): string | null {
+  if (!val) return null;
+
   if (!isValidEmail(val)) {
     return 'Invalid email format. Please use a valid email address format (e.g., example@example.com';
   }
