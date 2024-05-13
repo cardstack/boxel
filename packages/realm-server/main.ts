@@ -15,7 +15,10 @@ import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
 import { type RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common/realm';
 import * as Sentry from '@sentry/node';
-import { setErrorReporter } from '@cardstack/runtime-common/realm';
+import {
+  reportSentryError,
+  setErrorReporter,
+} from '@cardstack/runtime-common/error';
 import PgAdapter from './pg-adapter';
 import PgQueue from './pg-queue';
 
@@ -272,6 +275,7 @@ if (distURL) {
     `Unexpected error encountered starting realm, stopping server`,
     e,
   );
+  reportSentryError(e);
   process.exit(1);
 });
 

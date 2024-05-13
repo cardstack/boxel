@@ -14,6 +14,7 @@ import {
   Deferred,
   Job,
 } from '@cardstack/runtime-common';
+import { reportSentryError } from '@cardstack/runtime-common/error';
 import PgAdapter from './pg-adapter';
 
 const log = logger('queue');
@@ -338,7 +339,8 @@ export default class PgQueue implements Queue {
           log.debug(`running %s`, coalescedIds);
           result = await this.runJob(firstJob.category, firstJob.args);
           newStatus = 'resolved';
-        } catch (err) {
+        } catch (err: any) {
+          reportSentryError(err);
           result = serializableError(err);
           newStatus = 'rejected';
         }

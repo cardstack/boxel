@@ -23,6 +23,22 @@ export interface SerializedError {
   stack?: string;
 }
 
+export type ErrorReporter = (error: Error) => void;
+
+let globalWithErrorReporter = global as typeof globalThis & {
+  __boxelErrorReporter: ErrorReporter;
+};
+
+export function setErrorReporter(reporter: ErrorReporter) {
+  globalWithErrorReporter.__boxelErrorReporter = reporter;
+}
+
+export function reportSentryError(error: Error) {
+  if (globalWithErrorReporter.__boxelErrorReporter) {
+    globalWithErrorReporter.__boxelErrorReporter(error);
+  }
+}
+
 export class CardError extends Error implements SerializedError {
   detail: string;
   status: number;
