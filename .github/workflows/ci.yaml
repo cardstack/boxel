@@ -186,7 +186,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: junit-boxel-host-test-report-${{ matrix.browser }}-in-memory-index${{ github.head_ref || github.run_id }}
+          name: junit-boxel-host-test-report-${{ matrix.browser }}-in-memory-index
           path: junit/host.xml
           retention-days: 14
 
@@ -235,7 +235,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: junit-boxel-host-test-report-${{ matrix.browser }}-db-index${{ github.head_ref || github.run_id }}
+          name: junit-boxel-host-test-report-${{ matrix.browser }}-db-index
           path: junit/host.xml
           retention-days: 14
 
