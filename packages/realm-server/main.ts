@@ -26,6 +26,8 @@ import fs from 'fs';
 
 let log = logger('main');
 
+console.log(`LOG_LEVELS=${process.env.LOG_LEVELS}`);
+
 if (process.env.REALM_SENTRY_DSN) {
   log.info('Setting up Sentry.');
   Sentry.init({

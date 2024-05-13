@@ -598,6 +598,9 @@ export class CurrentRun {
     entry: SearchEntryWithErrors,
     deferred: Deferred<void>,
   ) {
+    console.log(
+      `updating index entry: ${instanceURL.href}. db-indexer-enabled=${isDbIndexerEnabled}`,
+    );
     if (isDbIndexerEnabled()) {
       try {
         await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
@@ -610,8 +613,10 @@ export class CurrentRun {
       this.#entrySetter(instanceURL, entry);
     }
     if (entry.type === 'entry') {
+      console.log(`successfully indexed ${instanceURL.href}`);
       this.stats.instancesIndexed++;
     } else {
+      console.log(`error document generated for ${instanceURL.href}`);
       this.stats.instanceErrors++;
     }
   }
