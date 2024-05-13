@@ -73,7 +73,7 @@ export default class PgAdapter implements DBAdapter {
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
     let client = await this.pool.connect();
-    log.debug(
+    log.info(
       `executing sql: ${sql}, with bindings: ${JSON.stringify(opts?.bind)}`,
     );
     try {
