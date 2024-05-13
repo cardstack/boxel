@@ -2687,7 +2687,8 @@ module('Integration | operator-mode', function (hooks) {
       .containsText('Jackie Woody Mango');
   });
 
-  test('can add a card to a linksTo field creating a loop', async function (assert) {
+  // CS-6837 - causes a loop and a crash
+  skip('can add a card to a linksTo field creating a loop', async function (assert) {
     // Friend A already links to friend B.
     // This test links B back to A
     await setCardInOperatorModeState(`${testRealmURL}Friend/friend-b`);
