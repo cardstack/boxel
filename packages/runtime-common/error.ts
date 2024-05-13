@@ -34,6 +34,7 @@ export function setErrorReporter(reporter: ErrorReporter) {
 }
 
 export function reportSentryError(error: Error) {
+  console.error('====> attempting to report error', error);
   if (globalWithErrorReporter.__boxelErrorReporter) {
     globalWithErrorReporter.__boxelErrorReporter(error);
   }
