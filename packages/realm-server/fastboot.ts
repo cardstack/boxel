@@ -7,7 +7,7 @@ import {
   type RunnerOpts,
 } from '@cardstack/runtime-common/search-index';
 import { JSDOM } from 'jsdom';
-import { type ErrorReporter } from '@cardstack/runtime-common/realm';
+import { type ErrorReporter } from '@cardstack/runtime-common/error';
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(

@@ -599,7 +599,9 @@ export class CurrentRun {
     deferred: Deferred<void>,
   ) {
     console.log(
-      `updating index entry: ${instanceURL.href}. db-indexer-enabled=${isDbIndexerEnabled}`,
+      `updating index entry: ${
+        instanceURL.href
+      }. db-indexer-enabled=${isDbIndexerEnabled()}`,
     );
     if (isDbIndexerEnabled()) {
       try {

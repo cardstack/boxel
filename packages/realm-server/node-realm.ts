@@ -37,7 +37,13 @@ export class NodeAdapter implements RealmAdapter {
       ensureDirSync(path);
     }
     let absolutePath = join(this.realmDir, path);
+    console.log(`reading directory: ${absolutePath}`);
     let entries = readdirSync(absolutePath, { withFileTypes: true });
+    console.log(
+      `directory entries for ${absolutePath}: ${entries
+        .map((e) => join(path, e.name))
+        .join(', ')}`,
+    );
     for await (let entry of entries) {
       let isDirectory = entry.isDirectory();
       let isFile = entry.isFile();
@@ -91,6 +97,7 @@ export class NodeAdapter implements RealmAdapter {
 
   async openFile(path: string): Promise<FileRef | undefined> {
     let absolutePath = join(this.realmDir, path);
+    console.log(`reading file: ${absolutePath}`);
     if (!existsSync(absolutePath)) {
       return undefined;
     }
