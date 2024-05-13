@@ -131,7 +131,7 @@ interface EmailWrapperSignature {
 }
 
 class EmailWrapper extends Component<EmailWrapperSignature> {
-  resendEmailVerification() {
+  @action resendEmailVerification() {
     this.args.resendEmailVerification?.();
   }
 
