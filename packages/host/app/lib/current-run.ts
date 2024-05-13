@@ -314,6 +314,7 @@ export class CurrentRun {
   }
 
   private async visitDirectory(url: URL): Promise<void> {
+    log(`begin visiting directory ${url.href}`);
     let ignorePatterns = await this.#reader.readFileAsText(
       this.#realmPaths.local(new URL('.gitignore', url)),
     );
@@ -336,17 +337,19 @@ export class CurrentRun {
         await this.visitDirectory(directoryURL);
       }
     }
+    log(`completed visiting directory ${url.href}`);
   }
 
   private async visitFile(
     url: URL,
     identityContext?: IdentityContextType,
   ): Promise<void> {
+    log(`begin visiting file ${url.href}`);
     if (isIgnored(this.#realmURL, this.#ignoreMap, url)) {
+      log(`ignoring file ${url.href}`);
       return;
     }
     let start = Date.now();
-    log(`begin visiting file ${url.href}`);
     if (
       hasExecutableExtension(url.href) ||
       // handle modules with no extension too
@@ -395,14 +398,13 @@ export class CurrentRun {
   }
 
   private async indexCardSource(url: URL): Promise<void> {
+    log(`start processing module ${url.href}`);
     let module: Record<string, unknown>;
     try {
       module = await this.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
-      console.warn(
-        `encountered error loading module "${url.href}": ${err.message}`,
-      );
+      log(`encountered error loading module "${url.href}": ${err.message}`);
       let deps = await (
         await this.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
@@ -439,6 +441,7 @@ export class CurrentRun {
         await this.buildModule(ref.module, url);
       }
     }
+    log(`completed processing module ${url.href}`);
   }
 
   private async indexCard(
@@ -626,6 +629,7 @@ export class CurrentRun {
     moduleIdentifier: string,
     relativeTo = this.#realmURL,
   ): Promise<void> {
+    log(`start building module ${moduleIdentifier}`);
     let url = new URL(moduleIdentifier, relativeTo).href;
     let existing = this.#modules.get(url);
     if (existing?.type === 'error') {
@@ -674,6 +678,7 @@ export class CurrentRun {
       }
     }
     this.#modules.set(url, { type: 'module', module });
+    log(`completed building module ${moduleIdentifier}`);
     deferred.fulfill(module);
   }
 
