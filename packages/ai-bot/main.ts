@@ -131,12 +131,12 @@ function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
   let messages = getModifyPrompt(history, aiBotUsername, tools);
   if (tools.length === 0) {
     return openai.beta.chat.completions.stream({
-      model: 'gpt-4-turbo',
+      model: 'gpt-4o',
       messages: messages,
     });
   } else {
     return openai.beta.chat.completions.stream({
-      model: 'gpt-4-turbo',
+      model: 'gpt-4o',
       messages: messages,
       tools: tools,
       tool_choice: 'auto',
@@ -381,7 +381,7 @@ Common issues are:
         const runner = getResponse(history, aiBotUserId)
           .on('content', async (_delta, snapshot) => {
             unsent += 1;
-            if (unsent > 5) {
+            if (unsent > 40) {
               unsent = 0;
               await sendMessage(
                 client,
