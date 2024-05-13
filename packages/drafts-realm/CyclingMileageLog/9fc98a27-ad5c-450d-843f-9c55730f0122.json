@@ -3,6 +3,9 @@
     "type": "card",
     "attributes": {
       "target": 1500,
+      "startDate": "2024-04-01",
+      "endDate": "2024-07-01",
+      "unit": "KM",
       "entries": [
         {
           "date": "2024-05-03",
@@ -15,6 +18,12 @@
           "origin": "Cibiru Hilir",
           "destination": "Lingkar Nagreg",
           "distance": 60
+        },
+        {
+          "date": "2024-03-31",
+          "origin": "Cibiru Hilir",
+          "destination": "Sanona Gowes Cafe",
+          "distance": 75
         }
       ],
       "title": "Cycling Mileage Log",
