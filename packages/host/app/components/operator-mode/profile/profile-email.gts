@@ -155,20 +155,18 @@ class EmailWrapper extends Component<EmailWrapperSignature> {
             >Resend</BoxelButton>
           </div>
         </div>
+      {{else if @email}}
+        <div class='email-value' data-test-current-email>
+          {{@email}}
+        </div>
+        <div class='indicator'>
+          <div class='verification-icon'>
+            <CheckMark class='checked' />
+          </div>
+          <span class='verification'>Verified</span>
+        </div>
       {{else}}
-        {{#if @email}}
-          <div class='email-value' data-test-current-email>
-            {{@email}}
-          </div>
-          <div class='indicator'>
-            <div class='verification-icon'>
-              <CheckMark class='checked' />
-            </div>
-            <span class='verification'>Verified</span>
-          </div>
-        {{else}}
-          <div class='email-value' data-test-no-current-email>- email not set -</div>
-        {{/if}}
+        <div class='email-value' data-test-no-current-email>- email not set -</div>
       {{/if}}
     </div>
 
