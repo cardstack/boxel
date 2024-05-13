@@ -182,6 +182,13 @@ jobs:
         with:
           junit_files: junit/host.xml
           check_name: ${{ matrix.browser }} Host Tests (In-Memory Index) Test Results
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-boxel-host-test-report-${{ matrix.browser }}-in-memory-index${{ github.head_ref || github.run_id }}
+          path: junit/host.xml
+          retention-days: 14
 
   host-test-db-index:
     name: Host Tests - db index
@@ -224,6 +231,13 @@ jobs:
         with:
           junit_files: junit/host.xml
           check_name: ${{ matrix.browser }} Host Tests (DB Index) Test Results
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-boxel-host-test-report-${{ matrix.browser }}-db-index${{ github.head_ref || github.run_id }}
+          path: junit/host.xml
+          retention-days: 14
 
   matrix-client-test:
     name: Matrix Client Tests
