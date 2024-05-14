@@ -918,6 +918,7 @@ export class Batch {
   }
 
   async makeNewGeneration() {
+    await this.setNextGenerationRealmVersion();
     this.isNewGeneration = true;
     let cols = [
       'url',
@@ -993,6 +994,18 @@ export class Batch {
     } else {
       this.realmVersion = row.current_version + 1;
     }
+  }
+
+  // this will use a version higher than any in-progress indexing in case there
+  // are artifacts left over from a failed index
+  private async setNextGenerationRealmVersion() {
+    let [maxVersionRow] = (await this.client.query([
+      'SELECT MAX(realm_version) as max_version FROM boxel_index WHERE realm_url =',
+      param(this.realmURL.href),
+    ])) as { max_version: number }[];
+    let maxVersion = (maxVersionRow?.max_version ?? 0) + 1;
+    let nextVersion = Math.max(this.realmVersion, maxVersion);
+    this.realmVersion = nextVersion;
   }
 
   async invalidate(url: URL): Promise<string[]> {
@@ -1077,14 +1090,6 @@ export class Batch {
             `prevent this from happening in the future.`;
         } else if (opts?.isMakingNewGeneration) {
           message =
-            // One thought is that we could make the new generation logic more
-            // resilient and scan the index for unfinished work before it starts
-            // (by looking for any items with a realm version number higher than
-            // the current version), and then use a realm version that is higher
-            // than any unfinished work. However, this might mask actual
-            // indexing bugs. Having the new generation logic more sensitive to
-            // unfinished indexing work should hopefully bring to light any
-            // future indexing bugs more readily.
             `${message}. created a new generation while there was still unfinished indexing. ` +
             `The most likely reason this happens is that there was an error encountered during incremental ` +
             `indexing that prevented the indexing from completing (and realm version increasing), ` +
