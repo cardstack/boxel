@@ -1300,7 +1300,7 @@ module(`Integration | search-index`, function (hooks) {
     }
   });
 
-  test(`search doc includes 'contains' and used 'linksTo' fields`, async function (assert) {
+  test(`search doc includes 'primitive', 'contains' and used 'linksTo' fields`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -1328,6 +1328,7 @@ module(`Integration | search-index`, function (hooks) {
               lastName: 'Abdel-Rahman',
               email: 'hassan@cardstack.com',
               posts: 100,
+              secretAgentName: 'Carver',
             },
             meta: {
               adoptsFrom: {
@@ -1350,6 +1351,7 @@ module(`Integration | search-index`, function (hooks) {
         firstName: 'Hassan',
         lastName: 'Abdel-Rahman',
         email: 'hassan@cardstack.com',
+        secretAgentName: 'Carver',
         posts: 100,
         title: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
@@ -1407,6 +1409,7 @@ module(`Integration | search-index`, function (hooks) {
       id: `${testRealmURL}CatalogEntry/booking`,
       demo: {
         hosts: null,
+        posts: null,
         sponsors: null,
         title: null,
         venue: null,
@@ -2289,6 +2292,7 @@ module(`Integration | search-index`, function (hooks) {
             id: `${testRealmURL}Friend/mango`,
           },
           description: 'Dog owner',
+          title: 'Hassan',
         },
       });
     } else {
@@ -2458,6 +2462,7 @@ module(`Integration | search-index`, function (hooks) {
             {
               id: vanGoghID,
               firstName: 'Van Gogh',
+              title: 'Van Gogh',
               friends: [{ id: hassanID }],
             },
           ],
@@ -2570,11 +2575,13 @@ module(`Integration | search-index`, function (hooks) {
             {
               id: hassanID,
               firstName: 'Hassan',
+              title: 'Hassan',
               friends: [
                 { id: mangoID },
                 {
                   id: vanGoghID,
                   firstName: 'Van Gogh',
+                  title: 'Van Gogh',
                   friends: [{ id: hassanID }],
                 },
               ],

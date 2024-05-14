@@ -57,6 +57,7 @@ async function makeTestCards(loader: Loader) {
     }),
     bestFriend: ringo,
     friends: [ringo],
+    secretAgentName: 'Vinnie',
   });
   let mango = new FancyPerson({
     name: 'Mango',

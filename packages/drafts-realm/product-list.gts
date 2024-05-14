@@ -104,7 +104,7 @@ class Isolated extends Component<typeof ProductList> {
     let { filterText } = this;
     if (!filterText) return allProducts;
     return allProducts.filter((product) => {
-      return product.title.toLowerCase().includes(filterText);
+      return product.title.value?.toLowerCase().includes(filterText);
     });
   }
 
@@ -216,6 +216,7 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

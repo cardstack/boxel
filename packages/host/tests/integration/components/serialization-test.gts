@@ -2741,14 +2741,15 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card with primitive fields', async function (assert) {
-    let { field, contains, serializeCard, CardDef, recompute } = cardApi;
-    let { default: StringField } = string;
+    let { field, contains, newPrimitive, serializeCard, CardDef, recompute } =
+      cardApi;
     let { default: DateField } = date;
     let { default: DatetimeField } = datetime;
     class Post extends CardDef {
-      @field title = contains(StringField);
       @field created = contains(DateField);
       @field published = contains(DatetimeField);
+      @newPrimitive slug: string | undefined;
+      @newPrimitive specialNumber: number | undefined;
     }
     loader.shimModule(`${realmURL}test-cards`, { Post });
 
@@ -2758,6 +2759,8 @@ module('Integration | serialization', function (hooks) {
       published: parseISO('2022-04-27T16:30+00:00'),
       description: 'Introductory post',
       thumbnailURL: './intro.png',
+      slug: 'first',
+      specialNumber: 1234,
     });
     await recompute(firstPost);
     let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
@@ -2772,6 +2775,8 @@ module('Integration | serialization', function (hooks) {
             published: '2022-04-27T16:30:00.000Z',
             description: 'Introductory post',
             thumbnailURL: './intro.png',
+            slug: 'first',
+            specialNumber: 1234,
           },
           meta: {
             adoptsFrom: {
@@ -3455,12 +3460,19 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a card from a resource object', async function (assert) {
-    let { field, contains, serializeCard, CardDef, createFromSerialized } =
-      cardApi;
+    let {
+      field,
+      contains,
+      newPrimitive,
+      serializeCard,
+      CardDef,
+      createFromSerialized,
+    } = cardApi;
     let { default: StringField } = string;
 
     class Person extends CardDef {
       @field firstName = contains(StringField);
+      @newPrimitive codeName: string | undefined;
       @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
@@ -3478,6 +3490,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Mango',
+          codeName: 'Yellow Monkey',
         },
         meta: {
           adoptsFrom: {
@@ -3494,6 +3507,7 @@ module('Integration | serialization', function (hooks) {
       loader,
     );
     assert.strictEqual(person.firstName.value, 'Mango');
+    assert.strictEqual(person.codeName, 'Yellow Monkey');
     assert.deepEqual(
       serializeCard(person, { includeUnrenderedFields: true }),
       {
@@ -3501,6 +3515,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            codeName: 'Yellow Monkey',
           },
           meta: {
             adoptsFrom: {

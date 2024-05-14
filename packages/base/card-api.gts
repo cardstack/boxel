@@ -19,6 +19,7 @@ import { getLinksToManyComponent } from './links-to-many-component';
 import {
   SupportedMimeType,
   Deferred,
+  exclusivePrimitive,
   isCardResource,
   Loader,
   isSingleCardDocument,
@@ -60,9 +61,6 @@ import { initSharedState } from './shared-state';
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
 export const deserialize = Symbol.for('cardstack-deserialize');
-export const newDeserialize = Symbol.for('cardstack-new-deserialize');
-export const newSerialize = Symbol.for('cardstack-new-serialize');
-export const cast = Symbol.for('cardstack-cast');
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldType = Symbol.for('cardstack-field-type');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
@@ -487,74 +485,59 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     _visited: Set<string>,
     opts?: SerializeOpts,
   ): JSONAPIResource {
-    if (primitive in this.card) {
-      return {
-        attributes: {
-          [this.name]:
-            values === null
-              ? null
-              : values.map(
-                  (value) =>
-                    callSerializeHook(this.card, value, doc, undefined, opts)
-                      ?.value,
-                ),
-        },
-      };
-    } else {
-      let relationships: Record<string, Relationship> = {};
-      let serialized =
-        values === null
-          ? null
-          : values.map((value, index) => {
-              let resource: JSONAPISingleResourceDocument['data'] =
-                callSerializeHook(
-                  this.card,
-                  value,
-                  doc,
-                  undefined,
-                  opts,
-                )?.value;
-              if (resource.relationships) {
-                for (let [fieldName, relationship] of Object.entries(
-                  resource.relationships as Record<string, Relationship>,
-                )) {
-                  relationships[`${this.name}.${index}.${fieldName}`] =
-                    relationship; // warning side-effect
-                }
-              }
-              if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
-                // when our implementation matches the default we don't need to include
-                // meta.adoptsFrom
-                delete resource.meta?.adoptsFrom;
-              }
-              if (resource.meta && Object.keys(resource.meta).length === 0) {
-                delete resource.meta;
-              }
-              return resource;
-            });
-
-      let result: JSONAPIResource = {
-        attributes: {
-          [this.name]:
-            serialized === null
-              ? null
-              : serialized.map((resource) => resource.attributes),
-        },
-      };
-      if (Object.keys(relationships).length > 0) {
-        result.relationships = relationships;
+    let relationships: Record<string, Relationship> = {};
+    let meta: unknown[] = [];
+    let attributes = []; // an array of primitive values or an array of attribute bags for each item
+    for (let [index, value] of values?.entries() || []) {
+      let serializedItem = callSerializeHook(
+        this.card,
+        value,
+        doc,
+        undefined,
+        opts,
+      );
+      if (!serializedItem) {
+        attributes.push(null);
+      } else if (serializedItem.type === 'custom') {
+        attributes.push(serializedItem.value);
+      } else {
+        let resource: LooseCardResource = serializedItem.value;
+        if (resource.relationships) {
+          for (let [fieldName, relationship] of Object.entries(
+            resource.relationships as Record<string, Relationship>,
+          )) {
+            relationships[`${this.name}.${index}.${fieldName}`] = relationship; // warning side-effect
+          }
+        }
+        if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
+          // when our implementation matches the default we don't need to include
+          // meta.adoptsFrom
+          delete (resource.meta as any)?.adoptsFrom;
+        }
+        if (resource.meta && Object.keys(resource.meta).length) {
+          meta.push(resource.meta);
+        }
+        attributes.push(resource.attributes);
       }
-
-      if (serialized && serialized.some((resource) => resource.meta)) {
-        result.meta = {
-          fields: {
-            [this.name]: serialized.map((resource) => resource.meta ?? {}),
-          },
-        };
-      }
-
-      return result;
     }
+
+    let result: JSONAPIResource = {
+      attributes: {
+        [this.name]: attributes.length === 0 ? null : attributes,
+      },
+    };
+    if (Object.keys(relationships).length > 0) {
+      result.relationships = relationships;
+    }
+    if (meta.length) {
+      result.meta = {
+        fields: {
+          [this.name]: meta,
+        },
+      };
+    }
+
+    return result;
   }
 
   async deserialize(
@@ -637,8 +620,8 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     if (!(primitive in this.card)) {
       value = value?.map((entry) => {
         if (entry != null && !(entry instanceof this.card)) {
-          if (this.card[cast]) {
-            return this.card[cast](entry);
+          if (this.card[exclusivePrimitive]) {
+            return new this.card({ [this.card[exclusivePrimitive]]: entry });
           } else {
             throw new Error(
               `tried set ${entry} as field ${this.name} but it is not an instance of ${this.card.name}`,
@@ -783,10 +766,9 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       );
     }
     let meta = makeMetaForField(fieldMeta, this.name, this.card);
-    if (this.card[newDeserialize]) {
-      let partial = await this.card[newDeserialize](value);
+    if (this.card[exclusivePrimitive]) {
       resource = {
-        attributes: partial.attributes ?? {},
+        attributes: { [this.card[exclusivePrimitive]]: value },
         meta,
       };
     } else {
@@ -825,8 +807,8 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       // todo: primitives could implement a validation symbol
     } else {
       if (value != null && !(value instanceof this.card)) {
-        if (this.card[cast]) {
-          return this.card[cast](value);
+        if (this.card[exclusivePrimitive]) {
+          return new this.card({ [this.card[exclusivePrimitive]]: value });
         } else {
           throw new Error(
             `tried set ${value} as field ${this.name} but it is not an instance of ${this.card.name}`,
@@ -1662,6 +1644,7 @@ export const newPrimitive = function <T>(
       notifySubscribers(this, key, value);
       logger.log(recompute(this));
     },
+    enumerable: true,
     [isPrimitive]: true,
   };
 } as unknown as PropertyDecorator;
@@ -1760,6 +1743,7 @@ export class BaseDef {
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
   static displayName = 'Base';
+  declare static [exclusivePrimitive]?: string;
 
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;
@@ -1771,14 +1755,17 @@ export class BaseDef {
     visited?: Set<string>,
     opts?: SerializeOpts,
   ):
-    | { type: 'custom'; value: any }
+    | { type: 'custom'; value: unknown }
     | { type: 'resource'; value: LooseCardResource } {
     // note that primitive can only exist in field definition
     if (primitive in this) {
       // primitive cards can override this as need be
       return { type: 'custom', value: value };
-    } else if (value[newSerialize]) {
-      return { type: 'custom', value: value[newSerialize]() ?? null };
+    } else if (value.constructor[exclusivePrimitive]) {
+      return {
+        type: 'custom',
+        value: value[value.constructor[exclusivePrimitive]] ?? null,
+      };
     } else {
       return {
         type: 'resource',
@@ -1788,8 +1775,8 @@ export class BaseDef {
   }
 
   static [formatQuery](value: any): any {
-    if (primitive in this) {
-      return value;
+    if (primitive in this || exclusivePrimitive in this) {
+      return value; // TODO: allow newPrimitive to format the query value
     }
     throw new Error(`Cannot format query value for composite card/field`);
   }
@@ -1797,6 +1784,8 @@ export class BaseDef {
   static [queryableValue](value: any, stack: BaseDef[] = []): any {
     if (primitive in this) {
       return value;
+    } else if (this[exclusivePrimitive]) {
+      return value[this[exclusivePrimitive] as string];
     } else {
       if (value == null) {
         return null;
@@ -1804,7 +1793,7 @@ export class BaseDef {
       if (stack.includes(value)) {
         return { id: value.id };
       }
-      return Object.fromEntries(
+      let fieldEntries = Object.fromEntries(
         Object.entries(
           getFields(value, { includeComputeds: true, usedFieldsOnly: true }),
         ).map(([fieldName, field]) => {
@@ -1824,6 +1813,12 @@ export class BaseDef {
           ];
         }),
       );
+      for (let [primitiveName, _primitive] of Object.entries(
+        getPrimitives(this),
+      )) {
+        fieldEntries[primitiveName] = value[primitiveName]; // TODO: use serialization from primitive
+      }
+      return fieldEntries;
     }
   }
 
@@ -1840,13 +1835,6 @@ export class BaseDef {
     }
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
-
-  static [newDeserialize]?: (data: any) => Promise<Partial<ResourceObject>>;
-  [newSerialize]?: () => any;
-  static [cast]?: <T extends BaseDefConstructor>(
-    this: T,
-    data: any,
-  ) => BaseInstanceType<T>;
 
   static getComponent(card: BaseDef, field?: Field) {
     return getComponent(card, field);
@@ -2112,6 +2100,7 @@ class IDField extends FieldDef {
 export class StringField extends FieldDef {
   static displayName = 'String';
   @newPrimitive value: string | undefined;
+  static [exclusivePrimitive] = 'value';
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -2130,20 +2119,6 @@ export class StringField extends FieldDef {
     <template>
       {{@model.value}}
     </template>
-  };
-  static async [newDeserialize](data: any): Promise<Partial<ResourceObject>> {
-    return {
-      attributes: {
-        value: data,
-      },
-    };
-  }
-  static [cast](this: any, value: string) {
-    return new this({ value: value });
-  }
-
-  [newSerialize] = () => {
-    return this.value;
   };
 }
 
@@ -2508,11 +2483,17 @@ function serializeCardResource(
       opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
     )
     .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
+  let primitiveResources = Object.entries(getPrimitives(model.constructor)).map(
+    ([key, _primitive]) => {
+      return { attributes: { [key]: (model as any)[key] } }; // TODO: use primitive's serialization
+    },
+  );
   return merge(
     {
       attributes: {},
     },
     ...fieldResources,
+    ...primitiveResources,
     {
       type: 'card',
       meta: { adoptsFrom },
@@ -2698,6 +2679,30 @@ export function getPrimitive<CardT extends BaseDefConstructor>(
     obj = Reflect.getPrototypeOf(obj);
   }
   return undefined;
+}
+
+export function getPrimitives<CardT extends BaseDefConstructor>(
+  card: CardT,
+): { [primitiveName: string]: Primitive } {
+  let obj: object | null = card.prototype;
+  let primitives: { [primitiveName: string]: Primitive } = {};
+  while (obj?.constructor.name && obj.constructor.name !== 'Object') {
+    let currentPrimitives = flatMap(
+      Object.entries(Object.getOwnPropertyDescriptors(obj)),
+      ([maybePrimitiveName, desc]) => {
+        if (maybePrimitiveName === 'constructor') {
+          return [];
+        }
+        if ((desc?.get as any)?.[isPrimitive]) {
+          return [[maybePrimitiveName, desc as Primitive]];
+        }
+        return [];
+      },
+    );
+    primitives = { ...primitives, ...Object.fromEntries(currentPrimitives) };
+    obj = Reflect.getPrototypeOf(obj);
+  }
+  return primitives;
 }
 
 async function _updateFromSerialized<T extends BaseDefConstructor>(
@@ -3167,16 +3172,18 @@ export function getFields(
         return [];
       }
 
-      if (maybeField.computeVia) {
-        if (!opts?.includeComputeds) {
-          return [];
-        }
-      } else if (!['contains', 'containsMany'].includes(maybeField.fieldType)) {
+      if (
+        !['contains', 'containsMany'].includes(maybeField.fieldType) ||
+        maybeField.computeVia
+      ) {
         if (
           opts?.usedFieldsOnly &&
           !usedFields.includes(maybeFieldName) &&
           !maybeField.isUsed
         ) {
+          return [];
+        }
+        if (maybeField.computeVia && !opts?.includeComputeds) {
           return [];
         }
       }

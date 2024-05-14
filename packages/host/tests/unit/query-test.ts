@@ -59,6 +59,7 @@ module('Unit | query', function (hooks) {
       containsMany,
       linksToMany,
       linksTo,
+      newPrimitive,
       CardDef,
       FieldDef,
       setCardAsSavedForTest,
@@ -82,6 +83,7 @@ module('Unit | query', function (hooks) {
       @field age = contains(NumberField);
       @field isHairy = contains(BooleanField);
       @field lotteryNumbers = containsMany(NumberField);
+      @newPrimitive secretAgentName: string | undefined;
     }
     class FancyPerson extends Person {
       @field favoriteColor = contains(StringField);
@@ -135,6 +137,7 @@ module('Unit | query', function (hooks) {
       }),
       bestFriend: ringo,
       friends: [ringo],
+      secretAgentName: 'Vinnie',
     });
     let mango = new FancyPerson({
       name: 'Mango',

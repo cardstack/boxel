@@ -13,8 +13,8 @@ import type LoaderService from '../../services/loader-service';
 interface Signature {
   Args: {
     isSelected: boolean;
-    title: string | null;
-    description: string | null;
+    title?: string | null;
+    description?: string | null;
     thumbnailURL: string | null;
   };
 }

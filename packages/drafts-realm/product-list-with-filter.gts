@@ -110,7 +110,7 @@ export class ProductList extends CardDef {
       let { filterText } = this;
       if (!filterText) return this.args.model.products;
       return this.args.model.products?.filter((product) => {
-        return product.title?.toLowerCase().includes(filterText);
+        return product.title?.value?.toLowerCase().includes(filterText);
       });
     }
 
@@ -218,6 +218,7 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

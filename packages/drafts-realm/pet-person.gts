@@ -18,7 +18,7 @@ export class PetPerson extends CardDef {
   @field friend = linksTo(Person);
   @field title = contains(StringCard, {
     computeVia: function (this: PetPerson) {
-      return `${this.firstName} Pet Person`;
+      return `${this.firstName.value} Pet Person`;
     },
   });
 

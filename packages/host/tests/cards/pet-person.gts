@@ -20,7 +20,7 @@ export class PetPerson extends CardDef {
   @field pets = linksToMany(Pet);
   @field title = contains(StringCard, {
     computeVia: function (this: PetPerson) {
-      return `${this.firstName} Pet Person`;
+      return `${this.firstName.value} Pet Person`;
     },
   });
   @field description = contains(StringCard, {

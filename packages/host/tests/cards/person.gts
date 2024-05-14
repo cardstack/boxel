@@ -1,6 +1,7 @@
 import {
   contains,
   field,
+  newPrimitive,
   Component,
   CardDef,
   FieldDef,
@@ -13,15 +14,16 @@ export class Person extends CardDef {
   @field lastName = contains(StringCard);
   @field email = contains(StringCard);
   @field posts = contains(NumberCard);
+  @newPrimitive secretAgentName: string | undefined;
   @field fullName = contains(StringCard, {
     computeVia: async function (this: Person) {
       await new Promise((resolve) => setTimeout(resolve, 10));
-      return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
+      return `${this.firstName?.value ?? ''} ${this.lastName?.value ?? ''}`;
     },
   });
   @field title = contains(StringCard, {
     computeVia: function (this: Person) {
-      return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
+      return `${this.firstName?.value ?? ''} ${this.lastName?.value ?? ''}`;
     },
   });
   @field description = contains(StringCard, { computeVia: () => 'Person' });
@@ -53,7 +55,7 @@ export class PersonField extends FieldDef {
   });
   @field title = contains(StringCard, {
     computeVia: function (this: Person) {
-      return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
+      return `${this.firstName?.value ?? ''} ${this.lastName?.value ?? ''}`;
     },
   });
   @field description = contains(StringCard, { computeVia: () => 'Person' });

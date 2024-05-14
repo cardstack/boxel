@@ -447,7 +447,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
     let results: RealmCards[] = [];
     let cardFilter = (c: CardDef) => {
-      return c.title
+      return c.title.value
         ?.trim()
         .toLowerCase()
         .includes(this.state.searchKey.trim().toLowerCase());

@@ -4,6 +4,7 @@ import {
   linksTo,
   linksToMany,
   containsMany,
+  newPrimitive,
   FieldDef,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
@@ -28,6 +29,7 @@ export class Person extends CardDef {
   @field age = contains(NumberField);
   @field isHairy = contains(BooleanField);
   @field lotteryNumbers = containsMany(NumberField);
+  @newPrimitive secretAgentName: string | undefined;
 }
 
 export class FancyPerson extends Person {

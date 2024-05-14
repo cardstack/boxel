@@ -11,7 +11,7 @@ export class Chain extends CardDef {
   @field name = contains(StringCard);
   @field chainId = contains(NumberCard, {
     computeVia: function (this: Chain) {
-      return CHAIN_IDS[this.name];
+      return this.name.value && CHAIN_IDS[this.name.value];
     },
   });
   @field title = contains(StringCard, {
@@ -26,7 +26,7 @@ export class Chain extends CardDef {
   });
   @field thumbnailURL = contains(StringCard, {
     computeVia: function (this: Chain) {
-      return `${this.name}-icon.png`;
+      return `${this.name.value}-icon.png`;
     },
   });
 }

@@ -174,7 +174,7 @@ const personCardSource = `
     @field lastName = contains(StringCard);
     @field title = contains(StringCard, {
       computeVia: function (this: Person) {
-        return [this.firstName, this.lastName].filter(Boolean).join(' ');
+        return [this.firstName.value, this.lastName.value].filter(Boolean).join(' ');
       },
     });
     @field pet = linksTo(Pet);

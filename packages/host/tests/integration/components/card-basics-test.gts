@@ -17,9 +17,12 @@ import { module, skip, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
-import { baseRealm } from '@cardstack/runtime-common';
-
-import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  cardTypeDisplayName,
+  exclusivePrimitive,
+  type CodeRef,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -82,7 +85,7 @@ module('Integration | card-basics', function (hooks) {
     base64Image = await loader.import(`${baseRealm.url}base64-image`);
   });
 
-  test('primitive field type checking', async function (assert) {
+  test('primitive field type checking (legacy-primitive)', async function (assert) {
     let { field, contains, containsMany, CardDef, Component } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
@@ -136,7 +139,7 @@ module('Integration | card-basics', function (hooks) {
     assert.deepEqual(readBoolean, true);
   });
 
-  test('access @model for primitive and composite fields', async function (assert) {
+  test('access @model for primitive and composite fields (legacy-primitive)', async function (assert) {
     let { field, contains, containsMany, CardDef, FieldDef, Component } =
       cardApi;
     let { default: StringField } = string;
@@ -187,7 +190,7 @@ module('Integration | card-basics', function (hooks) {
     );
   });
 
-  test('render primitive field', async function (assert) {
+  test('render primitive field (legacy-primitive)', async function (assert) {
     let { field, contains, CardDef, FieldDef, Component } = cardApi;
     class EmphasizedString extends FieldDef {
       static [primitive]: string;
@@ -219,6 +222,92 @@ module('Integration | card-basics', function (hooks) {
     }
 
     let arthur = new Person({ firstName: 'Arthur', number: 10 });
+
+    await renderCard(loader, arthur, 'embedded');
+    assert.dom('[data-test="name"]').containsText('Arthur');
+    assert.dom('[data-test="number"]').containsText('10');
+  });
+
+  test('render primitive', async function (assert) {
+    let { field, contains, newPrimitive, CardDef, FieldDef, Component } =
+      cardApi;
+    class EmphasizedString extends FieldDef {
+      @newPrimitive value: string | undefined;
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <em data-test='name'>{{@model.value}}</em>
+        </template>
+      };
+    }
+
+    class StrongNumber extends FieldDef {
+      @newPrimitive value: number | undefined;
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <strong data-test='number'>{{@model.value}}</strong>
+        </template>
+      };
+    }
+
+    class Person extends CardDef {
+      @field firstName = contains(EmphasizedString);
+      @field number = contains(StrongNumber);
+
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div><@fields.firstName /><@fields.number /></div>
+        </template>
+      };
+    }
+
+    let arthur = new Person({
+      firstName: new EmphasizedString({ value: 'Arthur' }),
+      number: new StrongNumber({ value: 10 }),
+    });
+
+    await renderCard(loader, arthur, 'embedded');
+    assert.dom('[data-test="name"]').containsText('Arthur');
+    assert.dom('[data-test="number"]').containsText('10');
+  });
+
+  test('render exclusive primitive', async function (assert) {
+    let { field, contains, newPrimitive, CardDef, FieldDef, Component } =
+      cardApi;
+    class EmphasizedString extends FieldDef {
+      @newPrimitive value: string | undefined;
+      static [exclusivePrimitive] = 'value';
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <em data-test='name'>{{@model.value}}</em>
+        </template>
+      };
+    }
+
+    class StrongNumber extends FieldDef {
+      @newPrimitive value: number | undefined;
+      static [exclusivePrimitive] = 'value';
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <strong data-test='number'>{{@model.value}}</strong>
+        </template>
+      };
+    }
+
+    class Person extends CardDef {
+      @field firstName = contains(EmphasizedString);
+      @field number = contains(StrongNumber);
+
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div><@fields.firstName /><@fields.number /></div>
+        </template>
+      };
+    }
+
+    let arthur = new Person({
+      firstName: 'Arthur',
+      number: 10,
+    });
 
     await renderCard(loader, arthur, 'embedded');
     assert.dom('[data-test="name"]').containsText('Arthur');

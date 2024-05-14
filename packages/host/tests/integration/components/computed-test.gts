@@ -44,7 +44,7 @@ module('Integration | computeds', function (hooks) {
       @field lastName = contains(StringField);
       @field fullName = contains(StringField, {
         computeVia: function (this: Person) {
-          return `${this.firstName} ${this.lastName}`;
+          return `${this.firstName.value} ${this.lastName.value}`;
         },
       });
       static isolated = class Isolated extends Component<typeof this> {
@@ -67,7 +67,7 @@ module('Integration | computeds', function (hooks) {
       @field lastName = contains(StringField);
       @field fullName = contains(StringField, { computeVia: 'getFullName' });
       getFullName() {
-        return `${this.firstName} ${this.lastName}`;
+        return `${this.firstName.value} ${this.lastName.value}`;
       }
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -93,7 +93,7 @@ module('Integration | computeds', function (hooks) {
       @field author = contains(Person);
       @field summary = contains(StringField, {
         computeVia: function (this: Post) {
-          return `${this.title} by ${this.author.firstName}`;
+          return `${this.title.value} by ${this.author.firstName.value}`;
         },
       });
       static isolated = class Isolated extends Component<typeof this> {
@@ -268,7 +268,7 @@ module('Integration | computeds', function (hooks) {
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <@fields.title /> by {{@model.author.slowName}}
+          <@fields.title /> by {{@model.author.slowName.value}}
         </template>
       };
     }
@@ -557,7 +557,7 @@ module('Integration | computeds', function (hooks) {
       });
       async computeSlowName() {
         await new Promise((resolve) => setTimeout(resolve, 10));
-        return this.firstName;
+        return this.firstName.value;
       }
       async computeSlowHomeTown() {
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -569,8 +569,10 @@ module('Integration | computeds', function (hooks) {
           <div data-test-field='homeTown'><@fields.homeTown.city /></div>
           <div data-test-field='slowName'><@fields.slowName /></div>
           <div data-test-field='slowHomeTown'><@fields.slowHomeTown /></div>
-          <div data-test-dep-field='firstName'>{{@model.firstName}}</div>
-          <div data-test-dep-field='homeTown'>{{@model.homeTown.city}}</div>
+          <div data-test-dep-field='firstName'>{{@model.firstName.value}}</div>
+          <div
+            data-test-dep-field='homeTown'
+          >{{@model.homeTown.city.value}}</div>
         </template>
       };
     }
@@ -737,7 +739,7 @@ module('Integration | computeds', function (hooks) {
         computeVia: 'findCollaborators',
       });
       findCollaborators(this: Post) {
-        let mango = this.author.pets.find((p) => p.name === 'Mango');
+        let mango = this.author.pets.find((p) => p.name.value === 'Mango');
         return [mango, ...this.factCheckers];
       }
     }
@@ -806,7 +808,7 @@ module('Integration | computeds', function (hooks) {
       });
       async findCollaborators(this: Post) {
         await new Promise((resolve) => setTimeout(resolve, 10));
-        let mango = this.author.pets.find((p) => p.name === 'Mango');
+        let mango = this.author.pets.find((p) => p.name.value === 'Mango');
         return [mango, ...this.factCheckers];
       }
     }
