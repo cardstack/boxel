@@ -204,7 +204,7 @@ if (distURL) {
           // loader which includes a url handler for internal requests that
           // bypasses auth. when workers are moved outside of the realm server
           // they will need to provide realm authentication credentials when
-          // indexing.0
+          // indexing.
           let worker = new Worker({
             realmURL: new URL(url),
             indexer,
