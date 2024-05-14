@@ -49,7 +49,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    <div data-test-links-to-many={{@field.name}}>
+    <div class='links-to-many-editor' data-test-links-to-many={{@field.name}}>
       {{#if (eq @childFormat 'atom')}}
         <LinksToManyCompactEditor
           @model={{@model}}
@@ -122,50 +122,43 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    <div class='links-to-many-editor' data-test-contains-many={{@field.name}}>
-      {{#if @arrayField.children.length}}
-        <ul class='list'>
-          {{#each @arrayField.children as |boxedElement i|}}
-            <li class='editor' data-test-item={{i}}>
-              <IconButton
-                @variant='primary'
-                @icon={{IconMinusCircle}}
-                @width='20px'
-                @height='20px'
-                class='remove'
-                {{on 'click' (fn @remove i)}}
-                aria-label='Remove'
-                data-test-remove-card
-                data-test-remove={{i}}
-              />
-              {{#let
-                (getBoxComponent
-                  (this.args.cardTypeFor @field boxedElement)
-                  boxedElement
-                  @field
-                )
-                as |Item|
-              }}
-                <Item @format='embedded' />
-              {{/let}}
-            </li>
-          {{/each}}
-        </ul>
-      {{/if}}
-      <AddButton
-        class='add-new'
-        @variant='full-width'
-        {{on 'click' @add}}
-        data-test-add-new
-      >
-        Add
-        {{getPlural @field.card.displayName}}
-      </AddButton>
-    </div>
+    {{#if @arrayField.children.length}}
+      <ul class='list'>
+        {{#each @arrayField.children as |boxedElement i|}}
+          <li class='editor' data-test-item={{i}}>
+            <IconButton
+              @variant='primary'
+              @icon={{IconMinusCircle}}
+              @width='20px'
+              @height='20px'
+              class='remove'
+              {{on 'click' (fn @remove i)}}
+              aria-label='Remove'
+              data-test-remove-card
+              data-test-remove={{i}}
+            />
+            {{#let
+              (getBoxComponent
+                (this.args.cardTypeFor @field boxedElement) boxedElement @field
+              )
+              as |Item|
+            }}
+              <Item @format='embedded' />
+            {{/let}}
+          </li>
+        {{/each}}
+      </ul>
+    {{/if}}
+    <AddButton
+      class='add-new'
+      @variant='full-width'
+      {{on 'click' @add}}
+      data-test-add-new
+    >
+      Add
+      {{getPlural @field.card.displayName}}
+    </AddButton>
     <style>
-      .links-to-many-editor {
-        --remove-icon-size: var(--boxel-icon-lg);
-      }
       .list {
         list-style: none;
         padding: 0;
@@ -177,7 +170,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       .editor {
         position: relative;
         display: grid;
-        grid-template-columns: 1fr var(--remove-icon-size);
+        grid-template-columns: 1fr var(--boxel-icon-lg);
       }
       .editor > :deep(.boxel-card-container.embedded-format) {
         order: -1;
@@ -199,7 +192,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           var(--boxel-box-shadow-hover);
       }
       .add-new {
-        width: calc(100% - var(--remove-icon-size));
+        width: calc(100% - var(--boxel-icon-lg));
       }
     </style>
   </template>
