@@ -66,6 +66,11 @@ const testMatrix = {
   password: 'password',
 };
 
+// Ignoring this TS error (Cannot find module 'ember-provide-consume-context/test-support')
+// until https://github.com/customerio/ember-provide-consume-context/issues/24 is fixed
+// @ts-ignore
+export { provide as provideConsumeContext } from 'ember-provide-consume-context/test-support';
+
 export function cleanWhiteSpace(text: string) {
   // this also normalizes non-breaking space characters which seem
   // to be appearing in date/time serialization in some envs

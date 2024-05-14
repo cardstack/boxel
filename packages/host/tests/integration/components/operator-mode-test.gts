@@ -245,6 +245,18 @@ module('Integration | operator-mode', function (hooks) {
       };
     }
 
+    // Friend card that can link to another friend
+    class Friend extends CardDef {
+      static displayName = 'Friend';
+      @field name = contains(StringField);
+      @field friend = linksTo(() => Friend);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.name />
+        </template>
+      };
+    }
+
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
@@ -382,6 +394,7 @@ module('Integration | operator-mode', function (hooks) {
         'boom-pet.gts': { BoomPet },
         'blog-post.gts': { BlogPost },
         'author.gts': { Author },
+        'friend.gts': { Friend },
         'publishing-packet.gts': { PublishingPacket },
         'pet-room.gts': { PetRoom },
         'Pet/mango.json': {
@@ -497,6 +510,48 @@ module('Integration | operator-mode', function (hooks) {
               adoptsFrom: {
                 module: `${testRealmURL}person`,
                 name: 'Person',
+              },
+            },
+          },
+        },
+        'Friend/friend-a.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Friend A',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/friend-b`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}friend`,
+                name: 'Friend',
+              },
+            },
+          },
+        },
+        'Friend/friend-b.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Friend B',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: null,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}friend`,
+                name: 'Friend',
               },
             },
           },
@@ -2747,6 +2802,52 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-field="friends"]')
       .containsText('Jackie Woody Mango');
+  });
+
+  // CS-6837 - causes a loop and a crash
+  skip('can add a card to a linksTo field creating a loop', async function (assert) {
+    // Friend A already links to friend B.
+    // This test links B back to A
+    await setCardInOperatorModeState(`${testRealmURL}Friend/friend-b`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Friend/friend-b"]`);
+    await click('[data-test-edit-button]');
+    assert.dom('[data-test-field="friend"] [data-test-add-new]').exists();
+
+    await click('[data-test-field="friend"] [data-test-add-new]');
+
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}Friend/friend-a"]`,
+    );
+    await click(`[data-test-select="${testRealmURL}Friend/friend-a"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+
+    // Normally we'd only have an assert like this at the end that may work,
+    // but the rest of the application may be broken.
+
+    assert.dom('[data-test-field="friend"]').containsText('Friend A');
+
+    // Instead try and go somewhere else in the application to see if it's broken
+    await waitFor('[data-test-submode-switcher]');
+    assert.dom('[data-test-submode-switcher]').exists();
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
   });
 
   test('can add a card to linksToMany field that has no existing values', async function (assert) {

@@ -11,6 +11,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -71,6 +72,7 @@ export default class DatetimeField extends FieldDef {
         @value={{this.formatted}}
         @onInput={{fn this.parseInput @set}}
         @max='9999-12-31T23:59:59'
+        @disabled={{not @canEdit}}
       />
     </template>
 

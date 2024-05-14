@@ -47,6 +47,7 @@ import {
   type Actions,
   cardTypeDisplayName,
   CardContextName,
+  RealmSessionContextName,
   Deferred,
 } from '@cardstack/runtime-common';
 
@@ -114,6 +115,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
+
+  @provide(RealmSessionContextName)
   private realmSession: RealmSessionResource | undefined;
 
   cardTracker = new ElementTracker<{
