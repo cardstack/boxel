@@ -19,6 +19,7 @@ import {
 import { shouldSetRoomTitle, setTitle } from './lib/set-title';
 import { OpenAIError } from 'openai/error';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+import { handleDebugCommands } from './lib/debug';
 import * as Sentry from '@sentry/node';
 
 if (process.env.SENTRY_DSN) {
@@ -54,7 +55,7 @@ async function sendEvent(
   return await client.sendEvent(room.roomId, eventType, content);
 }
 
-async function sendMessage(
+export async function sendMessage(
   client: MatrixClient,
   room: Room,
   content: string,
@@ -89,7 +90,7 @@ async function sendMessage(
 // TODO we might want to think about how to handle patches that are larger than
 // 65KB (the maximum matrix event size), such that we split them into fragments
 // like we split cards into fragments
-async function sendOption(
+export async function sendOption(
   client: MatrixClient,
   room: Room,
   patch: any,
@@ -153,7 +154,7 @@ function getErrorMessage(error: any): string {
   return `Unknown error`;
 }
 
-async function sendError(
+export async function sendError(
   client: MatrixClient,
   room: Room,
   error: any,
@@ -178,61 +179,6 @@ async function sendError(
     log.error(`Error sending error message back to user: ${e}`);
     Sentry.captureException(e);
   }
-}
-
-async function handleDebugCommands(
-  eventBody: string,
-  client: MatrixClient,
-  room: Room,
-  history: DiscreteMatrixEvent[],
-  userId: string,
-) {
-  // Explicitly set the room name
-  if (eventBody.startsWith('debug:title:set:')) {
-    return await client.setRoomName(
-      room.roomId,
-      eventBody.split('debug:title:set:')[1],
-    );
-  } else if (eventBody.startsWith('debug:boom')) {
-    await sendError(
-      client,
-      room,
-      `Boom! Throwing an unhandled error`,
-      undefined,
-    );
-    throw new Error('Boom!');
-  }
-  // Use GPT to set the room title
-  else if (eventBody.startsWith('debug:title:create')) {
-    return await setTitle(openai, client, room, history, userId);
-  } else if (eventBody.startsWith('debug:patch:')) {
-    let patchMessage = eventBody.split('debug:patch:')[1];
-    // If there's a card attached, we need to split it off to parse the json
-    patchMessage = patchMessage.split('(Card')[0];
-    let command: {
-      card_id?: string;
-      description?: string;
-      attributes?: any;
-    } = {};
-    try {
-      command = JSON.parse(patchMessage);
-      if (!command.card_id || !command.description || !command.attributes) {
-        throw new Error(
-          'Invalid debug patch: card_id, description, or attributes is missing.',
-        );
-      }
-    } catch (error) {
-      Sentry.captureException(error);
-      return await sendMessage(
-        client,
-        room,
-        `Error parsing your debug patch, ${error} ${patchMessage}`,
-        undefined,
-      );
-    }
-    return await sendOption(client, room, command, undefined);
-  }
-  return;
 }
 
 (async () => {
@@ -319,6 +265,7 @@ Common issues are:
         // To assist debugging, handle explicit commands
         if (eventBody.startsWith('debug:')) {
           return await handleDebugCommands(
+            openai,
             eventBody,
             client,
             room,
