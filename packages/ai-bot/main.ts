@@ -382,7 +382,6 @@ Common issues are:
                   );
                 }
                 if (functionCall.name === 'patchCard') {
-                  sentCommands += 1;
                   await sendOption(
                     client,
                     room,
