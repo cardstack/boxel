@@ -1,6 +1,7 @@
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 
 import parseISO from 'date-fns/parseISO';
+
 import { setupRenderingTest } from 'ember-qunit';
 import { isAddress } from 'ethers';
 import { module, test } from 'qunit';
@@ -9,6 +10,7 @@ import {
   baseRealm,
   NotLoaded,
   type LooseSingleCardDocument,
+  RealmSessionContextName,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -16,7 +18,13 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
-import { p, cleanWhiteSpace, setupCardLogs, saveCard } from '../../helpers';
+import {
+  p,
+  cleanWhiteSpace,
+  setupCardLogs,
+  saveCard,
+  provideConsumeContext,
+} from '../../helpers';
 
 import { renderCard } from '../../helpers/render-component';
 
@@ -36,6 +44,10 @@ module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function () {
+    provideConsumeContext(RealmSessionContextName, {
+      canWrite: true,
+    });
+
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
   });
