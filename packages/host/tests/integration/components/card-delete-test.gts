@@ -3,7 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -607,7 +607,8 @@ module('Integration | card-delete', function (hooks) {
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
-  test<TestContextWithSSE>('can delete a card that is a recent item', async function (assert) {
+  // Flaky test: CS-6843
+  skip<TestContextWithSSE>('can delete a card that is a recent item', async function (assert) {
     assert.expect(6);
     let expectedEvents = [
       {

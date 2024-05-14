@@ -175,7 +175,7 @@ jobs:
         if: always()
         with:
           junit_files: junit/host.xml
-          check_name: Host Tests (In-Memory Index) Test Results
+          check_name: Host Tests Test Results
 
   matrix-client-test:
     name: Matrix Client Tests

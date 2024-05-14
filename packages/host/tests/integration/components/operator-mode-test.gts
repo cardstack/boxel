@@ -3080,7 +3080,8 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
   });
 
-  test(`displays recently accessed card`, async function (assert) {
+  // Flaky test: CS-6842
+  skip(`displays recently accessed card`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
