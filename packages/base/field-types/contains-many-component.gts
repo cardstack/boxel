@@ -1,24 +1,19 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { type FieldDef, type BaseDef } from './card-api';
 import {
-  primitive,
-  type Box,
   type BoxComponent,
-  type Format,
-  type Field,
-  type FieldDef,
-  type BaseDef,
-} from './card-api';
-import {
   type BoxComponentSignature,
   getBoxComponent,
   DefaultFormatConsumer,
 } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
-import { getPlural } from '@cardstack/runtime-common';
+import { type Format, getPlural, primitive } from '@cardstack/runtime-common';
 import { IconTrash } from '@cardstack/boxel-ui/icons';
 import { TemplateOnlyComponent } from '@ember/component/template-only';
+import { type Box } from './box';
+import { Field } from './utils';
 
 interface ContainsManyEditorSignature {
   Args: {

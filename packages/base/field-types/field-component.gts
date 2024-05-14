@@ -20,7 +20,7 @@ import {
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
-import { initSharedState } from './shared-state';
+import { initSharedState } from '../shared-state';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
@@ -91,6 +91,114 @@ const componentCache = initSharedState(
   'componentCache',
   () => new WeakMap<Box<BaseDef>, BoxComponent>(),
 );
+
+function defaultFieldFormat(format: Format): Format {
+  switch (format) {
+    case 'edit':
+      return 'edit';
+    case 'isolated':
+    case 'embedded':
+      return 'embedded';
+    case 'atom':
+      return 'atom';
+  }
+}
+
+function fieldsComponentsFor<T extends BaseDef>(
+  target: object,
+  model: Box<T>,
+): FieldsTypeFor<T> {
+  // This is a cache of the fields we've already created components for
+  // so that they do not get recreated
+  let stableComponents = new Map<string, BoxComponent>();
+
+  return new Proxy(target, {
+    get(target, property, received) {
+      if (
+        typeof property === 'symbol' ||
+        model == null ||
+        model.value == null
+      ) {
+        // don't handle symbols or nulls
+        return Reflect.get(target, property, received);
+      }
+
+      let stable = stableComponents.get(property);
+      if (stable) {
+        return stable;
+      }
+
+      let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above
+      let maybeField: Field<BaseDefConstructor> | undefined = getField(
+        modelValue.constructor,
+        property,
+      );
+      if (!maybeField) {
+        // field doesn't exist, fall back to normal property access behavior
+        return Reflect.get(target, property, received);
+      }
+      let field = maybeField;
+
+      let result = field.component(model as unknown as Box<BaseDef>);
+      stableComponents.set(property, result);
+      return result;
+    },
+    getPrototypeOf() {
+      // This is necessary for Ember to be able to locate the template associated
+      // with a proxied component. Our Proxy object won't be in the template WeakMap,
+      // but we can pretend our Proxy object inherits from the true component, and
+      // Ember's template lookup respects inheritance.
+      return target;
+    },
+    ownKeys(target) {
+      let keys = Reflect.ownKeys(target);
+      for (let name in model.value) {
+        let field = getField(model.value.constructor, name);
+        if (field) {
+          keys.push(name);
+        }
+      }
+      return keys;
+    },
+    getOwnPropertyDescriptor(target, property) {
+      if (
+        typeof property === 'symbol' ||
+        model == null ||
+        model.value == null
+      ) {
+        // don't handle symbols, undefined, or nulls
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      }
+      let field = getField(model.value.constructor, property);
+      if (!field) {
+        // field doesn't exist, fall back to normal property access behavior
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      }
+      // found field: fields are enumerable properties
+      return {
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      };
+    },
+  }) as any;
+}
+
+export function fieldComponent(
+  field: Field<typeof BaseDef>,
+  model: Box<BaseDef>,
+): BoxComponent {
+  let fieldName = field.name as keyof BaseDef;
+  let card: typeof BaseDef;
+  if (primitive in field.card) {
+    card = field.card;
+  } else {
+    card =
+      (model.value[fieldName]?.constructor as typeof BaseDef) ?? field.card;
+  }
+  let innerModel = model.field(fieldName) as unknown as Box<BaseDef>;
+  return getBoxComponent(card, innerModel, field);
+}
 
 export function getBoxComponent(
   cardOrField: typeof BaseDef,
@@ -247,96 +355,4 @@ export function getBoxComponent(
   stable = externalFields as unknown as typeof component;
   componentCache.set(model, stable);
   return stable;
-}
-
-function defaultFieldFormat(format: Format): Format {
-  switch (format) {
-    case 'edit':
-      return 'edit';
-    case 'isolated':
-    case 'embedded':
-      return 'embedded';
-    case 'atom':
-      return 'atom';
-  }
-}
-
-function fieldsComponentsFor<T extends BaseDef>(
-  target: object,
-  model: Box<T>,
-): FieldsTypeFor<T> {
-  // This is a cache of the fields we've already created components for
-  // so that they do not get recreated
-  let stableComponents = new Map<string, BoxComponent>();
-
-  return new Proxy(target, {
-    get(target, property, received) {
-      if (
-        typeof property === 'symbol' ||
-        model == null ||
-        model.value == null
-      ) {
-        // don't handle symbols or nulls
-        return Reflect.get(target, property, received);
-      }
-
-      let stable = stableComponents.get(property);
-      if (stable) {
-        return stable;
-      }
-
-      let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above
-      let maybeField: Field<BaseDefConstructor> | undefined = getField(
-        modelValue.constructor,
-        property,
-      );
-      if (!maybeField) {
-        // field doesn't exist, fall back to normal property access behavior
-        return Reflect.get(target, property, received);
-      }
-      let field = maybeField;
-
-      let result = field.component(model as unknown as Box<BaseDef>);
-      stableComponents.set(property, result);
-      return result;
-    },
-    getPrototypeOf() {
-      // This is necessary for Ember to be able to locate the template associated
-      // with a proxied component. Our Proxy object won't be in the template WeakMap,
-      // but we can pretend our Proxy object inherits from the true component, and
-      // Ember's template lookup respects inheritance.
-      return target;
-    },
-    ownKeys(target) {
-      let keys = Reflect.ownKeys(target);
-      for (let name in model.value) {
-        let field = getField(model.value.constructor, name);
-        if (field) {
-          keys.push(name);
-        }
-      }
-      return keys;
-    },
-    getOwnPropertyDescriptor(target, property) {
-      if (
-        typeof property === 'symbol' ||
-        model == null ||
-        model.value == null
-      ) {
-        // don't handle symbols, undefined, or nulls
-        return Reflect.getOwnPropertyDescriptor(target, property);
-      }
-      let field = getField(model.value.constructor, property);
-      if (!field) {
-        // field doesn't exist, fall back to normal property access behavior
-        return Reflect.getOwnPropertyDescriptor(target, property);
-      }
-      // found field: fields are enumerable properties
-      return {
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      };
-    },
-  }) as any;
 }

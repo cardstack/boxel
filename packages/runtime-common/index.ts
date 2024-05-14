@@ -105,13 +105,14 @@ import type {
   CardDef,
   FieldDef,
   BaseDef,
-  Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
 export const boxelUIAssetsDir = '@cardstack/boxel-ui/';
+
+export type Format = 'isolated' | 'embedded' | 'edit' | 'atom';
 
 export interface MatrixCardError {
   id?: string;
