@@ -22,4 +22,5 @@ export const primitive = Symbol('cardstack-primitive');
 export const aiBotUsername = 'aibot';
 
 export const CardContextName = 'card-context';
+export const RealmSessionContextName = 'realm-session-context';
 export const DefaultFormatContextName = 'default-format-context';

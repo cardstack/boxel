@@ -14,6 +14,7 @@ import {
   type BoxComponentSignature,
   getBoxComponent,
   DefaultFormatConsumer,
+  RealmSessionConsumer,
 } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { getPlural } from '@cardstack/runtime-common';
@@ -34,45 +35,50 @@ interface ContainsManyEditorSignature {
 
 class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
   <template>
-    <div class='contains-many-editor' data-test-contains-many={{@field.name}}>
-      {{#if @arrayField.children.length}}
-        <ul class='list'>
-          {{#each @arrayField.children as |boxedElement i|}}
-            <li class='editor' data-test-item={{i}}>
-              <IconButton
-                @icon={{IconTrash}}
-                @width='18px'
-                @height='18px'
-                class='remove'
-                {{on 'click' (fn this.remove i)}}
-                data-test-remove={{i}}
-                aria-label='Remove'
-              />
-              <div class='item-container'>
-                {{#let
-                  (getBoxComponent
-                    (@cardTypeFor @field boxedElement) boxedElement @field
-                  )
-                  as |Item|
-                }}
-                  <Item />
-                {{/let}}
-              </div>
-
-            </li>
-          {{/each}}
-        </ul>
-      {{/if}}
-      <AddButton
-        class='add-new'
-        @variant='full-width'
-        {{on 'click' this.add}}
-        data-test-add-new
-      >
-        Add
-        {{getPlural @field.card.displayName}}
-      </AddButton>
-    </div>
+    <RealmSessionConsumer as |realmSession|>
+      <div class='contains-many-editor' data-test-contains-many={{@field.name}}>
+        {{#if @arrayField.children.length}}
+          <ul class='list'>
+            {{#each @arrayField.children as |boxedElement i|}}
+              <li class='editor' data-test-item={{i}}>
+                {{#if realmSession.canWrite}}
+                  <IconButton
+                    @icon={{IconTrash}}
+                    @width='18px'
+                    @height='18px'
+                    class='remove'
+                    {{on 'click' (fn this.remove i)}}
+                    data-test-remove={{i}}
+                    aria-label='Remove'
+                  />
+                {{/if}}
+                <div class='item-container'>
+                  {{#let
+                    (getBoxComponent
+                      (@cardTypeFor @field boxedElement) boxedElement @field
+                    )
+                    as |Item|
+                  }}
+                    <Item />
+                  {{/let}}
+                </div>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if realmSession.canWrite}}
+          <AddButton
+            class='add-new'
+            @variant='full-width'
+            {{on 'click' this.add}}
+            data-test-add-new
+          >
+            Add
+            {{getPlural @field.card.displayName}}
+          </AddButton>
+        {{/if}}
+      </div>
+    </RealmSessionConsumer>
     <style>
       .contains-many-editor {
         --remove-icon-size: var(--boxel-icon-lg);
