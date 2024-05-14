@@ -383,7 +383,6 @@ export default class MatrixService extends Service {
       },
     };
     try {
-      debugger;
       return await this.sendEvent(roomId, 'm.reaction', content);
     } catch (e) {
       throw new Error(
