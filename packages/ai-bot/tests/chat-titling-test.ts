@@ -1,5 +1,5 @@
 import { module, test, assert } from 'qunit';
-import { shouldSetRoomTitle } from '../helpers';
+import { shouldSetRoomTitle } from '../lib/set-title';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 
 module('shouldSetRoomTitle', () => {
