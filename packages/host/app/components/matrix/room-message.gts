@@ -46,6 +46,8 @@ interface Signature {
   };
 }
 
+const STREAMING_TIMEOUT_MS = 60000;
+
 export default class RoomMessage extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -61,7 +63,7 @@ export default class RoomMessage extends Component<Signature> {
     }
 
     // If message is streaming and hasn't been updated in the last minute, show a timeout message
-    if (Date.now() - Number(this.args.message.updated) > 600000) {
+    if (Date.now() - Number(this.args.message.updated) > STREAMING_TIMEOUT_MS) {
       this.streamingTimeout = true;
       return;
     }
