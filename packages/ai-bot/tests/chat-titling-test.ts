@@ -372,8 +372,8 @@ module('shouldSetRoomTitle', () => {
         content: {
           msgtype: 'org.boxel.command',
           format: 'org.matrix.custom.html',
-          body: 'patchCard',
-          formatted_body: 'patchCard',
+          body: 'patching card',
+          formatted_body: 'patching card',
           data: {
             command: {
               type: 'patchCard',
@@ -423,8 +423,8 @@ module('shouldSetRoomTitle', () => {
         content: {
           msgtype: 'org.boxel.command',
           format: 'org.matrix.custom.html',
-          body: 'patchCard',
-          formatted_body: 'patchCard',
+          body: 'patching card',
+          formatted_body: 'patching card',
           data: {
             command: {
               type: 'patchCard',
