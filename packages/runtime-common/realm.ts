@@ -92,6 +92,11 @@ import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthHandler } from './realm-auth-handler';
 
+export interface RealmSession {
+  canRead: boolean;
+  canWrite: boolean;
+}
+
 export type RealmInfo = {
   name: string;
   backgroundURL: string | null;

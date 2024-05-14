@@ -3,7 +3,7 @@ import { click, waitFor } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
 import { type Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -17,6 +17,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupIntegrationTestRealm,
+  provideConsumeContext,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent, renderCard } from '../../helpers/render-component';
@@ -47,6 +48,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
+    provideConsumeContext(RealmSessionContextName, {
+      canWrite: true,
+    });
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);

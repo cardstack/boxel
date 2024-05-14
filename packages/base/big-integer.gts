@@ -9,6 +9,7 @@ import {
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 function serialize(val: string | null): string | undefined {
   return val ? val : undefined;
@@ -50,6 +51,7 @@ class Edit extends Component<typeof BigIntegerField> {
       @onInput={{this.textInputValidator.onInput}}
       @errorMessage={{this.textInputValidator.errorMessage}}
       @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+      @disabled={{not @canEdit}}
     />
   </template>
 

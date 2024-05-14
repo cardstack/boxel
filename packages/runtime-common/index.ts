@@ -70,6 +70,7 @@ export type {
   RealmInfo,
   TokenClaims,
   RealmPermissions,
+  RealmSession,
 } from './realm';
 
 import type { Saved } from './card-document';

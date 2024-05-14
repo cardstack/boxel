@@ -11,6 +11,7 @@ import {
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 function isChecksumAddress(address: string): boolean {
   return getAddress(address) === address;
@@ -59,6 +60,7 @@ class Edit extends Component<typeof EthereumAddressField> {
       @onInput={{this.textInputValidator.onInput}}
       @errorMessage={{this.textInputValidator.errorMessage}}
       @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+      @disabled={{not @canEdit}}
     />
   </template>
 
