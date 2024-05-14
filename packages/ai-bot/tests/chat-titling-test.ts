@@ -346,7 +346,7 @@ module('shouldSetRoomTitle', () => {
     assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost'));
   });
 
-  test('Set a title if the bot has sent a command', () => {
+  test('Title is not set if the bot has sent ONLY a command', () => {
     const eventLog: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -394,10 +394,24 @@ module('shouldSetRoomTitle', () => {
         },
       },
     ];
-    assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost'));
+    assert.false(shouldSetRoomTitle(eventLog, '@aibot:localhost'));
   });
 
-  test('Set a title if the bot has sent a command in the last event, not seen in the log', () => {
+  test('Set a title if the user applied a command', () => {
+    let patchReactionEvent = {
+      getContent() {
+        return {
+          'm.relates_to': {
+            event_id: '1',
+            key: 'applied',
+            rel_type: 'm.annotation',
+          },
+        };
+      },
+      getType() {
+        return 'm.reaction';
+      },
+    };
     const eventLog: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -416,7 +430,37 @@ module('shouldSetRoomTitle', () => {
           transaction_id: '1',
         },
       },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.command',
+          format: 'org.matrix.custom.html',
+          body: 'patch',
+          formatted_body: 'patch',
+          data: {
+            command: {
+              type: 'patch',
+              id: 'http://localhost:4201/drafts/Friend/1',
+              patch: {
+                attributes: {
+                  firstName: 'Dave',
+                },
+              },
+            },
+          },
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '2',
+        },
+      },
     ];
-    assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost', 1));
+    assert.true(
+      shouldSetRoomTitle(eventLog, '@aibot:localhost', patchReactionEvent),
+    );
   });
 });

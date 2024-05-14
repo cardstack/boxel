@@ -127,7 +127,7 @@ const userAlreadyHasSentNMessages = (
   return (
     rawEventLog.filter(
       (event) => event.sender !== botUserId && event.type === 'm.room.message',
-    ).length > n
+    ).length >= n
   );
 };
 
