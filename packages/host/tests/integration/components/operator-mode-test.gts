@@ -812,7 +812,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Dave' },
@@ -867,7 +867,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Evie' } },
               eventId: 'room1-event1',
@@ -893,7 +893,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Jackie' } },
               eventId: 'room1-event2',
@@ -919,7 +919,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { pet: null } },
               eventId: 'room2-event1',
@@ -1011,7 +1011,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: otherCardID,
               patch: {
                 attributes: { firstName: 'Dave' },
@@ -1074,7 +1074,7 @@ module('Integration | operator-mode', function (hooks) {
 
       let roomId = await openAiAssistant();
       let payload = {
-        type: 'patch',
+        type: 'patchCard',
         id: `${testRealmURL}Person/fadhlan`,
         patch: {
           attributes: {
@@ -1112,7 +1112,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.deepEqual(
         JSON.parse(getMonacoContent()),
         {
-          commandType: 'patch',
+          commandType: 'patchCard',
           payload,
         },
         'it can preview code when a change is proposed',
@@ -1158,7 +1158,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1204,7 +1204,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1268,7 +1268,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { pet: null } },
               eventId: 'patch1',
@@ -1303,7 +1303,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1346,7 +1346,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1405,7 +1405,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { firstName: 'Dave' } },
               eventId: 'event1',
@@ -1431,7 +1431,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { pet: 'Harry' } },
               eventId: 'event2',
@@ -1457,7 +1457,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { firstName: 'Jackie' } },
               eventId: 'event3',
@@ -2110,7 +2110,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Dave' },

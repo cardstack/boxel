@@ -372,11 +372,11 @@ module('shouldSetRoomTitle', () => {
         content: {
           msgtype: 'org.boxel.command',
           format: 'org.matrix.custom.html',
-          body: 'patch',
-          formatted_body: 'patch',
+          body: 'patchCard',
+          formatted_body: 'patchCard',
           data: {
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: 'http://localhost:4201/drafts/Friend/1',
               patch: {
                 attributes: {
@@ -414,6 +414,34 @@ module('shouldSetRoomTitle', () => {
         unsigned: {
           age: 1000,
           transaction_id: '1',
+        },
+      },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.command',
+          format: 'org.matrix.custom.html',
+          body: 'patchCard',
+          formatted_body: 'patchCard',
+          data: {
+            command: {
+              type: 'patchCard',
+              id: 'http://localhost:4201/drafts/Friend/1',
+              patch: {
+                attributes: {
+                  firstName: 'Dave',
+                },
+              },
+            },
+          },
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '2',
         },
       },
     ];
