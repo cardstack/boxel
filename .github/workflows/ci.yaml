@@ -146,7 +146,7 @@ jobs:
     name: Host Tests
     runs-on: ubuntu-latest
     concurrency:
-      group: boxel-host-test${{ github.head_ref || github.run_id }}
+      group: boxel-host-test${{matrix.shardIndex}}/${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
