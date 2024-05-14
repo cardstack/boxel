@@ -398,6 +398,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
+
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`)
       .exists();
@@ -407,6 +408,14 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`)
       .exists();
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}index"]`)
+      .doesNotExist('grid cards do not show other grid cards');
+    // this was an unspelled, but very valid assertion that percy is making
+    // that I'm now making concrete
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}grid"]`)
+      .doesNotExist('grid cards do not show other grid cards');
     // this asserts that cards that throw errors during search
     // query deserialization (boom.json) are handled gracefully
     assert
