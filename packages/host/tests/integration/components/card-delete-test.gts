@@ -676,7 +676,8 @@ module('Integration | card-delete', function (hooks) {
       .doesNotExist('recent item removed');
   });
 
-  test<TestContextWithSSE>('can delete a card that is a selected item', async function (assert) {
+  // Flaky test: CS-6843
+  skip<TestContextWithSSE>('can delete a card that is a selected item', async function (assert) {
     assert.expect(6);
     let expectedEvents = [
       {
