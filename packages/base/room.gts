@@ -579,11 +579,6 @@ export class RoomField extends FieldDef {
         } else if (event.content.msgtype === 'org.boxel.command') {
           // We only handle patches for now
           let command = event.content.data.command;
-          if (command.type !== 'patchCard') {
-            throw new Error(
-              `cannot handle commands in room with type ${command.type}`,
-            );
-          }
           let annotation = this.events.find(
             (e) =>
               e.type === 'm.reaction' &&
