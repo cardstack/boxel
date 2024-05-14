@@ -1928,16 +1928,6 @@ class FieldDefEditTemplate extends GlimmerComponent<{
         content: 'None';
         color: var(--boxel-450);
       }
-      /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
-      .field-def-edit-template
-        > .boxel-field
-        > :deep(
-          *:nth-child(2):not(.links-to-many-editor):not(
-              .contains-many-editor
-            ):not(.links-to-editor)
-        ) {
-        padding-right: var(--boxel-icon-lg);
-      }
     </style>
   </template>
 }
