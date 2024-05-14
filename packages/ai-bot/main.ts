@@ -345,7 +345,6 @@ Common issues are:
         );
 
         let unsent = 0;
-        let sentCommands = 0;
         let thinkingMessageReplaced = false;
         const runner = getResponse(history, aiBotUserId)
           .on('content', async (_delta, snapshot) => {
@@ -427,6 +426,7 @@ Common issues are:
       } catch (e) {
         log.error(e);
         Sentry.captureException(e);
+        return;
       }
     },
   );
