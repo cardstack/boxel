@@ -10,11 +10,12 @@ import {
   IconButton,
 } from '@cardstack/boxel-ui/components';
 import { Sparkle } from '@cardstack/boxel-ui/icons';
-import { tracked } from '@glimmer/tracking';
 
 class Isolated extends Component<typeof ContactForm> {
-  @tracked hasTitleField =
-    this.args.model.title && this.args.model.title.length > 0;
+  get hasTitleField(){
+    return this.args.model.title && this.args.model.title.length > 0;
+  }
+
 
   <template>
     <div class='decorative-header'></div>
@@ -65,10 +66,7 @@ class Isolated extends Component<typeof ContactForm> {
     </CardContainer>
 
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Ubuntu+Sans:ital,wght@0,100..800;1,100..800&display=swap');
       h2 {
-        font-family: 'Playfair Display', serif;
-        font-optical-sizing: auto;
         font-size: 2.2rem;
         margin: 0;
       }
