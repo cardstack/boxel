@@ -323,10 +323,6 @@ export interface Field<
   component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
-  // TODO remove this after feature flag is removed
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: SearchT) => boolean | null;
   handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
@@ -455,22 +451,6 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     return [...instances].map((instance) => {
       return this.card[queryableValue](instance, stack);
     });
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[] | null) => boolean | null {
-    return (value) => {
-      if (Array.isArray(value) && value.length === 0) {
-        return innerMatcher(null);
-      }
-      return (
-        Array.isArray(value) &&
-        value.some((innerValue) => {
-          return innerMatcher(innerValue);
-        })
-      );
-    };
   }
 
   serialize(
@@ -676,12 +656,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return this.card[queryableValue](instance, stack);
   }
 
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any) => boolean | null {
-    return (value) => innerMatcher(value);
-  }
-
   serialize(
     value: InstanceType<CardT>,
     doc: JSONAPISingleResourceDocument,
@@ -833,12 +807,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return null;
     }
     return this.card[queryableValue](instance, stack);
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any) => boolean | null {
-    return (value) => innerMatcher(value);
   }
 
   serialize(
@@ -1181,22 +1149,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
       return this.card[queryableValue](instance, stack);
     });
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[] | null) => boolean | null {
-    return (value) => {
-      if (Array.isArray(value) && value.length === 0) {
-        return innerMatcher(null);
-      }
-      return (
-        Array.isArray(value) &&
-        value.some((innerValue) => {
-          return innerMatcher(innerValue);
-        })
-      );
-    };
   }
 
   serialize(

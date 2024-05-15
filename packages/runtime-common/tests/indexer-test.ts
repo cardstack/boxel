@@ -323,13 +323,19 @@ const tests = Object.freeze({
   },
 
   'can prevent concurrent batch invalidations from colliding when making new generation':
-    async (assert, { indexer }) => {
+    async (assert, { indexer, adapter }) => {
       await setupIndex(
         indexer,
         [{ realm_url: testRealmURL, current_version: 1 }],
         [
           {
             url: `${testRealmURL}1.json`,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [],
+          },
+          {
+            url: `${testRealmURL}2.json`,
             realm_version: 1,
             realm_url: testRealmURL,
             deps: [],
@@ -341,16 +347,79 @@ const tests = Object.freeze({
       let batch1 = await indexer.createBatch(new URL(testRealmURL));
       let batch2 = await indexer.createBatch(new URL(testRealmURL));
       await batch1.invalidate(new URL(`${testRealmURL}1.json`));
+      {
+        let index = await adapter.execute(
+          'SELECT url, realm_url, realm_version, is_deleted FROM boxel_index ORDER BY url COLLATE "POSIX", realm_version',
+          { coerceTypes: { is_deleted: 'BOOLEAN' } },
+        );
+        assert.deepEqual(
+          index,
+          [
+            {
+              url: `${testRealmURL}1.json`,
+              realm_url: testRealmURL,
+              realm_version: 1,
+              is_deleted: null,
+            },
+            {
+              url: `${testRealmURL}1.json`,
+              realm_url: testRealmURL,
+              realm_version: 2,
+              is_deleted: true,
+            },
+            {
+              url: `${testRealmURL}2.json`,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              is_deleted: null,
+            },
+          ],
+          'the index entries are correct',
+        );
+      }
 
-      try {
-        await batch2.makeNewGeneration();
-        throw new Error(`expected invalidation conflict error`);
-      } catch (e: any) {
-        assert.ok(
-          e.message.includes(
-            'Invalidation conflict error in realm http://test-realm/test/ version 2',
-          ),
-          'received invalidation conflict error',
+      // this will force batch2 to have a higher version number than batch 1
+      await batch2.makeNewGeneration();
+      {
+        let index = await adapter.execute(
+          'SELECT url, realm_url, realm_version, is_deleted FROM boxel_index ORDER BY url COLLATE "POSIX", realm_version',
+          { coerceTypes: { is_deleted: 'BOOLEAN' } },
+        );
+        assert.deepEqual(
+          index,
+          [
+            {
+              url: `${testRealmURL}1.json`,
+              realm_url: testRealmURL,
+              realm_version: 1,
+              is_deleted: null,
+            },
+            {
+              url: `${testRealmURL}1.json`,
+              realm_url: testRealmURL,
+              realm_version: 2,
+              is_deleted: true,
+            },
+            {
+              url: `${testRealmURL}1.json`,
+              realm_url: testRealmURL,
+              realm_version: 3,
+              is_deleted: true,
+            },
+            {
+              url: `${testRealmURL}2.json`,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              is_deleted: null,
+            },
+            {
+              url: `${testRealmURL}2.json`,
+              realm_version: 3,
+              realm_url: testRealmURL,
+              is_deleted: true,
+            },
+          ],
+          'the index entries are correct',
         );
       }
     },

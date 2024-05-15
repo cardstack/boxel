@@ -54,12 +54,16 @@ module('queue', function (hooks) {
         assert.strictEqual(
           startedCount,
           expectedStartedCount,
-          `the expected started count before job run, ${expectedStartedCount}, is correct`,
+          `For Queue #${
+            expectedStartedCount + 1
+          }, the expected started count before job run, ${expectedStartedCount}, is correct`,
         );
         assert.strictEqual(
           completedCount,
           expectedStartedCount,
-          `the expected completed count before job run, ${expectedStartedCount}, is correct`,
+          `For Queue #${
+            expectedStartedCount + 1
+          }, the expected completed count before job run, ${expectedStartedCount}, is correct`,
         );
         startedCount++;
         await new Promise((r) => setTimeout(r, 500));
@@ -67,14 +71,18 @@ module('queue', function (hooks) {
         assert.strictEqual(
           startedCount,
           expectedStartedCount + 1,
-          `the expected started count after job run, ${
+          `For Queue #${
+            expectedStartedCount + 1
+          }, the expected started count after job run, ${
             expectedStartedCount + 1
           }, is correct`,
         );
         assert.strictEqual(
           completedCount,
           expectedStartedCount + 1,
-          `the expected completed count after job run, ${
+          `For Queue #${
+            expectedStartedCount + 1
+          }, the expected completed count after job run, ${
             expectedStartedCount + 1
           }, is correct`,
         );
@@ -83,16 +91,17 @@ module('queue', function (hooks) {
       queue.register('count', count);
       queue2.register('count', count);
 
-      let [job1, job2] = await Promise.all([
-        queue.publish('count', 0, {
-          queueName: 'serial-queue',
-        }),
-        queue2.publish('count', 1, {
-          queueName: 'serial-queue',
-        }),
-      ]);
+      let promiseForJob1 = queue.publish('count', 0, {
+        queueName: 'serial-queue',
+      });
+      // start the 2nd job before the first job finishes
+      await new Promise((r) => setTimeout(r, 100));
+      let promiseForJob2 = queue2.publish('count', 1, {
+        queueName: 'serial-queue',
+      });
+      let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
-      await Promise.all([job2.done, job1.done]);
+      await Promise.all([job1.done, job2.done]);
     });
 
     test('different queues are processed concurrently across different queue clients', async function (assert) {
