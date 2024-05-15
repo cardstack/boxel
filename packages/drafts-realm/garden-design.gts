@@ -11,22 +11,40 @@ class Isolated extends Component<typeof GardenDesign> {
     <div class='grid' style={{this.grid}}>
       {{#each this.items as |item|}}
         <div
-          class='item'
-          id={{item.id}}
+          class='item' 
+          id={{item.id}} 
           {{on 'dragover' this.dragover}}
           {{on 'drop' this.dropItem}}
         />
       {{/each}}
     </div>
-    <ol>
+    <ul>
+      <li>
+        <span 
+          {{on 'dragstart' this.dragStart}}
+          id='penstemon'
+          draggable='true' 
+          class='plant penstemon'
+        >A</span>
+        Smooth Penstemon
+      </li>
+      <li>
+        <span 
+          {{on 'dragstart' this.dragStart}}
+          id='purple-coneflower'
+          draggable='true' 
+          class='plant purple-coneflower'
+        >B</span>
+        Purple Coneflower
+      </li>
       <li>
         <span
           {{on 'dragstart' this.dragStart}}
-          id='purple-coneflower'
+          id='royal-catchfly'
           draggable='true'
-          class='plant purple-coneflower'
-        >1</span>
-        Purple Coneflower
+          class='plant royal-catchfly'
+        >C</span>
+        Royal Catchfly
       </li>
       <li>
         <span
@@ -34,7 +52,7 @@ class Isolated extends Component<typeof GardenDesign> {
           id='black-eyed-susan'
           draggable='true'
           class='plant black-eyed-susan'
-        >2</span>
+        >D</span>
         Black-Eyed Susan
       </li>
       <li>
@@ -43,10 +61,28 @@ class Isolated extends Component<typeof GardenDesign> {
           id='lavender-hyssop'
           draggable='true'
           class='plant lavender-hyssop'
-        >3</span>
+        >E</span>
         Lavender Hyssop
       </li>
-    </ol>
+      <li>
+        <span
+          {{on 'dragstart' this.dragStart}}
+          id='prairie-smoke'
+          draggable='true'
+          class='plant prairie-smoke'
+        >F</span>
+        Prairie Smoke
+      </li>
+      <li>
+        <span
+          {{on 'dragstart' this.dragStart}}
+          id='birdbath'
+          draggable='true'
+          class='plant birdbath'
+        >BB</span>
+        Birdbath
+      </li>
+    </ul>
     <style>
       .grid {
         margin: 20px auto;
@@ -60,6 +96,18 @@ class Isolated extends Component<typeof GardenDesign> {
         justify-content: center;
         align-items: center;
       }
+      ul {
+        height: 140px;
+        display: flex;
+        flex-direction: column;
+        flex-wrap: wrap;
+        gap: 10px 0;
+      }
+      li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
       .plant {
         width: 30px;
         height: 30px;
@@ -70,10 +118,15 @@ class Isolated extends Component<typeof GardenDesign> {
         align-items: center;
         font-weight: bold;
       }
+      .penstemon {
+        background-color: whitesmoke;
+        border-color: rosybrown;
+        color: indianred;
+      }
       .purple-coneflower {
-        background-color: #fb9cbf;
-        border-color: #ea5c79;
-        color: #a93110;
+        background-color: orchid;
+        border-color: mediumorchid;
+        color: lavenderblush;
       }
       .black-eyed-susan {
         background-color: palegoldenrod;
@@ -83,7 +136,20 @@ class Isolated extends Component<typeof GardenDesign> {
       .lavender-hyssop {
         background-color: lavender;
         border-color: purple;
-        color: darkpurple;
+        color: indigo;
+      }
+      .royal-catchfly {
+        background-color: mistyrose;
+        border-color: red;
+        color: red;
+      }
+      .prairie-smoke {
+        background-color: lightpink;
+        border-color: deeppink;
+        color: deeppink;
+      }
+      .birdbath {
+        background-color: lightgray;
       }
     </style>
   </template>
