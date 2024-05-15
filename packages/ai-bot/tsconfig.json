@@ -31,12 +31,6 @@
     },
     "typeRoots": ["../boxel-ui/types"]
   },
-  "glint": {
-    "environment": ["ember-loose"],
-    "transform": {
-      "include": ["../base/**", "./**", "../boxel-ui/addon/**"]
-    }
-  },
   "include": ["../base/**/*", "./**/*"],
   "exclude": ["../base/__boxel/**/*"]
 }
