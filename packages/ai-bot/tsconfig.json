@@ -32,7 +32,7 @@
     "typeRoots": ["../boxel-ui/types"]
   },
   "glint": {
-    "environment": ["ember-loose", "ember-template-imports"],
+    "environment": ["ember-loose"],
     "transform": {
       "include": ["../base/**", "./**", "../boxel-ui/addon/**"]
     }
