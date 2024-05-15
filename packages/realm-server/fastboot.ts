@@ -5,7 +5,7 @@ import { instantiateFastBoot } from './fastboot-from-deployed';
 import {
   type IndexRunner,
   type RunnerOpts,
-} from '@cardstack/runtime-common/search-index';
+} from '@cardstack/runtime-common/worker';
 import { JSDOM } from 'jsdom';
 import { type ErrorReporter } from '@cardstack/runtime-common/realm';
 
@@ -29,9 +29,6 @@ export async function makeFastBootIndexRunner(
       buildSandboxGlobals(defaultGlobals: any) {
         return Object.assign({}, defaultGlobals, {
           __boxelErrorReporter: globalWithErrorReporter.__boxelErrorReporter,
-          // the fastboot instance is shared across all tests so we use a
-          // function to return the feature flag since this can change between tests
-          __enablePgIndexer: (globalThis as any).__enablePgIndexer,
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,
@@ -49,7 +46,6 @@ export async function makeFastBootIndexRunner(
       (defaultGlobals: any) => {
         return Object.assign({}, defaultGlobals, {
           __boxelErrorReporter: globalWithErrorReporter.__boxelErrorReporter,
-          __enablePgIndexer: (globalThis as any).__enablePgIndexer,
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,

@@ -19,6 +19,7 @@ import { FieldContainer, BoxelInput } from '@cardstack/boxel-ui/components';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import { htmlSafe } from '@ember/template';
 import { RadioInput } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 const atomImgHeight = 200;
 
@@ -118,6 +119,7 @@ class Edit extends Component<typeof Base64ImageField> {
             data-test-base64-field
             @errorMessage={{this.error}}
             @state={{this.base64InputState}}
+            @disabled={{not @canEdit}}
             {{on 'change' this.fileChanged}}
             type='file'
           />
@@ -222,6 +224,7 @@ class ImageSizeField extends FieldDef {
           name='{{this.radioGroup}}'
           @checkedId={{this.checkedId}}
           @hideBorder={{true}}
+          @disabled={{not @canEdit}}
           as |item|
         >
           <item.component @onChange={{fn @set item.data.id}}>

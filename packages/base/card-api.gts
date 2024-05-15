@@ -5,7 +5,7 @@ import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq, pick } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, not, pick } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { startCase } from 'lodash';
 import {
@@ -53,7 +53,6 @@ import {
   type CardResource,
   type Actions,
   type RealmInfo,
-  ResourceObject,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -326,10 +325,6 @@ export interface Field<
   component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
-  // TODO remove this after feature flag is removed
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: SearchT) => boolean | null;
   handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
@@ -461,22 +456,6 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     return [...instances].map((instance) => {
       return this.card[queryableValue](instance, stack);
     });
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[] | null) => boolean | null {
-    return (value) => {
-      if (Array.isArray(value) && value.length === 0) {
-        return innerMatcher(null);
-      }
-      return (
-        Array.isArray(value) &&
-        value.some((innerValue) => {
-          return innerMatcher(innerValue);
-        })
-      );
-    };
   }
 
   serialize(
@@ -690,12 +669,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return this.card[queryableValue](instance, stack);
   }
 
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any) => boolean | null {
-    return (value) => innerMatcher(value);
-  }
-
   serialize(
     value: InstanceType<CardT>,
     doc: JSONAPISingleResourceDocument,
@@ -865,12 +838,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return null;
     }
     return this.card[queryableValue](instance, stack);
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any) => boolean | null {
-    return (value) => innerMatcher(value);
   }
 
   serialize(
@@ -1224,22 +1191,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
       return this.card[queryableValue](instance, stack);
     });
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[] | null) => boolean | null {
-    return (value) => {
-      if (Array.isArray(value) && value.length === 0) {
-        return innerMatcher(null);
-      }
-      return (
-        Array.isArray(value) &&
-        value.some((innerValue) => {
-          return innerMatcher(innerValue);
-        })
-      );
-    };
   }
 
   serialize(
@@ -2063,6 +2014,7 @@ export type BaseDefComponent = ComponentLike<{
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    canEdit?: boolean;
   };
 }>;
 
@@ -2112,7 +2064,11 @@ export class StringField extends FieldDef {
       this.args.model.value = value;
     };
     <template>
-      <BoxelInput @value={{@model.value}} @onInput={{this.set}} />
+      <BoxelInput
+        @value={{@model.value}}
+        @onInput={{this.set}}
+        @disabled={{not @canEdit}}
+      />
     </template>
   };
   static atom = class Atom extends Component<typeof this> {
@@ -2971,6 +2927,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    canEdit?: boolean;
   };
 };
 

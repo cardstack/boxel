@@ -14,6 +14,7 @@ import {
 import {
   BoxComponentSignature,
   DefaultFormatConsumer,
+  RealmSessionConsumer,
   getBoxComponent,
 } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
@@ -122,44 +123,54 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    {{#if @arrayField.children.length}}
-      <ul class='list'>
-        {{#each @arrayField.children as |boxedElement i|}}
-          <li class='editor' data-test-item={{i}}>
-            {{#let
-              (getBoxComponent
-                (this.args.cardTypeFor @field boxedElement) boxedElement @field
-              )
-              as |Item|
-            }}
-              <Item @format='embedded' />
-            {{/let}}
-            <div class='remove-button-container'>
-              <IconButton
-                @variant='primary'
-                @icon={{IconMinusCircle}}
-                @width='20px'
-                @height='20px'
-                class='remove'
-                {{on 'click' (fn @remove i)}}
-                aria-label='Remove'
-                data-test-remove-card
-                data-test-remove={{i}}
-              />
-            </div>
-          </li>
-        {{/each}}
-      </ul>
-    {{/if}}
-    <AddButton
-      class='add-new'
-      @variant='full-width'
-      {{on 'click' @add}}
-      data-test-add-new
-    >
-      Add
-      {{getPlural @field.card.displayName}}
-    </AddButton>
+    <RealmSessionConsumer as |realmSession|>
+      {{#if @arrayField.children.length}}
+        <ul class='list'>
+          {{#each @arrayField.children as |boxedElement i|}}
+            <li class='editor' data-test-item={{i}}>
+              {{#let
+                (getBoxComponent
+                  (this.args.cardTypeFor @field boxedElement)
+                  boxedElement
+                  @field
+                )
+                as |Item|
+              }}
+                <Item @format='embedded' />
+              {{/let}}
+
+              {{#if realmSession.canWrite}}
+                <div class='remove-button-container'>
+                  <IconButton
+                    @variant='primary'
+                    @icon={{IconMinusCircle}}
+                    @width='20px'
+                    @height='20px'
+                    class='remove'
+                    {{on 'click' (fn @remove i)}}
+                    aria-label='Remove'
+                    data-test-remove-card
+                    data-test-remove={{i}}
+                  />
+                </div>
+              {{/if}}
+            </li>
+          {{/each}}
+        </ul>
+      {{/if}}
+
+      {{#if realmSession.canWrite}}
+        <AddButton
+          class='add-new'
+          @variant='full-width'
+          {{on 'click' @add}}
+          data-test-add-new
+        >
+          Add
+          {{getPlural @field.card.displayName}}
+        </AddButton>
+      {{/if}}
+    </RealmSessionConsumer>
     <style>
       .list {
         list-style: none;

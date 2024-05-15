@@ -1,3 +1,4 @@
+import { not } from '@cardstack/boxel-ui/helpers';
 import { Component } from './card-api';
 import StringField from './string';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -14,6 +15,7 @@ export default class TextAreaCard extends StringField {
         @value={{@model.value}}
         @onInput={{this.set}}
         @type='textarea'
+        @disabled={{not @canEdit}}
       />
     </template>
   };
