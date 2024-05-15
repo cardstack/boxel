@@ -669,7 +669,7 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
-        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
+        await realm.flushUpdateEvents();
         return await response;
       },
     });
@@ -1977,7 +1977,7 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
-        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
+        await realm.flushUpdateEvents();
         return await response;
       },
     });
@@ -2092,10 +2092,7 @@ module('Integration | realm', function (hooks) {
               body: cardSrc,
             }),
           );
-          await Promise.all([
-            realm.flushOperations(),
-            realm.flushUpdateEvents(),
-          ]);
+          await realm.flushUpdateEvents();
           return await response;
         },
       });
@@ -2161,7 +2158,7 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
-        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
+        await realm.flushUpdateEvents();
         assert.strictEqual((await response).status, 302, 'file exists');
 
         response = realm.handle(
@@ -2172,7 +2169,7 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
-        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
+        await realm.flushUpdateEvents();
         return await response;
       },
     });

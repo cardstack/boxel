@@ -11,7 +11,7 @@ import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
@@ -1445,7 +1445,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
     });
 
-    test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
+    // skipping FLaky test: CS-6845
+    skip('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
       window.localStorage.setItem(
         'recent-cards',

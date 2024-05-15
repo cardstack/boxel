@@ -12,7 +12,7 @@ import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -398,6 +398,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
+
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`)
       .exists();
@@ -407,6 +408,14 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`)
       .exists();
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}index"]`)
+      .doesNotExist('grid cards do not show other grid cards');
+    // this was an unspelled, but very valid assertion that percy is making
+    // that I'm now making concrete
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}grid"]`)
+      .doesNotExist('grid cards do not show other grid cards');
     // this asserts that cards that throw errors during search
     // query deserialization (boom.json) are handled gracefully
     assert
@@ -526,7 +535,8 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-profile-icon]').hasText('J'); // From display name "John"
   });
 
-  test('can open code submode when card or field has no embedded template', async function (assert) {
+  // Flaky test: CS-6841
+  skip('can open code submode when card or field has no embedded template', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [

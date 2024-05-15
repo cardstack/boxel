@@ -48,7 +48,6 @@ import {
 } from './query';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
-import { type SearchEntryWithErrors } from './search-index';
 
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -829,6 +828,18 @@ export class Indexer {
   }
 }
 
+export interface SearchEntry {
+  resource: CardResource;
+  searchData: Record<string, any>;
+  isolatedHtml?: string;
+  types: string[];
+  deps: Set<string>;
+}
+
+export type SearchEntryWithErrors =
+  | { type: 'entry'; entry: SearchEntry }
+  | { type: 'error'; error: SerializedError };
+
 export class Batch {
   readonly ready: Promise<void>;
   private touched = new Set<string>();
@@ -870,7 +881,7 @@ export class Batch {
               type: 'instance',
               pristine_doc: entry.entry.resource,
               search_doc: entry.entry.searchData,
-              isolated_html: entry.entry.html,
+              isolated_html: entry.entry.isolatedHtml,
               deps: [...entry.entry.deps],
               types: entry.entry.types,
             }
@@ -907,6 +918,7 @@ export class Batch {
   }
 
   async makeNewGeneration() {
+    await this.setNextGenerationRealmVersion();
     this.isNewGeneration = true;
     let cols = [
       'url',
@@ -953,9 +965,12 @@ export class Batch {
     if (this.isNewGeneration) {
       await this.client.query([
         `DELETE FROM boxel_index`,
-        'WHERE realm_version <',
-        param(this.realmVersion),
-      ]);
+        'WHERE',
+        ...every([
+          ['realm_version <', param(this.realmVersion)],
+          ['realm_url =', param(this.realmURL.href)],
+        ]),
+      ] as Expression);
     }
   }
 
@@ -982,6 +997,18 @@ export class Batch {
     } else {
       this.realmVersion = row.current_version + 1;
     }
+  }
+
+  // this will use a version higher than any in-progress indexing in case there
+  // are artifacts left over from a failed index
+  private async setNextGenerationRealmVersion() {
+    let [maxVersionRow] = (await this.client.query([
+      'SELECT MAX(realm_version) as max_version FROM boxel_index WHERE realm_url =',
+      param(this.realmURL.href),
+    ])) as { max_version: number }[];
+    let maxVersion = (maxVersionRow?.max_version ?? 0) + 1;
+    let nextVersion = Math.max(this.realmVersion, maxVersion);
+    this.realmVersion = nextVersion;
   }
 
   async invalidate(url: URL): Promise<string[]> {
@@ -1052,13 +1079,26 @@ export class Batch {
       ) {
         let message = `Invalidation conflict error in realm ${this.realmURL.href} version ${this.realmVersion}`;
         if (opts?.url && opts?.invalidations) {
-          message = `${message}: the invalidation ${
-            opts.url.href
-          } resulted in invalidation graph: ${JSON.stringify(
-            opts.invalidations,
-          )} that collides with unfinished indexing`;
+          message =
+            `${message}: the invalidation ${
+              opts.url.href
+            } resulted in invalidation graph: ${JSON.stringify(
+              opts.invalidations,
+            )} that collides with unfinished indexing. The most likely reason this happens is that there ` +
+            `was an error encountered during incremental indexing that prevented the indexing from completing ` +
+            `(and realm version increasing), then there was another incremental update to the same document ` +
+            `that collided with the WIP artifacts from the indexing that never completed. Removing the WIP ` +
+            `indexing artifacts (the rows(s) that triggered the unique constraint will solve the immediate ` +
+            `problem, but likely the issue that triggered the unfinished indexing will need to be fixed to ` +
+            `prevent this from happening in the future.`;
         } else if (opts?.isMakingNewGeneration) {
-          message = `${message}. created a new generation while there was still unfinished indexing`;
+          message =
+            `${message}. created a new generation while there was still unfinished indexing. ` +
+            `The most likely reason this happens is that there was an error encountered during incremental ` +
+            `indexing that prevented the indexing from completing (and realm version increasing), ` +
+            `then the realm was restarted and the left over WIP indexing artifact(s) collided with the ` +
+            `from-scratch indexing. To resolve this issue delete the WIP indexing artifacts (the row(s) ` +
+            `that triggered the unique constraint) and restart the realm.`;
         }
         throw new Error(message);
       }
@@ -1066,7 +1106,13 @@ export class Batch {
     }
   }
 
-  private async calculateInvalidations(alias: string): Promise<string[]> {
+  private async calculateInvalidations(
+    alias: string,
+    visited: string[] = [],
+  ): Promise<string[]> {
+    if (visited.includes(alias)) {
+      return [];
+    }
     let childInvalidations = await this.client.itemsThatReference(
       alias,
       this.realmVersion,
@@ -1077,7 +1123,9 @@ export class Batch {
       ...invalidations,
       ...flatten(
         await Promise.all(
-          aliases.map((alias) => this.calculateInvalidations(alias)),
+          aliases.map((a) =>
+            this.calculateInvalidations(a, [...visited, alias]),
+          ),
         ),
       ),
     ];
