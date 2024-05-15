@@ -963,11 +963,14 @@ export class Batch {
 
     // prune obsolete generation index entries
     if (this.isNewGeneration) {
-      // await this.client.query([
-      //   `DELETE FROM boxel_index`,
-      //   'WHERE realm_version <',
-      //   param(this.realmVersion),
-      // ]);
+      await this.client.query([
+        `DELETE FROM boxel_index`,
+        'WHERE',
+        ...every([
+          ['realm_version <', param(this.realmVersion)],
+          ['realm_url =', param(this.realmURL.href)],
+        ]),
+      ] as Expression);
     }
   }
 
