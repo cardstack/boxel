@@ -533,17 +533,15 @@ module('indexing', function (hooks) {
       delete actual.error.stack;
       assert.ok(
         // assert.deepEqual returns false because despite having the same shape, the constructors are different
-        isEqual(await realm.searchIndex.card(new URL(`${testRealm}post-1`)), {
+        isEqual(actual, {
           type: 'error',
           error: {
             isCardError: true,
             additionalErrors: null,
             detail: 'http://test-realm/post not found',
-            source: undefined,
             status: 404,
             title: 'Not Found',
             deps: ['http://test-realm/post'],
-            responseText: undefined,
           },
         }),
         'card instance is an error document',

@@ -12,6 +12,7 @@ import {
 } from './card-api';
 import { fn } from '@ember/helper';
 import { RadioInput } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
@@ -67,6 +68,7 @@ export default class BooleanField extends FieldDef {
           name='{{this.radioGroup}}'
           @checkedId={{this.checkedId}}
           @hideBorder={{true}}
+          @disabled={{not @canEdit}}
           as |item|
         >
           <item.component @onChange={{fn @set item.data.value}}>

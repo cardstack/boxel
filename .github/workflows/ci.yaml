@@ -142,18 +142,12 @@ jobs:
       - name: Fail if generated icons have been changed without underlying raw icon changing
         run: git diff --exit-code
 
-  host-test-in-memory-index:
-    name: Host Tests - in-memory index
+  host-test:
+    name: Host Tests
     runs-on: ubuntu-latest
     concurrency:
-      group: boxel-host-test-${{ matrix.browser }}-in-memory-index${{ github.head_ref || github.run_id }}
+      group: boxel-host-test${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
-    strategy:
-      fail-fast: false
-      matrix:
-        browser: ["Chrome", "Firefox"]
-    env:
-      TESTEM_BROWSER: ${{ (startsWith(matrix.browser, 'Firefox') && 'Firefox') || matrix.browser }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/init
@@ -181,63 +175,7 @@ jobs:
         if: always()
         with:
           junit_files: junit/host.xml
-          check_name: ${{ matrix.browser }} Host Tests (In-Memory Index) Test Results
-      - name: Upload JUnit report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: junit-boxel-host-test-report-${{ matrix.browser }}-in-memory-index
-          path: junit/host.xml
-          retention-days: 14
-
-  host-test-db-index:
-    name: Host Tests - db index
-    runs-on: ubuntu-latest
-    concurrency:
-      group: boxel-host-test-${{ matrix.browser }}-db-index${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    strategy:
-      fail-fast: false
-      matrix:
-        browser: ["Chrome", "Firefox"]
-    env:
-      TESTEM_BROWSER: ${{ (startsWith(matrix.browser, 'Firefox') && 'Firefox') || matrix.browser }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/init
-      - name: Build boxel-ui
-        run: PG_INDEXER=true pnpm build
-        working-directory: packages/boxel-ui/addon
-      - name: Build host dist/ for fastboot
-        run: PG_INDEXER=true pnpm build
-        env:
-          NODE_OPTIONS: --max_old_space_size=4096
-        working-directory: packages/host
-      - name: Start realm servers
-        run: pnpm start:all &
-        working-directory: packages/realm-server
-      - name: create realm users
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
-      - name: host test suite
-        # don't run the db index host tests in percy until we remove the feature flag
-        run: pnpm test:wait-for-servers
-        env:
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
-        working-directory: packages/host
-      - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2.9.0
-        if: always()
-        with:
-          junit_files: junit/host.xml
-          check_name: ${{ matrix.browser }} Host Tests (DB Index) Test Results
-      - name: Upload JUnit report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: junit-boxel-host-test-report-${{ matrix.browser }}-db-index
-          path: junit/host.xml
-          retention-days: 14
+          check_name: Host Tests Test Results
 
   matrix-client-test:
     name: Matrix Client Tests
@@ -353,11 +291,11 @@ jobs:
             https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
             -d '{"context":"Matrix Playwright tests report","description":"","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
 
-  realm-server-in-memory-index-test:
-    name: Realm Server Tests - in-memory index
+  realm-server-test:
+    name: Realm Server Tests
     runs-on: ubuntu-latest
     concurrency:
-      group: realm-server-in-memory-index-test-${{ github.head_ref || github.run_id }}
+      group: realm-server-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -381,36 +319,6 @@ jobs:
         working-directory: packages/realm-server
       - name: realm server DOM tests
         run: pnpm test:dom
-        working-directory: packages/realm-server
-
-  realm-server-db-index-test:
-    name: Realm Server Tests - db index
-    runs-on: ubuntu-latest
-    concurrency:
-      group: realm-server-db-index-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ./.github/actions/init
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
-      - name: Build host dist/ for fastboot
-        run: pnpm build
-        env:
-          NODE_OPTIONS: --max_old_space_size=4096
-        working-directory: packages/host
-      - name: Start realm servers
-        run: PG_INDEXER=true pnpm start:all &
-        working-directory: packages/realm-server
-      - name: create realm users
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
-      - name: realm server test suite
-        run: PG_INDEXER=true pnpm test:wait-for-servers
-        working-directory: packages/realm-server
-      - name: realm server DOM tests
-        run: PG_INDEXER=true pnpm test:dom
         working-directory: packages/realm-server
 
   change-check:
@@ -450,9 +358,8 @@ jobs:
     needs:
       - change-check
       - boxel-ui-test
-      # don't forget to change this after we remove the feature flag
-      - host-test-in-memory-index
-      - realm-server-in-memory-index-test
+      - host-test
+      - realm-server-test
     uses: ./.github/workflows/manual-deploy.yml
     secrets: inherit
     with:

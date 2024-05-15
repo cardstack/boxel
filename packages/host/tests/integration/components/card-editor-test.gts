@@ -9,7 +9,7 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -28,6 +28,7 @@ import {
   setupLocalIndexing,
   saveCard,
   setupIntegrationTestRealm,
+  provideConsumeContext,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -42,6 +43,10 @@ module('Integration | card-editor', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
+    provideConsumeContext(RealmSessionContextName, {
+      canWrite: true,
+    });
+
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
   });

@@ -183,9 +183,8 @@ class Isolated extends Component<typeof CardsGrid> {
       {
         filter: {
           not: {
-            type: {
-              module: `${baseRealm.url}cards-grid`,
-              name: 'CardsGrid',
+            eq: {
+              _cardType: 'Cards Grid',
             },
           },
         },
