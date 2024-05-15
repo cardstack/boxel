@@ -46,41 +46,45 @@ export class RealmServer {
     detectRealmCollision(realms);
     this.realms = realms;
 
-    this.assetsURL = opts?.assetsURL ?? new URL(`${baseRealm.url}${assetsDir}`);
+    this.assetsURL = opts?.assetsURL;
+
+    // this.assetsURL = opts?.assetsURL ?? new URL(`${baseRealm.url}${assetsDir}`);
+
+    // localhost:4201/__boxel/assets/ -> localhost:4201/base/__boxel/assets/
 
     // TODO: Get rid of this redirect by providing the final absolute URL in the assetsURL. In dev, distURL should be localhost:4200, in prod, the deployed host app url. Remove distDir.
-    virtualNetwork.mount(async (request: Request) => {
-      let url = new URL(request.url);
-      let path = url.pathname;
+    // virtualNetwork.mount(async (request: Request) => {
+    //   let url = new URL(request.url);
+    //   let path = url.pathname;
 
-      if (path.startsWith(`/${assetsDir}`)) {
-        let redirectURL = new URL(
-          `./${path.slice(assetsDir.length + 1)}`,
-          this.assetsURL,
-        ).href;
+    //   if (path.startsWith(`/${assetsDir}`)) {
+    //     let redirectURL = new URL(
+    //       `./${path.slice(assetsDir.length + 1)}`,
+    //       this.assetsURL,
+    //     ).href;
 
-        if (redirectURL !== url.href) {
-          return new Response(null, {
-            status: 302,
-            headers: {
-              Location: redirectURL,
-            },
-          }) as ResponseWithNodeStream;
-        }
-      }
+    //     if (redirectURL !== url.href) {
+    //       return new Response(null, {
+    //         status: 302,
+    //         headers: {
+    //           Location: redirectURL,
+    //         },
+    //       }) as ResponseWithNodeStream;
+    //     }
+    //   }
 
-      if (path.startsWith(`/${boxelUIAssetsDir}`)) {
-        let redirectURL = new URL(`.${path}`, this.assetsURL).href;
-        return new Response(null, {
-          status: 302,
-          headers: {
-            Location: redirectURL,
-          },
-        }) as ResponseWithNodeStream;
-      }
+    //   if (path.startsWith(`/${boxelUIAssetsDir}`)) {
+    //     let redirectURL = new URL(`.${path}`, this.assetsURL).href;
+    //     return new Response(null, {
+    //       status: 302,
+    //       headers: {
+    //         Location: redirectURL,
+    //       },
+    //     }) as ResponseWithNodeStream;
+    //   }
 
-      return null;
-    });
+    //   return null;
+    // });
   }
 
   @Memoize()

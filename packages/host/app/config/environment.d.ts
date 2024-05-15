@@ -31,4 +31,5 @@ declare const config: {
   featureFlags?: {
     'pg-indexer'?: boolean;
   };
+  assetsURL: string;
 };

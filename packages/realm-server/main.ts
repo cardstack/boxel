@@ -160,6 +160,9 @@ if (distURL) {
   dist = resolve(distDir);
 }
 
+// take the base url from the arg (check fromUrl and toUrl)
+let assetsURL = new URL(distURL || 'http://localhost:4201/base/__boxel/');
+
 (async () => {
   let realms: Realm[] = [];
   let dbAdapter: PgAdapter | undefined;
@@ -224,6 +227,7 @@ if (distURL) {
             await worker.run();
           }
         },
+        assetsURL,
       },
       {
         deferStartUp: true,
@@ -239,7 +243,7 @@ if (distURL) {
   }
 
   let server = new RealmServer(realms, virtualNetwork, {
-    ...(distURL ? { assetsURL: new URL(distURL) } : {}),
+    ...{ assetsURL },
   });
 
   server.listen(port);
