@@ -3,7 +3,6 @@ import FastBoot from 'fastboot';
 import { type FastBootInstance } from './fastboot-from-deployed';
 import { instantiateFastBoot } from './fastboot-from-deployed';
 import {
-  logger,
   type IndexRunner,
   type RunnerOpts,
   type ErrorReporter,
@@ -36,7 +35,7 @@ export async function makeFastBootIndexRunner(
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
-          _logger: logger,
+          _log: console.log,
           jsdom: new JSDOM(''),
         });
       },
@@ -54,7 +53,7 @@ export async function makeFastBootIndexRunner(
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
-          _logger: logger,
+          _log: console.log,
           jsdom: new JSDOM(''),
         });
       },

@@ -9,7 +9,7 @@ NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
   PGDATABASE=boxel_dev \
-  LOG_LEVELS='*=info' \
+  LOG_LEVELS='current-run=debug' \
   REALM_SECRET_SEED="shhh! it's a secret" \
   ts-node \
   --transpileOnly main \

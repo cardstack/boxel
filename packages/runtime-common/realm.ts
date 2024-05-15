@@ -787,9 +787,9 @@ export class Realm {
         if (!request.headers.get('X-Boxel-Use-WIP-Index')) {
           let timeout = await Promise.race<void | Error>([
             this.ready,
-            new Promise((r) =>
+            new Promise((resolve) =>
               setTimeout(() => {
-                r(
+                resolve(
                   new Error(
                     `Timeout waiting for realm ${this.url} to become ready`,
                   ),
