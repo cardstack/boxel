@@ -153,7 +153,7 @@ jobs:
       matrix:
         browser: ["Chrome", "Firefox"]
     env:
-      TESTEM_BROWSER: ${{ (startsWith(matrix.browser, 'Firefox') && 'Firefox') || matrix.browser }}
+      TESTEM_BROWSER: ${{ matrix.browser }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/init
