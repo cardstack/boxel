@@ -783,7 +783,10 @@ export class Realm {
     try {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
-        await this.ready;
+        // allow any WIP index requests to query the index while it's building up
+        if (!request.headers.get('X-Boxel-Use-WIP-Index')) {
+          await this.ready;
+        }
 
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
           request.method,
