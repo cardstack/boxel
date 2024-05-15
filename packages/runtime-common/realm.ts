@@ -785,7 +785,21 @@ export class Realm {
       if (!isLocal) {
         // allow any WIP index requests to query the index while it's building up
         if (!request.headers.get('X-Boxel-Use-WIP-Index')) {
-          await this.ready;
+          let timeout = await Promise.race<void | Error>([
+            this.ready,
+            new Promise((r) =>
+              setTimeout(() => {
+                r(
+                  new Error(
+                    `Timeout waiting for realm ${this.url} to become ready`,
+                  ),
+                );
+              }, 60 * 1000),
+            ),
+          ]);
+          if (timeout) {
+            return new Response(timeout.message, { status: 500 });
+          }
         }
 
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
