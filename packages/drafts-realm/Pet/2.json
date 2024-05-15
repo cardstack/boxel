@@ -6,7 +6,8 @@
       "favoriteToy": null,
       "favoriteTreat": null,
       "cutenessRating": null,
-      "sleepsOnTheCouch": null
+      "sleepsOnTheCouch": false,
+      "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
