@@ -6,82 +6,79 @@ import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 
+const OPTIONS = [
+  {
+    name: 'Smooth Penstemon',
+    id: 'smooth-penstemon',
+    symbol: 'A',
+  },
+  {
+    name: 'Purple Coneflower',
+    id: 'purple-coneflower',
+    symbol: 'B',
+  },
+  {
+    name: 'Royal Catchfly',
+    id: 'royal-catchfly',
+    symbol: 'C',
+  },
+  {
+    name: 'Black-Eyed Susan',
+    id: 'black-eyed-susan',
+    symbol: 'D',
+  },
+  {
+    name: 'Lavender Hyssop',
+    id: 'lavender-hyssop',
+    symbol: 'E',
+  },
+  {
+    name: 'Prairie Smoke',
+    id: 'prairie-smoke',
+    symbol: 'F',
+  },
+  {
+    name: 'Birdbath',
+    id: 'birdbath',
+    symbol: 'BB',
+  },
+];
+
 class Isolated extends Component<typeof GardenDesign> {
   <template>
-    <div class='grid' style={{this.grid}}>
-      {{#each this.items as |item|}}
+    <div class='grid' style={{this.gridStyle}}>
+      {{#each this.gridItems as |gridItem|}}
         <div
-          class='item' 
-          id={{item.id}} 
+          class='grid-item'
+          id={{gridItem.id}}
           {{on 'dragover' this.dragover}}
           {{on 'drop' this.dropItem}}
-        />
+        >
+          {{#if gridItem.content}}
+            <span
+              {{on 'dragstart' this.dragStart}}
+              id={{gridItem.content.id}}
+              draggable='true'
+              class='plant {{gridItem.content.id}}'
+            >
+              {{gridItem.content.symbol}}
+            </span>
+          {{/if}}
+        </div>
       {{/each}}
     </div>
     <ul>
-      <li>
-        <span 
-          {{on 'dragstart' this.dragStart}}
-          id='penstemon'
-          draggable='true' 
-          class='plant penstemon'
-        >A</span>
-        Smooth Penstemon
-      </li>
-      <li>
-        <span 
-          {{on 'dragstart' this.dragStart}}
-          id='purple-coneflower'
-          draggable='true' 
-          class='plant purple-coneflower'
-        >B</span>
-        Purple Coneflower
-      </li>
-      <li>
-        <span
-          {{on 'dragstart' this.dragStart}}
-          id='royal-catchfly'
-          draggable='true'
-          class='plant royal-catchfly'
-        >C</span>
-        Royal Catchfly
-      </li>
-      <li>
-        <span
-          {{on 'dragstart' this.dragStart}}
-          id='black-eyed-susan'
-          draggable='true'
-          class='plant black-eyed-susan'
-        >D</span>
-        Black-Eyed Susan
-      </li>
-      <li>
-        <span
-          {{on 'dragstart' this.dragStart}}
-          id='lavender-hyssop'
-          draggable='true'
-          class='plant lavender-hyssop'
-        >E</span>
-        Lavender Hyssop
-      </li>
-      <li>
-        <span
-          {{on 'dragstart' this.dragStart}}
-          id='prairie-smoke'
-          draggable='true'
-          class='plant prairie-smoke'
-        >F</span>
-        Prairie Smoke
-      </li>
-      <li>
-        <span
-          {{on 'dragstart' this.dragStart}}
-          id='birdbath'
-          draggable='true'
-          class='plant birdbath'
-        >BB</span>
-        Birdbath
-      </li>
+      {{#each this.items as |item|}}
+        <li>
+          <span
+            {{on 'dragstart' this.dragStart}}
+            id={{item.id}}
+            draggable='true'
+            class='plant {{item.id}}'
+          >{{item.symbol}}</span>
+          {{item.name}}
+        </li>
+      {{/each}}
     </ul>
     <style>
       .grid {
@@ -90,7 +87,7 @@ class Isolated extends Component<typeof GardenDesign> {
         border: 2px solid green;
         display: grid;
       }
-      .item {
+      .grid-item {
         border: 1px solid black;
         display: flex;
         justify-content: center;
@@ -101,7 +98,7 @@ class Isolated extends Component<typeof GardenDesign> {
         display: flex;
         flex-direction: column;
         flex-wrap: wrap;
-        gap: 10px 0;
+        gap: 10px;
       }
       li {
         display: flex;
@@ -118,7 +115,7 @@ class Isolated extends Component<typeof GardenDesign> {
         align-items: center;
         font-weight: bold;
       }
-      .penstemon {
+      .smooth-penstemon {
         background-color: whitesmoke;
         border-color: rosybrown;
         color: indianred;
@@ -156,36 +153,64 @@ class Isolated extends Component<typeof GardenDesign> {
 
   defaultUnit = 30;
   defaultSize = 10;
-  @tracked grid;
-  @tracked items;
+  items = OPTIONS;
+  @tracked gridStyle;
+  @tracked rows = this.defaultSize;
+  @tracked columns = this.defaultSize;
+  @tracked unit = this.defaultUnit;
+  @tracked gridContentMap = new Map();
+  @tracked gridItems: { id: string; content?: any }[] = [];
+  @tracked _itemsMap = new Map();
 
   constructor(owner, args) {
     super(owner, args);
-    this.args.model.width = this.args.model.width ?? this.defaultSize;
-    this.args.model.length = this.args.model.length ?? this.defaultSize;
-    this.args.model.unitPx = this.args.model.unitPx ?? this.defaultUnit;
-    this.grid = this.generateGrid();
-    this.items = this.generateGridItems();
+    this.rows = this.args.model.width ?? this.defaultSize;
+    this.columns = this.args.model.length ?? this.defaultSize;
+    this.unit = this.args.model.unitPx ?? this.defaultUnit;
+    this.gridStyle = this.generateGrid();
+    this.generateGridItems();
   }
 
   generateGrid = () => {
     return htmlSafe(`
-      grid-template-columns: repeat(${this.args.model.width}, ${this.args.model.unitPx}px);
-      grid-template-rows: repeat(${this.args.model.length}, ${this.args.model.unitPx}px);
+      grid-template-columns: repeat(${this.rows}, ${this.unit}px);
+      grid-template-rows: repeat(${this.columns}, ${this.unit}px);
     `);
   };
 
   generateGridItems = () => {
-    let items = [];
-    for (let j = 0; j < this.args.model.length; j++) {
-      for (let i = 0; i < this.args.model.width; i++) {
-        items.push({
-          id: `target-${i}-${j}`,
-        });
+    for (let col = 0; col < this.columns; col++) {
+      for (let row = 0; row < this.rows; row++) {
+        let id = `target-${row}-${col}`;
+        if (!this.gridContentMap.has(id)) {
+          this.gridContentMap.set(`target-${row}-${col}`, null);
+        }
       }
     }
-    return items;
+    this.updateGridItems();
   };
+
+  updateGridItems = () => {
+    this.gridItems = [];
+    [...this.gridContentMap.entries()].map(([key, val]) => {
+      this.gridItems.push({
+        id: key,
+        content: val,
+      });
+    });
+  };
+
+  get itemsMap() {
+    this.items.map((el) => {
+      if (!this._itemsMap.has(el.id)) {
+        this._itemsMap.set(el.id, {
+          name: el.name,
+          symbol: el.symbol,
+        });
+      }
+    });
+    return this._itemsMap;
+  }
 
   @action dragStart(ev) {
     ev.dataTransfer.setData('text/plain', ev.target.id);
@@ -198,10 +223,11 @@ class Isolated extends Component<typeof GardenDesign> {
 
   @action dropItem(ev) {
     ev.preventDefault();
+    let targetId = ev.target.id;
     let id = ev.dataTransfer.getData('text/plain');
-    let itemCopy = document.getElementById(id).cloneNode(true);
-    itemCopy.draggable = false;
-    ev.target.appendChild(itemCopy);
+    let itemValue = this.itemsMap.get(id);
+    this.gridContentMap.set(targetId, { id, ...itemValue });
+    this.updateGridItems();
   }
 }
 
@@ -223,5 +249,25 @@ export class GardenDesign extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   */
 }
