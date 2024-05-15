@@ -8,7 +8,7 @@ import merge from 'lodash/merge';
 import {
   Loader,
   baseRealm,
-  logger,
+  logger as _logger,
   baseCardRef,
   LooseCardResource,
   isCardResource,
@@ -49,6 +49,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { type RenderCard } from '../services/render-service';
 
+const logger = ((globalThis as any)._logger as typeof _logger) ?? _logger;
 const log = logger('current-run');
 
 interface Module {
