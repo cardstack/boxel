@@ -150,6 +150,10 @@ importers:
       typescript:
         specifier: ~5.1.6
         version: 5.1.6
+    devDependencies:
+      '@types/qunit':
+        specifier: ^2.19.10
+        version: 2.19.10
 
   packages/base:
     dependencies:
