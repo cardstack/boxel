@@ -186,7 +186,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: junit-boxel-host-test-report-${{ matrix.browser }}-in-memory-index
+          name: junit-boxel-host-test-report-${{ matrix.browser }}
           path: junit/host.xml
           retention-days: 14
 
