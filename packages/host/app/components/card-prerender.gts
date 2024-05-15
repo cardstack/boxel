@@ -6,13 +6,12 @@ import { didCancel, enqueueTask, restartableTask } from 'ember-concurrency';
 
 import { type Indexer } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
-import {
-  type EntrySetter,
-  type Reader,
-  type RunState,
-  type RunnerOpts,
-} from '@cardstack/runtime-common/search-index';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
+import {
+  type IndexResults,
+  type Reader,
+  type RunnerOpts,
+} from '@cardstack/runtime-common/worker';
 
 import { CurrentRun } from '../lib/current-run';
 
@@ -50,10 +49,10 @@ export default class CardPrerender extends Component {
     }
   }
 
-  private async fromScratch(realmURL: URL): Promise<RunState> {
+  private async fromScratch(realmURL: URL): Promise<IndexResults> {
     try {
-      let state = await this.doFromScratch.perform(realmURL);
-      return state;
+      let results = await this.doFromScratch.perform(realmURL);
+      return results;
     } catch (e: any) {
       if (!didCancel(e)) {
         throw e;
@@ -65,17 +64,17 @@ export default class CardPrerender extends Component {
   }
 
   private async incremental(
-    prev: RunState,
     url: URL,
+    realmURL: URL,
     operation: 'delete' | 'update',
-    onInvalidation?: (invalidatedURLs: URL[]) => void,
-  ): Promise<RunState> {
+    ignoreData: Record<string, string>,
+  ): Promise<IndexResults> {
     try {
       let state = await this.doIncremental.perform(
-        prev,
         url,
+        realmURL,
         operation,
-        onInvalidation,
+        ignoreData,
       );
       return state;
     } catch (e: any) {
@@ -98,7 +97,7 @@ export default class CardPrerender extends Component {
   });
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
-    let { reader, entrySetter, indexer } = this.getRunnerParams();
+    let { reader, indexer } = this.getRunnerParams();
     await this.resetLoaderInFastboot.perform();
     let current = await CurrentRun.fromScratch(
       new CurrentRun({
@@ -106,7 +105,6 @@ export default class CardPrerender extends Component {
         loader: this.loaderService.loader,
         reader,
         indexer,
-        entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
       }),
     );
@@ -116,23 +114,22 @@ export default class CardPrerender extends Component {
 
   private doIncremental = enqueueTask(
     async (
-      prev: RunState,
       url: URL,
+      realmURL: URL,
       operation: 'delete' | 'update',
-      onInvalidation?: (invalidatedURLs: URL[]) => void,
+      ignoreData: Record<string, string>,
     ) => {
-      let { reader, entrySetter, indexer } = this.getRunnerParams();
+      let { reader, indexer } = this.getRunnerParams();
       await this.resetLoaderInFastboot.perform();
       let current = await CurrentRun.incremental({
         url,
+        realmURL,
         operation,
-        prev,
         reader,
+        ignoreData,
         indexer,
         loader: this.loaderService.loader,
-        entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
-        onInvalidation,
       });
       this.renderService.indexRunDeferred?.fulfill();
       return current;
@@ -149,9 +146,7 @@ export default class CardPrerender extends Component {
 
   private getRunnerParams(): {
     reader: Reader;
-    entrySetter: EntrySetter;
-    // TODO make this required after feature flag removed
-    indexer?: Indexer;
+    indexer: Indexer;
   } {
     let self = this;
     function readFileAsText(
@@ -172,7 +167,6 @@ export default class CardPrerender extends Component {
       }
       return {
         reader: getRunnerOpts(optsId).reader,
-        entrySetter: getRunnerOpts(optsId).entrySetter,
         indexer: getRunnerOpts(optsId).indexer,
       };
     } else {
@@ -183,7 +177,6 @@ export default class CardPrerender extends Component {
           ),
           readFileAsText,
         },
-        entrySetter: this.localIndexer.setEntry.bind(this.localIndexer),
         indexer: this.localIndexer.indexer,
       };
     }

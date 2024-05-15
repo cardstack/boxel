@@ -15,6 +15,8 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
+import { provide } from 'ember-provide-consume-context';
+
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
@@ -27,6 +29,7 @@ import {
   hasExecutableExtension,
   RealmPaths,
   type ResolvedCodeRef,
+  RealmSessionContextName,
 } from '@cardstack/runtime-common';
 import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
@@ -659,6 +662,11 @@ export default class CodeSubmode extends Component<Signature> {
 
   get isReadOnly() {
     return !this.readyFile.realmSession.canWrite;
+  }
+
+  @provide(RealmSessionContextName)
+  get realmSession() {
+    return this.readyFile.realmSession;
   }
 
   <template>

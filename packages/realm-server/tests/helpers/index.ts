@@ -8,13 +8,13 @@ import {
   RealmPermissions,
   VirtualNetwork,
   Worker,
+  RunnerOptionsManager,
   type MatrixConfig,
   type Queue,
+  type IndexRunner,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
-import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { type IndexRunner } from '@cardstack/runtime-common/search-index';
 import { RealmServer } from '../../server';
 import PgAdapter from '../../pg-adapter';
 import PgQueue from '../../pg-queue';
@@ -142,18 +142,17 @@ export async function createRealm({
   }
 
   let adapter = new NodeAdapter(dir);
-  return new Realm({
+  let realm = new Realm({
     url: realmURL,
     adapter,
-    indexRunner,
-    runnerOptsMgr: manager,
     getIndexHTML: async () =>
       readFileSync(join(distPath, 'index.html')).toString(),
     matrix: matrixConfig,
     permissions,
     realmSecretSeed: "shhh! it's a secret",
     virtualNetwork,
-    ...((globalThis as any).__enablePgIndexer?.() ? { dbAdapter, queue } : {}),
+    dbAdapter,
+    queue,
     onIndexer: async (indexer) => {
       let worker = new Worker({
         realmURL: new URL(realmURL!),
@@ -161,12 +160,13 @@ export async function createRealm({
         queue,
         realmAdapter: adapter,
         runnerOptsManager: manager,
-        loader: virtualNetwork.createLoader(),
+        loader: realm.loaderTemplate,
         indexRunner,
       });
       await worker.run();
     },
   });
+  return realm;
 }
 
 export function setupBaseRealmServer(
