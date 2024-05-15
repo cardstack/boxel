@@ -8,7 +8,7 @@ import merge from 'lodash/merge';
 import {
   Loader,
   baseRealm,
-  logger as _logger,
+  logger,
   baseCardRef,
   LooseCardResource,
   isCardResource,
@@ -49,8 +49,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { type RenderCard } from '../services/render-service';
 
-// const log = logger('current-run');
-const log = (globalThis as any)._log as typeof console.log;
+const log = logger('current-run');
 
 interface Module {
   url: string;
@@ -124,15 +123,12 @@ export class CurrentRun {
   static async fromScratch(current: CurrentRun): Promise<IndexResults> {
     await current.whileIndexing(async () => {
       let start = Date.now();
-      log(`starting from scratch indexing`);
-      // (globalThis as any).__currentRunLoader = current.loader;
+      log.debug(`starting from scratch indexing`);
       current.#batch = await current.#indexer.createBatch(current.realmURL);
-      // current.#invalidations = [];
       await current.batch.makeNewGeneration();
       await current.visitDirectory(current.realmURL);
       await current.batch.done();
-      // (globalThis as any).__currentRunLoader = undefined;
-      log(`completed from scratch indexing in ${Date.now() - start}ms`);
+      log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
     });
     let { stats, ignoreData } = current;
     return { invalidations: [], stats, ignoreData };
@@ -158,7 +154,7 @@ export class CurrentRun {
     indexer: Indexer;
   }): Promise<IndexResults> {
     let start = Date.now();
-    log(`starting from incremental indexing for ${url.href}`);
+    log.debug(`starting from incremental indexing for ${url.href}`);
 
     let current = new this({
       realmURL,
@@ -184,7 +180,7 @@ export class CurrentRun {
 
       await current.batch.done();
 
-      log(
+      log.debug(
         `completed incremental indexing for ${url.href} in ${
           Date.now() - start
         }ms`,
@@ -202,7 +198,7 @@ export class CurrentRun {
       await this.visitFile(url);
     } catch (err: any) {
       if (isCardError(err) && err.status === 404) {
-        log(`tried to visit file ${url.href}, but it no longer exists`);
+        log.info(`tried to visit file ${url.href}, but it no longer exists`);
       } else {
         throw err;
       }
@@ -280,7 +276,7 @@ export class CurrentRun {
       return;
     }
     let start = Date.now();
-    log(`begin visiting file ${url.href}`);
+    log.debug(`begin visiting file ${url.href}`);
     if (
       hasExecutableExtension(url.href) ||
       // handle modules with no extension too
@@ -312,7 +308,7 @@ export class CurrentRun {
           let { data } = JSON.parse(content);
           resource = data;
         } catch (e) {
-          log(`unable to parse ${url.href} as card JSON`);
+          log.warn(`unable to parse ${url.href} as card JSON`);
         }
 
         if (resource && isCardResource(resource)) {
@@ -325,7 +321,7 @@ export class CurrentRun {
         }
       }
     }
-    log(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
+    log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
   }
 
   private async indexCardSource(url: URL): Promise<void> {
@@ -334,7 +330,9 @@ export class CurrentRun {
       module = await this.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
-      log(`encountered error loading module "${url.href}": ${err.message}`);
+      log.warn(
+        `encountered error loading module "${url.href}": ${err.message}`,
+      );
       let deps = await (
         await this.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
@@ -513,7 +511,7 @@ export class CurrentRun {
         deferred.reject(err);
         throw err;
       }
-      log(
+      log.warn(
         `encountered error indexing card instance ${path}: ${error.error.detail}`,
       );
       await this.updateEntry(instanceURL, error);

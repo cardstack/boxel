@@ -5,9 +5,9 @@ import { instantiateFastBoot } from './fastboot-from-deployed';
 import {
   type IndexRunner,
   type RunnerOpts,
-  type ErrorReporter,
-} from '@cardstack/runtime-common';
+} from '@cardstack/runtime-common/worker';
 import { JSDOM } from 'jsdom';
+import { type ErrorReporter } from '@cardstack/runtime-common/realm';
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
@@ -35,7 +35,6 @@ export async function makeFastBootIndexRunner(
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
-          _log: console.log,
           jsdom: new JSDOM(''),
         });
       },
@@ -53,7 +52,6 @@ export async function makeFastBootIndexRunner(
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
-          _log: console.log,
           jsdom: new JSDOM(''),
         });
       },

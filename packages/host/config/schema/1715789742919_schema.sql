@@ -16,7 +16,7 @@
    isolated_html TEXT,
    indexed_at,
    is_deleted BOOLEAN,
-   PRIMARY KEY ( url, realm_version ) 
+   PRIMARY KEY ( url, realm_version, realm_url ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_versions (
