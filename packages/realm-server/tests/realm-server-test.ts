@@ -22,10 +22,10 @@ import {
   loadCard,
   Deferred,
   RealmPaths,
-  type LooseSingleCardDocument,
   Realm,
   RealmPermissions,
   VirtualNetwork,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -35,10 +35,12 @@ import {
   runTestRealmServer,
   localBaseRealm,
   setupDB,
+  createRealm,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
 import { shimExternals } from '../lib/externals';
+import { RealmServer } from '../server';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 
@@ -2180,6 +2182,97 @@ module('Realm Server serving from root', function (hooks) {
       },
       'the directory response is correct',
     );
+  });
+});
+
+module('Realm server serving multiple realms', function (hooks) {
+  let testRealmServer: Server;
+  let request: SuperTest<Test>;
+  let dir: DirResult;
+  let base: Realm;
+  let testRealm: Realm;
+
+  let virtualNetwork = new VirtualNetwork();
+  let loader = virtualNetwork.createLoader();
+  const basePath = resolve(join(__dirname, '..', '..', 'base'));
+  shimExternals(virtualNetwork);
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
+
+  hooks.beforeEach(async function () {
+    dir = dirSync();
+    copySync(join(__dirname, 'cards'), dir.name);
+  });
+
+  setupDB(hooks, {
+    beforeEach: async (dbAdapter, queue) => {
+      let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
+      virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+
+      base = await createRealm({
+        dir: basePath,
+        realmURL: baseRealm.url,
+        virtualNetwork,
+        queue,
+        dbAdapter,
+        deferStartUp: true,
+      });
+      virtualNetwork.mount(base.maybeExternalHandle);
+
+      testRealm = await createRealm({
+        dir: dir.name,
+        virtualNetwork,
+        realmURL: 'http://127.0.0.1:4446/demo/',
+        queue,
+        dbAdapter,
+        deferStartUp: true,
+      });
+      virtualNetwork.mount(testRealm.maybeExternalHandle);
+
+      testRealmServer = new RealmServer(
+        [base, testRealm],
+        virtualNetwork,
+      ).listen(parseInt(localBaseRealmURL.port));
+      await base.start();
+      await testRealm.start();
+
+      request = supertest(testRealmServer);
+    },
+    afterEach: async () => {
+      testRealmServer.close();
+    },
+  });
+
+  test(`Can perform full indexing multiple times on a server that runs multiple realms`, async function (assert) {
+    {
+      let response = await request
+        .get('/demo/person-1')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    }
+
+    await base.reindex();
+    await testRealm.reindex();
+
+    {
+      let response = await request
+        .get('/demo/person-1')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    }
+
+    await base.reindex();
+    await testRealm.reindex();
+
+    {
+      let response = await request
+        .get('/demo/person-1')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    }
   });
 });
 

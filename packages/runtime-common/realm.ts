@@ -405,6 +405,10 @@ export class Realm {
     await this.ready;
   }
 
+  async fullIndex() {
+    await this.searchIndex.fullIndex();
+  }
+
   async flushUpdateEvents() {
     return this.#flushUpdateEvents;
   }
