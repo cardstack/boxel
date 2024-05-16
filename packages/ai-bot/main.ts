@@ -1,6 +1,5 @@
 import './setup-logger'; // This should be first
 import {
-  IContent,
   RoomMemberEvent,
   RoomEvent,
   createClient,
@@ -18,9 +17,10 @@ import {
   isPatchReactionEvent,
 } from './helpers';
 import { shouldSetRoomTitle, setTitle } from './lib/set-title';
+import { handleDebugCommands } from './lib/debug';
+import { sendError, sendOption, sendMessage } from './lib/matrix';
 import { OpenAIError } from 'openai/error';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
-import { handleDebugCommands } from './lib/debug';
 import * as Sentry from '@sentry/node';
 
 if (process.env.SENTRY_DSN) {
@@ -86,134 +86,6 @@ class Assistant {
 }
 
 let startTime = Date.now();
-
-async function sendEvent(
-  client: MatrixClient,
-  room: Room,
-  eventType: string,
-  content: IContent,
-  eventToUpdate: string | undefined,
-) {
-  if (content.data) {
-    content.data = JSON.stringify(content.data);
-  }
-  if (eventToUpdate) {
-    content['m.relates_to'] = {
-      rel_type: 'm.replace',
-      event_id: eventToUpdate,
-    };
-  }
-  log.info('Sending', content);
-  return await client.sendEvent(room.roomId, eventType, content);
-}
-
-export async function sendMessage(
-  client: MatrixClient,
-  room: Room,
-  content: string,
-  eventToUpdate: string | undefined,
-  data: any = {},
-) {
-  log.info('Sending', content);
-  let messageObject: IContent = {
-    ...{
-      body: content,
-      msgtype: 'm.text',
-      formatted_body: content,
-      format: 'org.matrix.custom.html',
-      'm.new_content': {
-        body: content,
-        msgtype: 'm.text',
-        formatted_body: content,
-        format: 'org.matrix.custom.html',
-      },
-    },
-    ...data,
-  };
-  return await sendEvent(
-    client,
-    room,
-    'm.room.message',
-    messageObject,
-    eventToUpdate,
-  );
-}
-
-// TODO we might want to think about how to handle patches that are larger than
-// 65KB (the maximum matrix event size), such that we split them into fragments
-// like we split cards into fragments
-export async function sendOption(
-  client: MatrixClient,
-  room: Room,
-  patch: any,
-  eventToUpdate: string | undefined,
-) {
-  log.info('sending option', patch);
-  const id = patch['card_id'];
-  const body = patch['description'] || "Here's the change:";
-  let messageObject = {
-    body: body,
-    msgtype: 'org.boxel.command',
-    formatted_body: body,
-    format: 'org.matrix.custom.html',
-    data: {
-      command: {
-        type: 'patch',
-        id: id,
-        patch: {
-          attributes: patch['attributes'],
-          relationships: patch['relationships'],
-        },
-        eventId: eventToUpdate,
-      },
-    },
-  };
-  log.info(JSON.stringify(messageObject, null, 2));
-  return await sendEvent(
-    client,
-    room,
-    'm.room.message',
-    messageObject,
-    eventToUpdate,
-  );
-}
-
-function getErrorMessage(error: any): string {
-  if (error instanceof OpenAIError) {
-    return `OpenAI error: ${error.name} - ${error.message}`;
-  }
-  if (typeof error === 'string') {
-    return `Unknown error: ${error}`;
-  }
-  return `Unknown error`;
-}
-
-export async function sendError(
-  client: MatrixClient,
-  room: Room,
-  error: any,
-  eventToUpdate: string | undefined,
-) {
-  try {
-    let errorMessage = getErrorMessage(error);
-    log.error(errorMessage);
-    await sendMessage(
-      client,
-      room,
-      'There was an error processing your request, please try again later',
-      eventToUpdate,
-      {
-        isStreamingFinished: true,
-        errorMessage,
-      },
-    );
-  } catch (e) {
-    // We've had a problem sending the error message back to the user
-    // Log and continue
-    log.error(`Error sending error message back to user: ${e}`);
-    Sentry.captureException(e);
-  }
-}
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
