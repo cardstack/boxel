@@ -37,14 +37,17 @@ interface Signature {
 }
 
 export default class PastSessionItem extends Component<Signature> {
+  get roomId() {
+    return this.args.room.roomId.value as string;
+  }
   <template>
-    <li class='session' data-test-joined-room={{@room.roomId}}>
+    <li class='session' data-test-joined-room={{this.roomId}}>
       <button
         class='view-session-button'
-        {{on 'click' (fn @actions.open @room.roomId)}}
-        data-test-enter-room={{@room.roomId}}
+        {{on 'click' (fn @actions.open this.roomId)}}
+        data-test-enter-room={{this.roomId}}
       >
-        <div class='name'>{{@room.name}}</div>
+        <div class='name'>{{@room.name.value}}</div>
         <div class='date' data-test-last-active={{this.lastActive}}>
           {{this.formattedDate}}
         </div>
@@ -59,7 +62,7 @@ export default class PastSessionItem extends Component<Signature> {
                 @height='20px'
                 class='menu-button'
                 aria-label='Options'
-                data-test-past-session-options-button={{@room.roomId}}
+                data-test-past-session-options-button={{this.roomId}}
                 {{bindings}}
               />
             </:trigger>
@@ -74,7 +77,7 @@ export default class PastSessionItem extends Component<Signature> {
             @closeMenu={{dd.close}}
             @items={{array
               (menuItem
-                'Open Session' (fn @actions.open @room.roomId) icon=Upload
+                'Open Session' (fn @actions.open this.roomId) icon=Upload
               )
               (menuItem 'Rename' (fn @actions.rename @room) icon=IconPencil)
               (menuItem 'Delete' (fn @actions.delete @room) icon=IconTrash)

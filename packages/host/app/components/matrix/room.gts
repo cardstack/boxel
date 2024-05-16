@@ -41,8 +41,8 @@ export default class Room extends Component<Signature> {
       class='room'
       data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-      data-test-room-name={{this.room.name}}
-      data-test-room={{this.room.roomId}}
+      data-test-room-name={{this.room.name.value}}
+      data-test-room={{this.room.roomId.value}}
     >
       {{#if this.room.messages}}
         <AiAssistantConversation>
@@ -72,7 +72,7 @@ export default class Room extends Component<Signature> {
             @onInput={{this.setMessage}}
             @onSend={{this.sendMessage}}
             @canSend={{this.canSend}}
-            data-test-message-field={{this.room.roomId}}
+            data-test-message-field={{this.room.roomId.value}}
           />
           <AiAssistantCardPicker
             @autoAttachedCards={{this.autoAttachedCards}}
@@ -176,7 +176,7 @@ export default class Room extends Component<Signature> {
     }
 
     let myMessages = this.room.messages.filter(
-      (message) => message.author.userId === this.matrixService.userId,
+      (message) => message.author?.userId?.value === this.matrixService.userId,
     );
     if (myMessages.length === 0) {
       throw new Error(
@@ -190,9 +190,9 @@ export default class Room extends Component<Signature> {
       .filter((card) => card !== undefined) as CardDef[];
 
     this.doSendMessage.perform(
-      myLastMessage.message,
+      myLastMessage.message.value,
       attachedCards,
-      myLastMessage.clientGeneratedId,
+      myLastMessage.clientGeneratedId?.value,
     );
   }
 
@@ -336,7 +336,9 @@ export default class Room extends Component<Signature> {
   }
 
   private isPendingMessage(message: MessageField) {
-    return message.status === 'sending' || message.status === 'queued';
+    return (
+      message.status?.value === 'sending' || message.status?.value === 'queued'
+    );
   }
 }
 

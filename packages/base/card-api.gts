@@ -2441,7 +2441,7 @@ function serializeCardResource(
     .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
   let primitiveResources = Object.entries(getPrimitives(model.constructor)).map(
     ([key, _primitive]) => {
-      return { attributes: { [key]: (model as any)[key] } }; // TODO: use primitive's serialization
+      return { attributes: { [key]: (model as any)[key] ?? null } }; // TODO: use primitive's serialization
     },
   );
   return merge(

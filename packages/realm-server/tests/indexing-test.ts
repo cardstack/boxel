@@ -449,7 +449,7 @@ module('indexing', function (hooks) {
           @field message = contains(StringCard);
           @field nickName = contains(StringCard, {
             computeVia: function() {
-              return this.author.firstName + '-poo';
+              return this.author.firstName.value + '-poo';
             }
           })
         }
@@ -485,7 +485,7 @@ module('indexing', function (hooks) {
             @field firstName = contains(StringCard);
             @field nickName = contains(StringCard, {
               computeVia: function() {
-                return this.firstName + '-poo';
+                return this.firstName.value + '-poo';
               }
             })
             static embedded = class Embedded extends Component<typeof this> {
@@ -572,7 +572,7 @@ module('indexing', function (hooks) {
           @field message = contains(StringCard);
           @field nickName = contains(StringCard, {
             computeVia: function() {
-              return this.author.firstName + '-poo';
+              return this.author.firstName.value + '-poo';
             }
           })
         }

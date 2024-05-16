@@ -216,7 +216,7 @@ const petCardSource = `
     });
     static embedded = class Embedded extends Component<typeof this> {
       <template>
-        <h3 data-test-pet={{@model.name}}>
+        <h3 data-test-pet={{@model.name.value}}>
           <@fields.name/>
         </h3>
       </template>
@@ -224,7 +224,7 @@ const petCardSource = `
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <h1>{{@model.title}}</h1>
-        <h2 data-test-pet={{@model.name}}>
+        <h2 data-test-pet={{@model.name.value}}>
           <@fields.name/>
         </h2>
         <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>

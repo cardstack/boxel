@@ -68,7 +68,7 @@ function upsertRoomMember({
     roomMembers.set(userId, member);
   }
   if (displayName) {
-    member.displayName = displayName;
+    member.displayName.value = displayName;
   }
   if (membership) {
     member.membership = membership;
@@ -77,7 +77,7 @@ function upsertRoomMember({
     member.membershipDateTime = new Date(membershipTs);
   }
   if (membershipInitiator) {
-    member.membershipInitiator = membershipInitiator;
+    member.membershipInitiator.value = membershipInitiator;
   }
   return member;
 }
@@ -105,11 +105,11 @@ class RoomMemberView extends Component<typeof RoomMemberField> {
     <div class='container'>
       <div>
         User ID:
-        {{@model.userId}}
+        {{@model.userId.value}}
       </div>
       <div>
         Name:
-        {{@model.displayName}}
+        {{@model.displayName.value}}
       </div>
       <div>
         Membership:
@@ -170,7 +170,7 @@ export class RoomMemberField extends FieldDef {
   @field membershipInitiator = contains(StringField);
   @field name = contains(StringField, {
     computeVia: function (this: RoomMemberField) {
-      return this.displayName ?? this.userId?.split(':')[0].substring(1);
+      return this.displayName ?? this.userId?.value?.split(':')[0].substring(1);
     },
   });
   static embedded = class Embedded extends RoomMemberView {};
@@ -294,7 +294,7 @@ export class MessageField extends FieldDef {
   @field status = contains(StringField);
   @field isRetryable = contains(BooleanField, {
     computeVia: function (this: MessageField) {
-      return this.errorMessage !== ErrorMessage['M_TOO_LARGE'];
+      return this.errorMessage.value !== ErrorMessage['M_TOO_LARGE'];
     },
   });
 
@@ -308,13 +308,13 @@ export class MessageField extends FieldDef {
       return undefined;
     }
     let cards = this.attachedCardIds.map((id) => {
-      let card = getCard(new URL(id));
+      let card = getCard(new URL(id.value ?? ''));
       if (!card) {
         return {
           card: undefined,
           cardError: {
-            id,
-            error: new Error(`cannot find card for id "${id}"`),
+            id: id.value ?? '',
+            error: new Error(`cannot find card for id "${id.value}"`),
           },
         };
       }
@@ -679,7 +679,7 @@ export class RoomField extends FieldDef {
     let cardDoc = JSON.parse(
       fragments.map((f) => f.data.cardFragment).join(''),
     ) as LooseSingleCardDocument;
-    cardHashes.set(generateCardHashKey(this.roomId, cardDoc), eventId);
+    cardHashes.set(generateCardHashKey(this.roomId.value!, cardDoc), eventId);
     return cardDoc;
   }
 

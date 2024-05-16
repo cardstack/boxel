@@ -79,7 +79,11 @@ export default class AiAssistantPanel extends Component<Signature> {
                 height='20'
               />
               <h3 class='panel-title-text' data-test-chat-title>
-                {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
+                {{if
+                  this.currentRoom.name.value
+                  this.currentRoom.name.value
+                  'Assistant'
+                }}
               </h3>
             </div>
           {{/if}}
@@ -158,7 +162,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     </Velcro>
 
     {{#if this.roomToDelete}}
-      {{#let this.roomToDelete.roomId this.roomToDelete.name as |id name|}}
+      {{#let this.roomToDelete.id this.roomToDelete.name as |id name|}}
         <DeleteModal
           @itemToDelete={{id}}
           @onConfirm={{fn this.leaveRoom id}}
@@ -270,7 +274,8 @@ export default class AiAssistantPanel extends Component<Signature> {
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
   @tracked private roomToRename: RoomField | undefined = undefined;
-  @tracked private roomToDelete: RoomField | undefined = undefined;
+  @tracked private roomToDelete: { id: string; name: string } | undefined =
+    undefined;
   @tracked private roomDeleteError: string | undefined = undefined;
   @tracked private displayRoomError = false;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
@@ -294,7 +299,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     } else {
       let latestRoom = this.aiSessionRooms[0];
       if (latestRoom) {
-        this.currentRoomId = latestRoom.roomId;
+        this.currentRoomId = latestRoom.roomId.value;
       } else {
         this.createNewSession();
       }
@@ -386,9 +391,11 @@ export default class AiAssistantPanel extends Component<Signature> {
         room.created = new Date();
       }
       if (
-        (room.invitedMembers.find((m) => aiBotUserId === m.userId) ||
-          room.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
-        room.joinedMembers.find((m) => this.matrixService.userId === m.userId)
+        (room.invitedMembers.find((m) => aiBotUserId === m.userId.value) ||
+          room.joinedMembers.find((m) => aiBotUserId === m.userId.value)) &&
+        room.joinedMembers.find(
+          (m) => this.matrixService.userId === m.userId.value,
+        )
       ) {
         rooms.push(room);
       }
@@ -423,7 +430,9 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @action private setRoomToDelete(room: RoomField | undefined) {
     this.roomDeleteError = undefined;
-    this.roomToDelete = room;
+    if (room?.name.value && room.roomId.value) {
+      this.roomToDelete = { name: room.name.value, id: room.roomId.value };
+    }
   }
 
   private get roomActions() {
@@ -435,8 +444,10 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   @action
-  private leaveRoom(roomId: string) {
-    this.doLeaveRoom.perform(roomId);
+  private leaveRoom(roomId: string | undefined) {
+    if (roomId) {
+      this.doLeaveRoom.perform(roomId);
+    }
   }
 
   private doLeaveRoom = restartableTask(async (roomId: string) => {
@@ -453,8 +464,8 @@ export default class AiAssistantPanel extends Component<Signature> {
       if (this.currentRoomId === roomId) {
         window.localStorage.removeItem(currentRoomIdPersistenceKey);
         let latestRoom = this.aiSessionRooms[0];
-        if (latestRoom) {
-          this.enterRoom(latestRoom.roomId, false);
+        if (latestRoom && latestRoom.roomId.value) {
+          this.enterRoom(latestRoom.roomId.value, false);
         } else {
           this.createNewSession();
         }

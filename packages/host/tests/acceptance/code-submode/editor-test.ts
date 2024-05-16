@@ -163,7 +163,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           @field address = contains(Address);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
-              <h2 data-test-person={{@model.firstName}}>
+              <h2 data-test-person={{@model.firstName.value}}>
                 <@fields.firstName/>
               </h2>
               <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>

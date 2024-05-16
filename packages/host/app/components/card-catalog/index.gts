@@ -58,7 +58,7 @@ export default class CardCatalog extends Component<Signature> {
                     @isSelected={{isSelected}}
                     @title={{card.title.value}}
                     @description={{card.description.value}}
-                    @thumbnailURL={{card.thumbnailURL}}
+                    @thumbnailURL={{card.thumbnailURL.value}}
                   />
                   <button
                     class='select'

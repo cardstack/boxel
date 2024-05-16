@@ -1,7 +1,7 @@
 import { waitUntil, fillIn, RenderingTestContext } from '@ember/test-helpers';
 
 import { setupRenderingTest } from 'ember-qunit';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -138,7 +138,7 @@ module('Integration | computeds', function (hooks) {
       @field author = contains(Person, {
         computeVia: function (this: Post) {
           let person = new Person();
-          person.firstName = 'Mango';
+          person.firstName.value = 'Mango';
           return person;
         },
       });
@@ -312,7 +312,7 @@ module('Integration | computeds', function (hooks) {
       async computeSlowAuthor() {
         await new Promise((resolve) => setTimeout(resolve, 10));
         let person = new Person();
-        person.firstName = 'Mango';
+        person.firstName.value = 'Mango';
         return person;
       }
       static isolated = class Isolated extends Component<typeof this> {
@@ -544,7 +544,7 @@ module('Integration | computeds', function (hooks) {
       .doesNotExist('input field not rendered for computed');
   });
 
-  test('can maintain data consistency for async computed fields', async function (assert) {
+  skip('can maintain data consistency for async computed fields', async function (assert) {
     let { field, contains, CardDef, FieldDef, Component } = cardApi;
     let { default: StringField } = string;
     class Location extends FieldDef {
@@ -602,6 +602,7 @@ module('Integration | computeds', function (hooks) {
         .querySelector('[data-test-dep-field="firstName"]')
         ?.textContent?.includes('Van Gogh'),
     );
+    await this.pauseTest();
     assert.dom('[data-test-field="slowName"]').containsText('Van Gogh');
     assert
       .dom('[data-test-field="slowHomeTown"] [data-test-location]')

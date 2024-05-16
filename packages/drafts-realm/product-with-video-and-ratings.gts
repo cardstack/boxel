@@ -14,7 +14,15 @@ class Isolated extends Component<typeof ProductWithVideoAndRatings> {
   @tracked activeImage = this.args.model.images?.[0];
 
   @action updateActiveImage(image: string) {
-    this.activeImage = image;
+    if (this.activeImage) {
+      this.activeImage.value = image;
+    }
+  }
+
+  get imageValues() {
+    return (this.args.model.images ?? [])
+      .map((image: StringField) => image.value)
+      .filter(Boolean) as string[];
   }
 
   <template>
@@ -22,8 +30,8 @@ class Isolated extends Component<typeof ProductWithVideoAndRatings> {
       <div class='decorative-header'></div>
       <div class='left-container'>
         <ProductImages
-          @images={{@model.images}}
-          @activeImage={{this.activeImage}}
+          @images={{this.imageValues}}
+          @activeImage={{this.activeImage.value}}
           @onSelectImage={{this.updateActiveImage}}
           class='images'
         />
@@ -36,18 +44,18 @@ class Isolated extends Component<typeof ProductWithVideoAndRatings> {
       <div class='right-container'>
         <div class='seller-container'>
           <span class='seller'>
-            {{@model.seller.title}}
+            {{@model.seller.title.value}}
           </span>
           <@fields.ratingsSummary @format='atom' />
         </div>
-        <h1 class='title'>{{@model.title}}</h1>
+        <h1 class='title'>{{@model.title.value}}</h1>
         <div class='price'><MonetaryAmountAtom
             @model={{@model.unitPrice}}
           /></div>
         {{#if @model.videoUrl}}
           <div class='video-container'>
             <video controls aria-label='Product video' aria-hidden='false'>
-              <source src={{@model.videoUrl}} type='video/mp4' />
+              <source src={{@model.videoUrl.value}} type='video/mp4' />
             </video>
           </div>
         {{/if}}

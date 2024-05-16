@@ -485,13 +485,13 @@ export class Chess extends CardDef {
 
   static isolated = class Isolated extends BoxelComponent<typeof this> {
     get fenString() {
-      return this.args.model.fen;
+      return this.args.model.fen?.value;
     }
     <template>
       <div>
         {{this.fenString}}
       </div>
-      <ChessboardComponent @fen={{this.args.model.fen}} />
+      <ChessboardComponent @fen={{this.fenString}} />
     </template>
   };
 }

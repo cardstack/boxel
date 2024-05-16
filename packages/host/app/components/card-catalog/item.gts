@@ -15,7 +15,7 @@ interface Signature {
     isSelected: boolean;
     title?: string | null;
     description?: string | null;
-    thumbnailURL: string | null;
+    thumbnailURL?: string | null;
   };
 }
 

@@ -156,7 +156,7 @@ module('Integration | operator-mode', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <h3 data-test-pet={{@model.name}}>
+          <h3 data-test-pet={{@model.name.value}}>
             <@fields.name />
           </h3>
         </template>
@@ -174,7 +174,7 @@ module('Integration | operator-mode', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <span data-test-preferredCarrier={{@model.preferredCarrier}}>
+          <span data-test-preferredCarrier={{@model.preferredCarrier.value}}>
             <@fields.preferredCarrier />
           </span>
         </template>
@@ -189,10 +189,10 @@ module('Integration | operator-mode', function (hooks) {
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-address>
-            <h3 data-test-city={{@model.city}}>
+            <h3 data-test-city={{@model.city.value}}>
               <@fields.city />
             </h3>
-            <h3 data-test-country={{@model.country}}>
+            <h3 data-test-country={{@model.country.value}}>
               <@fields.country />
             </h3>
             <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
@@ -265,7 +265,7 @@ module('Integration | operator-mode', function (hooks) {
       @field trips = contains(Trips);
       @field firstLetterOfTheName = contains(StringField, {
         computeVia: function (this: Person) {
-          return this.firstName[0];
+          return (this.firstName.value ?? '')[0];
         },
       });
       @field title = contains(StringField, {
@@ -276,10 +276,12 @@ module('Integration | operator-mode', function (hooks) {
       @field address = contains(Address);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <h2 data-test-person={{@model.firstName}}>
+          <h2 data-test-person={{@model.firstName.value}}>
             <@fields.firstName />
           </h2>
-          <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
+          <p
+            data-test-first-letter-of-the-name={{@model.firstLetterOfTheName.value}}
+          >
             <@fields.firstLetterOfTheName />
           </p>
           Pet:
@@ -299,7 +301,7 @@ module('Integration | operator-mode', function (hooks) {
       }
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          {{@model}}
+          {{@model.value}}
         </template>
       };
     }
@@ -309,7 +311,7 @@ module('Integration | operator-mode', function (hooks) {
 
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <h2 data-test-pet={{@model.name}}>
+          <h2 data-test-pet={{@model.name.value}}>
             <@fields.name />
             <@fields.boom />
           </h2>
@@ -337,7 +339,7 @@ module('Integration | operator-mode', function (hooks) {
       };
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <span data-test-author='{{@model.firstName}}'>
+          <span data-test-author='{{@model.firstName.value}}'>
             <@fields.firstName />
             <@fields.lastName />
           </span>

@@ -376,7 +376,9 @@ export default class InteractSubmode extends Component<Signature> {
           destinationItem.card,
         );
         let realmURL = destinationRealmURL;
-        sources.sort((a, b) => a.title.localeCompare(b.title));
+        sources.sort((a, b) =>
+          (a.title.value ?? '')?.localeCompare(b.title.value ?? ''),
+        );
         let scrollToCard: CardDef | undefined;
         for (let [index, card] of sources.entries()) {
           let newCard = await this.cardService.copyCard(card, realmURL);

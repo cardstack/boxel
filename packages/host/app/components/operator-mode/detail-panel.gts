@@ -406,7 +406,7 @@ export default class DetailPanel extends Component<Signature> {
               {{! JSON case when visting, eg Author/1.json }}
               <InstanceDefinitionContainer
                 @fileURL={{@readyFile.url}}
-                @name={{@cardInstance.title}}
+                @name={{@cardInstance.title.value}}
                 @fileExtension='.JSON'
                 @infoText={{this.lastModified.value}}
                 @actions={{this.instanceActions}}

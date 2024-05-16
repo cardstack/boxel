@@ -1412,7 +1412,6 @@ module('Integration | card-basics', function (hooks) {
       }
 
       class Post extends CardDef {
-        @field title = contains(TestString);
         @field author = contains(Person);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
@@ -2669,12 +2668,11 @@ module('Integration | card-basics', function (hooks) {
 
 async function testString(label: string) {
   cardApi = await loader.import(`${baseRealm.url}card-api`);
-  let { FieldDef, Component } = cardApi;
-  return class TestString extends FieldDef {
-    static [primitive]: string;
+  let { Component, StringField } = cardApi;
+  return class TestString extends StringField {
     static embedded = class Embedded extends Component<typeof this> {
       <template>
-        <em data-test={{label}}>{{@model}}</em>
+        <em data-test={{label}}>{{@model.value}}</em>
       </template>
     };
   };

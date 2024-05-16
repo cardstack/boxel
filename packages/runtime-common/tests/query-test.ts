@@ -33,13 +33,15 @@ const tests = Object.freeze({
       loader,
     );
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
+    let [mangoSerialized, paperSerialized, vangoghSerialized] =
+      await Promise.all([
+        serializeCard(mango),
+        serializeCard(paper),
+        serializeCard(vangogh),
+      ]);
     assert.deepEqual(
       results,
-      [
-        await serializeCard(mango),
-        await serializeCard(paper),
-        await serializeCard(vangogh),
-      ],
+      [mangoSerialized, paperSerialized, vangoghSerialized],
       'results are correct',
     );
   },
@@ -457,7 +459,7 @@ const tests = Object.freeze({
         card: stringFieldEntry,
         data: {
           search_doc: {
-            title: stringFieldEntry.title,
+            title: stringFieldEntry.title.value ?? null,
             ref: internalKeyFor((stringFieldEntry as any).ref, undefined),
           },
         },
@@ -466,7 +468,7 @@ const tests = Object.freeze({
         card: numberFieldEntry,
         data: {
           search_doc: {
-            title: numberFieldEntry.title,
+            title: numberFieldEntry.title.value ?? null,
             ref: internalKeyFor((numberFieldEntry as any).ref, undefined),
           },
         },
@@ -508,7 +510,7 @@ const tests = Object.freeze({
         card: mangoBirthday,
         data: {
           search_doc: {
-            title: mangoBirthday.title,
+            title: mangoBirthday.title.value ?? null,
             venue: (mangoBirthday as any).venue,
             date: format((mangoBirthday as any).date, 'yyyy-MM-dd'),
           },
@@ -518,7 +520,7 @@ const tests = Object.freeze({
         card: vangoghBirthday,
         data: {
           search_doc: {
-            title: vangoghBirthday.title,
+            title: vangoghBirthday.title.value ?? null,
             venue: (vangoghBirthday as any).venue,
             date: format((vangoghBirthday as any).date, 'yyyy-MM-dd'),
           },

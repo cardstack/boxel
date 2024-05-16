@@ -302,8 +302,8 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       @field title = contains(StringField, {
         computeVia: function (this: PersonField) {
           return this.guestCount
-            ? `${this.fullName} + ${this.guestCount}`
-            : this.fullName;
+            ? `${this.fullName.value} + ${this.guestCount}`
+            : this.fullName.value;
         },
       });
     }

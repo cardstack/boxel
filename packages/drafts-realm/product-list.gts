@@ -25,15 +25,15 @@ class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponent
     <div class='product'>
       <img
         {{on 'click' (fn @viewProduct @model)}}
-        src={{@model.thumbnailURL}}
-        alt={{@model.title}}
+        src={{@model.thumbnailURL.value}}
+        alt={{@model.title.value}}
       />
       <div>
         <div class='seller'>
-          {{@model.seller.title}}
+          {{@model.seller.title.value}}
         </div>
         <div class='title'>
-          {{@model.title}}
+          {{@model.title.value}}
         </div>
         <div class='price'>
           <MonetaryAmountAtom @model={{@model.unitPrice}} />
@@ -216,6 +216,7 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

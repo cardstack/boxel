@@ -122,12 +122,14 @@ module('Integration | card-copy', function (hooks) {
       });
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
+          <h2 data-test-pet={{@model.firstName.value}}><@fields.firstName
+            /></h2>
         </template>
       };
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
+          <h3 data-test-pet={{@model.firstName.value}}><@fields.firstName
+            /></h3>
         </template>
       };
     }
@@ -143,7 +145,8 @@ module('Integration | card-copy', function (hooks) {
       });
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <h2 data-test-person={{@model.firstName}}><@fields.firstName /></h2>
+          <h2 data-test-person={{@model.firstName.value}}><@fields.firstName
+            /></h2>
           <@fields.pet />
         </template>
       };

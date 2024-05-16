@@ -3675,58 +3675,58 @@ posts/ignore-me.json
     });
 
     test(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
-          {
-            let { data: matching } = await indexer.search({
-              filter: {
-                on: {
-                  module: `${testModuleRealm}booking`,
-                  name: 'Booking',
-                },
-                eq: { sponsors: 'Nintendo' },
-              },
-            });
-            assert.deepEqual(
-              matching.map((m) => m.id),
-              [`${paths.url}booking1`],
-              'eq on sponsors',
-            );
-          }
-          {
-            let { data: matching } = await indexer.search({
-              filter: {
-                on: {
-                  module: `${testModuleRealm}booking`,
-                  name: 'Booking',
-                },
-                eq: { sponsors: 'Playstation' },
-              },
-            });
-            assert.strictEqual(
-              matching.length,
-              0,
-              'eq on nonexisting value in sponsors',
-            );
-          }
-          {
-            let { data: matching } = await indexer.search({
-              filter: {
-                on: {
-                  module: `${testModuleRealm}booking`,
-                  name: 'Booking',
-                },
-                eq: {
-                  'hosts.firstName': 'Arthur',
-                  sponsors: null,
-                },
-              },
-            });
-            assert.deepEqual(
-              matching.map((m) => m.id),
-              [`${paths.url}booking2`],
-              'eq on hosts.firstName and null sponsors',
-            );
-          }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: {
+              module: `${testModuleRealm}booking`,
+              name: 'Booking',
+            },
+            eq: { sponsors: 'Nintendo' },
+          },
         });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking1`],
+          'eq on sponsors',
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: {
+              module: `${testModuleRealm}booking`,
+              name: 'Booking',
+            },
+            eq: { sponsors: 'Playstation' },
+          },
+        });
+        assert.strictEqual(
+          matching.length,
+          0,
+          'eq on nonexisting value in sponsors',
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: {
+              module: `${testModuleRealm}booking`,
+              name: 'Booking',
+            },
+            eq: {
+              'hosts.firstName': 'Arthur',
+              sponsors: null,
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking2`],
+          'eq on hosts.firstName and null sponsors',
+        );
+      }
+    });
 
     test('can negate a filter', async function (assert) {
       let { data: matching } = await indexer.search({
@@ -3982,47 +3982,47 @@ posts/ignore-me.json
     });
 
     test(`can sort on multiple paths in combination with 'any' filter`, async function (assert) {
-          let { data: matching } = await indexer.search({
-            sort: [
-              {
-                by: 'author.lastName',
-                on: { module: `${testModuleRealm}book`, name: 'Book' },
+      let { data: matching } = await indexer.search({
+        sort: [
+          {
+            by: 'author.lastName',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+          {
+            by: 'author.firstName',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+            direction: 'desc',
+          },
+        ],
+        filter: {
+          any: [
+            {
+              type: {
+                module: `${testModuleRealm}book`,
+                name: 'Book',
               },
-              {
-                by: 'author.firstName',
-                on: { module: `${testModuleRealm}book`, name: 'Book' },
-                direction: 'desc',
-              },
-            ],
-            filter: {
-              any: [
-                {
-                  type: {
-                    module: `${testModuleRealm}book`,
-                    name: 'Book',
-                  },
-                },
-                {
-                  type: {
-                    module: `${testModuleRealm}article`,
-                    name: 'Article',
-                  },
-                },
-              ],
             },
-          });
-          assert.deepEqual(
-            matching.map((m) => m.id),
-            [
-              `${paths.url}books/2`, // Ab Van Gogh
-              `${paths.url}books/1`, // Ab Mango
-              `${paths.url}books/3`, // Ag Jackie
-              `${paths.url}cards/2`, // De Darrin
-              `${paths.url}card-2`, // Jo Cardy
-              `${paths.url}card-1`, // St Cardy
-            ],
-          );
-        });
+            {
+              type: {
+                module: `${testModuleRealm}article`,
+                name: 'Article',
+              },
+            },
+          ],
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}books/2`, // Ab Van Gogh
+          `${paths.url}books/1`, // Ab Mango
+          `${paths.url}books/3`, // Ag Jackie
+          `${paths.url}cards/2`, // De Darrin
+          `${paths.url}card-2`, // Jo Cardy
+          `${paths.url}card-1`, // St Cardy
+        ],
+      );
+    });
 
     test(`can sort on multiple paths in combination with 'every' filter`, async function (assert) {
       let { data: matching } = await indexer.search({

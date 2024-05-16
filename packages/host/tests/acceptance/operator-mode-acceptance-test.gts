@@ -88,7 +88,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <h3 data-test-pet={{@model.name}}>
+          <h3 data-test-pet={{@model.name.value}}>
             <@fields.name />
           </h3>
         </template>
@@ -105,7 +105,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
+          <span
+            data-test-preferredCarrier={{@model.preferredCarrier.value}}
+          ></span>
           <@fields.preferredCarrier />
         </template>
       };
@@ -151,10 +153,10 @@ module('Acceptance | operator mode tests', function (hooks) {
       @field shippingInfo = contains(ShippingInfo);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <h3 data-test-city={{@model.city}}>
+          <h3 data-test-city={{@model.city.value}}>
             <@fields.city />
           </h3>
-          <h3 data-test-country={{@model.country}}>
+          <h3 data-test-country={{@model.country.value}}>
             <@fields.country />
           </h3>
           <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
@@ -185,10 +187,10 @@ module('Acceptance | operator mode tests', function (hooks) {
       @field friends = linksToMany(Pet);
       @field firstLetterOfTheName = contains(StringField, {
         computeVia: function (this: Person) {
-          if (!this.firstName) {
+          if (!this.firstName.value) {
             return;
           }
-          return this.firstName[0];
+          return this.firstName.value[0];
         },
       });
       @field title = contains(StringField, {
@@ -201,10 +203,12 @@ module('Acceptance | operator mode tests', function (hooks) {
       @field countryWithNoEmbedded = linksTo(CountryWithNoEmbedded);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <h2 data-test-person={{@model.firstName}}>
+          <h2 data-test-person={{@model.firstName.value}}>
             <@fields.firstName />
           </h2>
-          <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
+          <p
+            data-test-first-letter-of-the-name={{@model.firstLetterOfTheName.value}}
+          >
             <@fields.firstLetterOfTheName />
           </p>
           Pet:

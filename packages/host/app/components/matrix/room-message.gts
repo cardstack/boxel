@@ -73,19 +73,21 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   get isFromAssistant() {
-    return this.args.message.author.userId === aiBotUserId;
+    return this.args.message.author?.userId?.value === aiBotUserId;
   }
 
   <template>
     <AiAssistantMessage
       id='message-container-{{@index}}'
       class='room-message'
-      @formattedMessage={{htmlSafe (markdownToHtml @message.formattedMessage)}}
+      @formattedMessage={{htmlSafe
+        (markdownToHtml @message.formattedMessage.value)
+      }}
       @datetime={{@message.created}}
       @isFromAssistant={{this.isFromAssistant}}
       @profileAvatar={{component
         ProfileAvatarIcon
-        userId=@message.author.userId
+        userId=@message.author.userId.value
       }}
       @resources={{this.resources}}
       @errorMessage={{this.errorMessage}}
@@ -96,7 +98,7 @@ export default class RoomMessage extends Component<Signature> {
         @retryAction
       }}
       @isPending={{@isPending}}
-      data-test-boxel-message-from={{@message.author.name}}
+      data-test-boxel-message-from={{@message.author.name.value}}
       ...attributes
     >
       {{#if (eq @message.command.commandType 'patch')}}
@@ -256,8 +258,8 @@ export default class RoomMessage extends Component<Signature> {
       return `Failed to apply changes. ${this.failedCommandState.message}`;
     }
 
-    if (this.args.message.errorMessage) {
-      return this.args.message.errorMessage;
+    if (this.args.message.errorMessage.value) {
+      return this.args.message.errorMessage.value;
     }
 
     if (this.streamingTimeout) {
@@ -283,7 +285,10 @@ export default class RoomMessage extends Component<Signature> {
       return;
     }
     let { payload, eventId } = this.args.message.command;
-    this.matrixService.failedCommandState.delete(eventId);
+    if (!eventId.value) {
+      return;
+    }
+    this.matrixService.failedCommandState.delete(eventId.value);
     try {
       await this.operatorModeStateService.patchCard.perform(
         payload.id,
@@ -291,7 +296,7 @@ export default class RoomMessage extends Component<Signature> {
       );
       await this.matrixService.sendReactionEvent(
         this.args.roomId,
-        eventId,
+        eventId.value,
         'applied',
       );
     } catch (e) {
@@ -301,7 +306,7 @@ export default class RoomMessage extends Component<Signature> {
           : e instanceof Error
           ? e
           : new Error('Unknown error.');
-      this.matrixService.failedCommandState.set(eventId, error);
+      this.matrixService.failedCommandState.set(eventId.value, error);
     }
   });
 
@@ -312,11 +317,11 @@ export default class RoomMessage extends Component<Signature> {
 
   @cached
   private get failedCommandState() {
-    if (!this.args.message.command?.eventId) {
+    if (!this.args.message.command?.eventId.value) {
       return undefined;
     }
     return this.matrixService.failedCommandState.get(
-      this.args.message.command.eventId,
+      this.args.message.command.eventId.value,
     );
   }
 

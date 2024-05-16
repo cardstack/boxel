@@ -92,7 +92,7 @@ module('Integration | card-editor', function (hooks) {
       @field name = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <h3 data-test-pet={{@model.name}}>
+          <h3 data-test-pet={{@model.name.value}}>
             <@fields.name />
           </h3>
         </template>
@@ -103,7 +103,7 @@ module('Integration | card-editor', function (hooks) {
       @field favoriteToy = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <h3 data-test-pet={{@model.name}}>
+          <h3 data-test-pet={{@model.name.value}}>
             <@fields.name />
             (plays with
             <@fields.favoriteToy />)
@@ -117,7 +117,7 @@ module('Integration | card-editor', function (hooks) {
       @field pet = linksTo(Pet);
       static isolated = class Embedded extends Component<typeof this> {
         <template>
-          <h2 data-test-person={{@model.firstName}}>
+          <h2 data-test-person={{@model.firstName.value}}>
             <@fields.firstName />
           </h2>
           Pet:
@@ -233,7 +233,7 @@ module('Integration | card-editor', function (hooks) {
       @field firstName = contains(StringField);
       @field nickName = contains(StringField, {
         computeVia: function (this: TestCard) {
-          return `${this.firstName}-poo`;
+          return `${this.firstName.value}-poo`;
         },
       });
       @field lastName = contains(StringField);
