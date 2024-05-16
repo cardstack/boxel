@@ -1,7 +1,6 @@
 import { Room, MatrixClient } from 'matrix-js-sdk';
 import { setTitle } from './set-title';
 import { sendError, sendOption, sendMessage } from './matrix';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 import OpenAI from 'openai';
 
 import * as Sentry from '@sentry/node';
@@ -11,7 +10,6 @@ export async function handleDebugCommands(
   eventBody: string,
   client: MatrixClient,
   room: Room,
-  history: DiscreteMatrixEvent[],
   userId: string,
 ) {
   // Explicitly set the room name
@@ -31,7 +29,7 @@ export async function handleDebugCommands(
   }
   // Use GPT to set the room title
   else if (eventBody.startsWith('debug:title:create')) {
-    return await setTitle(openai, client, room, history, userId);
+    return await setTitle(openai, client, room, [], userId);
   } else if (eventBody.startsWith('debug:patch:')) {
     let patchMessage = eventBody.split('debug:patch:')[1];
     // If there's a card attached, we need to split it off to parse the json

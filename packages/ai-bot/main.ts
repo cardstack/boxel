@@ -61,17 +61,12 @@ class Assistant {
     }
   }
 
-  async handleDebugCommands(
-    eventBody: string,
-    room: Room,
-    history: DiscreteMatrixEvent[],
-  ) {
+  async handleDebugCommands(eventBody: string, room: Room) {
     return handleDebugCommands(
       this.openai,
       eventBody,
       this.client,
       room,
-      history,
       this.id,
     );
   }
@@ -293,17 +288,14 @@ Common issues are:
   //handle debug events
   client.on(RoomEvent.Timeline, async function (event, room) {
     let eventBody = event.getContent().body;
-    if (!eventBody.startsWith('debug:')) {
+    let isDebugEvent = eventBody.startsWith('debug:');
+    if (!isDebugEvent) {
       return;
     }
     if (!room) {
       return;
     }
-    //very inefficient to load initial
-    let initial = await client.roomInitialSync(room!.roomId, 1000);
-    let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
-    let history: DiscreteMatrixEvent[] = constructHistory(eventList);
-    return await assistant.handleDebugCommands(eventBody, room, history);
+    return await assistant.handleDebugCommands(eventBody, room);
   });
 
   await client.startClient();
