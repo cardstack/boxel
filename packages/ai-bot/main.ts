@@ -262,18 +262,6 @@ Common issues are:
         let history: DiscreteMatrixEvent[] = constructHistory(eventList);
         log.info("Compressed into just the history that's ", history.length);
 
-        // To assist debugging, handle explicit commands
-        if (eventBody.startsWith('debug:')) {
-          return await handleDebugCommands(
-            openai,
-            eventBody,
-            client,
-            room,
-            history,
-            aiBotUserId,
-          );
-        }
-
         let initialMessage = await sendMessage(
           client,
           room,
@@ -377,6 +365,7 @@ Common issues are:
     },
   );
 
+  //handle reaction events
   client.on(RoomEvent.Timeline, async function (event, room) {
     if (event.getType() !== 'm.reaction') {
       return;
@@ -404,6 +393,29 @@ Common issues are:
       Sentry.captureException(e);
       return;
     }
+  });
+
+  //handle debug events
+  client.on(RoomEvent.Timeline, async function (event, room) {
+    let eventBody = event.getContent().body;
+    if (!eventBody.startsWith('debug:')) {
+      return;
+    }
+    if (!room) {
+      return;
+    }
+    //very inefficient to load initial
+    let initial = await client.roomInitialSync(room!.roomId, 1000);
+    let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
+    let history: DiscreteMatrixEvent[] = constructHistory(eventList);
+    return await handleDebugCommands(
+      openai,
+      eventBody,
+      client,
+      room,
+      history,
+      aiBotUserId,
+    );
   });
 
   await client.startClient();
