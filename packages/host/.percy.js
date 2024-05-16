@@ -7,7 +7,7 @@ module.exports = {
         visibility: hidden;
       }
 
-      #ember1420 {display: none !important;}
+      .create-file { display: none !important; }
     `,
   },
 };
