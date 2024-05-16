@@ -1966,7 +1966,7 @@ module('Realm Server', function (hooks) {
         .auth('cardstack', process.env.BOXEL_HTTP_BASIC_PW);
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.ok(
-        /https?:\/\/[^\/]+\/__boxel\/assets\/vendor\.css/.test(response.text),
+        /https?:\/\/[^/]+\/__boxel\/assets\/vendor\.css/.test(response.text),
         'the HTML returned is correct',
       );
     });
