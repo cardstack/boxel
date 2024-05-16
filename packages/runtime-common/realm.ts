@@ -296,7 +296,7 @@ export class Realm {
       queue: Queue;
       virtualNetwork: VirtualNetwork;
       onIndexer?: (indexer: Indexer) => Promise<void>;
-      assetsURL?: URL;
+      assetsURL: URL;
     },
     opts?: Options,
   ) {

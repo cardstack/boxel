@@ -5,6 +5,8 @@ import {
   VirtualNetwork,
   logger,
   RunnerOptionsManager,
+  baseRealm,
+  assetsDir,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -155,8 +157,19 @@ if (distURL) {
   dist = resolve(distDir);
 }
 
-// take the base url from the arg (check fromUrl and toUrl)
-let assetsURL = new URL(distURL || 'http://localhost:4201/base/__boxel/');
+let assetsURL;
+
+if (distURL) {
+  assetsURL = new URL(distURL);
+} else {
+  // Default to the base dist URL for assets
+  let baseRealmDistUrlPair = hrefs!.find((pair) => pair[0] == baseRealm.url);
+  if (baseRealmDistUrlPair) {
+    assetsURL = new URL(`${baseRealmDistUrlPair[1]}${assetsDir}`); // Final resolved absolute URL for assets
+  } else {
+    throw new Error(`Base realm dist URL not found.`);
+  }
+}
 
 (async () => {
   let realms: Realm[] = [];
@@ -234,9 +247,7 @@ let assetsURL = new URL(distURL || 'http://localhost:4201/base/__boxel/');
     virtualNetwork.mount(realm.maybeExternalHandle);
   }
 
-  let server = new RealmServer(realms, virtualNetwork, {
-    ...{ assetsURL },
-  });
+  let server = new RealmServer(realms, virtualNetwork);
 
   server.listen(port);
   log.info(`Realm server listening on port ${port}:`);
