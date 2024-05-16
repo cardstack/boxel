@@ -27,7 +27,9 @@ import {
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import percySnapshot from '@percy/ember';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -1084,6 +1086,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await waitForCodeEditor();
 
+    await percySnapshot(assert); // FIXME remove???
     assert.dom('[data-test-syntax-errors]').hasText('File is empty');
   });
 });
