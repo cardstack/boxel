@@ -14,7 +14,7 @@ import {
   getModifyPrompt,
   cleanContent,
   getTools,
-  isPatchReactionEvent
+  isPatchReactionEvent,
 } from './helpers';
 import { shouldSetRoomTitle, setTitle } from './lib/set-title';
 import { OpenAIError } from 'openai/error';
@@ -232,7 +232,7 @@ async function handleDebugCommands(
     }
     return await sendOption(client, room, command, undefined);
   }
-  return 
+  return;
 }
 
 (async () => {
@@ -430,39 +430,34 @@ Common issues are:
     },
   );
 
-
-  client.on(
-    RoomEvent.Timeline,
-    async function (event, room) {
-      if(event.getType() !== 'm.reaction'){
-        return 
-      }
-      try {
-        if (!room) {
-          return;
-        }
-        let initial = await client.roomInitialSync(room!.roomId, 1000);
-        let eventList = (initial!.messages?.chunk ||
-          []) as DiscreteMatrixEvent[];
-        let history: DiscreteMatrixEvent[] = constructHistory(eventList);
-        if (isPatchReactionEvent(event)) {
-          return await setTitle(
-            openai,
-            client,
-            room,
-            history,
-            aiBotUserId,
-            event,
-          );
-        }
-        return 
-      } catch (e) {
-        log.error(e);
-        Sentry.captureException(e);
+  client.on(RoomEvent.Timeline, async function (event, room) {
+    if (event.getType() !== 'm.reaction') {
+      return;
+    }
+    try {
+      if (!room) {
         return;
       }
+      let initial = await client.roomInitialSync(room!.roomId, 1000);
+      let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
+      let history: DiscreteMatrixEvent[] = constructHistory(eventList);
+      if (isPatchReactionEvent(event)) {
+        return await setTitle(
+          openai,
+          client,
+          room,
+          history,
+          aiBotUserId,
+          event,
+        );
+      }
+      return;
+    } catch (e) {
+      log.error(e);
+      Sentry.captureException(e);
+      return;
     }
-  );
+  });
 
   await client.startClient();
   log.info('client started');
