@@ -20,6 +20,7 @@ import {
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
+  assetsDir,
 } from '@cardstack/runtime-common';
 
 import {
@@ -548,6 +549,7 @@ async function setupTestRealm({
       });
       await worker.run();
     },
+    assetsURL: new URL(`${realmURL}${assetsDir}`),
   });
   virtualNetwork.mount(realm.maybeHandle);
 
