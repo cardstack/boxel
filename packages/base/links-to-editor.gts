@@ -52,46 +52,50 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
             {{@field.card.displayName}}
           </AddButton>
         {{else}}
+          {{#if realmSession.canWrite}}
+            <IconButton
+              @variant='primary'
+              @icon={{IconMinusCircle}}
+              @width='20px'
+              @height='20px'
+              class='remove'
+              {{on 'click' this.remove}}
+              disabled={{this.isEmpty}}
+              aria-label='Remove'
+              data-test-remove-card
+            />
+          {{/if}}
           <DefaultFormatProvider @value='embedded'>
             <this.linkedCard />
           </DefaultFormatProvider>
-
-          {{#if realmSession.canWrite}}
-            <div class='remove-button-container'>
-              <IconButton
-                @variant='primary'
-                @icon={{IconMinusCircle}}
-                @width='20px'
-                @height='20px'
-                class='remove'
-                {{on 'click' this.remove}}
-                disabled={{this.isEmpty}}
-                aria-label='Remove'
-                data-test-remove-card
-              />
-            </div>
-          {{/if}}
         {{/if}}
       </div>
     </RealmSessionConsumer>
     <style>
       .links-to-editor {
+        --remove-icon-size: var(--boxel-icon-lg);
         position: relative;
+        display: grid;
+        grid-template-columns: 1fr var(--remove-icon-size);
       }
-      .remove-button-container {
-        position: absolute;
-        top: 0;
-        left: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
+      .links-to-editor > :deep(.boxel-card-container.embedded-format) {
+        order: -1;
       }
       .remove {
         --icon-color: var(--boxel-light);
+        align-self: center;
+        outline: 0;
       }
+      .remove:focus,
       .remove:hover {
         --icon-bg: var(--boxel-dark);
         --icon-border: var(--boxel-dark);
+      }
+      .remove:focus + :deep(.boxel-card-container.embedded-format),
+      .remove:hover + :deep(.boxel-card-container.embedded-format) {
+        box-shadow:
+          0 0 0 1px var(--boxel-light-500),
+          var(--boxel-box-shadow-hover);
       }
     </style>
   </template>

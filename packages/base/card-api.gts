@@ -1859,10 +1859,15 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-xl);
       }
-      .default-card-template.edit {
-        padding-right: var(
-          --boxel-sp-xxl
-        ); /* allow room for trash/delete icons that appear on hover */
+      /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
+      .default-card-template.edit
+        > .boxel-field
+        > :deep(
+          *:nth-child(2):not(.links-to-many-editor):not(
+              .contains-many-editor
+            ):not(.links-to-editor)
+        ) {
+        padding-right: var(--boxel-icon-lg);
       }
     </style>
   </template>
