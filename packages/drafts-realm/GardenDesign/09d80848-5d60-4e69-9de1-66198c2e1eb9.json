@@ -2,10 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "width": 9,
-      "length": 6,
+      "width": 10,
+      "length": 10,
       "unitPx": 50,
-      "title": null,
+      "title": "Wildflower Garden",
       "description": null,
       "thumbnailURL": null
     },
