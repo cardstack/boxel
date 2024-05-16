@@ -8,13 +8,13 @@ import {
   RealmPermissions,
   VirtualNetwork,
   Worker,
+  RunnerOptionsManager,
   type MatrixConfig,
   type Queue,
+  type IndexRunner,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
-import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { type IndexRunner } from '@cardstack/runtime-common/search-index';
 import { RealmServer } from '../../server';
 import PgAdapter from '../../pg-adapter';
 import PgQueue from '../../pg-queue';
@@ -116,6 +116,7 @@ export async function createRealm({
   queue,
   dbAdapter,
   matrixConfig = testMatrix,
+  deferStartUp,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -125,6 +126,7 @@ export async function createRealm({
   matrixConfig?: MatrixConfig;
   queue: Queue;
   dbAdapter: PgAdapter;
+  deferStartUp?: true;
 }): Promise<Realm> {
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
@@ -142,31 +144,34 @@ export async function createRealm({
   }
 
   let adapter = new NodeAdapter(dir);
-  return new Realm({
-    url: realmURL,
-    adapter,
-    indexRunner,
-    runnerOptsMgr: manager,
-    getIndexHTML: async () =>
-      readFileSync(join(distPath, 'index.html')).toString(),
-    matrix: matrixConfig,
-    permissions,
-    realmSecretSeed: "shhh! it's a secret",
-    virtualNetwork,
-    ...((globalThis as any).__enablePgIndexer?.() ? { dbAdapter, queue } : {}),
-    onIndexer: async (indexer) => {
-      let worker = new Worker({
-        realmURL: new URL(realmURL!),
-        indexer,
-        queue,
-        realmAdapter: adapter,
-        runnerOptsManager: manager,
-        loader: virtualNetwork.createLoader(),
-        indexRunner,
-      });
-      await worker.run();
+  let realm = new Realm(
+    {
+      url: realmURL,
+      adapter,
+      getIndexHTML: async () =>
+        readFileSync(join(distPath, 'index.html')).toString(),
+      matrix: matrixConfig,
+      permissions,
+      realmSecretSeed: "shhh! it's a secret",
+      virtualNetwork,
+      dbAdapter,
+      queue,
+      onIndexer: async (indexer) => {
+        let worker = new Worker({
+          realmURL: new URL(realmURL!),
+          indexer,
+          queue,
+          realmAdapter: adapter,
+          runnerOptsManager: manager,
+          loader: realm.loaderTemplate,
+          indexRunner,
+        });
+        await worker.run();
+      },
     },
-  });
+    { deferStartUp },
+  );
+  return realm;
 }
 
 export function setupBaseRealmServer(
