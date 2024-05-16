@@ -14,6 +14,7 @@ import {
   getModifyPrompt,
   cleanContent,
   getTools,
+  isPatchReactionEvent
 } from './helpers';
 import { shouldSetRoomTitle, setTitle } from './lib/set-title';
 import { OpenAIError } from 'openai/error';
@@ -444,7 +445,7 @@ Common issues are:
         let eventList = (initial!.messages?.chunk ||
           []) as DiscreteMatrixEvent[];
         let history: DiscreteMatrixEvent[] = constructHistory(eventList);
-        if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
+        if (isPatchReactionEvent(event)) {
           return await setTitle(
             openai,
             client,
