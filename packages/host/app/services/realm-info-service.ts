@@ -100,9 +100,12 @@ export default class RealmInfoService extends Service {
       if (this.cachedRealmInfos.has(realmURLString)) {
         return this.cachedRealmInfos.get(realmURLString)!;
       } else {
-        let realmInfoResponse = await this.cachedFetch(`${realmURLString}_info`, {
-          headers: { Accept: SupportedMimeType.RealmInfo },
-        });
+        let realmInfoResponse = await this.cachedFetch(
+          `${realmURLString}_info`,
+          {
+            headers: { Accept: SupportedMimeType.RealmInfo },
+          },
+        );
 
         //The usage of `clone()` is to avoid the `json already read` error.
         let realmInfo = (await realmInfoResponse.clone().json())?.data
