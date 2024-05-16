@@ -487,6 +487,7 @@ module(`Integration | search-index`, function (hooks) {
             attributes: {
               title: 'Person Card',
               description: 'Catalog entry for Person card',
+              isField: false,
               ref: {
                 module: './person',
                 name: 'Person',
@@ -1365,6 +1366,7 @@ module(`Integration | search-index`, function (hooks) {
             attributes: {
               title: 'Booking',
               description: 'Catalog entry for Booking',
+              isField: false,
               ref: {
                 module: 'http://localhost:4202/test/booking',
                 name: 'Booking',
@@ -1697,6 +1699,7 @@ module(`Integration | search-index`, function (hooks) {
             attributes: {
               title: 'PetPerson',
               description: 'Catalog entry for PetPerson',
+              isField: false,
               ref: {
                 module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
@@ -3038,6 +3041,7 @@ posts/ignore-me.json
           attributes: {
             title: 'Post',
             description: 'A card that represents a blog post',
+            isField: false,
             ref: {
               module: `${testModuleRealm}post`,
               name: 'Post',
@@ -3057,6 +3061,7 @@ posts/ignore-me.json
           attributes: {
             title: 'Article',
             description: 'A card that represents an online article ',
+            isField: false,
             ref: {
               module: `${testModuleRealm}article`,
               name: 'Article',

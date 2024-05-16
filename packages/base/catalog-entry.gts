@@ -4,14 +4,12 @@ import {
   Component,
   CardDef,
   FieldDef,
-  BaseDef,
   relativeTo,
   realmInfo,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
 import CodeRef from './code-ref';
-import { isFieldDef, loadCard, Loader } from '@cardstack/runtime-common';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import GlimmerComponent from '@glimmer/component';
@@ -23,26 +21,8 @@ export class CatalogEntry extends CardDef {
   @field ref = contains(CodeRef);
 
   // If it's not a field, then it's a card
-  @field isField = contains(BooleanField, {
-    computeVia: async function (this: CatalogEntry) {
-      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
+  @field isField = contains(BooleanField);
 
-      if (!loader) {
-        throw new Error(
-          'Could not find a loader for this instance’s class’s module',
-        );
-      }
-
-      let card: typeof BaseDef | undefined = await loadCard(this.ref, {
-        loader,
-        relativeTo: this[relativeTo],
-      });
-      if (!card) {
-        throw new Error(`Could not load card '${this.ref.name}'`);
-      }
-      return isFieldDef(card);
-    },
-  });
   @field moduleHref = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return new URL(this.ref.module, this[relativeTo]).href;

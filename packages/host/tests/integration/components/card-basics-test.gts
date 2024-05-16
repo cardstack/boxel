@@ -1154,56 +1154,6 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
     });
 
-    test('catalog entry isField indicates if the catalog entry is a field card', async function (assert) {
-      let { CatalogEntry } = catalogEntry;
-
-      let cardEntry = new CatalogEntry({
-        title: 'CatalogEntry Card',
-        ref: {
-          module: 'https://cardstack.com/base/catalog-entry',
-          name: 'CatalogEntry',
-        },
-      });
-      let fieldEntry = new CatalogEntry({
-        title: 'String Card',
-        ref: {
-          module: 'https://cardstack.com/base/string',
-          name: 'default',
-        },
-      });
-
-      await cardApi.recompute(cardEntry, { recomputeAllFields: true });
-      await cardApi.recompute(fieldEntry, { recomputeAllFields: true });
-
-      assert.strictEqual(cardEntry.isField, false, 'isField is correct');
-      assert.strictEqual(fieldEntry.isField, true, 'isField is correct');
-    });
-
-    test('catalog entry isField indicates if the catalog entry references a card descended from FieldDef', async function (assert) {
-      let { CatalogEntry } = catalogEntry;
-
-      let cardFromCardDef = new CatalogEntry({
-        title: 'CatalogEntry Card',
-        ref: {
-          module: 'https://cardstack.com/base/catalog-entry',
-          name: 'CatalogEntry',
-        },
-      });
-      let cardFromFieldDef = new CatalogEntry({
-        title: 'String Card',
-        ref: {
-          module: 'https://cardstack.com/base/string',
-          name: 'default',
-        },
-      });
-
-      await cardApi.recompute(cardFromCardDef, { recomputeAllFields: true });
-      await cardApi.recompute(cardFromFieldDef, { recomputeAllFields: true });
-
-      assert.strictEqual(cardFromCardDef.isField, false, 'isField is correct');
-      assert.strictEqual(cardFromFieldDef.isField, true, 'isField is correct');
-    });
-
     test('render whole composite field', async function (assert) {
       let { field, contains, FieldDef, CardDef, Component } = cardApi;
       let { default: StringField } = string;

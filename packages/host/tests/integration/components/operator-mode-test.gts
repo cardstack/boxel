@@ -574,6 +574,7 @@ module('Integration | operator-mode', function (hooks) {
             attributes: {
               title: 'Publishing Packet',
               description: 'Catalog entry for PublishingPacket',
+              isField: false,
               ref: {
                 module: `${testRealmURL}publishing-packet`,
                 name: 'PublishingPacket',
@@ -611,6 +612,7 @@ module('Integration | operator-mode', function (hooks) {
             attributes: {
               title: 'General Pet Room',
               description: 'Catalog entry for Pet Room Card',
+              isField: false,
               ref: {
                 module: `${testRealmURL}pet-room`,
                 name: 'PetRoom',
@@ -642,6 +644,7 @@ module('Integration | operator-mode', function (hooks) {
                 module: `${testRealmURL}pet`,
                 name: 'Pet',
               },
+              isField: false,
               demo: {
                 name: 'Snoopy',
               },
