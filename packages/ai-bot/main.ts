@@ -6,6 +6,7 @@ import {
   createClient,
   Room,
   MatrixClient,
+  type MatrixEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
@@ -31,7 +32,58 @@ if (process.env.SENTRY_DSN) {
 
 let log = logger('ai-bot');
 
-const openai = new OpenAI();
+class Assistant {
+  private openai: OpenAI;
+  private client: MatrixClient;
+  id: string;
+
+  constructor(client: MatrixClient, id: string) {
+    this.openai = new OpenAI();
+    this.id = id;
+    this.client = client;
+  }
+
+  getResponse(history: DiscreteMatrixEvent[]) {
+    let tools = getTools(history, this.id);
+    let messages = getModifyPrompt(history, this.id, tools);
+    if (tools.length === 0) {
+      return this.openai.beta.chat.completions.stream({
+        model: 'gpt-4o',
+        messages: messages,
+      });
+    } else {
+      return this.openai.beta.chat.completions.stream({
+        model: 'gpt-4o',
+        messages: messages,
+        tools: tools,
+        tool_choice: 'auto',
+      });
+    }
+  }
+
+  async handleDebugCommands(
+    eventBody: string,
+    room: Room,
+    history: DiscreteMatrixEvent[],
+  ) {
+    return handleDebugCommands(
+      this.openai,
+      eventBody,
+      this.client,
+      room,
+      history,
+      this.id,
+    );
+  }
+
+  async setTitle(
+    room: Room,
+    history: DiscreteMatrixEvent[],
+    event?: MatrixEvent,
+  ) {
+    return setTitle(this.openai, this.client, room, history, this.id, event);
+  }
+}
 
 let startTime = Date.now();
 
@@ -126,24 +178,6 @@ export async function sendOption(
   );
 }
 
-function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
-  let tools = getTools(history, aiBotUsername);
-  let messages = getModifyPrompt(history, aiBotUsername, tools);
-  if (tools.length === 0) {
-    return openai.beta.chat.completions.stream({
-      model: 'gpt-4o',
-      messages: messages,
-    });
-  } else {
-    return openai.beta.chat.completions.stream({
-      model: 'gpt-4o',
-      messages: messages,
-      tools: tools,
-      tool_choice: 'auto',
-    });
-  }
-}
-
 function getErrorMessage(error: any): string {
   if (error instanceof OpenAIError) {
     return `OpenAI error: ${error.name} - ${error.message}`;
@@ -210,6 +244,8 @@ Common issues are:
       process.exit(1);
     });
   let { user_id: aiBotUserId } = auth;
+  let assistant = new Assistant(client, aiBotUserId);
+
   client.on(RoomMemberEvent.Membership, function (_event, member) {
     if (member.membership === 'invite' && member.userId === aiBotUserId) {
       client
@@ -271,7 +307,8 @@ Common issues are:
 
         let unsent = 0;
         let thinkingMessageReplaced = false;
-        const runner = getResponse(history, aiBotUserId)
+        const runner = assistant
+          .getResponse(history)
           .on('content', async (_delta, snapshot) => {
             unsent += 1;
             if (unsent > 40) {
@@ -347,14 +384,7 @@ Common issues are:
         }
 
         if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
-          return await setTitle(
-            openai,
-            client,
-            room,
-            history,
-            aiBotUserId,
-            event,
-          );
+          return await assistant.setTitle(room, history, event);
         }
         return;
       } catch (e) {
@@ -378,14 +408,7 @@ Common issues are:
       let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
       let history: DiscreteMatrixEvent[] = constructHistory(eventList);
       if (isPatchReactionEvent(event)) {
-        return await setTitle(
-          openai,
-          client,
-          room,
-          history,
-          aiBotUserId,
-          event,
-        );
+        return await assistant.setTitle(room, history, event);
       }
       return;
     } catch (e) {
@@ -408,14 +431,7 @@ Common issues are:
     let initial = await client.roomInitialSync(room!.roomId, 1000);
     let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
     let history: DiscreteMatrixEvent[] = constructHistory(eventList);
-    return await handleDebugCommands(
-      openai,
-      eventBody,
-      client,
-      room,
-      history,
-      aiBotUserId,
-    );
+    return await assistant.handleDebugCommands(eventBody, room, history);
   });
 
   await client.startClient();
