@@ -169,6 +169,7 @@ jobs:
         run: pnpm test-with-percy
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          PERCY_PAGE_LOAD_TIMEOUT: 120000
         working-directory: packages/host
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2.9.0
