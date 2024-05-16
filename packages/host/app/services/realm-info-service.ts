@@ -104,6 +104,7 @@ export default class RealmInfoService extends Service {
           headers: { Accept: SupportedMimeType.RealmInfo },
         });
 
+        //The usage of `clone()` is to avoid the `json already read` error.
         let realmInfo = (await realmInfoResponse.clone().json())?.data
           ?.attributes as RealmInfo;
         let realmSession = getRealmSession(this, {
