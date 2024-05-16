@@ -1,6 +1,6 @@
 import { Room, MatrixClient } from 'matrix-js-sdk';
 import { setTitle } from './set-title';
-import { sendError, sendOption, sendMessage } from '../main';
+import { sendError, sendOption, sendMessage } from './matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 import OpenAI from 'openai';
 
