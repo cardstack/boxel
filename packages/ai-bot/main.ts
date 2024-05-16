@@ -138,14 +138,6 @@ Common issues are:
         if (!room) {
           return;
         }
-        log.info(
-          '(%s) (Room: "%s" %s) (Message: %s %s)',
-          event.getType(),
-          room?.name,
-          room?.roomId,
-          event.getSender(),
-          eventBody,
-        );
 
         if (event.event.origin_server_ts! < startTime) {
           return;
@@ -162,6 +154,14 @@ Common issues are:
         if (event.getSender() === aiBotUserId) {
           return;
         }
+        log.info(
+          '(%s) (Room: "%s" %s) (Message: %s %s)',
+          event.getType(),
+          room?.name,
+          room?.roomId,
+          event.getSender(),
+          eventBody,
+        );
 
         let initial = await client.roomInitialSync(room!.roomId, 1000);
         let eventList = (initial!.messages?.chunk ||
@@ -269,20 +269,25 @@ Common issues are:
 
   //handle reaction events
   client.on(RoomEvent.Timeline, async function (event, room) {
-    if (event.getType() !== 'm.reaction') {
+    if (!room) {
       return;
     }
+    if (!isPatchReactionEvent(event)) {
+      return;
+    }
+    log.info(
+      '(%s) (Room: "%s" %s) (Message: %s %s)',
+      event.getType(),
+      room?.name,
+      room?.roomId,
+      event.getSender(),
+      undefined,
+    );
     try {
-      if (!room) {
-        return;
-      }
       let initial = await client.roomInitialSync(room!.roomId, 1000);
       let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
       let history: DiscreteMatrixEvent[] = constructHistory(eventList);
-      if (isPatchReactionEvent(event)) {
-        return await assistant.setTitle(room, history, event);
-      }
-      return;
+      return await assistant.setTitle(room, history, event);
     } catch (e) {
       log.error(e);
       Sentry.captureException(e);
@@ -298,14 +303,22 @@ Common issues are:
     if (event.getType() !== 'm.room.message') {
       return;
     }
+    if (!room) {
+      return;
+    }
     let eventBody = event.getContent().body;
     let isDebugEvent = eventBody.startsWith('debug:');
     if (!isDebugEvent) {
       return;
     }
-    if (!room) {
-      return;
-    }
+    log.info(
+      '(%s) (Room: "%s" %s) (Message: %s %s)',
+      event.getType(),
+      room?.name,
+      room?.roomId,
+      event.getSender(),
+      eventBody,
+    );
     return await assistant.handleDebugCommands(eventBody, room);
   });
 
