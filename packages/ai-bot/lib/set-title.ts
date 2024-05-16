@@ -9,8 +9,14 @@ import {
   type OpenAIPromptMessage,
   isPatchReactionEvent,
   isPatchCommandEvent,
+  attachedCardsToMessage,
 } from '../helpers';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+
+const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
+Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context. 
+The user can optionally apply 'patchCard' by sending data about fields to update. 
+Explain the general actions and user intent. If 'patchCard' was used, express the title in an active sentence. Do NOT use the word "patch" in the title.`;
 
 export async function setTitle(
   openai: OpenAI,
@@ -23,13 +29,10 @@ export async function setTitle(
   let startOfConversation: OpenAIPromptMessage[] = [
     {
       role: 'system',
-      content: `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
-                Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context. 
-                The user can optionally apply 'patchCard' by sending data about fields to update. 
-                Explain the general actions and user intent.`,
+      content: SET_TITLE_SYSTEM_MESSAGE,
     },
     ...getStartOfConversation(history, userId),
-    ...getLatestPatchApplyMessage(history, event),
+    ...getLatestPatchApplyMessage(history, userId, event),
     {
       role: 'user',
       content: 'Create a short title for this chat, limited to 6 words.',
@@ -88,6 +91,7 @@ export function getStartOfConversation(
 
 export const getLatestPatchApplyMessage = (
   history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
   event?: MatrixEvent,
 ): OpenAIPromptMessage[] => {
   if (event) {
@@ -99,12 +103,15 @@ export const getLatestPatchApplyMessage = (
       return [];
     }
     if (isPatchCommandEvent(commandEvent)) {
-      let patchString = JSON.stringify(commandEvent.content.data.command);
+      let patchMessage = JSON.stringify(commandEvent.content.data.command);
+      let content = `Applying patchCard with the payload ${patchMessage}. The patch being made is applied to the following ${attachedCardsToMessage(
+        history,
+        aiBotUserId,
+      )}`;
       return [
         {
           role: 'user',
-          content: `Applying patch with the following data ${patchString}  
-        `,
+          content,
         },
       ];
     }

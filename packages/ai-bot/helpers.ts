@@ -232,9 +232,7 @@ export function getModifyPrompt(
     `
   The user currently has given you the following data to work with:
   Cards:\n`;
-  for (let card of getRelevantCards(history, aiBotUserId)) {
-    systemMessage += `Full data: ${JSON.stringify(card)}`;
-  }
+  systemMessage += attachedCardsToMessage(history, aiBotUserId);
   if (tools.length == 0) {
     systemMessage +=
       'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached';
@@ -250,6 +248,16 @@ export function getModifyPrompt(
   messages = messages.concat(historicalMessages);
   return messages;
 }
+
+export const attachedCardsToMessage = (
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+) => {
+  for (let card of getRelevantCards(history, aiBotUserId)) {
+    return `Full card data: ${JSON.stringify(card)}`;
+  }
+  return;
+};
 
 export function cleanContent(content: string) {
   content = content.trim();
