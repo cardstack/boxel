@@ -165,6 +165,7 @@ export async function createRealm({
       });
       await worker.run();
     },
+    assetsURL: new URL('http://localhost:4441/__boxel/'),
   });
   return realm;
 }
