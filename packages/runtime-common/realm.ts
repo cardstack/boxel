@@ -1111,6 +1111,12 @@ export class Realm {
   }
 
   private transpileJS(content: string, debugFilename: string): string {
+    let contentIsAllWhitespace = content.match(/^\s*$/);
+
+    if (contentIsAllWhitespace) {
+      throw new Error('File is empty');
+    }
+
     let hash = md5(content);
     let cached = this.#transpileCache.get(hash);
     if (cached) {
