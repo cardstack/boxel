@@ -287,6 +287,12 @@ Common issues are:
 
   //handle debug events
   client.on(RoomEvent.Timeline, async function (event, room) {
+    if (event.event.origin_server_ts! < startTime) {
+      return;
+    }
+    if (event.getType() !== 'm.room.message') {
+      return;
+    }
     let eventBody = event.getContent().body;
     let isDebugEvent = eventBody.startsWith('debug:');
     if (!isDebugEvent) {
