@@ -21,7 +21,7 @@ export async function sendEvent(
       event_id: eventToUpdate,
     };
   }
-  log.info('Sending', content);
+  log.debug('sending event', content);
   return await client.sendEvent(room.roomId, eventType, content);
 }
 
@@ -32,7 +32,7 @@ export async function sendMessage(
   eventToUpdate: string | undefined,
   data: any = {},
 ) {
-  log.info('Sending', content);
+  log.debug('sending message', content);
   let messageObject: IContent = {
     ...{
       body: content,
@@ -66,7 +66,7 @@ export async function sendOption(
   patch: any,
   eventToUpdate: string | undefined,
 ) {
-  log.info('sending option', patch);
+  log.debug('sending option', patch);
   const id = patch['card_id'];
   const body = patch['description'] || "Here's the change:";
   let messageObject = {
@@ -86,7 +86,6 @@ export async function sendOption(
       },
     },
   };
-  log.info(JSON.stringify(messageObject, null, 2));
   return await sendEvent(
     client,
     room,

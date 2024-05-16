@@ -118,7 +118,7 @@ Common issues are:
       client
         .joinRoom(member.roomId)
         .then(function () {
-          log.info('Auto-joined %s', member.roomId);
+          log.info('%s auto-joined %s', member.name, member.roomId);
         })
         .catch(function (err) {
           log.info(
@@ -138,7 +138,14 @@ Common issues are:
         if (!room) {
           return;
         }
-        log.info('(%s) %s :: %s', room?.name, event.getSender(), eventBody);
+        log.info(
+          '(%s) (Room: "%s" %s) (Message: %s %s)',
+          event.getType(),
+          room?.name,
+          room?.roomId,
+          event.getSender(),
+          eventBody,
+        );
 
         if (event.event.origin_server_ts! < startTime) {
           return;
@@ -159,8 +166,6 @@ Common issues are:
         let initial = await client.roomInitialSync(room!.roomId, 1000);
         let eventList = (initial!.messages?.chunk ||
           []) as DiscreteMatrixEvent[];
-        log.info(eventList);
-
         log.info('Total event list', eventList.length);
         let history: DiscreteMatrixEvent[] = constructHistory(eventList);
         log.info("Compressed into just the history that's ", history.length);
@@ -195,7 +200,7 @@ Common issues are:
             if (msg.role === 'assistant') {
               for (const toolCall of msg.tool_calls || []) {
                 const functionCall = toolCall.function;
-                console.log('Function call', toolCall);
+                log.debug('[Room Timeline] Function call', toolCall);
                 let args;
                 try {
                   args = JSON.parse(functionCall.arguments);
