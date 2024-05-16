@@ -1,5 +1,6 @@
 import { UserName } from './user-name';
 import { UserEmail } from './user-email';
+import { AddressInfo } from './address-info';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
@@ -12,10 +13,9 @@ import {
 import { Sparkle } from '@cardstack/boxel-ui/icons';
 
 class Isolated extends Component<typeof ContactForm> {
-  get hasTitleField(){
+  get hasTitleField() {
     return this.args.model.title && this.args.model.title.length > 0;
   }
-
 
   <template>
     <div class='decorative-header'></div>
@@ -59,6 +59,11 @@ class Isolated extends Component<typeof ContactForm> {
           <div class='field-input'>
             <label>Department: </label>
             <@fields.department />
+          </div>
+
+          <div class='field-input'>
+            <label>AddressInfo: </label>
+            <@fields.addressInfo />
           </div>
         </div>
       </div>
@@ -207,6 +212,10 @@ class Edit extends Component<typeof ContactForm> {
         @label='Department'
         @vertical={{true}}
       ><@fields.department /></FieldContainer>
+
+      <FieldContainer @tag='label' @label='Address Info' @vertical={{true}}>
+        <@fields.addressInfo />
+      </FieldContainer>
     </CardContainer>
 
     <style>
@@ -238,6 +247,10 @@ export class ContactForm extends CardDef {
   });
   @field department = contains(StringField, {
     description: `User's Department`,
+  });
+
+  @field addressInfo = contains(AddressInfo, {
+    description: `User's AddressInfo`,
   });
 
   static displayName = 'Contact Form';

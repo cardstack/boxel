@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "name": {
+        "salutation": null,
+        "firstName": null,
+        "lastName": null
+      },
+      "email": null,
+      "phone": null,
+      "fax": null,
+      "department": null,
+      "addressInfo": {
+        "address": "dk impian",
+        "zip": null,
+        "city": "",
+        "state": null,
+        "country": null
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contact-form",
+        "name": "ContactForm"
+      }
+    }
+  }
+}
