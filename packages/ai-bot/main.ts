@@ -231,6 +231,7 @@ async function handleDebugCommands(
     }
     return await sendOption(client, room, command, undefined);
   }
+  return 
 }
 
 (async () => {
@@ -289,22 +290,6 @@ Common issues are:
         }
         log.info('(%s) %s :: %s', room?.name, event.getSender(), eventBody);
 
-        let initial = await client.roomInitialSync(room!.roomId, 1000);
-        let eventList = (initial!.messages?.chunk ||
-          []) as DiscreteMatrixEvent[];
-        let history: DiscreteMatrixEvent[] = constructHistory(eventList);
-
-        if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
-          return await setTitle(
-            openai,
-            client,
-            room,
-            history,
-            aiBotUserId,
-            event,
-          );
-        }
-
         if (event.event.origin_server_ts! < startTime) {
           return;
         }
@@ -321,9 +306,13 @@ Common issues are:
           return;
         }
 
+        let initial = await client.roomInitialSync(room!.roomId, 1000);
+        let eventList = (initial!.messages?.chunk ||
+          []) as DiscreteMatrixEvent[];
         log.info(eventList);
 
         log.info('Total event list', eventList.length);
+        let history: DiscreteMatrixEvent[] = constructHistory(eventList);
         log.info("Compressed into just the history that's ", history.length);
 
         // To assist debugging, handle explicit commands
@@ -421,6 +410,16 @@ Common issues are:
           );
         }
 
+        if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
+          return await setTitle(
+            openai,
+            client,
+            room,
+            history,
+            aiBotUserId,
+            event,
+          );
+        }
         return;
       } catch (e) {
         log.error(e);
@@ -428,6 +427,40 @@ Common issues are:
         return;
       }
     },
+  );
+
+
+  client.on(
+    RoomEvent.Timeline,
+    async function (event, room) {
+      if(event.getType() !== 'm.reaction'){
+        return 
+      }
+      try {
+        if (!room) {
+          return;
+        }
+        let initial = await client.roomInitialSync(room!.roomId, 1000);
+        let eventList = (initial!.messages?.chunk ||
+          []) as DiscreteMatrixEvent[];
+        let history: DiscreteMatrixEvent[] = constructHistory(eventList);
+        if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
+          return await setTitle(
+            openai,
+            client,
+            room,
+            history,
+            aiBotUserId,
+            event,
+          );
+        }
+        return 
+      } catch (e) {
+        log.error(e);
+        Sentry.captureException(e);
+        return;
+      }
+    }
   );
 
   await client.startClient();
