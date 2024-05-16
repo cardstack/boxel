@@ -4,6 +4,7 @@
     "attributes": {
       "title": "Date-time Field",
       "description": "A field that captures date-time values",
+      "isField": true,
       "ref": {
         "module": "https://cardstack.com/base/datetime",
         "name": "default"
