@@ -2265,6 +2265,117 @@ module('Integration | operator-mode', function (hooks) {
         .dom('[data-test-message-idx="4"]')
         .containsText('I have a feeling something will go wrong');
     });
+
+    test('replacement message should use `created` from the oldest message', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+
+      let firstMessage = {
+        event_id: 'first-message-event',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'This is the first message',
+          msgtype: 'org.text',
+          formatted_body: 'This is the first message',
+          format: 'org.matrix.custom.html',
+          'm.new_content': {
+            body: 'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+            msgtype: 'org.text',
+            formatted_body:
+              'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+            format: 'org.matrix.custom.html',
+          },
+        },
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+      };
+      let secondMessage = {
+        event_id: 'second-message-event',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'This is the second message comes after the first message and before the replacement of the first message',
+          msgtype: 'org.text',
+          formatted_body:
+            'This is the second message comes after the first message and before the replacement of the first message',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: new Date(2024, 0, 3, 12, 31).getTime(),
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+      };
+      let firstMessageReplacement = {
+        event_id: 'first-message-replacement-event',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+          msgtype: 'org.text',
+          formatted_body:
+            'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+          format: 'org.matrix.custom.html',
+          ['m.new_content']: {
+            body: 'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+            msgtype: 'org.text',
+            formatted_body:
+              'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+            format: 'org.matrix.custom.html',
+          },
+          ['m.relates_to']: {
+            event_id: 'first-message-event',
+            rel_type: 'm.replace',
+          },
+        },
+        origin_server_ts: new Date(2024, 0, 3, 12, 32).getTime(),
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+      };
+
+      await addRoomEvent(matrixService, firstMessage);
+
+      await addRoomEvent(matrixService, secondMessage);
+
+      await addRoomEvent(matrixService, firstMessageReplacement);
+
+      await waitFor('[data-test-message-idx="0"]');
+      await this.pauseTest();
+
+      assert
+        .dom('[data-test-message-idx="0"]')
+        .containsText(
+          'Wednesday Jan 3, 2024, 12:30 PM This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+        );
+      assert
+        .dom('[data-test-message-idx="1"]')
+        .containsText(
+          'Wednesday Jan 3, 2024, 12:31 PM This is the second message comes after the first message and before the replacement of the first message',
+        );
+    });
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
