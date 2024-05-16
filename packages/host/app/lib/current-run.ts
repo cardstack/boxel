@@ -124,13 +124,10 @@ export class CurrentRun {
     await current.whileIndexing(async () => {
       let start = Date.now();
       log.debug(`starting from scratch indexing`);
-      // (globalThis as any).__currentRunLoader = current.loader;
       current.#batch = await current.#indexer.createBatch(current.realmURL);
-      // current.#invalidations = [];
       await current.batch.makeNewGeneration();
       await current.visitDirectory(current.realmURL);
       await current.batch.done();
-      // (globalThis as any).__currentRunLoader = undefined;
       log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
     });
     let { stats, ignoreData } = current;

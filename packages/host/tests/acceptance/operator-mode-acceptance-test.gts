@@ -694,7 +694,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  module('realm session expiration', function () {
+  module('realm session expiration', function (hooks) {
     let refreshInSec = 2;
 
     hooks.beforeEach(async function () {

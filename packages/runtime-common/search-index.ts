@@ -104,6 +104,10 @@ export class SearchIndex {
       await onIndexer(this.#indexer);
     }
 
+    await this.fullIndex();
+  }
+
+  async fullIndex() {
     let args: FromScratchArgs = {
       realmURL: this.#realm.url,
     };
