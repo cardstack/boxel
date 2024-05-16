@@ -100,7 +100,7 @@ export default class RealmInfoService extends Service {
       if (this.cachedRealmInfos.has(realmURLString)) {
         return this.cachedRealmInfos.get(realmURLString)!;
       } else {
-        let realmInfoResponse = await this.fetch(`${realmURLString}_info`, {
+        let realmInfoResponse = await this.cachedFetch(`${realmURLString}_info`, {
           headers: { Accept: SupportedMimeType.RealmInfo },
         });
 
@@ -140,7 +140,7 @@ export default class RealmInfoService extends Service {
     }
   });
 
-  private fetch(url: string, init: RequestInit) {
+  private cachedFetch(url: string, init: RequestInit): Promise<Response> {
     let fetchTaskKey = url + init.method;
     let fetchTask = this.cachedFetchTasks.get(fetchTaskKey);
     if (fetchTask) {
