@@ -133,6 +133,9 @@ function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
     return openai.beta.chat.completions.stream({
       model: 'gpt-4o',
       messages: messages,
+      stream_options: {
+        include_usage: true,
+      },
     });
   } else {
     return openai.beta.chat.completions.stream({
@@ -140,6 +143,9 @@ function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
       messages: messages,
       tools: tools,
       tool_choice: 'auto',
+      stream_options: {
+        include_usage: true,
+      },
     });
   }
 }
@@ -379,6 +385,15 @@ Common issues are:
         let sentCommands = 0;
         let thinkingMessageReplaced = false;
         const runner = getResponse(history, aiBotUserId)
+          .on('chunk', async (chunk, _snapshot) => {
+            // This usage value is set *once* and *only once* at the end of the conversation
+            // It will be null at all other times.
+            if (chunk.usage) {
+              log.info(
+                `Request used ${chunk.usage.prompt_tokens} prompt tokens and ${chunk.usage.completion_tokens}`,
+              );
+            }
+          })
           .on('content', async (_delta, snapshot) => {
             unsent += 1;
             if (unsent > 40) {
