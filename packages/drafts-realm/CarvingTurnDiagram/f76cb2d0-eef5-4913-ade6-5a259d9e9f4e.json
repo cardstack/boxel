@@ -5,14 +5,14 @@
       "diagramType": "toe/heel",
       "toeAnnotations": [
         {
-          "position": 0,
+          "position": 0,  
           "comment": "Hip 0",
           "bodyPositionDegrees": 45,
           "edgeAngleDegrees": "45"  
         },
         {
-          "position": 5, 
-          "comment": "Hip 3", 
+          "position": 5,    
+          "comment": "Hip 3",  
           "bodyPositionDegrees": 45,
           "bodyBalance": "5/5",   
           "edgeAngleDegrees": "90"
@@ -21,7 +21,7 @@
       ],
       "heelAnnotations": [ 
         {
-          "position": 0,
+          "position": 0,  
           "comment": "Hip 10",
           "bodyPositionDegrees": 10,
           "bodyBalance": "3/7",

@@ -88,6 +88,11 @@ export class BoardAnnotation extends FieldDef {
   @field edgeAngleDegrees = contains(NumberField);
 
   static embedded = class Embedded extends Component<typeof this> {
+    // It would be great is this could be unpersisted application
+    // state that could be shared with this field--similar to component arguments
+    get stance() {
+      return (globalThis as any).__carvingDiagram?.stance ?? 'regular';
+    }
     get hasBodyBalance() {
       return this.args.model.bodyBalance != null;
     }
@@ -117,7 +122,8 @@ export class BoardAnnotation extends FieldDef {
       return this.args.model.edgeAngleDegrees ?? 0;
     }
     get positionStyle() {
-      return `transform: rotate(${-1 * this.positionDegrees}deg)`;
+      let stanceFactor = this.stance === 'regular' ? -1 : 1;
+      return `transform: rotate(${stanceFactor * this.positionDegrees}deg)`;
     }
     get edgeRayStyle() {
       return `transform: rotate(${-1 * this.edgeAngleDegrees}deg)`;
@@ -144,10 +150,9 @@ export class BoardAnnotation extends FieldDef {
             </div>
           {{/if}}
           {{#if this.hasBodyPosition}}
-            <div
-              class='body-position'
-              style='{{this.positionStyle}}'
-            >{{this.positionDegrees}}°
+            <div class='body-position' style='{{this.positionStyle}}'><div
+                class='position-value'
+              >{{this.positionDegrees}}°</div>
               <div class='arrow'></div>
             </div>
           {{/if}}

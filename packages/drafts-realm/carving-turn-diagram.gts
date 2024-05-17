@@ -12,6 +12,7 @@ import {
 import { Component } from 'https://cardstack.com/base/card-api';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
+import type Owner from '@ember/owner';
 import { fn, concat, get } from '@ember/helper';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoardAnnotation } from './board-annotation';
@@ -77,7 +78,16 @@ class DiagramType extends FieldDef {
 }
 
 class IsolatedView extends Component<typeof CarvingTurnDiagram> {
-  @tracked stance = 'regular';
+  @tracked stance: 'regular' | 'goofy' = 'regular';
+
+  // A desired feature would be to share non-persisted application state
+  // with other cards, maybe like setting arguments in child cards. Because
+  // that is not a thing, I'm using globalThis to share the stance with child
+  // fields
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    (globalThis as any).__carvingDiagram = this;
+  }
 
   get showToeTurn() {
     return (
@@ -116,7 +126,7 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
       : this.args.model.toeAnnotations;
   }
 
-  private setStance = (stance: string) => {
+  private setStance = (stance: 'regular' | 'goofy') => {
     this.stance = stance;
   };
 
@@ -205,6 +215,14 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
       }
       .goofy :deep(.board:after) {
         transform: rotate(219deg);
+      }
+      .goofy :deep(.body-position) {
+        top: 40px;
+        left: calc(50% + 40px);
+      }
+      .goofy .toe .position-10 :deep(.body-position .position-value),
+      .goofy .heel :deep(.body-position .position-value) {
+        transform: rotate(180deg);
       }
       .turn {
         position: relative;
