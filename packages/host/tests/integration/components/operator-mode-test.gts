@@ -2363,7 +2363,6 @@ module('Integration | operator-mode', function (hooks) {
       await addRoomEvent(matrixService, firstMessageReplacement);
 
       await waitFor('[data-test-message-idx="0"]');
-      await this.pauseTest();
 
       assert
         .dom('[data-test-message-idx="0"]')
