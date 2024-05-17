@@ -302,6 +302,7 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
       .heel :deep(.board) {
         left: 0;
       }
+      .goofy .toe .position-10 :deep(.edge-angle),
       .heel :deep(.edge-angle) {
         top: 70px;
         left: 60px;

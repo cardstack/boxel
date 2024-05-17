@@ -5,7 +5,7 @@
       "diagramType": "toe/heel",
       "toeAnnotations": [
         {
-          "position": 0,  
+          "position": 0, 
           "comment": "Hip 0",
           "bodyPositionDegrees": 45,
           "edgeAngleDegrees": "45"  
