@@ -2,38 +2,42 @@
   "data": {
     "type": "card",
     "attributes": {
-      "diagramType": "toe/heel", 
-      "toeAnnotations": [ 
+      "diagramType": "toe/heel",
+      "toeAnnotations": [
         {
           "step": 0,
           "comment": "Hip 0",
           "bodyPositionDegrees": 10,
-          "bodyBalance": "7/3"
+          "bodyBalance": "7/3",
+          "edgeAngleDegrees": "45"  
         },
-       
         {
           "step": 5,
           "comment": "Hip 3",
-          "bodyPositionDegrees": 45, 
-          "bodyBalance": "5/5"
+          "bodyPositionDegrees": 45,
+          "bodyBalance": "5/5",
+          "edgeAngleDegrees": "90"
         },
         {
           "step": 10,
           "comment": "Hip 10",
           "bodyPositionDegrees": 45,
-          "bodyBalance": "3/7"
+          "bodyBalance": "3/7",
+          "edgeAngleDegrees": "45" 
         }
       ],
       "heelAnnotations": [
-         {
+        {
           "step": 3,
-          "comment": "touch positive" 
+          "comment": "touch positive",
+          "edgeAngleDegrees": "80"
         },
         {
           "step": 5,
           "comment": "Hip 3",
           "bodyPositionDegrees": 10,
-          "bodyBalance": "5/5"
+          "bodyBalance": "5/5",
+          "edgeAngleDegrees": "90"  
         }
       ],
       "title": "FunXR Open style",

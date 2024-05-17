@@ -85,6 +85,7 @@ export class BoardAnnotation extends FieldDef {
   @field comment = contains(StringField);
   @field bodyPositionDegrees = contains(NumberField);
   @field bodyBalance = contains(BodyBalance);
+  @field edgeAngleDegrees = contains(NumberField);
 
   static embedded = class Embedded extends Component<typeof this> {
     get hasBodyBalance() {
@@ -93,8 +94,11 @@ export class BoardAnnotation extends FieldDef {
     get hasBodyPosition() {
       return this.args.model.bodyPositionDegrees != null;
     }
+    get hasEdgeAngle() {
+      return this.args.model.edgeAngleDegrees != null;
+    }
     get hasBoard() {
-      return this.hasBodyPosition || this.hasBodyBalance;
+      return this.hasBodyPosition || this.hasBodyBalance || this.hasEdgeAngle;
     }
     get balanceToe() {
       return this.args.model.bodyBalance
@@ -109,12 +113,26 @@ export class BoardAnnotation extends FieldDef {
     get positionDegrees() {
       return this.args.model.bodyPositionDegrees ?? 0;
     }
+    get edgeAngleDegrees() {
+      return this.args.model.edgeAngleDegrees ?? 0;
+    }
     get positionStyle() {
       return `transform: rotate(${-1 * this.positionDegrees}deg)`;
+    }
+    get edgeRayStyle() {
+      return `transform: rotate(${-1 * this.edgeAngleDegrees}deg)`;
     }
     <template>
       {{#if this.hasBoard}}
         <div class='board'>
+          {{#if this.hasEdgeAngle}}
+            <div class='edge-angle'>
+              <div class='angle'>
+                <div class='ray' style='{{this.edgeRayStyle}}'></div>
+              </div>
+              <div class='degrees'>{{this.edgeAngleDegrees}}° Edge</div>
+            </div>
+          {{/if}}
           {{#if this.hasBodyBalance}}
             <div class='body-balance'>
               <div
@@ -142,6 +160,7 @@ export class BoardAnnotation extends FieldDef {
         .comment {
           font-size: 18px;
           font-weight: bold;
+          max-width: 100px;
         }
         .board {
           position: absolute;
@@ -176,6 +195,54 @@ export class BoardAnnotation extends FieldDef {
           border-radius: 10px 10px 5px 5px;
           background: rgba(0, 0, 0, 0.5);
           transform: rotate(-39deg);
+        }
+        .edge-angle {
+          position: absolute;
+          top: -35px;
+          left: -5px;
+        }
+        .angle {
+          position: absolute;
+          height: 22px;
+          width: 20px;
+          clip-path: inset(0px 0px 0px 0px);
+        }
+        .angle:before {
+          content: '';
+          position: absolute;
+          width: 30px;
+          height: 0px;
+          top: 20px;
+          border: 1px solid rgba(0, 0, 0, 0.5);
+        }
+        .ray {
+          position: absolute;
+          top: 20px;
+          clip-path: inset(0px -22px -20px 0px);
+        }
+        .ray:before {
+          content: '';
+          position: absolute;
+          top: 0;
+          width: 30px;
+          height: 0px;
+          border: 1px solid rgba(0, 0, 0, 0.5);
+        }
+        .ray:after {
+          content: '';
+          position: absolute;
+          bottom: -11px;
+          left: -11px;
+          width: 20px;
+          height: 20px;
+          border: 1px solid rgba(0, 0, 0, 0.5);
+          border-radius: 50%;
+        }
+        .degrees {
+          position: absolute;
+          top: 4px;
+          left: 22px;
+          text-wrap: nowrap;
         }
         .body-position {
           /*

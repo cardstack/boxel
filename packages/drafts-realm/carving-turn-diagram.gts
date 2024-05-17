@@ -190,6 +190,11 @@ export class CarvingTurnDiagram extends CardDef {
         .heel :deep(.board) {
           left: 0;
         }
+        .heel :deep(.edge-angle) {
+          top: 70px;
+          left: 60px;
+          transform: rotate(180deg);
+        }
         .step {
           position: absolute;
           height: 50px;
