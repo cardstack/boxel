@@ -6,6 +6,7 @@ import {
   createClient,
   Room,
   MatrixClient,
+  ISendEventResponse,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
@@ -21,6 +22,7 @@ import {
 import { OpenAIError } from 'openai/error';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 import * as Sentry from '@sentry/node';
+import debounce from 'lodash/debounce';
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({
@@ -375,21 +377,38 @@ Common issues are:
           undefined,
         );
 
-        let unsent = 0;
+        let messagePromises: Promise<ISendEventResponse>[] = [];
+
+        const sendMessageDebounced = debounce(
+          async (
+            content: string,
+            eventToUpdate: string | undefined,
+            isStreamingFinished = false,
+          ) => {
+            const messagePromise = sendMessage(
+              client,
+              room,
+              content,
+              eventToUpdate,
+              {
+                isStreamingFinished: isStreamingFinished,
+              },
+            );
+            messagePromises.push(messagePromise);
+            await messagePromise;
+          },
+          250,
+          { leading: true, maxWait: 250 },
+        );
+
         let sentCommands = 0;
         let thinkingMessageReplaced = false;
         const runner = getResponse(history, aiBotUserId)
           .on('content', async (_delta, snapshot) => {
-            unsent += 1;
-            if (unsent > 40) {
-              unsent = 0;
-              await sendMessage(
-                client,
-                room,
-                cleanContent(snapshot),
-                initialMessage.event_id,
-              );
-            }
+            sendMessageDebounced(
+              cleanContent(snapshot),
+              initialMessage.event_id,
+            );
             thinkingMessageReplaced = true;
           })
           // Messages can have both content and tool calls
@@ -442,17 +461,14 @@ Common issues are:
           return await sendError(client, room, error, initialMessage.event_id);
         });
         if (finalContent) {
-          finalContent = cleanContent(finalContent);
-          await sendMessage(
-            client,
-            room,
-            finalContent,
+          sendMessageDebounced(
+            cleanContent(finalContent),
             initialMessage.event_id,
-            {
-              isStreamingFinished: true,
-            },
+            true,
           );
         }
+        // Make sure all messages are sent
+        await Promise.all(messagePromises);
 
         if (shouldSetRoomTitle(eventList, aiBotUserId, sentCommands)) {
           return await setTitle(client, room, history, aiBotUserId);
