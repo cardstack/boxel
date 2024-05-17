@@ -137,6 +137,9 @@ export async function basicMappings(loader: Loader) {
   mappings.set(BooleanField, {
     type: 'boolean',
   });
+  for (const value of mappings.values()) {
+    Object.freeze(value);
+  }
   return mappings;
 }
 
@@ -149,7 +152,7 @@ function getPrimitiveType(
     return undefined;
   }
   if (mappings.has(def)) {
-    return mappings.get(def);
+    return { ...mappings.get(def) } as Schema;
   } else {
     // Try the parent class, recurse up until we hit a type recognised
     return getPrimitiveType(Object.getPrototypeOf(def), mappings);
