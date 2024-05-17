@@ -2,8 +2,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { primitive } from '../constants';
 import { Loader } from '../loader';
 
-type EmptySchema = {};
-
 type ArraySchema = {
   type: 'array';
   description?: string;
@@ -81,7 +79,6 @@ type EnumSchema = {
 };
 
 export type Schema =
-  | EmptySchema
   | ArraySchema
   | ObjectSchema
   | DateSchema
@@ -225,29 +222,36 @@ function generatePatchCallSpecification(
           },
           required: ['links'],
         };
+        if (field.description) {
+          schema.properties[fieldName].description = field.description;
+        }
       } else {
         continue;
       }
     }
 
     if (!relationshipsOnly) {
-      const fieldSchema = generatePatchCallSpecification(
+      let fieldSchemaForSingleItem = generatePatchCallSpecification(
         field.card,
         cardApi,
         mappings,
-      );
+      ) as Schema | undefined;
       // This happens when we have no known schema for the field type
-      if (fieldSchema == undefined) {
+      if (fieldSchemaForSingleItem == undefined) {
         continue;
       }
 
       if (field.fieldType == 'containsMany') {
         schema.properties[fieldName] = {
           type: 'array',
-          items: fieldSchema,
+          items: fieldSchemaForSingleItem,
         };
       } else if (field.fieldType == 'contains') {
-        schema.properties[fieldName] = fieldSchema;
+        schema.properties[fieldName] = fieldSchemaForSingleItem;
+      }
+
+      if (field.description) {
+        schema.properties[fieldName].description = field.description;
       }
     }
   }
@@ -273,7 +277,9 @@ export function generateCardPatchCallSpecification(
 ):
   | { attributes: Schema }
   | { attributes: Schema; relationships: RelationshipsSchema } {
-  let schema = generatePatchCallSpecification(def, cardApi, mappings);
+  let schema = generatePatchCallSpecification(def, cardApi, mappings) as
+    | Schema
+    | undefined;
   if (schema == undefined) {
     return {
       attributes: {
