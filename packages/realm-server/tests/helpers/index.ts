@@ -12,6 +12,7 @@ import {
   type MatrixConfig,
   type Queue,
   type IndexRunner,
+  assetsDir,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -168,6 +169,7 @@ export async function createRealm({
         });
         await worker.run();
       },
+      assetsURL: new URL(`${realmURL}${assetsDir}`),
     },
     { deferStartUp },
   );

@@ -253,6 +253,7 @@ export class Realm {
       new Map([['GET' as Method, new Map([['/_readiness-check', true]])]]),
     ],
   ]);
+  #assetsURL: URL;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -283,6 +284,7 @@ export class Realm {
       queue,
       virtualNetwork,
       onIndexer,
+      assetsURL,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -294,6 +296,7 @@ export class Realm {
       queue: Queue;
       virtualNetwork: VirtualNetwork;
       onIndexer?: (indexer: Indexer) => Promise<void>;
+      assetsURL: URL;
     },
     opts?: Options,
   ) {
@@ -304,6 +307,7 @@ export class Realm {
     this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
+    this.#assetsURL = assetsURL;
 
     let loader = virtualNetwork.createLoader();
     adapter.setLoader?.(loader);
@@ -902,14 +906,17 @@ export class Realm {
           resolvedOwnRealmURL: this.url,
           hostsOwnAssets: !isNode,
           realmsServed: opts?.realmsServed,
+          assetsURL: this.#assetsURL.href,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
     );
 
     if (isNode) {
-      // set the static public asset paths in index.html
-      indexHTML = indexHTML.replace(/(src|href)="\//g, `$1="/${assetsDir}`);
+      indexHTML = indexHTML.replace(
+        /(src|href)="\//g,
+        `$1="${this.#assetsURL.href}`,
+      );
 
       // this installs an event listener to allow a test driver to introspect
       // the DOM from a different localhost:4205 origin (the test driver's
