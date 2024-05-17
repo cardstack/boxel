@@ -13,11 +13,11 @@
       "fax": null,
       "department": null,
       "addressInfo": {
-        "address": "dk impian",
-        "zip": null,
-        "city": "",
-        "state": null,
-        "country": null
+        "address": "1, Lorong Tebu 3",
+        "zip": "96000",
+        "city": "Bakri",
+        "state": "Johor",
+        "country": "Malaysia"
       },
       "description": null,
       "thumbnailURL": null

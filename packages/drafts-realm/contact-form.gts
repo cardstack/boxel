@@ -36,6 +36,7 @@ class Isolated extends Component<typeof ContactForm> {
         />
 
         <div class='contact-form-details'>
+
           <div class='field-input'>
             <label>Full Name: </label>
             <@fields.name />
@@ -60,17 +61,19 @@ class Isolated extends Component<typeof ContactForm> {
             <label>Department: </label>
             <@fields.department />
           </div>
-
           <div class='field-input'>
             <label>AddressInfo: </label>
             <@fields.addressInfo />
           </div>
+
         </div>
+
       </div>
 
     </CardContainer>
 
-    <style>
+    <style
+    >
       h2 {
         font-size: 2.2rem;
         margin: 0;
@@ -102,10 +105,13 @@ class Isolated extends Component<typeof ContactForm> {
         border-radius: var(--boxel-border-radius-xl);
         background-color: #eeeeee50;
         display: grid;
+        grid-template-columns: 1fr;
         gap: var(--boxel-sp-lg);
         justify-content: center;
         text-align: center;
       }
+
+
 
       .field-input {
         display: flex;
@@ -132,13 +138,18 @@ class Isolated extends Component<typeof ContactForm> {
         text-align: center;
       }
 
-      @media (min-width: 768px) {
-        .contact-form-details {
-          gap: var(--boxel-sp-xl);
-        }
-        .field-input {
-          gap: var(--boxel-sp);
-        }
+      @media (max-width: 767px) {
+         .left-col {
+      grid-column:span 2;
+        {{! display: grid;
+        gap: var(--boxel-sp-lg); }}
+      }
+
+      .right-col {
+      grid-column: span 2;
+        {{! display: grid;
+        gap: var(--boxel-sp-lg); }}
+      }
       }
     </style>
   </template>
