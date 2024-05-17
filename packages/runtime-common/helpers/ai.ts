@@ -6,6 +6,7 @@ type EmptySchema = {};
 
 type ArraySchema = {
   type: 'array';
+  description?: string;
   items: Schema;
   minItems?: number;
   maxItems?: number;
@@ -14,6 +15,7 @@ type ArraySchema = {
 
 export type ObjectSchema = {
   type: 'object';
+  description?: string;
   properties: {
     [fieldName: string]: Schema;
   };
@@ -21,6 +23,7 @@ export type ObjectSchema = {
 
 export type RelationshipSchema = {
   type: 'object';
+  description?: string;
   properties: {
     links: {
       type: 'object';
@@ -35,6 +38,7 @@ export type RelationshipSchema = {
 
 export type RelationshipsSchema = {
   type: 'object';
+  description?: string;
   properties: {
     [fieldName: string]: RelationshipSchema;
   };
@@ -43,11 +47,13 @@ export type RelationshipsSchema = {
 
 type DateSchema = {
   type: 'string';
+  description?: string;
   format: 'date' | 'date-time';
 };
 
 type NumberSchema = {
   type: 'number' | 'integer';
+  description?: string;
   exclusiveMinimum?: number;
   minimum?: number;
   exclusiveMaximum?: number;
@@ -57,17 +63,20 @@ type NumberSchema = {
 
 type StringSchema = {
   type: 'string';
+  description?: string;
   minLength?: number;
   maxLength?: number;
   pattern?: string;
 };
 
 type BooleanSchema = {
+  description?: string;
   type: 'boolean';
 };
 
 type EnumSchema = {
   // JSON Schema allows a mix of any types in an enum
+  description?: string;
   enum: any[];
 };
 
