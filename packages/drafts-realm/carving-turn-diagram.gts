@@ -150,20 +150,52 @@ export class CarvingTurnDiagram extends CardDef {
           top: -10px;
         }
         .turn:before {
-          content: '';
           position: absolute;
           top: 0;
           left: 0;
+          color: rgba(0, 0, 0, 0.15);
+          font-size: 80px;
+          text-align: center;
+          line-height: 300px;
           border: 10px solid gray;
+          width: calc(100% - 20px);
+          height: calc(100% - 20px);
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 50%;
+        }
+        .turn:after {
+          position: absolute;
+          top: 0;
+          left: 0;
+          color: rgba(0, 0, 0, 0.15);
+          font-size: 80px;
+          text-align: center;
+          line-height: 675px;
+          border: 10px solid rgba(0, 0, 0, 0);
+          background: rgba(0, 0, 0, 0.05);
           width: calc(100% - 20px);
           height: calc(100% - 20px);
           border-radius: 50%;
         }
         .toe:before {
+          content: 'x+';
           clip-path: inset(-100% -100% -100% 50%);
+          letter-spacing: 280px;
         }
         .heel:before {
+          content: '+';
           clip-path: inset(-100% 50% -100% -100%);
+          letter-spacing: 200px;
+        }
+        .toe:after {
+          content: 'x-';
+          clip-path: inset(50% -100% -100% 50%);
+          letter-spacing: 280px;
+        }
+        .heel:after {
+          content: '-';
+          clip-path: inset(50% 50% -100% -100%);
+          letter-spacing: 200px;
         }
         .container {
           position: relative;

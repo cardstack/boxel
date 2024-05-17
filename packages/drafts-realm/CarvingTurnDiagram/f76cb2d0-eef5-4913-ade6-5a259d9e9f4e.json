@@ -7,7 +7,7 @@
         {
           "step": 0,
           "comment": "Hip 0",
-          "bodyPositionDegrees": 10,
+          "bodyPositionDegrees": 45,
           "bodyBalance": "7/3",
           "edgeAngleDegrees": "45"  
         },
@@ -15,29 +15,39 @@
           "step": 5,
           "comment": "Hip 3",
           "bodyPositionDegrees": 45,
-          "bodyBalance": "5/5",
+          "bodyBalance": "5/5",   
           "edgeAngleDegrees": "90"
-        },
-        {
-          "step": 10,
-          "comment": "Hip 10",
-          "bodyPositionDegrees": 45,
-          "bodyBalance": "3/7",
-          "edgeAngleDegrees": "45" 
         }
+        
       ],
       "heelAnnotations": [
         {
+          "step": 0,
+          "comment": "Hip 10",
+          "bodyPositionDegrees": 10,
+          "bodyBalance": "3/7",
+          "edgeAngleDegrees": "45" 
+        },
+        {
           "step": 3,
-          "comment": "touch positive",
+          "comment": "Hip 3 touch positive",
+          "bodyPositionDegrees": 10,
+          "bodyBalance": "6/4", 
           "edgeAngleDegrees": "80"
         },
         {
           "step": 5,
           "comment": "Hip 3",
-          "bodyPositionDegrees": 10,
+          "bodyPositionDegrees": 15,
           "bodyBalance": "5/5",
-          "edgeAngleDegrees": "90"  
+          "edgeAngleDegrees": "90"    
+        },
+        {
+          "step": 10,
+          "comment": "Hip 10",
+          "bodyPositionDegrees": 45,
+          "bodyBalance": "3/7",  
+          "edgeAngleDegrees": "45"  
         }
       ],
       "title": "FunXR Open style",
