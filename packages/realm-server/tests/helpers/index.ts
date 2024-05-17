@@ -117,6 +117,7 @@ export async function createRealm({
   queue,
   dbAdapter,
   matrixConfig = testMatrix,
+  deferStartUp,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -126,6 +127,7 @@ export async function createRealm({
   matrixConfig?: MatrixConfig;
   queue: Queue;
   dbAdapter: PgAdapter;
+  deferStartUp?: true;
 }): Promise<Realm> {
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
@@ -143,31 +145,34 @@ export async function createRealm({
   }
 
   let adapter = new NodeAdapter(dir);
-  let realm = new Realm({
-    url: realmURL,
-    adapter,
-    getIndexHTML: async () =>
-      readFileSync(join(distPath, 'index.html')).toString(),
-    matrix: matrixConfig,
-    permissions,
-    realmSecretSeed: "shhh! it's a secret",
-    virtualNetwork,
-    dbAdapter,
-    queue,
-    onIndexer: async (indexer) => {
-      let worker = new Worker({
-        realmURL: new URL(realmURL!),
-        indexer,
-        queue,
-        realmAdapter: adapter,
-        runnerOptsManager: manager,
-        loader: realm.loaderTemplate,
-        indexRunner,
-      });
-      await worker.run();
+  let realm = new Realm(
+    {
+      url: realmURL,
+      adapter,
+      getIndexHTML: async () =>
+        readFileSync(join(distPath, 'index.html')).toString(),
+      matrix: matrixConfig,
+      permissions,
+      realmSecretSeed: "shhh! it's a secret",
+      virtualNetwork,
+      dbAdapter,
+      queue,
+      onIndexer: async (indexer) => {
+        let worker = new Worker({
+          realmURL: new URL(realmURL!),
+          indexer,
+          queue,
+          realmAdapter: adapter,
+          runnerOptsManager: manager,
+          loader: realm.loaderTemplate,
+          indexRunner,
+        });
+        await worker.run();
+      },
+      assetsURL: new URL(`${realmURL}${assetsDir}`),
     },
-    assetsURL: new URL(`${realmURL}${assetsDir}`),
-  });
+    { deferStartUp },
+  );
   return realm;
 }
 
