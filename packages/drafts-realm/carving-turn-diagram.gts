@@ -1,3 +1,40 @@
+/*
+ * Feedback from this champagne drinking exercise:
+ *
+ * - It would be nice to have a range input slider boxel ui component
+ *
+ * - I would like to be able to pass non-persisted application state between
+ *   cards/fields. in this case the "stance" state represents a way to view
+ *   the diagram that does not make sense to persist. This state effects both
+ *   the diagram and the annotations on the diagram. I had to use a global to
+ *   pass this state between card and field, ew!
+ *
+ * - I would like to be able to view and edit a card in the same view. it is a
+ *   real pain to have to switch between edit format and isoalted format. making
+ *   these modal was a UX choice. instead it would be much nicer to splay the card's
+ *   formats on teh page simultaneously so that I could view both the edit and the
+ *   isolated (and probably other formats simulanteously. For now I had to use the
+ *   monaco editor to get that type of view which was not ideal for card data entry.
+ *
+ * - I ran into a bug where updated fields in a composite containsMany are not
+ *   auto-saved. bug filed: CS-6862.
+ *
+ * - I was unable to live edit the CSS in chrome for the field in the card. oddly I
+ *   could live edit the CSS in chrome for the card itself, but not its fields. that
+ *   made CSS authoring rather painful. Perhaps this has something to do with the way
+ *   our scoped CSS works?
+ *
+ * - When using VS Code to author code (it was too painful to use monaco because of
+ *   the auto-saving during bad syntax), it was annoying that re-indexing wasn't
+ *   triggered after the card definition file change. I suspect that if I was
+ *   viewing the card deifnition in monaco it live updates (i didn't happen to have
+ *   card definition open in monaco at the time). but instances that consume the card
+ *   definition are not live updated when the gts file changes on disk. I think this
+ *   is either an oversigh or perhaps a bug. Not sure that it is that important, though,
+ *   as generally people will not be using VS code to directly edit cards in a local
+ *   boxel instance (I assume).
+ */
+
 import {
   CardDef,
   FieldDef,
