@@ -1,9 +1,9 @@
 import NumberField from 'https://cardstack.com/base/number';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { IconTrash } from '@cardstack/boxel-ui/icons';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
@@ -54,62 +54,75 @@ const OPTIONS: Option[] = [
 
 class Isolated extends Component<typeof GardenDesign> {
   <template>
-    <div
+    <section
       class='garden-design'
-      style='width:calc({{this.columns}} * {{this.unit}}px + 100px)'
+      {{on 'dragover' this.dragover}}
+      {{on 'drop' this.dropItem}}
     >
-      <h2>{{this.title}}</h2>
-      <div class='grid' style={{this.gridStyle}}>
-        {{#each this.gridItems as |gridItem|}}
-          <div
-            class='grid-item'
-            id={{gridItem.id}}
-            {{on 'dragover' this.dragover}}
-            {{on 'drop' this.dropItem}}
-          >
-            {{#if gridItem.content}}
-              <span
-                {{on 'dragstart' this.dragStartFromGrid}}
-                id={{gridItem.content.id}}
-                draggable='true'
-                class='plant {{gridItem.content.id}}'
-              >
-                {{gridItem.content.symbol}}
-              </span>
-            {{/if}}
-          </div>
-        {{/each}}
-      </div>
-      <ul>
-        {{#each OPTIONS as |option|}}
-          <li>
-            <span
-              {{on 'dragstart' this.dragStart}}
-              id={{option.id}}
-              draggable='true'
-              class='plant {{option.id}}'
+      <div>
+        <h2>{{this.title}}</h2>
+        <div class='grid' style={{this.gridStyle}}>
+          {{#each this.gridItems as |gridItem|}}
+            <div
+              class='grid-item'
+              id={{gridItem.id}}
+              {{on 'dragover' this.dragover}}
+              {{on 'drop' this.dropItem}}
             >
-              {{option.symbol}}
-            </span>
-            {{option.name}}
-          </li>
-        {{/each}}
-      </ul>
-      <button {{on 'click' this.reset}}>Reset Design</button>
-      <div
-        class='compost'
-        {{on 'dragover' this.dragover}}
-        {{on 'drop' this.removeItem}}
-      >
-        <IconTrash width='25' height='25' />
-        Compost
+              {{#if gridItem.content}}
+                <button
+                  {{on 'dragstart' this.dragStartFromGrid}}
+                  id={{gridItem.content.id}}
+                  draggable='true'
+                  class='option {{gridItem.content.id}}'
+                >
+                  {{gridItem.content.symbol}}
+                </button>
+              {{/if}}
+            </div>
+          {{/each}}
+        </div>
+        <ul class='list'>
+          {{#each OPTIONS as |option|}}
+            <li>
+              <button
+                {{on 'dragstart' this.dragStart}}
+                id={{option.id}}
+                draggable='true'
+                class='option {{option.id}}'
+              >
+                {{option.symbol}}
+              </button>
+              {{option.name}}
+            </li>
+          {{/each}}
+        </ul>
+        <button class='reset' {{on 'click' this.reset}}>Reset</button>
+        <hr />
+        <h4>Instructions:</h4>
+        <ul>
+          <li>Drag and drop circle icons from the list to the grid squares</li>
+          <li>Drag and drop items within the grid to move or replace them</li>
+          <li>Drag and drop items off the grid into the gray area to remove them</li>
+          <li>Click "Reset" to clear the design</li>
+        </ul>
       </div>
-    </div>
+    </section>
     <style>
       .garden-design {
-        padding: 10px 50px;
+        width: 100%;
+        height: 100%;
+        background-color: whitesmoke;
+        display: flex;
+        justify-content: center;
+        padding: 30px 50px;
+      }
+      h2 {
+        margin-top: 0;
+        margin-bottom: 20px;
       }
       .grid {
+        background-color: white;
         width: max-content;
         border: 2px solid green;
         display: grid;
@@ -120,16 +133,16 @@ class Isolated extends Component<typeof GardenDesign> {
         justify-content: center;
         align-items: center;
       }
-      ul {
+      .list {
         margin: 20px 0;
         padding: 0;
-        height: 140px;
+        height: 110px;
         display: flex;
         flex-direction: column;
         flex-wrap: wrap;
         gap: 10px;
       }
-      li {
+      .list > li {
         display: flex;
         align-items: center;
         gap: 10px;
@@ -149,7 +162,7 @@ class Isolated extends Component<typeof GardenDesign> {
         color: brown;
         font-weight: bold;
       }
-      .plant {
+      .option {
         width: 30px;
         height: 30px;
         border: 2px solid black;
@@ -158,6 +171,13 @@ class Isolated extends Component<typeof GardenDesign> {
         justify-content: center;
         align-items: center;
         font-weight: bold;
+      }
+      .option:hover {
+        cursor: move;
+        box-shadow: 0 1px 3px 0 rgba(0 0 0 / 50%);
+      }
+      .reset {
+        margin: 30px 0 50px;
       }
       .smooth-penstemon {
         background-color: whitesmoke;
@@ -205,7 +225,7 @@ class Isolated extends Component<typeof GardenDesign> {
   @tracked gridMap: TrackedMap<string, Option | null>;
   @tracked optionsMap: Map<string, Option>;
 
-  constructor(owner, args) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.rows = this.args.model.width ?? this.defaultSize;
     this.columns = this.args.model.length ?? this.defaultSize;
@@ -249,46 +269,60 @@ class Isolated extends Component<typeof GardenDesign> {
     return items;
   }
 
-  @action dragStart(ev) {
-    ev.dataTransfer.setData('text/plain', ev.target.id);
+  @action dragStart(ev: DragEvent) {
+    if (!ev.dataTransfer) {
+      return;
+    }
+    ev.dataTransfer.setData('text/plain', (ev.target as HTMLElement).id);
     ev.dataTransfer.dropEffect = 'copy';
   }
 
-  @action dragStartFromGrid(ev) {
-    ev.dataTransfer.setData('text/plain', ev.target.parentElement.id);
+  @action dragStartFromGrid(ev: DragEvent) {
+    let id = (ev.target as HTMLElement)?.parentElement?.id;
+    if (!ev.dataTransfer || !id) {
+      return;
+    }
+    ev.dataTransfer.setData('text/plain', id);
     ev.dataTransfer.dropEffect = 'move';
   }
 
-  @action dragover(ev) {
+  @action dragover(ev: DragEvent) {
     ev.preventDefault();
   }
 
-  @action dropItem(ev) {
+  @action dropItem(ev: DragEvent) {
     ev.preventDefault();
-    let dropTargetId = ev.target.id;
-    let dragItemId = ev.dataTransfer.getData('text/plain');
-    let dragItem = this.optionsMap.get(dragItemId);
+    let dropTargetId: string | undefined = (ev.target as HTMLElement).id;
+    let dragItemId: string | undefined = ev.dataTransfer?.getData('text/plain');
 
-    let maybeCurrentValue = this.gridMap.get(dragItemId);
+    let dragItem;
+    let maybeCurrentValue;
 
+    if (dragItemId) {
+      dragItem = this.optionsMap.get(dragItemId);
+      // in dragStartFromGrid, dragItemId is set to the grid location id
+      maybeCurrentValue = this.gridMap.get(dragItemId);
+    }
     if (this.optionsMap.has(dropTargetId)) {
-      dropTargetId = ev.target.parentElement.id;
+      // if the drop target has content, we need to get its grid location id
+      dropTargetId = (ev.target as HTMLElement)?.parentElement?.id;
     }
-    if (this.gridMap.has(dropTargetId)) {
-      if (maybeCurrentValue) {
+    if (!dropTargetId || !this.gridMap.has(dropTargetId)) {
+      if (maybeCurrentValue && dragItemId) {
+        // item from the grid is dragged to unknown location, remove it from the grid
         this.gridMap.set(dragItemId, null);
-        this.gridMap.set(dropTargetId, maybeCurrentValue);
-      } else {
-        this.gridMap.set(dropTargetId, dragItem);
       }
+      return;
     }
-  }
+    if (maybeCurrentValue && dragItemId) {
+      // move item from one grid location to another
+      this.gridMap.set(dragItemId, null);
+      this.gridMap.set(dropTargetId, maybeCurrentValue);
+      return;
+    }
 
-  @action removeItem(ev) {
-    ev.preventDefault();
-    let fromId = ev.dataTransfer.getData('text/plain');
-    if (this.gridMap.has(fromId)) {
-      this.gridMap.set(fromId, null);
+    if (dragItem) {
+      this.gridMap.set(dropTargetId, dragItem);
     }
   }
 
