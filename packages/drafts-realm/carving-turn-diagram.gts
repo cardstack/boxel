@@ -353,11 +353,6 @@ export class CarvingTurnDiagram extends CardDef {
     </template>
   };
 
-  /*
-  static edit = class Edit extends Component<typeof this> {
-    <template></template>
-  }
-
 
 
 
