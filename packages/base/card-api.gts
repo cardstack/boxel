@@ -5,7 +5,7 @@ import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq, pick } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, not, pick } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { startCase } from 'lodash';
 import {
@@ -323,10 +323,6 @@ export interface Field<
   component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
-  // TODO remove this after feature flag is removed
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: SearchT) => boolean | null;
   handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
@@ -455,22 +451,6 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     return [...instances].map((instance) => {
       return this.card[queryableValue](instance, stack);
     });
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[] | null) => boolean | null {
-    return (value) => {
-      if (Array.isArray(value) && value.length === 0) {
-        return innerMatcher(null);
-      }
-      return (
-        Array.isArray(value) &&
-        value.some((innerValue) => {
-          return innerMatcher(innerValue);
-        })
-      );
-    };
   }
 
   serialize(
@@ -676,12 +656,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return this.card[queryableValue](instance, stack);
   }
 
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any) => boolean | null {
-    return (value) => innerMatcher(value);
-  }
-
   serialize(
     value: InstanceType<CardT>,
     doc: JSONAPISingleResourceDocument,
@@ -833,12 +807,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return null;
     }
     return this.card[queryableValue](instance, stack);
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any) => boolean | null {
-    return (value) => innerMatcher(value);
   }
 
   serialize(
@@ -1181,22 +1149,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
       return this.card[queryableValue](instance, stack);
     });
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[] | null) => boolean | null {
-    return (value) => {
-      if (Array.isArray(value) && value.length === 0) {
-        return innerMatcher(null);
-      }
-      return (
-        Array.isArray(value) &&
-        value.some((innerValue) => {
-          return innerMatcher(innerValue);
-        })
-      );
-    };
   }
 
   serialize(
@@ -1787,10 +1739,15 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-xl);
       }
-      .default-card-template.edit {
-        padding-right: var(
-          --boxel-sp-xxl
-        ); /* allow room for trash/delete icons that appear on hover */
+      /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
+      .default-card-template.edit
+        > .boxel-field
+        > :deep(
+          *:nth-child(2):not(.links-to-many-editor):not(
+              .contains-many-editor
+            ):not(.links-to-editor)
+        ) {
+        padding-right: var(--boxel-icon-lg);
       }
     </style>
   </template>
@@ -1942,6 +1899,7 @@ export type BaseDefComponent = ComponentLike<{
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    canEdit?: boolean;
   };
 }>;
 
@@ -1987,7 +1945,11 @@ export class StringField extends FieldDef {
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <BoxelInput @value={{@model}} @onInput={{@set}} />
+      <BoxelInput
+        @value={{@model}}
+        @onInput={{@set}}
+        @disabled={{not @canEdit}}
+      />
     </template>
   };
   static atom = class Atom extends Component<typeof this> {
@@ -2787,6 +2749,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    canEdit?: boolean;
   };
 };
 
