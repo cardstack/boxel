@@ -8,13 +8,13 @@
           "step": 0,
           "comment": "Hip 0",
           "bodyPositionDegrees": 10,
-          "bodyBalance": "3/7"
+          "bodyBalance": "7/3"
         },
         {
           "step": 5,
           "comment": "Hip 3",
           "bodyPositionDegrees": 45, 
-          "bodyBalance": "3/7"
+          "bodyBalance": "5/5"
         },
         {
           "step": 10,
@@ -28,7 +28,7 @@
           "step": 5,
           "comment": "Hip 3",
           "bodyPositionDegrees": 10,
-          "bodyBalance": "3/7"
+          "bodyBalance": "5/5"
         }
       ],
       "title": "FunXR Open style",
