@@ -1,4 +1,5 @@
 import NumberField from 'https://cardstack.com/base/number';
+import StringField from 'https://cardstack.com/base/string';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
@@ -215,48 +216,56 @@ class Isolated extends Component<typeof GardenDesign> {
     </style>
   </template>
 
-  defaultUnit = 30;
-  defaultSize = 10;
+  defaultCount = 10;
+  defaultUnitSize = 50;
+  optionsMap = new Map(OPTIONS.map((el) => [el.id, el]));
 
-  @tracked rows;
-  @tracked columns;
-  @tracked unit;
-  @tracked gridStyle;
+  @tracked cols = this.args.model.columns ?? this.defaultCount;
+  @tracked rows = this.args.model.rows ?? this.defaultCount;
+  @tracked gridStyle = htmlSafe(`
+    grid-template-columns: repeat(${this.cols}, ${this.defaultUnitSize}px);
+    grid-template-rows: repeat(${this.rows}, ${this.defaultUnitSize}px);
+  `);
   @tracked gridMap: TrackedMap<string, Option | null>;
-  @tracked optionsMap: Map<string, Option>;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    this.rows = this.args.model.width ?? this.defaultSize;
-    this.columns = this.args.model.length ?? this.defaultSize;
-    this.unit = this.args.model.unitPx ?? this.defaultUnit;
-    this.gridStyle = this.generateGridStyle();
     this.gridMap = new TrackedMap(
-      this.generateGridIds().map((id) => [id, null]),
+      this.generateGridIds().map((id) => {
+        let maybeOption = this._gridModel.find(
+          (el: [string, Option | null]) => el[0] === id,
+        );
+        return [id, maybeOption ? maybeOption[1] : null];
+      }),
     );
-    this.optionsMap = new Map(OPTIONS.map((el) => [el.id, el]));
+    this.updateGridModel();
   }
 
   get title() {
     return this.args.model.title ?? 'Untitled Garden';
   }
 
-  generateGridStyle = () => {
-    return htmlSafe(`
-      grid-template-columns: repeat(${this.rows}, ${this.unit}px);
-      grid-template-rows: repeat(${this.columns}, ${this.unit}px);
-    `);
-  };
-
   generateGridIds = () => {
     let ids: string[] = [];
-    for (let col = 0; col < this.columns; col++) {
-      for (let row = 0; row < this.rows; row++) {
-        ids.push(`target-${row}-${col}`);
+    for (let row = 0; row < this.rows; row++) {
+      for (let col = 0; col < this.cols; col++) {
+        ids.push(`r${row}-c${col}`);
       }
     }
     return ids;
   };
+
+  get _gridModel() {
+    return JSON.parse(this.args.model.grid ?? '[]');
+  }
+
+  updateGridModel() {
+    let newValues = JSON.stringify([...this.gridMap.entries()]);
+    if (this.args.model.grid === newValues) {
+      return;
+    }
+    this.args.model.grid = newValues;
+  }
 
   get gridItems() {
     let items: { id: string; content: Option | null }[] = [];
@@ -311,30 +320,29 @@ class Isolated extends Component<typeof GardenDesign> {
       if (maybeCurrentValue && dragItemId) {
         // item from the grid is dragged to unknown location, remove it from the grid
         this.gridMap.set(dragItemId, null);
+      } else {
+        return;
       }
-      return;
-    }
-    if (maybeCurrentValue && dragItemId) {
+    } else if (maybeCurrentValue && dragItemId) {
       // move item from one grid location to another
       this.gridMap.set(dragItemId, null);
       this.gridMap.set(dropTargetId, maybeCurrentValue);
-      return;
-    }
-
-    if (dragItem) {
+    } else if (dragItem) {
       this.gridMap.set(dropTargetId, dragItem);
     }
+    this.updateGridModel();
   }
 
   @action reset() {
     [...this.gridMap.keys()].map((key) => this.gridMap.set(key, null));
+    this.updateGridModel();
   }
 }
 
 export class GardenDesign extends CardDef {
-  @field width = contains(NumberField);
-  @field length = contains(NumberField);
-  @field unitPx = contains(NumberField);
+  @field rows = contains(NumberField);
+  @field columns = contains(NumberField);
+  @field grid = contains(StringField);
   static displayName = 'Garden Design';
   static isolated = Isolated;
   /*
