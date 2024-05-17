@@ -125,6 +125,7 @@ export async function loadCard(
     return maybeCard;
   }
 
+  debugger;
   let err = new CardError(`Unable to loadCard ${humanReadable(ref)}`, {
     status: 404,
   });

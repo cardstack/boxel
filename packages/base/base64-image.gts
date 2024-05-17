@@ -1,16 +1,5 @@
 import StringField from './string';
 import NumberField from './number';
-import {
-  FieldDef,
-  field,
-  contains,
-  Component,
-  primitive,
-  useIndexBasedKey,
-  BaseDefConstructor,
-  BaseInstanceType,
-  deserialize,
-} from './card-api';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -20,6 +9,17 @@ import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import { htmlSafe } from '@ember/template';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
+import { Component } from './card-api/-components/utils';
+import {
+  BaseDefConstructor,
+  BaseInstanceType,
+  FieldDef,
+  contains,
+  deserialize,
+  field,
+  primitive,
+  useIndexBasedKey,
+} from './card-api';
 
 const atomImgHeight = 200;
 

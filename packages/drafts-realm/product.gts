@@ -13,7 +13,7 @@ import {
   contains,
   containsMany,
   StringField,
-  FieldsTypeFor,
+  type FieldsTypeFor,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';

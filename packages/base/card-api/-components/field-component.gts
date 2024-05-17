@@ -1,31 +1,29 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import {
-  type Box,
-  type Field,
-  type Format,
-  type FieldsTypeFor,
-  type BaseDef,
-  type BaseDefComponent,
-  type BaseDefConstructor,
-  CardContext,
-  isCard,
-  isCompoundField,
-  formats,
-} from './card-api';
-import {
   CardContextName,
   DefaultFormatContextName,
   RealmSession,
   RealmSessionContextName,
   getField,
+  primitive,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
-import { initSharedState } from './shared-state';
+import { initSharedState } from '../../shared-state';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
+import { formats, type Format } from '../-constants';
+import { type Box } from '../-box';
+import { type BaseDef, type BaseDefConstructor } from '../-base-def';
+import {
+  type FieldsTypeFor,
+  type CardContext,
+  type BaseDefComponent,
+} from './utils';
+import { type Field } from '../-fields/storage';
+import { isCard, isCompoundField } from '../-type-utils';
 
 export interface BoxComponentSignature {
   Args: { Named: { format?: Format; displayContainer?: boolean } };
@@ -360,4 +358,20 @@ function fieldsComponentsFor<T extends BaseDef>(
       };
     },
   }) as any;
+}
+
+export function fieldComponent(
+  field: Field<typeof BaseDef>,
+  model: Box<BaseDef>,
+): BoxComponent {
+  let fieldName = field.name as keyof BaseDef;
+  let card: typeof BaseDef;
+  if (primitive in field.card) {
+    card = field.card;
+  } else {
+    card =
+      (model.value[fieldName]?.constructor as typeof BaseDef) ?? field.card;
+  }
+  let innerModel = model.field(fieldName) as unknown as Box<BaseDef>;
+  return getBoxComponent(card, innerModel, field);
 }
