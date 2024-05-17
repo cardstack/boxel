@@ -30,6 +30,7 @@ export default class RealmInfoService extends Service {
   cachedRealmInfos: TrackedMap<string, RealmInfoWithPermissions> =
     new TrackedMap(); // Has the realm url already been resolved to a realm info?
   cachedPublicReadableRealms: Map<string, boolean> = new Map();
+  cachedFetchTasks: Map<string, Promise<Response>> = new Map();
 
   async fetchRealmURL(url: string): Promise<URL | undefined> {
     let realmURLString = this.getRealmURLFromCache(url);
@@ -99,12 +100,15 @@ export default class RealmInfoService extends Service {
       if (this.cachedRealmInfos.has(realmURLString)) {
         return this.cachedRealmInfos.get(realmURLString)!;
       } else {
-        let realmInfoResponse = await this.loaderService.loader.fetch(
+        let realmInfoResponse = await this.cachedFetch(
           `${realmURLString}_info`,
-          { headers: { Accept: SupportedMimeType.RealmInfo } },
+          {
+            headers: { Accept: SupportedMimeType.RealmInfo },
+          },
         );
 
-        let realmInfo = (await realmInfoResponse.json())?.data
+        //The usage of `clone()` is to avoid the `json already read` error.
+        let realmInfo = (await realmInfoResponse.clone().json())?.data
           ?.attributes as RealmInfo;
         let realmSession = getRealmSession(this, {
           realmURL: () => new URL(realmURLString!),
@@ -138,4 +142,15 @@ export default class RealmInfoService extends Service {
       waiter.endAsync(token);
     }
   });
+
+  private cachedFetch(url: string, init: RequestInit): Promise<Response> {
+    let fetchTaskKey = url + init.method;
+    let fetchTask = this.cachedFetchTasks.get(fetchTaskKey);
+    if (fetchTask) {
+      return fetchTask;
+    }
+    fetchTask = this.loaderService.loader.fetch(url, init);
+    this.cachedFetchTasks.set(fetchTaskKey, fetchTask);
+    return fetchTask;
+  }
 }

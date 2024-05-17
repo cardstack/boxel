@@ -81,7 +81,6 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
     .horizontal {
       grid-template-columns: var(--boxel-field-label-size, minmax(4rem, 25%)) 1fr;
       gap: 0 var(--boxel-sp-lg);
-      padding-right: var(--boxel-sp-xl);
     }
 
     .small-label {

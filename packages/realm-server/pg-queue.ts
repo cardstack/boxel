@@ -13,6 +13,7 @@ import {
   asExpressions,
   Deferred,
   Job,
+  reportError,
 } from '@cardstack/runtime-common';
 import PgAdapter from './pg-adapter';
 
@@ -338,9 +339,16 @@ export default class PgQueue implements Queue {
           log.debug(`running %s`, coalescedIds);
           result = await this.runJob(firstJob.category, firstJob.args);
           newStatus = 'resolved';
-        } catch (err) {
+        } catch (err: any) {
+          console.error(
+            `Error running job ${firstJob.id}: category=${
+              firstJob.category
+            } queue=${firstJob.queue} args=${JSON.stringify(firstJob.args)}`,
+            err,
+          );
           result = serializableError(err);
           newStatus = 'rejected';
+          reportError(err);
         }
         log.debug(`finished %s as %s`, coalescedIds, newStatus);
         await query([
