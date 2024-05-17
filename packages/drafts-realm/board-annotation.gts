@@ -81,7 +81,7 @@ class BodyBalance extends FieldDef {
 
 export class BoardAnnotation extends FieldDef {
   static displayName = 'Board Annotation';
-  @field step = contains(NumberField);
+  @field position = contains(NumberField);
   @field comment = contains(StringField);
   @field bodyPositionDegrees = contains(NumberField);
   @field bodyBalance = contains(BodyBalance);
@@ -158,9 +158,9 @@ export class BoardAnnotation extends FieldDef {
       {{/if}}
       <style>
         .comment {
-          font-size: 18px;
-          font-weight: bold;
-          max-width: 100px;
+          font-size: 13px;
+          max-width: 60px;
+          font-weight: normal;
         }
         .board {
           position: absolute;

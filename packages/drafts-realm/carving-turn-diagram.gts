@@ -11,6 +11,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import { RadioInput } from '@cardstack/boxel-ui/components';
+import { tracked } from '@glimmer/tracking';
 import { fn, concat, get } from '@ember/helper';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoardAnnotation } from './board-annotation';
@@ -74,309 +75,378 @@ class DiagramType extends FieldDef {
     </template>
   };
 }
+
+class IsolatedView extends Component<typeof CarvingTurnDiagram> {
+  @tracked stance = 'regular';
+
+  get showToeTurn() {
+    return (
+      this.args.model.diagramType === 'toe/heel' ||
+      this.args.model.diagramType === 'toe'
+    );
+  }
+  get showHeelTurn() {
+    return (
+      this.args.model.diagramType === 'toe/heel' ||
+      this.args.model.diagramType === 'heel'
+    );
+  }
+
+  get toeAnnotationFields() {
+    return this.stance === 'regular'
+      ? this.args.fields.toeAnnotations
+      : this.args.fields.heelAnnotations;
+  }
+
+  get toeAnnotationModels() {
+    return this.stance === 'regular'
+      ? this.args.model.toeAnnotations
+      : this.args.model.heelAnnotations;
+  }
+
+  get heelAnnotationFields() {
+    return this.stance === 'regular'
+      ? this.args.fields.heelAnnotations
+      : this.args.fields.toeAnnotations;
+  }
+
+  get heelAnnotationModels() {
+    return this.stance === 'regular'
+      ? this.args.model.heelAnnotations
+      : this.args.model.toeAnnotations;
+  }
+
+  private setStance = (stance: string) => {
+    this.stance = stance;
+  };
+
+  private stanceItems = [
+    { id: 'regular', text: 'Regular' },
+    { id: 'goofy', text: 'Goofy' },
+  ];
+
+  <template>
+    <div class='title'><@fields.title /></div>
+    <div class='description'><@fields.description /></div>
+    <div class='stance-switch'>
+      <RadioInput
+        @items={{this.stanceItems}}
+        @groupDescription='Stance'
+        name='stance'
+        @checkedId={{this.stance}}
+        as |item|
+      >
+        <item.component @onChange={{fn this.setStance item.data.id}}>
+          {{item.data.text}}
+        </item.component>
+      </RadioInput>
+    </div>
+    <div class='container {{this.stance}}'>
+      <div class='fall-line'>Fall Line
+        <div class='arrow'></div>
+      </div>
+      {{#if this.showToeTurn}}
+        <div class='toe turn'>
+          {{#if this.toeAnnotationFields}}
+            {{#each this.toeAnnotationFields as |annotation i|}}
+              {{#let
+                (get (get this.toeAnnotationModels i) 'position')
+                as |position|
+              }}
+                <div class='position {{concat "position-" position}}'>
+                  <div class='annotation'>position {{position}}</div>
+                  <annotation />
+                </div>
+              {{/let}}
+            {{/each}}
+          {{/if}}
+        </div>
+      {{/if}}
+      {{#if this.showHeelTurn}}
+        <div class='heel turn'>
+          {{#if this.heelAnnotationFields}}
+            {{#each this.heelAnnotationFields as |annotation i|}}
+              {{#let
+                (get (get this.heelAnnotationModels i) 'position')
+                as |position|
+              }}
+                <div class='position {{concat "position-" position}}'>
+                  <div class='annotation'>position {{position}}</div>
+                  <annotation />
+                </div>
+              {{/let}}
+            {{/each}}
+          {{/if}}
+        </div>
+      {{/if}}
+    </div>
+
+    <style>
+      .title {
+        width: 500px;
+        margin: 2rem 2rem 0;
+        font-weight: bold;
+        font-size: 25px;
+      }
+      .stance-switch {
+        display: flex;
+        justify-content: center;
+      }
+      .description {
+        margin: 1rem 2rem 0;
+      }
+      .container {
+        position: relative;
+        margin-top: 250px;
+        margin-bottom: 200px;
+      }
+      .goofy :deep(.board:before) {
+        transform: rotate(207deg);
+      }
+      .goofy :deep(.board:after) {
+        transform: rotate(219deg);
+      }
+      .turn {
+        position: relative;
+        width: 500px;
+        height: 500px;
+        margin: 0 auto;
+      }
+      .heel {
+        top: -10px;
+      }
+      .turn:before {
+        position: absolute;
+        top: 0;
+        left: 0;
+        color: rgba(0, 0, 0, 0.15);
+        font-size: 80px;
+        text-align: center;
+        line-height: 300px;
+        border: 10px solid gray;
+        width: calc(100% - 20px);
+        height: calc(100% - 20px);
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 50%;
+      }
+      .turn:after {
+        position: absolute;
+        top: 0;
+        left: 0;
+        color: rgba(0, 0, 0, 0.15);
+        font-size: 80px;
+        text-align: center;
+        line-height: 675px;
+        border: 10px solid rgba(0, 0, 0, 0);
+        background: rgba(0, 0, 0, 0.05);
+        width: calc(100% - 20px);
+        height: calc(100% - 20px);
+        border-radius: 50%;
+      }
+      .toe:before {
+        content: 'x+';
+        clip-path: inset(-100% -100% -100% 50%);
+        letter-spacing: 280px;
+      }
+      .heel:before {
+        content: '+';
+        clip-path: inset(-100% 50% -100% -100%);
+        letter-spacing: 200px;
+      }
+      .toe:after {
+        content: 'x-';
+        clip-path: inset(50% -100% -100% 50%);
+        letter-spacing: 280px;
+      }
+      .heel:after {
+        content: '-';
+        clip-path: inset(50% 50% -100% -100%);
+        letter-spacing: 200px;
+      }
+      .fall-line {
+        position: absolute;
+        top: 150px;
+        left: 40%;
+        font-weight: bold;
+        color: rgba(0, 0, 0, 1);
+        font-size: 23px;
+        opacity: 0.5;
+        transform: rotate(90deg);
+      }
+      .annotation {
+        font-weight: bold;
+        font-size: 13px;
+        line-height: 50px;
+      }
+      .toe :deep(.board) {
+        left: 270px;
+      }
+      .heel :deep(.board) {
+        left: 0;
+      }
+      .heel :deep(.edge-angle) {
+        top: 70px;
+        left: 60px;
+        transform: rotate(180deg);
+      }
+      .position {
+        position: absolute;
+        height: 50px;
+        width: 600px;
+        opacity: 0.6;
+      }
+      .toe .position {
+        padding-left: 270px;
+      }
+      .heel .position {
+      }
+      .toe .position-0 {
+        transform: rotate(-0.25turn);
+        left: -60px;
+        top: -80px;
+      }
+      .toe .position-1 {
+        transform: rotate(-0.2turn);
+        left: 31px;
+        top: -67px;
+      }
+      .toe .position-2 {
+        transform: rotate(-0.15turn);
+        left: 111px;
+        top: -24px;
+      }
+      .toe .position-3 {
+        transform: rotate(-0.1turn);
+        left: 180px;
+        top: 40px;
+      }
+      .toe .position-4 {
+        transform: rotate(-0.05turn);
+        left: 225px;
+        top: 121px;
+      }
+      .toe .position-5 {
+        top: calc(50% - 25px);
+        left: 50%;
+      }
+      .toe .position-6 {
+        transform: rotate(0.05turn);
+        left: 225px;
+        top: 308px;
+      }
+      .toe .position-7 {
+        transform: rotate(0.1turn);
+        left: 183px;
+        top: 391px;
+      }
+      .toe .position-8 {
+        transform: rotate(0.15turn);
+        left: 115px;
+        top: 455px;
+      }
+      .toe .position-9 {
+        transform: rotate(0.2turn);
+        left: 33px;
+        top: 498px;
+      }
+      .toe .position-10 {
+        transform: rotate(0.25turn);
+        left: -60px;
+        top: 515px;
+      }
+
+      .heel .position-0 {
+        transform: rotate(0.25turn);
+        right: -60px;
+        top: 108px;
+      }
+      .heel .position-1 {
+        transform: rotate(0.2turn);
+        right: -29px;
+        top: 112px;
+      }
+      .heel .position-2 {
+        transform: rotate(0.15turn);
+        right: 5px;
+        top: 125px;
+      }
+      .heel .position-3 {
+        transform: rotate(0.1turn);
+        right: 31px;
+        top: 148px;
+      }
+      .heel .position-4 {
+        transform: rotate(0.05turn);
+        right: 40px;
+        top: 182px;
+      }
+      .heel .position-5 {
+        top: calc(50% - 25px);
+        right: 46px;
+      }
+      .heel .position-6 {
+        transform: rotate(-0.05turn);
+        right: 30px;
+        top: 245px;
+      }
+      .heel .position-7 {
+        transform: rotate(-0.1turn);
+        right: 17px;
+        top: 271px;
+      }
+      .heel .position-8 {
+        transform: rotate(-0.15turn);
+        right: -2px;
+        top: 294px;
+      }
+      .heel .position-9 {
+        transform: rotate(-0.2turn);
+        right: -29px;
+        top: 312px;
+      }
+      .heel .position-10 {
+        transform: rotate(-0.25turn);
+        right: -60px;
+        top: 306px;
+      }
+      .arrow {
+        font-weight: inherit;
+        font-size: inherit;
+        position: absolute;
+        top: 15px;
+        right: -45px;
+        width: 35px;
+        height: 5px;
+        background-color: rgba(0, 0, 0, 1);
+      }
+      .arrow::after,
+      .arrow::before {
+        content: '';
+        position: absolute;
+        width: 20px;
+        height: 5px;
+        right: -8px;
+        background-color: rgba(0, 0, 0, 1);
+      }
+      .arrow::after {
+        top: -6px;
+        transform: rotate(45deg);
+      }
+      .arrow::before {
+        top: 5px;
+        transform: rotate(-45deg);
+      }
+    </style>
+  </template>
+}
+
 export class CarvingTurnDiagram extends CardDef {
   static displayName = 'Carving Turn Diagram';
   @field diagramType = contains(DiagramType);
   @field toeAnnotations = containsMany(BoardAnnotation);
   @field heelAnnotations = containsMany(BoardAnnotation);
 
-  static isolated = class Isolated extends Component<typeof this> {
-    get showToeTurn() {
-      return (
-        this.args.model.diagramType === 'toe/heel' ||
-        this.args.model.diagramType === 'toe'
-      );
-    }
-    get showHeelTurn() {
-      return (
-        this.args.model.diagramType === 'toe/heel' ||
-        this.args.model.diagramType === 'heel'
-      );
-    }
-    <template>
-      <div class='title'><@fields.title /></div>
-      <div class='description'><@fields.description /></div>
-      <div class='container'>
-        <div class='fall-line'>Fall Line
-          <div class='arrow'></div>
-        </div>
-        {{#if this.showToeTurn}}
-          <div class='toe turn'>
-            {{#if @fields.toeAnnotations}}
-              {{#each @fields.toeAnnotations as |annotation i|}}
-                {{#let (get (get @model.toeAnnotations i) 'step') as |step|}}
-                  <div class='step {{concat "step-" step}}'>
-                    <div class='annotation'>step {{step}}</div>
-                    <annotation />
-                  </div>
-                {{/let}}
-              {{/each}}
-            {{/if}}
-          </div>
-        {{/if}}
-        {{#if this.showHeelTurn}}
-          <div class='heel turn'>
-            {{#if @fields.heelAnnotations}}
-              {{#each @fields.heelAnnotations as |annotation i|}}
-                {{#let (get (get @model.heelAnnotations i) 'step') as |step|}}
-                  <div class='step {{concat "step-" step}}'>
-                    <div class='annotation'>step {{step}}</div>
-                    <annotation />
-                  </div>
-                {{/let}}
-              {{/each}}
-            {{/if}}
-          </div>
-        {{/if}}
-      </div>
-
-      <style>
-        .title {
-          width: 500px;
-          margin: 2rem 2rem 0;
-          font-weight: bold;
-          font-size: 25px;
-        }
-        .description {
-          margin: 1rem 2rem 0;
-        }
-        .turn {
-          position: relative;
-          width: 500px;
-          height: 500px;
-          margin: 0 auto;
-        }
-        .heel {
-          top: -10px;
-        }
-        .turn:before {
-          position: absolute;
-          top: 0;
-          left: 0;
-          color: rgba(0, 0, 0, 0.15);
-          font-size: 80px;
-          text-align: center;
-          line-height: 300px;
-          border: 10px solid gray;
-          width: calc(100% - 20px);
-          height: calc(100% - 20px);
-          background: rgba(0, 0, 0, 0.05);
-          border-radius: 50%;
-        }
-        .turn:after {
-          position: absolute;
-          top: 0;
-          left: 0;
-          color: rgba(0, 0, 0, 0.15);
-          font-size: 80px;
-          text-align: center;
-          line-height: 675px;
-          border: 10px solid rgba(0, 0, 0, 0);
-          background: rgba(0, 0, 0, 0.05);
-          width: calc(100% - 20px);
-          height: calc(100% - 20px);
-          border-radius: 50%;
-        }
-        .toe:before {
-          content: 'x+';
-          clip-path: inset(-100% -100% -100% 50%);
-          letter-spacing: 280px;
-        }
-        .heel:before {
-          content: '+';
-          clip-path: inset(-100% 50% -100% -100%);
-          letter-spacing: 200px;
-        }
-        .toe:after {
-          content: 'x-';
-          clip-path: inset(50% -100% -100% 50%);
-          letter-spacing: 280px;
-        }
-        .heel:after {
-          content: '-';
-          clip-path: inset(50% 50% -100% -100%);
-          letter-spacing: 200px;
-        }
-        .container {
-          position: relative;
-          margin-top: 200px;
-          margin-bottom: 200px;
-        }
-        .fall-line {
-          position: absolute;
-          top: 150px;
-          left: 40%;
-          font-weight: bold;
-          color: rgba(0, 0, 0, 1);
-          font-size: 23px;
-          opacity: 0.5;
-          transform: rotate(90deg);
-        }
-        .annotation {
-          font-size: 18px;
-          line-height: 50px;
-        }
-        .toe :deep(.board) {
-          left: 270px;
-        }
-        .heel :deep(.board) {
-          left: 0;
-        }
-        .heel :deep(.edge-angle) {
-          top: 70px;
-          left: 60px;
-          transform: rotate(180deg);
-        }
-        .step {
-          position: absolute;
-          height: 50px;
-          width: 600px;
-          opacity: 0.6;
-        }
-        .toe .step {
-          padding-left: 270px;
-        }
-        .heel .step {
-        }
-        .toe .step-0 {
-          transform: rotate(-0.25turn);
-          left: -60px;
-          top: -80px;
-        }
-        .toe .step-1 {
-          transform: rotate(-0.2turn);
-          left: 31px;
-          top: -67px;
-        }
-        .toe .step-2 {
-          transform: rotate(-0.15turn);
-          left: 111px;
-          top: -24px;
-        }
-        .toe .step-3 {
-          transform: rotate(-0.1turn);
-          left: 180px;
-          top: 40px;
-        }
-        .toe .step-4 {
-          transform: rotate(-0.05turn);
-          left: 225px;
-          top: 121px;
-        }
-        .toe .step-5 {
-          top: calc(50% - 25px);
-          left: 50%;
-        }
-        .toe .step-6 {
-          transform: rotate(0.05turn);
-          left: 225px;
-          top: 308px;
-        }
-        .toe .step-7 {
-          transform: rotate(0.1turn);
-          left: 183px;
-          top: 391px;
-        }
-        .toe .step-8 {
-          transform: rotate(0.15turn);
-          left: 115px;
-          top: 455px;
-        }
-        .toe .step-9 {
-          transform: rotate(0.2turn);
-          left: 33px;
-          top: 498px;
-        }
-        .toe .step-10 {
-          transform: rotate(0.25turn);
-          left: -60px;
-          top: 515px;
-        }
-
-        .heel .step-0 {
-          transform: rotate(0.25turn);
-          right: -60px;
-          top: 108px;
-        }
-        .heel .step-1 {
-          transform: rotate(0.2turn);
-          right: -29px;
-          top: 112px;
-        }
-        .heel .step-2 {
-          transform: rotate(0.15turn);
-          right: 5px;
-          top: 125px;
-        }
-        .heel .step-3 {
-          transform: rotate(0.1turn);
-          right: 31px;
-          top: 148px;
-        }
-        .heel .step-4 {
-          transform: rotate(0.05turn);
-          right: 40px;
-          top: 182px;
-        }
-        .heel .step-5 {
-          top: calc(50% - 25px);
-          right: 46px;
-        }
-        .heel .step-6 {
-          transform: rotate(-0.05turn);
-          right: 30px;
-          top: 245px;
-        }
-        .heel .step-7 {
-          transform: rotate(-0.1turn);
-          right: 17px;
-          top: 271px;
-        }
-        .heel .step-8 {
-          transform: rotate(-0.15turn);
-          right: -2px;
-          top: 294px;
-        }
-        .heel .step-9 {
-          transform: rotate(-0.2turn);
-          right: -29px;
-          top: 312px;
-        }
-        .heel .step-10 {
-          transform: rotate(-0.25turn);
-          right: -60px;
-          top: 306px;
-        }
-        .arrow {
-          font-weight: inherit;
-          font-size: inherit;
-          position: absolute;
-          top: 15px;
-          right: -45px;
-          width: 35px;
-          height: 5px;
-          background-color: rgba(0, 0, 0, 1);
-        }
-        .arrow::after,
-        .arrow::before {
-          content: '';
-          position: absolute;
-          width: 20px;
-          height: 5px;
-          right: -8px;
-          background-color: rgba(0, 0, 0, 1);
-        }
-        .arrow::after {
-          top: -6px;
-          transform: rotate(45deg);
-        }
-        .arrow::before {
-          top: 5px;
-          transform: rotate(-45deg);
-        }
-      </style>
-    </template>
-  };
+  static isolated = IsolatedView;
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

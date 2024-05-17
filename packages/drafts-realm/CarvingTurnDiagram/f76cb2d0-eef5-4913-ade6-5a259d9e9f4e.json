@@ -5,45 +5,43 @@
       "diagramType": "toe/heel",
       "toeAnnotations": [
         {
-          "step": 0,
+          "position": 0,
           "comment": "Hip 0",
           "bodyPositionDegrees": 45,
-          "bodyBalance": "7/3",
           "edgeAngleDegrees": "45"  
         },
         {
-          "step": 5,
-          "comment": "Hip 3",
+          "position": 5, 
+          "comment": "Hip 3", 
           "bodyPositionDegrees": 45,
           "bodyBalance": "5/5",   
           "edgeAngleDegrees": "90"
         }
         
       ],
-      "heelAnnotations": [
+      "heelAnnotations": [ 
         {
-          "step": 0,
+          "position": 0,
           "comment": "Hip 10",
           "bodyPositionDegrees": 10,
           "bodyBalance": "3/7",
           "edgeAngleDegrees": "45" 
         },
         {
-          "step": 3,
+          "position": 3,
           "comment": "Hip 3 touch positive",
-          "bodyPositionDegrees": 10,
-          "bodyBalance": "6/4", 
+          "bodyPositionDegrees": 15,
           "edgeAngleDegrees": "80"
         },
         {
-          "step": 5,
+          "position": 5,
           "comment": "Hip 3",
-          "bodyPositionDegrees": 15,
+          "bodyPositionDegrees": 25,
           "bodyBalance": "5/5",
           "edgeAngleDegrees": "90"    
         },
         {
-          "step": 10,
+          "position": 10,
           "comment": "Hip 10",
           "bodyPositionDegrees": 45,
           "bodyBalance": "3/7",  
