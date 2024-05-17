@@ -201,9 +201,6 @@ export class CarvingTurnDiagram extends CardDef {
         }
         .heel .step {
         }
-        .step-3 {
-          background: lightgreen;
-        }
         .toe .step-0 {
           transform: rotate(-0.25turn);
           left: -60px;
@@ -360,6 +357,7 @@ export class CarvingTurnDiagram extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

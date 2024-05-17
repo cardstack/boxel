@@ -3,9 +3,6 @@ import {
   field,
   contains,
   primitive,
-  deserialize,
-  BaseDefConstructor,
-  BaseInstanceType,
 } from 'https://cardstack.com/base/card-api';
 import { concat, fn } from '@ember/helper';
 import { Component } from 'https://cardstack.com/base/card-api';
@@ -30,15 +27,6 @@ class BodyBalance extends FieldDef {
     | '9/1'
     | '10/0';
 
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    val: any,
-  ): Promise<BaseInstanceType<T>> {
-    if (val === undefined || val === null) {
-      return 0 as BaseInstanceType<T>;
-    }
-    return val as BaseInstanceType<T>;
-  }
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{@model}}
@@ -284,6 +272,10 @@ export class BoardAnnotation extends FieldDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
 
 
 

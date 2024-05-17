@@ -10,6 +10,7 @@
           "bodyPositionDegrees": 10,
           "bodyBalance": "7/3"
         },
+       
         {
           "step": 5,
           "comment": "Hip 3",
@@ -24,6 +25,10 @@
         }
       ],
       "heelAnnotations": [
+         {
+          "step": 3,
+          "comment": "touch positive" 
+        },
         {
           "step": 5,
           "comment": "Hip 3",
