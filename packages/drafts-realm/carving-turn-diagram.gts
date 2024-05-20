@@ -498,9 +498,16 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
 
 export class CarvingTurnDiagram extends CardDef {
   static displayName = 'Carving Turn Diagram';
-  @field diagramType = contains(DiagramType);
-  @field toeAnnotations = containsMany(BoardAnnotation);
-  @field heelAnnotations = containsMany(BoardAnnotation);
+  @field diagramType = contains(DiagramType, {
+    description:
+      'An indicator for which turns to include in the diagram: toe turn, heel turn, or both toe and heel turns.',
+  });
+  @field toeAnnotations = containsMany(BoardAnnotation, {
+    description: 'A collection of annotations for a toe side turn',
+  });
+  @field heelAnnotations = containsMany(BoardAnnotation, {
+    description: 'A collection of annotations for a heel side turn',
+  });
 
   static isolated = IsolatedView;
 
