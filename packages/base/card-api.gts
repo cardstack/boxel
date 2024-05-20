@@ -96,7 +96,7 @@ export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 type Setter = (value: any) => void;
 
 interface Options {
-  computeVia?: string | (() => unknown);
+  computeVia?: () => unknown;
   description?: string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
@@ -287,6 +287,15 @@ export interface JSONAPISingleResourceDocument {
   included?: (Partial<JSONAPIResource> & { id: string; type: string })[];
 }
 
+interface FieldFactory {
+  new <T extends typeof BaseDef>(
+    cardThunk: () => T,
+    computeVia: undefined | (() => unknown),
+    name: string,
+    isUsed: undefined | true,
+  ): Field;
+}
+
 export interface Field<
   CardT extends BaseDefConstructor = BaseDefConstructor,
   SearchT = any,
@@ -294,8 +303,8 @@ export interface Field<
   card: CardT;
   name: string;
   fieldType: FieldType;
-  computeVia: undefined | string | (() => unknown);
-  description: undefined | string;
+  computeVia: undefined | (() => unknown);
+
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -422,9 +431,8 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   readonly fieldType = 'containsMany';
   constructor(
     private cardThunk: () => FieldT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
-    readonly description: string | undefined,
     readonly isUsed: undefined | true,
   ) {}
 
@@ -630,9 +638,8 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly fieldType = 'contains';
   constructor(
     private cardThunk: () => CardT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
-    readonly description: string | undefined,
     readonly isUsed: undefined | true,
   ) {}
 
@@ -776,9 +783,8 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   constructor(
     private cardThunk: () => CardT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
-    readonly description: string | undefined,
     readonly isUsed: undefined | true,
   ) {}
 
@@ -1097,9 +1103,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly fieldType = 'linksToMany';
   constructor(
     private cardThunk: () => FieldT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
-    readonly description: string | undefined,
     readonly isUsed: undefined | true,
   ) {}
 
@@ -1487,19 +1492,14 @@ function fieldComponent(
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
 export const field = function (
-  target: BaseDef,
+  target: typeof BaseDef,
   key: string | symbol,
   { initializer }: { initializer(): any },
 ) {
-  let descriptor = initializer().setupField(key);
-  if (descriptor[fieldDescription]) {
-    setFieldDescription(
-      target.constructor,
-      key as string,
-      descriptor[fieldDescription],
-    );
+  if (typeof key !== 'string') {
+    throw new Error(`only string field names are supported`);
   }
-  return descriptor;
+  return makeDescriptor(key, target, initializer);
 } as unknown as PropertyDecorator;
 (field as any)[fieldDecorator] = undefined;
 
@@ -1507,19 +1507,16 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   field: FieldT,
   options?: Options,
 ): BaseInstanceType<FieldT>[] {
-  return {
-    setupField(fieldName: string) {
-      return makeDescriptor(
-        new ContainsMany(
-          cardThunk(field),
-          options?.computeVia,
-          fieldName,
-          options?.description,
-          options?.isUsed,
-        ),
-      );
-    },
-  } as any;
+  let result: FieldInitializer = {
+    // TODO: contravariant type error to address
+    factory: ContainsMany as any,
+    fieldClass: field,
+    computeVia: options?.computeVia,
+    description: options?.description,
+    // todo: get rid of this
+    isUsed: options?.isUsed,
+  };
+  return result as any;
 }
 containsMany[fieldType] = 'contains-many' as FieldType;
 
@@ -1527,19 +1524,16 @@ export function contains<FieldT extends FieldDefConstructor>(
   field: FieldT,
   options?: Options,
 ): BaseInstanceType<FieldT> {
-  return {
-    setupField(fieldName: string) {
-      return makeDescriptor(
-        new Contains(
-          cardThunk(field),
-          options?.computeVia,
-          fieldName,
-          options?.description,
-          options?.isUsed,
-        ),
-      );
-    },
-  } as any;
+  let result: FieldInitializer = {
+    // TODO: contravariant type error to address
+    factory: Contains as any,
+    fieldClass: field,
+    computeVia: options?.computeVia,
+    description: options?.description,
+    // todo: get rid of this
+    isUsed: options?.isUsed,
+  };
+  return result as any;
 }
 contains[fieldType] = 'contains' as FieldType;
 
@@ -1547,19 +1541,16 @@ export function linksTo<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
   options?: Options,
 ): BaseInstanceType<CardT> {
-  return {
-    setupField(fieldName: string) {
-      return makeDescriptor(
-        new LinksTo(
-          cardThunk(cardOrThunk),
-          options?.computeVia,
-          fieldName,
-          options?.description,
-          options?.isUsed,
-        ),
-      );
-    },
-  } as any;
+  let result: FieldInitializer = {
+    // TODO: contravariant type error to address
+    factory: LinksTo as any,
+    fieldClass: cardOrThunk,
+    computeVia: options?.computeVia,
+    description: options?.description,
+    // todo: get rid of this
+    isUsed: options?.isUsed,
+  };
+  return result as any;
 }
 linksTo[fieldType] = 'linksTo' as FieldType;
 
@@ -1567,19 +1558,16 @@ export function linksToMany<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
   options?: Options,
 ): BaseInstanceType<CardT>[] {
-  return {
-    setupField(fieldName: string) {
-      return makeDescriptor(
-        new LinksToMany(
-          cardThunk(cardOrThunk),
-          options?.computeVia,
-          fieldName,
-          options?.description,
-          options?.isUsed,
-        ),
-      );
-    },
-  } as any;
+  let result: FieldInitializer = {
+    // TODO: contravariant type error to address
+    factory: LinksToMany as any,
+    fieldClass: cardOrThunk,
+    computeVia: options?.computeVia,
+    description: options?.description,
+    // todo: get rid of this
+    isUsed: options?.isUsed,
+  };
+  return result as any;
 }
 linksToMany[fieldType] = 'linksToMany' as FieldType;
 
@@ -2663,58 +2651,84 @@ async function cardClassFromResource<CardT extends BaseDefConstructor>(
   return fallback;
 }
 
-function makeDescriptor<
-  CardT extends BaseDefConstructor,
-  FieldT extends BaseDefConstructor,
->(field: Field<FieldT>) {
+interface FieldInitializer {
+  factory: FieldFactory;
+  fieldClass: BaseDefConstructor | (() => BaseDefConstructor);
+  computeVia: (() => unknown) | undefined;
+  description: string | undefined;
+  // todo: get rid of this
+  isUsed: true | undefined;
+}
+
+function makeDescriptor(
+  name: string,
+  target: BaseDefConstructor,
+  initializer: () => FieldInitializer,
+) {
+  const ensureField = (() => {
+    let field: Field | undefined;
+
+    return function ensureField(instance: unknown): Field {
+      if (field) {
+        return field;
+      }
+
+      let { factory, fieldClass, description, computeVia, isUsed } =
+        initializer.call(instance);
+
+      field = new factory(cardThunk(fieldClass), computeVia, name, isUsed);
+
+      if (description) {
+        setFieldDescription(target, name, description);
+      }
+      return field;
+    };
+  })();
+
   let descriptor: any = {
     enumerable: true,
-  };
-  descriptor.get = function (this: BaseInstanceType<CardT>) {
-    return field.getter(this);
-  };
-  if (field.computeVia) {
-    descriptor.set = function () {
-      // computeds should just no-op when an assignment occurs
-    };
-  } else {
-    descriptor.set = function (this: BaseInstanceType<CardT>, value: any) {
-      if (
-        (field.card as typeof BaseDef) === IDField &&
-        isCardInstance(this) &&
-        this[isSavedInstance]
-      ) {
-        throw new Error(
-          `cannot assign a value to the field '${
-            field.name
-          }' on the saved card '${
-            (this as any)[field.name]
-          }' because it is the card's identifier`,
-        );
-      }
-      value = field.validate(this, value);
-      let deserialized = getDataBucket(this);
-      deserialized.set(field.name, value);
-      // invalidate all computed fields because we don't know which ones depend on this one
-      for (let computedFieldName of Object.keys(getComputedFields(this))) {
-        if (deserialized.has(computedFieldName)) {
-          let currentValue = deserialized.get(computedFieldName);
-          if (!isStaleValue(currentValue)) {
-            deserialized.set(computedFieldName, {
-              type: 'stale',
-              staleValue: currentValue,
-            } as StaleValue);
+    get() {
+      return ensureField(this).getter(this);
+    },
+    set(value: unknown) {
+      let field = ensureField(this);
+      if (field.computeVia) {
+        // computeds should just no-op when an assignment occurs
+      } else {
+        if (
+          (field.card as typeof BaseDef) === IDField &&
+          isCardInstance(this) &&
+          this[isSavedInstance]
+        ) {
+          throw new Error(
+            `cannot assign a value to the field '${
+              field.name
+            }' on the saved card '${
+              (this as any)[field.name]
+            }' because it is the card's identifier`,
+          );
+        }
+        value = field.validate(this, value);
+        let deserialized = getDataBucket(this);
+        deserialized.set(field.name, value);
+        // invalidate all computed fields because we don't know which ones depend on this one
+        for (let computedFieldName of Object.keys(getComputedFields(this))) {
+          if (deserialized.has(computedFieldName)) {
+            let currentValue = deserialized.get(computedFieldName);
+            if (!isStaleValue(currentValue)) {
+              deserialized.set(computedFieldName, {
+                type: 'stale',
+                staleValue: currentValue,
+              } as StaleValue);
+            }
           }
         }
+        notifySubscribers(this, field.name, value);
+        logger.log(recompute(this));
       }
-      notifySubscribers(this, field.name, value);
-      logger.log(recompute(this));
-    };
-  }
-  if (field.description) {
-    (descriptor as any)[fieldDescription] = field.description;
-  }
-  (descriptor.get as any)[isField] = field;
+    },
+  };
+  (descriptor.get as any)[isField] = theFielddIsNotAvailable; // Todo
   return descriptor;
 }
 

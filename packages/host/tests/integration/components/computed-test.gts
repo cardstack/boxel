@@ -74,10 +74,11 @@ module('Integration | computeds', function (hooks) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
-      @field fullName = contains(StringField, { computeVia: 'getFullName' });
-      getFullName() {
-        return `${this.firstName} ${this.lastName}`;
-      }
+      @field fullName = contains(StringField, {
+        computeVia: () => {
+          return `${this.firstName} ${this.lastName}`;
+        },
+      });
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.fullName />
@@ -438,12 +439,11 @@ module('Integration | computeds', function (hooks) {
       @field author = linksTo(Person);
       @field factCheckers = linksToMany(Pet);
       @field collaborators = linksToMany(Pet, {
-        computeVia: 'findCollaborators',
+        computeVia: function findCollaborators(this: Post) {
+          let mango = this.author.pets.find((p) => p.name === 'Mango');
+          return [mango, ...this.factCheckers];
+        },
       });
-      findCollaborators(this: Post) {
-        let mango = this.author.pets.find((p) => p.name === 'Mango');
-        return [mango, ...this.factCheckers];
-      }
     }
 
     let p1 = new Pet({ id: `${testRealmURL}mango`, name: 'Mango' });
