@@ -106,7 +106,7 @@ async function sendOption(
     format: 'org.matrix.custom.html',
     data: {
       command: {
-        type: 'patch',
+        type: 'patchCard',
         id: id,
         patch: {
           attributes: patch['attributes'],
