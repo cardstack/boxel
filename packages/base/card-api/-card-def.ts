@@ -10,7 +10,7 @@ import { contains } from './-fields/contains';
 import { IDField } from './-fields/id';
 import { StringField } from './-fields/string';
 import { MaybeBase64Field } from './-fields/maybe-base-64';
-import { BaseDef } from '../card-api';
+import { BaseDef } from './-base-def';
 
 export class CardDef extends BaseDef {
   [isSavedInstance] = false;

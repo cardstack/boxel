@@ -1,5 +1,3 @@
-import isEqual from 'lodash/isEqual';
-
 import {
   Indexer,
   asExpressions,
@@ -19,11 +17,15 @@ import {
   type RealmVersionsTable,
   LooseCardResource,
   trimExecutableExtension,
+  isRootCardDef,
 } from '../index';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { testRealmURL } from './const';
+import { logger } from '../log';
+
+const log = logger('indexer');
 
 const defaultIndexEntry = {
   realm_version: 1,
@@ -57,7 +59,18 @@ export async function getTypes(instance: CardDef): Promise<string[]> {
       throw new Error(`could not identify card ${loadedCard.name}`);
     }
     types.push(internalKeyFor(loadedCardRef, undefined));
-    if (!isEqual(loadedCardRef, baseCardRef)) {
+
+    log.debug(
+      `comparing ${JSON.stringify(loadedCardRef)} to ${JSON.stringify(
+        baseCardRef,
+      )}`,
+    );
+    console.log(
+      `comparing ${JSON.stringify(loadedCardRef)} to ${JSON.stringify(
+        baseCardRef,
+      )}`,
+    );
+    if (!isRootCardDef(loadedCardRef)) {
       fullRef = {
         type: 'ancestorOf',
         card: loadedCardRef,

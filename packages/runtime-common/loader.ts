@@ -669,6 +669,7 @@ export class Loader {
         }
       });
 
+      this.log.debug(`evaluating ${moduleIdentifier}`);
       module.implementation(...dependencies);
       this.setModule(moduleIdentifier, {
         state: 'evaluated',

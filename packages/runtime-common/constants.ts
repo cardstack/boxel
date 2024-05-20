@@ -11,10 +11,6 @@ export const baseCardRef: ResolvedCodeRef = {
   module: `${baseRealm.url}card-api`,
   name: 'CardDef',
 };
-export const baseFieldRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}card-api`,
-  name: 'FieldDef',
-};
 
 export const isField = Symbol('cardstack-field');
 export const primitive = Symbol('cardstack-primitive');

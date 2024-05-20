@@ -3,7 +3,7 @@ import { pick } from '@cardstack/boxel-ui/helpers';
 import { primitive } from '@cardstack/runtime-common';
 import { useIndexBasedKey } from '../-constants';
 import { Component } from '../-components/utils';
-import { FieldDef } from '../../card-api';
+import { FieldDef } from '../-field-def';
 
 export class IDField extends FieldDef {
   static [primitive]: string;

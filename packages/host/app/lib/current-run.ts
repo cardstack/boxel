@@ -9,9 +9,9 @@ import {
   Loader,
   baseRealm,
   logger,
-  baseCardRef,
   LooseCardResource,
   isCardResource,
+  isRootCardDef,
   internalKeyFor,
   trimExecutableExtension,
   hasExecutableExtension,
@@ -602,7 +602,8 @@ export class CurrentRun {
       }
 
       types.push(internalKeyFor(loadedCardRef, undefined));
-      if (!isEqual(loadedCardRef, baseCardRef)) {
+      log.debug(`isRootCardDef ${JSON.stringify(loadedCardRef)}`);
+      if (!isRootCardDef(loadedCardRef)) {
         fullRef = {
           type: 'ancestorOf',
           card: loadedCardRef,

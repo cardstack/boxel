@@ -3,7 +3,7 @@ import { useIndexBasedKey } from '../-constants';
 import { Component } from '../-components/utils';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
-import { FieldDef } from '../../card-api';
+import { FieldDef } from '../-field-def';
 
 export class StringField extends FieldDef {
   static displayName = 'String';

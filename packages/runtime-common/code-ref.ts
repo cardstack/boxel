@@ -125,7 +125,6 @@ export async function loadCard(
     return maybeCard;
   }
 
-  debugger;
   let err = new CardError(`Unable to loadCard ${humanReadable(ref)}`, {
     status: 404,
   });
@@ -227,4 +226,26 @@ export function humanReadable(ref: CodeRef): string {
 
 function assertNever(value: never) {
   return new Error(`should never happen ${value}`);
+}
+
+export function isRootCardDef(candidate: CodeRef) {
+  if ('card' in candidate) {
+    return false;
+  }
+  return (
+    candidate.name === 'CardDef' &&
+    (candidate.module === 'https://cardstack.com/base/card-api' ||
+      candidate.module === 'https://cardstack.com/base/card-api/-card-def')
+  );
+}
+
+export function isRootFieldDef(candidate: CodeRef) {
+  if ('card' in candidate) {
+    return false;
+  }
+  return (
+    candidate.name === 'FieldDef' &&
+    (candidate.module === 'https://cardstack.com/base/card-api' ||
+      candidate.module === 'https://cardstack.com/base/card-api/-field-def')
+  );
 }

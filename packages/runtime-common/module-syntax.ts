@@ -26,9 +26,9 @@ import {
   maybeRelativeURL,
   trimExecutableExtension,
   codeRefWithAbsoluteURL,
-  baseCardRef,
-  baseFieldRef,
   type CodeRef,
+  isRootCardDef,
+  isRootFieldDef,
 } from './index';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
@@ -462,8 +462,8 @@ function suggestedCardName(
 ): string {
   if (
     ref.name.toLowerCase().endsWith(type) ||
-    isEqual(ref, baseCardRef) ||
-    isEqual(ref, baseFieldRef)
+    isRootCardDef(ref) ||
+    isRootFieldDef(ref)
   ) {
     return ref.name;
   }
