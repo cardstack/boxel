@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "quantity": 2,
+      "title": "Potions",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "item": {
+        "links": {
+          "self": "../Item/8ec1b337-1a53-479e-9bb8-3047e714142c"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../dnd",
+        "name": "InventoryItem"
+      }
+    }
+  }
+}
