@@ -244,7 +244,7 @@ class PatchObjectField extends FieldDef {
 }
 
 class CommandType extends FieldDef {
-  static [primitive]: 'patch';
+  static [primitive]: 'patchCard';
 }
 
 type CommandStatus = 'applied' | 'ready';
@@ -579,11 +579,6 @@ export class RoomField extends FieldDef {
         } else if (event.content.msgtype === 'org.boxel.command') {
           // We only handle patches for now
           let command = event.content.data.command;
-          if (command.type !== 'patch') {
-            throw new Error(
-              `cannot handle commands in room with type ${command.type}`,
-            );
-          }
           let annotation = this.events.find(
             (e) =>
               e.type === 'm.reaction' &&
@@ -775,6 +770,7 @@ interface LeaveEvent extends RoomStateEvent {
   };
 }
 
+//Here are some message events
 interface MessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
@@ -797,7 +793,7 @@ interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
-interface CommandEvent extends BaseMatrixEvent {
+export interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CommandMessageContent;
   unsigned: {
@@ -819,7 +815,7 @@ interface CommandMessageContent {
   formatted_body: string;
   data: {
     command: {
-      type: 'patch';
+      type: 'patchCard';
       payload: PatchObject;
       eventId: string;
     };

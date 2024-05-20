@@ -7,7 +7,7 @@
     "@types/stream-chain": "^2.0.1",
     "@types/stream-json": "^1.7.3",
     "matrix-js-sdk": "^31.0.0",
-    "openai": "4.19.0",
+    "openai": "4.47.1",
     "qunit": "^2.18.0",
     "stream-chain": "^2.2.5",
     "stream-json": "^1.8.0",
