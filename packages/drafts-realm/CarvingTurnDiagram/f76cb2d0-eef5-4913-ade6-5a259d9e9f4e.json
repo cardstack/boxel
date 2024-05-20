@@ -1,12 +1,13 @@
 {
   "data": {
-    "type": "card", 
-    "attributes": {  
+    "type": "card",
+    "attributes": {
       "diagramType": "toe-heel",
-      "toeAnnotations": [ 
-        { 
+      "toeAnnotations": [
+        {
           "position": 0,
           "comment": "Hip 0",
+          "bodyBalance": "7/3",
           "bodyPositionDegrees": 45,
           "edgeAngleDegrees": "45"
         },
@@ -16,14 +17,21 @@
           "bodyPositionDegrees": 45,
           "bodyBalance": "5/5",
           "edgeAngleDegrees": "90"
+        },
+        {
+          "position": 10,
+          "comment": "Hip 10",
+          "bodyPositionDegrees": 10,
+          "bodyBalance": "3/7",
+          "edgeAngleDegrees": "45"
         }
       ],
       "heelAnnotations": [
         {
           "position": 0,
-          "comment": "Hip 10",
+          "comment": "Hip 0",
           "bodyPositionDegrees": 10,
-          "bodyBalance": "3/7",
+          "bodyBalance": "7/3",
           "edgeAngleDegrees": "45"
         },
         {
