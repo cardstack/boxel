@@ -1,5 +1,5 @@
 import { module, test, assert } from 'qunit';
-import { shouldSetRoomTitle } from '../helpers';
+import { shouldSetRoomTitle } from '../lib/set-title';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 
 module('shouldSetRoomTitle', () => {
@@ -346,7 +346,7 @@ module('shouldSetRoomTitle', () => {
     assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost'));
   });
 
-  test('Set a title if the bot has sent a command', () => {
+  test('Title is not set if the bot has sent ONLY a command', () => {
     const eventLog: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -394,10 +394,24 @@ module('shouldSetRoomTitle', () => {
         },
       },
     ];
-    assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost'));
+    assert.false(shouldSetRoomTitle(eventLog, '@aibot:localhost'));
   });
 
-  test('Set a title if the bot has sent a command in the last event, not seen in the log', () => {
+  test('Set a title if the user applied a command', () => {
+    let patchReactionEvent = {
+      getContent() {
+        return {
+          'm.relates_to': {
+            event_id: '1',
+            key: 'applied',
+            rel_type: 'm.annotation',
+          },
+        };
+      },
+      getType() {
+        return 'm.reaction';
+      },
+    };
     const eventLog: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -445,6 +459,8 @@ module('shouldSetRoomTitle', () => {
         },
       },
     ];
-    assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost', 1));
+    assert.true(
+      shouldSetRoomTitle(eventLog, '@aibot:localhost', patchReactionEvent),
+    );
   });
 });
