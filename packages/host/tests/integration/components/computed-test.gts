@@ -1,4 +1,4 @@
-import { waitUntil, fillIn, RenderingTestContext } from '@ember/test-helpers';
+import { RenderingTestContext } from '@ember/test-helpers';
 
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
