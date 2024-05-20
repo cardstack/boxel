@@ -289,7 +289,7 @@ export default class RoomMessage extends Component<Signature> {
       return 'This message was processing for too long. Please try again.';
     }
 
-    if (!this.resources.errors) {
+    if (!this.resources?.errors) {
       return undefined;
     }
 
