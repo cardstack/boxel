@@ -73,16 +73,7 @@ class View extends Component<typeof AddressInfo> {
 }
 
 class Edit extends Component<typeof AddressInfo> {
-  @tracked filterCountry = '';
-
-  @tracked filterCountryByCode = this.allCountries || [];
-
-  @tracked countryCode = '';
   @tracked stateCode = '';
-
-  @tracked countryPlaceholder = this.args.model.country || 'Select';
-  @tracked statePlaceholder = this.args.model.state || 'Select';
-  @tracked cityPlaceholder = this.args.model.city || 'Select';
 
   @tracked selectedCountryType = {
     name: this.args.model.country || 'Select',
@@ -98,16 +89,12 @@ class Edit extends Component<typeof AddressInfo> {
     return Country.getAllCountries();
   }
 
-  get allCountriesByCode() {
-    return this.filterCountryByCode;
-  }
-
   get allStatesOfCountry() {
-    return State.getStatesOfCountry(this.countryCode);
+    return State.getStatesOfCountry(this.args.model.countryCode);
   }
 
   get allCitiesOfState() {
-    return City.getCitiesOfState(this.countryCode, this.stateCode);
+    return City.getCitiesOfState(this.args.model.countryCode, this.stateCode);
   }
 
   // get isValidStates() {
@@ -115,23 +102,8 @@ class Edit extends Component<typeof AddressInfo> {
   // }
 
   @action
-  updateFilter(event) {
-    this.filterCountry = event.target.value;
-
-    this.filterCountryByCode =
-      event.target.value === ''
-        ? this.allCountries
-        : this.allCountries.filter((obj) =>
-            obj.name
-              .toLowerCase()
-              .replace(/\s+/g, '')
-              .includes(event.target.value.toLowerCase().replace(/\s+/g, '')),
-          );
-  }
-
-  @action
-  updateCountry(type) {
-    this.countryCode = type.isoCode;
+  updateCountry(type: any) {
+    this.args.model.countryCode = type.isoCode;
     this.selectedCountryType = type;
     this.args.model.country = type.name;
 
@@ -139,38 +111,32 @@ class Edit extends Component<typeof AddressInfo> {
     if (states.length > 0) {
       this.updateState(states[0]);
     } else {
-      this.statePlaceholder = 'No Result Found';
       this.selectedStateType = { name: 'Select' };
       this.stateCode = '';
       this.args.model.state = '';
-      this.cityPlaceholder = 'No Result Found';
       this.selectedCityType = { name: 'Select' };
       this.args.model.city = '';
     }
   }
 
   @action
-  updateState(type) {
+  updateState(type: any) {
     if (type.isoCode) {
       this.stateCode = type.isoCode;
       this.selectedStateType = type;
-      this.statePlaceholder = type.name;
       this.args.model.state = type.name;
 
       const cities = this.allCitiesOfState;
       if (cities.length > 0) {
         this.updateCity(cities[0]);
       } else {
-        this.cityPlaceholder = 'No Result Found';
         this.selectedCityType = { name: 'Select' };
         this.args.model.city = '';
       }
     } else {
       this.selectedStateType = { name: 'Select' };
-      this.statePlaceholder = 'Select';
       this.stateCode = '';
       this.args.model.state = '';
-      this.cityPlaceholder = 'No Result Found';
       this.selectedCityType = { name: 'Select' };
       this.args.model.city = '';
     }
@@ -180,7 +146,6 @@ class Edit extends Component<typeof AddressInfo> {
   updateCity(type) {
     this.selectedCityType = type;
     this.args.model.city = type.name;
-    this.cityPlaceholder = type.name;
   }
 
   <template>
@@ -203,10 +168,10 @@ class Edit extends Component<typeof AddressInfo> {
         <BoxelSelect
           @searchEnabled={{true}}
           @searchField='name'
-          @placeholder={{this.countryPlaceholder}}
+          @placeholder='Select'
           @selected={{this.selectedCountryType}}
           @onChange={{this.updateCountry}}
-          @options={{this.allCountriesByCode}}
+          @options={{this.allCountries}}
           id='location-autocomplete'
           class='select'
           as |item|
@@ -218,7 +183,7 @@ class Edit extends Component<typeof AddressInfo> {
 
       <FieldContainer @tag='label' @label='State' @vertical={{true}}>
         <BoxelSelect
-          @placeholder={{this.statePlaceholder}}
+          @placeholder='Select'
           @selected={{this.selectedStateType}}
           @onChange={{this.updateState}}
           @options={{this.allStatesOfCountry}}
@@ -233,7 +198,7 @@ class Edit extends Component<typeof AddressInfo> {
 
       <FieldContainer @tag='label' @label='City' @vertical={{true}}>
         <BoxelSelect
-          @placeholder={{this.cityPlaceholder}}
+          @placeholder='Select'
           @selected={{this.selectedCityType}}
           @onChange={{this.updateCity}}
           @options={{this.allCitiesOfState}}
@@ -244,6 +209,12 @@ class Edit extends Component<typeof AddressInfo> {
           <div>{{item.name}}</div>
         </BoxelSelect>
       </FieldContainer>
+
+      <FieldContainer
+        @tag='label'
+        @label='Country Code'
+        @vertical={{true}}
+      ><@fields.countryCode /></FieldContainer>
     </CardContainer>
 
     <style>
@@ -353,6 +324,9 @@ export class AddressInfo extends FieldDef {
   });
   @field country = contains(StringField, {
     description: `Mailing Country`,
+  });
+  @field countryCode = contains(StringField, {
+    description: `Mailing Country Code`,
   });
 
   @field mapUrl = contains(StringField, {
