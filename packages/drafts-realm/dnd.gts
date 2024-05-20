@@ -11,8 +11,6 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
@@ -30,15 +28,18 @@ export class Spell extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof this> {
-    @tracked rolls = [];
+    // @ts-ignore TS1206: Decorators are not valid here.
+    @tracked rolls: { sides: number; roll: number; id: string }[] = [];
+    // @ts-ignore TS1206: Decorators are not valid here.
     @tracked totalDamage = 0;
+    // @ts-ignore TS1206: Decorators are not valid here.
     @tracked halfDamage = 0;
 
-    rollDie(sides) {
+    rollDie(sides: number) {
       return Math.floor(Math.random() * sides) + 1;
     }
 
-    parseDiceString(diceString) {
+    parseDiceString(diceString: string) {
       const [count, sides] = diceString.split('d').map(Number);
       if (isNaN(count) || isNaN(sides) || count <= 0 || sides <= 0) {
         throw new Error(`Invalid dice notation: ${diceString}`);
@@ -52,9 +53,10 @@ export class Spell extends CardDef {
       this.halfDamage = Math.floor(totalDamage / 2);
     }
 
+    // @ts-ignore TS1206: Decorators are not valid here.
     @action
     calculateDamage() {
-      let rolls = [];
+      let rolls: { sides: number; roll: number; id: string }[] = [];
       const diceStrings = this.args.model.damageDice || [];
 
       try {
@@ -73,8 +75,9 @@ export class Spell extends CardDef {
       }
     }
 
+    // @ts-ignore TS1206: Decorators are not valid here.
     @action
-    rerollDie(dieId) {
+    rerollDie(dieId: string) {
       let newRolls = this.rolls.map((roll) => {
         if (roll.id === dieId) {
           return { ...roll, roll: this.rollDie(roll.sides) };
