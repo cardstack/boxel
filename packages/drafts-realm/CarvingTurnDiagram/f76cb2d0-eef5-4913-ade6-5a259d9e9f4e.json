@@ -1,10 +1,10 @@
 {
   "data": {
-    "type": "card",
-    "attributes": {
-      "diagramType": "toe/heel",
-      "toeAnnotations": [
-        {
+    "type": "card", 
+    "attributes": {  
+      "diagramType": "toe-heel",
+      "toeAnnotations": [ 
+        { 
           "position": 0,
           "comment": "Hip 0",
           "bodyPositionDegrees": 45,

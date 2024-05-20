@@ -59,14 +59,14 @@ import { BoardAnnotation } from './board-annotation';
 let groupNumber = 0;
 class DiagramType extends FieldDef {
   static displayName = 'Carving Turn Diagram Type';
-  static [primitive]: 'heel' | 'toe' | 'toe/heel';
+  static [primitive]: 'heel' | 'toe' | 'toe-heel';
 
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     val: any,
   ): Promise<BaseInstanceType<T>> {
     if (val === undefined || val === null) {
-      return 'toe/heel' as BaseInstanceType<T>;
+      return 'toe-heel' as BaseInstanceType<T>;
     }
     return val as BaseInstanceType<T>;
   }
@@ -98,7 +98,7 @@ class DiagramType extends FieldDef {
     private radioGroup = `__boxel_carving_turn_diagram_type${groupNumber++}__`;
 
     private items = [
-      { id: 'toe/heel', text: 'Toe and Heel Turns' },
+      { id: 'toe-heel', text: 'Toe and Heel Turns' },
       { id: 'toe', text: 'Toe Turn' },
       { id: 'heel', text: 'Heel Turn' },
     ];
@@ -128,13 +128,13 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
 
   get showToeTurn() {
     return (
-      this.args.model.diagramType === 'toe/heel' ||
+      this.args.model.diagramType === 'toe-heel' ||
       this.args.model.diagramType === 'toe'
     );
   }
   get showHeelTurn() {
     return (
-      this.args.model.diagramType === 'toe/heel' ||
+      this.args.model.diagramType === 'toe-heel' ||
       this.args.model.diagramType === 'heel'
     );
   }
@@ -188,10 +188,18 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
         </item.component>
       </RadioInput>
     </div>
-    <div class='container {{this.stance}}'>
+    <div
+      class='container
+        {{this.stance}}
+        {{concat "diagram-type-" this.args.model.diagramType}}'
+    >
       {{#if this.showToeTurn}}
-        <div class='turn filler' />
-        <div class='transition' />
+        <div class='turn' />
+        <div class='transition'>
+          <div class='fall-line'>Fall Line
+            <div class='arrow'></div>
+          </div>
+        </div>
         <div class='toe turn'>
           {{#if this.toeAnnotationFields}}
             {{#each this.toeAnnotationFields as |annotation i|}}
@@ -229,7 +237,7 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
             <div class='arrow'></div>
           </div>
         </div>
-        <div class='turn filler' />
+        <div class='turn' />
       {{/if}}
     </div>
 
@@ -282,16 +290,22 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
         right: -50%;
         top: -10px;
       }
-      .heel + .transition {
-        top: -10px;
-        border-bottom: 10px solid rgba(0, 0, 0, 0.5);
-      }
       .transition {
         position: relative;
         border-top: 10px solid gray;
       }
       .transition.filler {
         border-top: none;
+      }
+      .heel + .transition {
+        top: -10px;
+        border-bottom: 10px solid rgba(0, 0, 0, 0.5);
+      }
+      .diagram-type-toe-heel .heel + .transition .fall-line {
+        display: none;
+      }
+      .diagram-type-toe .transition {
+        border-bottom: 10px solid rgba(0, 0, 0, 0.5);
       }
       .turn:before {
         position: absolute;
