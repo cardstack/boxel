@@ -93,7 +93,7 @@ export default class RoomMessage extends Component<Signature> {
       @errorMessage={{this.errorMessage}}
       @isStreaming={{@isStreaming}}
       @retryAction={{if
-        (eq @message.command.commandType 'patch')
+        (eq @message.command.commandType 'patchCard')
         (perform this.patchCard)
         @retryAction
       }}
@@ -101,7 +101,7 @@ export default class RoomMessage extends Component<Signature> {
       data-test-boxel-message-from={{@message.author.name}}
       ...attributes
     >
-      {{#if (eq @message.command.commandType 'patch')}}
+      {{#if (eq @message.command.commandType 'patchCard')}}
         <div
           class='patch-button-bar'
           data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}

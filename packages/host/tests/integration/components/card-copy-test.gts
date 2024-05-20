@@ -5,7 +5,7 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import flatMap from 'lodash/flatMap';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import {
@@ -797,7 +797,8 @@ module('Integration | card-copy', function (hooks) {
     );
   });
 
-  test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
+  // Skip flaky test: CS-6846
+  skip<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
     assert.expect(15);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],

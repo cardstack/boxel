@@ -181,6 +181,15 @@ Common issues are:
         let thinkingMessageReplaced = false;
         const runner = assistant
           .getResponse(history)
+          .on('chunk', async (chunk, _snapshot) => {
+            // This usage value is set *once* and *only once* at the end of the conversation
+            // It will be null at all other times.
+            if (chunk.usage) {
+              log.info(
+                `Request used ${chunk.usage.prompt_tokens} prompt tokens and ${chunk.usage.completion_tokens}`,
+              );
+            }
+          })
           .on('content', async (_delta, snapshot) => {
             unsent += 1;
             if (unsent > 40) {

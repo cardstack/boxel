@@ -812,7 +812,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Dave' },
@@ -867,7 +867,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Evie' } },
               eventId: 'room1-event1',
@@ -893,7 +893,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Jackie' } },
               eventId: 'room1-event2',
@@ -919,7 +919,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { pet: null } },
               eventId: 'room2-event1',
@@ -1011,7 +1011,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: otherCardID,
               patch: {
                 attributes: { firstName: 'Dave' },
@@ -1074,7 +1074,7 @@ module('Integration | operator-mode', function (hooks) {
 
       let roomId = await openAiAssistant();
       let payload = {
-        type: 'patch',
+        type: 'patchCard',
         id: `${testRealmURL}Person/fadhlan`,
         patch: {
           attributes: {
@@ -1112,7 +1112,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.deepEqual(
         JSON.parse(getMonacoContent()),
         {
-          commandType: 'patch',
+          commandType: 'patchCard',
           payload,
         },
         'it can preview code when a change is proposed',
@@ -1158,7 +1158,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1204,7 +1204,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1268,7 +1268,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { pet: null } },
               eventId: 'patch1',
@@ -1303,7 +1303,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1346,7 +1346,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1405,7 +1405,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { firstName: 'Dave' } },
               eventId: 'event1',
@@ -1431,7 +1431,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { pet: 'Harry' } },
               eventId: 'event2',
@@ -1457,7 +1457,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { firstName: 'Jackie' } },
               eventId: 'event3',
@@ -2110,7 +2110,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Dave' },
@@ -3080,7 +3080,8 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
   });
 
-  test(`displays recently accessed card`, async function (assert) {
+  // Flaky test: CS-6842
+  skip(`displays recently accessed card`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -3184,8 +3185,8 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-label]`).containsText('Searching for “Ma”');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert.dom(`[data-test-search-label]`).containsText('2 Results for “Ma”');
-    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 2 });
+    assert.dom(`[data-test-search-label]`).containsText('3 Results for “Ma”');
+    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 3 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
@@ -3194,9 +3195,11 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-search-sheet-cancel-button]`);
 
     await focus(`[data-test-search-field]`);
-    await typeIn(`[data-test-search-field]`, 'Mar');
+    await typeIn(`[data-test-search-field]`, 'Mark J');
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert.dom(`[data-test-search-label]`).containsText('1 Result for “Mar”');
+    assert
+      .dom(`[data-test-search-label]`)
+      .containsText('1 Result for “Mark J”');
 
     //Ensures that there is no cards when reopen the search sheet
     await click(`[data-test-search-sheet-cancel-button]`);

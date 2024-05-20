@@ -51,6 +51,7 @@
     "safe-stable-stringify": "^2.4.3",
     "super-fast-md5": "^1.0.1",
     "transform-modules-amd-plugin": "workspace:*",
+    "typescript-memoize": "^1.1.1",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

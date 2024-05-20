@@ -372,11 +372,11 @@ module('shouldSetRoomTitle', () => {
         content: {
           msgtype: 'org.boxel.command',
           format: 'org.matrix.custom.html',
-          body: 'patch',
-          formatted_body: 'patch',
+          body: 'patching card',
+          formatted_body: 'patching card',
           data: {
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: 'http://localhost:4201/drafts/Friend/1',
               patch: {
                 attributes: {
@@ -437,11 +437,11 @@ module('shouldSetRoomTitle', () => {
         content: {
           msgtype: 'org.boxel.command',
           format: 'org.matrix.custom.html',
-          body: 'patch',
-          formatted_body: 'patch',
+          body: 'patching card',
+          formatted_body: 'patching card',
           data: {
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: 'http://localhost:4201/drafts/Friend/1',
               patch: {
                 attributes: {

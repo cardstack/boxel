@@ -1,0 +1,64 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "diagramType": "toe/heel",
+      "toeAnnotations": [
+        {
+          "step": 0,
+          "comment": "Hip 0",
+          "bodyPositionDegrees": 45,
+          "bodyBalance": "7/3",
+          "edgeAngleDegrees": "45"  
+        },
+        {
+          "step": 5,
+          "comment": "Hip 3",
+          "bodyPositionDegrees": 45,
+          "bodyBalance": "5/5",   
+          "edgeAngleDegrees": "90"
+        }
+        
+      ],
+      "heelAnnotations": [
+        {
+          "step": 0,
+          "comment": "Hip 10",
+          "bodyPositionDegrees": 10,
+          "bodyBalance": "3/7",
+          "edgeAngleDegrees": "45" 
+        },
+        {
+          "step": 3,
+          "comment": "Hip 3 touch positive",
+          "bodyPositionDegrees": 10,
+          "bodyBalance": "6/4", 
+          "edgeAngleDegrees": "80"
+        },
+        {
+          "step": 5,
+          "comment": "Hip 3",
+          "bodyPositionDegrees": 15,
+          "bodyBalance": "5/5",
+          "edgeAngleDegrees": "90"    
+        },
+        {
+          "step": 10,
+          "comment": "Hip 10",
+          "bodyPositionDegrees": 45,
+          "bodyBalance": "3/7",  
+          "edgeAngleDegrees": "45"  
+        }
+      ],
+      "title": "FunXR Open style",
+      "description": "Primary open style for 24'/25' season",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../carving-turn-diagram",
+        "name": "CarvingTurnDiagram"
+      }
+    }
+  }
+}
