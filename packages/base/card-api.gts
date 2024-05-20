@@ -1,8 +1,8 @@
 import Modifier from 'ember-modifier';
 import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
 import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
-import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq, not, pick } from '@cardstack/boxel-ui/helpers';
@@ -54,6 +54,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
+import type { DecoratorPropertyDescriptor } from '@ember/-internals/metal';
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -197,13 +198,6 @@ const subscribers = initSharedState(
 const fieldDescriptions = initSharedState(
   'fieldDescriptions',
   () => new WeakMap<typeof BaseDef, Map<string, string>>(),
-);
-
-// our place for notifying Glimmer when a card is ready to re-render (which will
-// involve rerunning async computed fields)
-const cardTracking = initSharedState(
-  'cardTracking',
-  () => new TrackedWeakMap<object, any>(),
 );
 
 const isBaseInstance = Symbol.for('isBaseInstance');
@@ -384,8 +378,6 @@ function getter<CardT extends BaseDefConstructor>(
   field: Field<CardT>,
 ): BaseInstanceType<CardT> {
   let deserialized = getDataBucket(instance);
-  // this establishes that our field should rerender when cardTracking for this card changes
-  cardTracking.get(instance);
 
   if (field.computeVia) {
     let value = deserialized.get(field.name);
@@ -788,8 +780,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
 
   getter(instance: CardDef): BaseInstanceType<CardT> {
     let deserialized = getDataBucket(instance);
-    // this establishes that our field should rerender when cardTracking for this card changes
-    cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
@@ -1109,7 +1099,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
     let deserialized = getDataBucket(instance);
-    cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (maybeNotLoaded) {
       let notLoadedRefs: string[] = [];
@@ -1491,7 +1480,11 @@ export const field = function (
   key: string | symbol,
   { initializer }: { initializer(): any },
 ) {
-  let descriptor = initializer().setupField(key);
+  if (typeof key !== 'string') {
+    throw new Error(`@field only supports string field name names`);
+  }
+
+  let descriptor = initializer().setupField(target, key);
   if (descriptor[fieldDescription]) {
     setFieldDescription(
       target.constructor,
@@ -1508,8 +1501,9 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT>[] {
   return {
-    setupField(fieldName: string) {
+    setupField(target: BaseDef, fieldName: string) {
       return makeDescriptor(
+        target,
         new ContainsMany(
           cardThunk(field),
           options?.computeVia,
@@ -1528,8 +1522,9 @@ export function contains<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT> {
   return {
-    setupField(fieldName: string) {
+    setupField(target: BaseDef, fieldName: string) {
       return makeDescriptor(
+        target,
         new Contains(
           cardThunk(field),
           options?.computeVia,
@@ -1548,8 +1543,9 @@ export function linksTo<CardT extends CardDefConstructor>(
   options?: Options,
 ): BaseInstanceType<CardT> {
   return {
-    setupField(fieldName: string) {
+    setupField(target: BaseDef, fieldName: string) {
       return makeDescriptor(
+        target,
         new LinksTo(
           cardThunk(cardOrThunk),
           options?.computeVia,
@@ -1568,8 +1564,9 @@ export function linksToMany<CardT extends CardDefConstructor>(
   options?: Options,
 ): BaseInstanceType<CardT>[] {
   return {
-    setupField(fieldName: string) {
+    setupField(target: BaseDef, fieldName: string) {
       return makeDescriptor(
+        target,
         new LinksToMany(
           cardThunk(cardOrThunk),
           options?.computeVia,
@@ -2666,18 +2663,28 @@ async function cardClassFromResource<CardT extends BaseDefConstructor>(
 function makeDescriptor<
   CardT extends BaseDefConstructor,
   FieldT extends BaseDefConstructor,
->(field: Field<FieldT>) {
+>(target: BaseDef, field: Field<FieldT>) {
   let descriptor: any = {
     enumerable: true,
   };
-  descriptor.get = function (this: BaseInstanceType<CardT>) {
-    return field.getter(this);
-  };
-  if (field.computeVia) {
+
+  const { computeVia } = field;
+
+  if (computeVia) {
+    descriptor.get = function (this: BaseInstanceType<CardT>) {
+      computeVia.call(this);
+
+      return field.getter(this);
+    };
     descriptor.set = function () {
-      // computeds should just no-op when an assignment occurs
+      throw new Error(
+        `attempted to set read-only computed field ${field.name}`,
+      );
     };
   } else {
+    descriptor.get = function (this: BaseInstanceType<CardT>) {
+      return field.getter(this);
+    };
     descriptor.set = function (this: BaseInstanceType<CardT>, value: any) {
       if (
         (field.card as typeof BaseDef) === IDField &&
@@ -2832,7 +2839,6 @@ export async function recompute(
   }
 
   // notify glimmer to rerender this card
-  cardTracking.set(card, true);
   done!();
 }
 

@@ -15,6 +15,7 @@ import {
   provideConsumeContext,
 } from '../../helpers';
 import { renderCard } from '../../helpers/render-component';
+import { settled } from '@ember/test-helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -66,6 +67,9 @@ module('Integration | computeds', function (hooks) {
     let mango = new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
     let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(root.textContent!.trim(), 'Mango Abdel-Rahman');
+    mango.firstName = 'Papaya';
+    await settled();
+    assert.strictEqual(root.textContent!.trim(), 'Papaya Abdel-Rahman');
   });
 
   test('can render a synchronous computed field (using a string in `computeVia`)', async function (assert) {
