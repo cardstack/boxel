@@ -189,10 +189,9 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
       </RadioInput>
     </div>
     <div class='container {{this.stance}}'>
-      <div class='fall-line'>Fall Line
-        <div class='arrow'></div>
-      </div>
       {{#if this.showToeTurn}}
+        <div class='turn filler' />
+        <div class='transition' />
         <div class='toe turn'>
           {{#if this.toeAnnotationFields}}
             {{#each this.toeAnnotationFields as |annotation i|}}
@@ -225,6 +224,12 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
             {{/each}}
           {{/if}}
         </div>
+        <div class='transition'>
+          <div class='fall-line'>Fall Line
+            <div class='arrow'></div>
+          </div>
+        </div>
+        <div class='turn filler' />
       {{/if}}
     </div>
 
@@ -243,6 +248,9 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
         margin: 1rem 2rem 0;
       }
       .container {
+        display: grid;
+        grid-template-columns: 500px 225px 500px;
+        grid-template-rows: 500px;
         position: relative;
         margin-top: 250px;
         margin-bottom: 200px;
@@ -267,8 +275,23 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
         height: 500px;
         margin: 0 auto;
       }
+      .toe {
+        left: -50%;
+      }
       .heel {
+        right: -50%;
         top: -10px;
+      }
+      .heel + .transition {
+        top: -10px;
+        border-bottom: 10px solid rgba(0, 0, 0, 0.5);
+      }
+      .transition {
+        position: relative;
+        border-top: 10px solid gray;
+      }
+      .transition.filler {
+        border-top: none;
       }
       .turn:before {
         position: absolute;
@@ -320,21 +343,26 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
       }
       .fall-line {
         position: absolute;
-        top: 150px;
-        left: 40%;
+        top: 200px;
+        left: 30%;
         font-weight: bold;
         color: rgba(0, 0, 0, 1);
         font-size: 23px;
         opacity: 0.5;
         transform: rotate(90deg);
+        text-wrap: nowrap;
       }
       .annotation {
+        position: relative;
         font-weight: bold;
         font-size: 13px;
         line-height: 50px;
       }
+      .heel .annotation {
+        left: -10px;
+      }
       .toe :deep(.board) {
-        left: 270px;
+        left: 280px;
       }
       .heel :deep(.board) {
         left: 0;
@@ -410,7 +438,6 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
         left: -60px;
         top: 515px;
       }
-
       .heel .position-0 {
         transform: rotate(0.25turn);
         right: -60px;
