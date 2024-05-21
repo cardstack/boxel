@@ -1499,7 +1499,7 @@ module('Integration | operator-mode', function (hooks) {
         .exists();
     });
 
-    test('essures applied state displayed as a check mark even eventId in command payload is undefined', async function (assert) {
+    test('assures applied state displayed as a check mark even eventId in command payload is undefined', async function (assert) {
       let id = `${testRealmURL}Person/fadhlan`;
       await setCardInOperatorModeState(id);
       await renderComponent(
