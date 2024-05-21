@@ -13,6 +13,8 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
 
 export class Spell extends CardDef {
   @field name = contains(StringField);
@@ -185,14 +187,14 @@ export class Spell extends CardDef {
 }
 
 // Define the Item card
-export class Item extends CardDef {
+export class DnDItem extends CardDef {
   @field name = contains(StringField);
   @field value = contains(NumberField);
 }
 
 // Define the InventoryItem card
 export class InventoryItem extends CardDef {
-  @field item = linksTo(Item);
+  @field item = linksTo(DnDItem);
   @field quantity = contains(NumberField);
 }
 

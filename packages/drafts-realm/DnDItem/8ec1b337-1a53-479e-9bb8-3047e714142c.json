@@ -11,7 +11,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../dnd",
-        "name": "Item"
+        "name": "DnDItem"
       }
     }
   }

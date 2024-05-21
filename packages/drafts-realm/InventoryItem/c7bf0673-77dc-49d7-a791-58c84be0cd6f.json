@@ -10,7 +10,7 @@
     "relationships": {
       "item": {
         "links": {
-          "self": "../Item/8ec1b337-1a53-479e-9bb8-3047e714142c"
+          "self": "../DnDItem/8ec1b337-1a53-479e-9bb8-3047e714142c"
         }
       }
     },
