@@ -13,7 +13,15 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+
+/**
+ * These imports *are* used, but a bug causes them to be flagged as unused
+ * It seems related to the other issue of saying decorators are not valid
+ */
+
+// @ts-ignore  TS6133: 'action' is declared but its value is never read.
 import { action } from '@ember/object';
+// @ts-ignore  TS6133: 'tracked' is declared but its value is never read.
 import { tracked } from '@glimmer/tracking';
 
 export class Spell extends CardDef {
