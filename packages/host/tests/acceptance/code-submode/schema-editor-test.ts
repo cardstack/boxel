@@ -1083,6 +1083,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     });
 
     await waitForCodeEditor();
+    await waitFor('[data-test-syntax-errors]');
 
     assert.dom('[data-test-syntax-errors]').hasText('File is empty');
   });
