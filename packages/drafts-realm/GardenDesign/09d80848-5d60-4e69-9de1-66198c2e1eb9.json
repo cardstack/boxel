@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "rows": 10,
+      "columns": 9,
+      "grid": "[[\"r0-c0\",null],[\"r0-c1\",null],[\"r0-c2\",null],[\"r0-c3\",null],[\"r0-c4\",null],[\"r0-c5\",null],[\"r0-c6\",null],[\"r0-c7\",null],[\"r0-c8\",null],[\"r1-c0\",null],[\"r1-c1\",{\"name\":\"Lavender Hyssop\",\"id\":\"lavender-hyssop\",\"symbol\":\"E\"}],[\"r1-c2\",null],[\"r1-c3\",{\"name\":\"Smooth Penstemon\",\"id\":\"smooth-penstemon\",\"symbol\":\"A\"}],[\"r1-c4\",null],[\"r1-c5\",null],[\"r1-c6\",{\"name\":\"Purple Coneflower\",\"id\":\"purple-coneflower\",\"symbol\":\"B\"}],[\"r1-c7\",null],[\"r1-c8\",null],[\"r2-c0\",{\"name\":\"Lavender Hyssop\",\"id\":\"lavender-hyssop\",\"symbol\":\"E\"}],[\"r2-c1\",null],[\"r2-c2\",{\"name\":\"Smooth Penstemon\",\"id\":\"smooth-penstemon\",\"symbol\":\"A\"}],[\"r2-c3\",null],[\"r2-c4\",{\"name\":\"Birdbath\",\"id\":\"birdbath\",\"symbol\":\"BB\"}],[\"r2-c5\",{\"name\":\"Smooth Penstemon\",\"id\":\"smooth-penstemon\",\"symbol\":\"A\"}],[\"r2-c6\",null],[\"r2-c7\",{\"name\":\"Purple Coneflower\",\"id\":\"purple-coneflower\",\"symbol\":\"B\"}],[\"r2-c8\",null],[\"r3-c0\",null],[\"r3-c1\",null],[\"r3-c2\",null],[\"r3-c3\",{\"name\":\"Royal Catchfly\",\"id\":\"royal-catchfly\",\"symbol\":\"C\"}],[\"r3-c4\",null],[\"r3-c5\",null],[\"r3-c6\",{\"name\":\"Black-Eyed Susan\",\"id\":\"black-eyed-susan\",\"symbol\":\"D\"}],[\"r3-c7\",null],[\"r3-c8\",null],[\"r4-c0\",null],[\"r4-c1\",null],[\"r4-c2\",null],[\"r4-c3\",null],[\"r4-c4\",{\"name\":\"Prairie Smoke\",\"id\":\"prairie-smoke\",\"symbol\":\"F\"}],[\"r4-c5\",null],[\"r4-c6\",null],[\"r4-c7\",null],[\"r4-c8\",null],[\"r5-c0\",null],[\"r5-c1\",null],[\"r5-c2\",null],[\"r5-c3\",null],[\"r5-c4\",null],[\"r5-c5\",null],[\"r5-c6\",null],[\"r5-c7\",null],[\"r5-c8\",null],[\"r6-c0\",null],[\"r6-c1\",null],[\"r6-c2\",null],[\"r6-c3\",null],[\"r6-c4\",null],[\"r6-c5\",null],[\"r6-c6\",null],[\"r6-c7\",null],[\"r6-c8\",null],[\"r7-c0\",null],[\"r7-c1\",null],[\"r7-c2\",null],[\"r7-c3\",null],[\"r7-c4\",null],[\"r7-c5\",null],[\"r7-c6\",null],[\"r7-c7\",null],[\"r7-c8\",null],[\"r8-c0\",null],[\"r8-c1\",null],[\"r8-c2\",null],[\"r8-c3\",null],[\"r8-c4\",null],[\"r8-c5\",null],[\"r8-c6\",null],[\"r8-c7\",null],[\"r8-c8\",null],[\"r9-c0\",null],[\"r9-c1\",null],[\"r9-c2\",null],[\"r9-c3\",null],[\"r9-c4\",null],[\"r9-c5\",null],[\"r9-c6\",null],[\"r9-c7\",null],[\"r9-c8\",null]]",
+      "title": "Wildflower Garden",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../garden-design",
+        "name": "GardenDesign"
+      }
+    }
+  }
+}

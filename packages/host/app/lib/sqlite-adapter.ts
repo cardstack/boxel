@@ -106,9 +106,6 @@ export default class SQLiteAdapter implements DBAdapter {
   async execute(sql: string, opts?: ExecuteOptions) {
     this.assertNotClosed();
     sql = this.adjustSQL(sql);
-    console.debug(
-      `executing sql: ${sql}, with bindings: ${JSON.stringify(opts?.bind)}`,
-    );
     return await this.query(sql, opts);
   }
 
