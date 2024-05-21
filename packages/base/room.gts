@@ -606,6 +606,11 @@ export class RoomField extends FieldDef {
         }
 
         if (messageField) {
+          // if the message is a replacement for other messages,
+          // use `created` from the oldest one.
+          if (newMessages.has(event_id)) {
+            messageField.created = newMessages.get(event_id)!.created;
+          }
           newMessages.set(
             (event.content as CardMessageContent).clientGeneratedId ?? event_id,
             messageField,
