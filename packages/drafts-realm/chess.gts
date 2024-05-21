@@ -300,6 +300,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
       .info {
         display: flex;
         gap: 10px;
+        width: 100%;
       }
       .game-info {
         flex: 1;
