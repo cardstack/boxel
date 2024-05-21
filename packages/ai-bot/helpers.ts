@@ -296,5 +296,7 @@ export function isCommandEvent(
 export function isPatchCommandEvent(
   event: DiscreteMatrixEvent,
 ): event is CommandEvent {
-  return isCommandEvent(event) && event.content.data.command.type === 'patch';
+  return (
+    isCommandEvent(event) && event.content.data.command.type === 'patchCard'
+  );
 }
