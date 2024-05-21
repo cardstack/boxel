@@ -245,6 +245,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
       <div class='actions'>
         <button {{on 'click' (fn this.prevMove)}}>Prev Move</button>
         <button {{on 'click' (fn this.nextMove)}}>Next Move</button>
+        <button {{on 'click' (fn this.backToPosition)}}>Back To Game Position</button>
         {{#if (not this.args.analysis)}}
           <button {{on 'click' (fn this.reset)}}>Reset</button>
         {{/if}}
@@ -259,7 +260,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
           <div><strong>Move:</strong> {{this.moveNumber}}</div>
         </div>
         <div class='move-info'>
-          <h2>Moves</h2>
+          <h2>Game Moves</h2>
           <div class='game-moves'>
             {{#each this.moves as |move|}}
               <div>
@@ -267,9 +268,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
               </div>
             {{/each}}
           </div>
-          <div>
-            <button {{on 'click' (fn this.backToPosition)}}>Back To Position</button>
-          </div>
+
         </div>
       </div>
 
