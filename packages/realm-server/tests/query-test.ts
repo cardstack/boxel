@@ -11,16 +11,14 @@ import { testRealmURL } from '@cardstack/runtime-common/helpers/const';
 import PgAdapter from '../pg-adapter';
 import { shimExternals } from '../lib/externals';
 import type CardDef from 'https://cardstack.com/base/card-def';
+import { setCardAsSavedForTest } from 'https://cardstack.com/base/card-def';
 import queryTests from '@cardstack/runtime-common/tests/query-test';
-
-let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 async function makeTestCards(loader: Loader) {
   let { Address, Person, FancyPerson, Cat, SimpleCatalogEntry, Event } =
     await loader.import<Record<string, typeof CardDef>>(
       'http://localhost:4202/node-test/query-test-cards',
     );
-  cardApi = await loader.import(`${baseRealm.url}card-api`);
 
   loader.shimModule(`${testRealmURL}person`, { Person });
   loader.shimModule(`${testRealmURL}fancy-person`, { FancyPerson });
@@ -92,7 +90,7 @@ async function makeTestCards(loader: Loader) {
   };
   for (let [name, card] of Object.entries(testCards)) {
     card.id = `${testRealmURL}${name}`;
-    cardApi.setCardAsSavedForTest(card);
+    setCardAsSavedForTest(card);
   }
   return testCards;
 }

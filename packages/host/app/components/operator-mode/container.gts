@@ -25,7 +25,7 @@ import {
   type Search,
 } from '@cardstack/host/resources/search';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import CardCatalogModal from '../card-catalog/modal';
 import { Submodes } from '../submode-switcher';

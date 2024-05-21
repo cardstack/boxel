@@ -36,6 +36,7 @@ import {
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardDef: typeof import('https://cardstack.com/base/card-def');
 
 let loader: Loader;
 
@@ -74,10 +75,11 @@ module('Integration | text-input-validator', function (hooks) {
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     let bigInteger: typeof import('https://cardstack.com/base/big-integer');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
     bigInteger = await loader.import(`${baseRealm.url}big-integer`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
 
-    let { field, contains, CardDef } = cardApi;
+    let { field, contains } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: BigIntegerField } = bigInteger;
     let { default: NumberField } = (await loader.import(
       `${baseRealm.url}number`,

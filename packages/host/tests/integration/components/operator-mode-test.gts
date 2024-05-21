@@ -57,6 +57,8 @@ import {
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardDef: typeof import('https://cardstack.com/base/card-def');
+let fieldDef: typeof import('https://cardstack.com/base/field-def');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (
   cardURL?: string,
@@ -88,6 +90,8 @@ module('Integration | operator-mode', function (hooks) {
 
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
+    fieldDef = await loader.import(`${baseRealm.url}field-def`);
     matrixService = this.owner.lookup(
       'service:matrixService',
     ) as MockMatrixService;
@@ -133,16 +137,10 @@ module('Integration | operator-mode', function (hooks) {
     string = await loader.import(`${baseRealm.url}string`);
     textArea = await loader.import(`${baseRealm.url}text-area`);
 
-    let {
-      field,
-      contains,
-      linksTo,
-      linksToMany,
-      serialize,
-      CardDef,
-      Component,
-      FieldDef,
-    } = cardApi;
+    let { field, contains, linksTo, linksToMany, serialize, Component } =
+      cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
     let { default: TextAreaField } = textArea;
 

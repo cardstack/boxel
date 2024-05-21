@@ -19,6 +19,7 @@ import {
 } from '../../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardDef: typeof import('https://cardstack.com/base/card-def');
 let string: typeof import('https://cardstack.com/base/string');
 let loader: Loader;
 
@@ -33,9 +34,11 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
     string = await loader.import(`${baseRealm.url}string`);
 
-    let { contains, field, CardDef, linksTo } = cardApi;
+    let { contains, field, linksTo } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
 
     class Article extends CardDef {

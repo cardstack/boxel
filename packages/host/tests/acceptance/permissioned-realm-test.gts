@@ -27,8 +27,11 @@ module('Acceptance | permissioned realm tests', function (hooks) {
   hooks.beforeEach(async function () {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    let { field, contains, CardDef, Component } = await loader.import<
+    let { field, contains, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')
+    >(`${baseRealm.url}card-api`);
+    let { default: CardDef } = await loader.import<
+      typeof import('https://cardstack.com/base/card-def')
     >(`${baseRealm.url}card-api`);
     let { default: StringField } = await loader.import<
       typeof import('https://cardstack.com/base/string')

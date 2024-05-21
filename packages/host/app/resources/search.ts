@@ -11,7 +11,7 @@ import { subscribeToRealm } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import { type RealmCards } from '../components/card-catalog/modal';
 

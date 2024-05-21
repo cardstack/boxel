@@ -24,9 +24,8 @@ import { ErrorDetails } from '@cardstack/runtime-common/error';
 
 import type MessageService from '@cardstack/host/services/message-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';

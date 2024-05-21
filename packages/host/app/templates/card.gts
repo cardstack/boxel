@@ -41,7 +41,7 @@ import OperatorModeStateService, {
 } from '@cardstack/host/services/operator-mode-state-service';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import { withPreventDefault } from '../helpers/with-prevent-default';
 import {

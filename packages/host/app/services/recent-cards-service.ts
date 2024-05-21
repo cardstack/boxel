@@ -8,7 +8,7 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 export default class RecentCardsService extends Service {
   @tracked recentCards = new TrackedArray<CardDef>([]);

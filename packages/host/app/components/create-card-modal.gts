@@ -20,7 +20,7 @@ import {
   codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common/code-ref';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import CardEditor from './card-editor';
 import ModalContainer from './modal-container';

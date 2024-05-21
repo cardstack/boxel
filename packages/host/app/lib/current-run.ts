@@ -2,7 +2,6 @@ import { cached } from '@glimmer/tracking';
 
 import ignore, { type Ignore } from 'ignore';
 
-import isEqual from 'lodash/isEqual';
 import merge from 'lodash/merge';
 
 import {

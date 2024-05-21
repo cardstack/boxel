@@ -467,11 +467,14 @@ module(`Integration | search-index`, function (hooks) {
 
   test('can index a card with relative code-ref fields', async function (assert) {
     let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let cardDef: typeof import('https://cardstack.com/base/card-def');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
     string = await loader.import(`${baseRealm.url}string`);
 
-    let { field, contains, CardDef } = cardApi;
+    let { field, contains } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
 
     class Person extends CardDef {
@@ -570,11 +573,14 @@ module(`Integration | search-index`, function (hooks) {
   test('can recover from rendering a card that has a template error', async function (assert) {
     {
       let cardApi: typeof import('https://cardstack.com/base/card-api');
+      let cardDef: typeof import('https://cardstack.com/base/card-def');
       let string: typeof import('https://cardstack.com/base/string');
       cardApi = await loader.import(`${baseRealm.url}card-api`);
+      cardDef = await loader.import(`${baseRealm.url}card-def`);
       string = await loader.import(`${baseRealm.url}string`);
 
-      let { field, contains, CardDef, Component } = cardApi;
+      let { field, contains, Component } = cardApi;
+      let { default: CardDef } = cardDef;
       let { default: StringField } = string;
 
       class Person extends CardDef {
@@ -667,11 +673,14 @@ module(`Integration | search-index`, function (hooks) {
     {
       // perform a new index to assert that render stack is still consistent
       let cardApi: typeof import('https://cardstack.com/base/card-api');
+      let cardDef: typeof import('https://cardstack.com/base/card-def');
       let string: typeof import('https://cardstack.com/base/string');
       cardApi = await loader.import(`${baseRealm.url}card-api`);
+      cardDef = await loader.import(`${baseRealm.url}card-def`);
       string = await loader.import(`${baseRealm.url}string`);
 
-      let { field, contains, CardDef, Component } = cardApi;
+      let { field, contains, Component } = cardApi;
+      let { default: CardDef } = cardDef;
       let { default: StringField } = string;
 
       class Person extends CardDef {
@@ -725,11 +734,17 @@ module(`Integration | search-index`, function (hooks) {
 
   test('can recover from rendering a card that has a nested card with a template error', async function (assert) {
     let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let cardDef: typeof import('https://cardstack.com/base/card-def');
+    let fieldDef: typeof import('https://cardstack.com/base/field-def');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
+    fieldDef = await loader.import(`${baseRealm.url}field-def`);
     string = await loader.import(`${baseRealm.url}string`);
 
-    let { field, contains, CardDef, Component, FieldDef } = cardApi;
+    let { field, contains, Component } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class Boom extends FieldDef {
@@ -836,11 +851,17 @@ module(`Integration | search-index`, function (hooks) {
 
   test('can recover from rendering a card that encounters a template error in its own custom component', async function (assert) {
     let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let cardDef: typeof import('https://cardstack.com/base/card-def');
+    let fieldDef: typeof import('https://cardstack.com/base/field-def');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
+    fieldDef = await loader.import(`${baseRealm.url}field-def`);
     string = await loader.import(`${baseRealm.url}string`);
 
-    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    let { field, contains, Component } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class CustomBoom extends FieldDef {
@@ -953,11 +974,17 @@ module(`Integration | search-index`, function (hooks) {
 
   test('can index a card that has a cyclic relationship with the field of a card in its fields', async function (assert) {
     let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let cardDef: typeof import('https://cardstack.com/base/card-def');
+    let fieldDef: typeof import('https://cardstack.com/base/field-def');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
+    fieldDef = await loader.import(`${baseRealm.url}field-def`);
     string = await loader.import(`${baseRealm.url}string`);
 
-    let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
+    let { field, contains, linksTo } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class Person extends FieldDef {

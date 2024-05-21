@@ -16,6 +16,7 @@ import { testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardDef: typeof import('https://cardstack.com/base/card-def');
 let string: typeof import('https://cardstack.com/base/string');
 
 class MockLocalIndexer extends Service {
@@ -30,12 +31,14 @@ module('Integration | preview', function (hooks) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
     string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-indexer', MockLocalIndexer);
   });
 
   test('renders card', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
+    let { field, contains, Component } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringCard } = string;
     class TestCard extends CardDef {
       @field firstName = contains(StringCard);

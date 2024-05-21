@@ -20,6 +20,8 @@ import type CardDef from 'https://cardstack.com/base/card-def';
 import { testRealmURL, p, getDbAdapter } from '../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardDef: typeof import('https://cardstack.com/base/card-def');
+let fieldDef: typeof import('https://cardstack.com/base/field-def');
 let string: typeof import('https://cardstack.com/base/string');
 let date: typeof import('https://cardstack.com/base/date');
 let number: typeof import('https://cardstack.com/base/number');
@@ -53,16 +55,9 @@ module('Unit | query', function (hooks) {
     boolean = await loader.import(`${baseRealm.url}boolean`);
     codeRef = await loader.import(`${baseRealm.url}code-ref`);
 
-    let {
-      field,
-      contains,
-      containsMany,
-      linksToMany,
-      linksTo,
-      CardDef,
-      FieldDef,
-      setCardAsSavedForTest,
-    } = cardApi;
+    let { field, contains, containsMany, linksToMany, linksTo } = cardApi;
+    let { default: CardDef, setCardAsSavedForTest } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
     let { default: CodeRefField } = codeRef;
     let { default: DateField } = date;

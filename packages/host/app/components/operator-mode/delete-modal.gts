@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import { BoxelButton, Modal } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 interface Signature {
   Args: {

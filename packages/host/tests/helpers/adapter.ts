@@ -15,6 +15,8 @@ import {
   UpdateEventData,
 } from '@cardstack/runtime-common/realm';
 
+import { setCardAsSavedForTest } from 'https://cardstack.com/base/card-def';
+
 import { WebMessageStream, messageCloseHandler } from './stream';
 
 import { createJWT, testRealmURL } from '.';
@@ -172,7 +174,7 @@ export class TestRealmAdapter implements RealmAdapter {
       );
       if (cardApi.isCard(value)) {
         value.id = `${this.#paths.url}${path.replace(/\.json$/, '')}`;
-        cardApi.setCardAsSavedForTest(value);
+        setCardAsSavedForTest(value);
         let doc = cardApi.serializeCard(value);
         fileRefContent = JSON.stringify(doc);
       } else {

@@ -22,7 +22,7 @@ import {
   isStaleValue,
   recompute,
 } from './storage';
-import { IDField } from '../../id';
+import IDField from '../../id';
 import { notifySubscribers } from '../-subscriptions';
 import { logger } from '../-logger';
 

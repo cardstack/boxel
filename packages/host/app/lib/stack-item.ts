@@ -11,8 +11,8 @@ import {
 } from '@cardstack/host/resources/card-resource';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
-import type CardDef from 'https://cardstack.com/base/card-def';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 interface Args {
   format: Format;

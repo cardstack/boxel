@@ -1,6 +1,6 @@
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type CardDef from 'https://cardstack.com/base/card-def';
-import type FieldDef from 'https://cardstack.com/base/card-def';
+import type FieldDef from 'https://cardstack.com/base/field-def';
 import { primitive } from '../constants';
 import { Loader } from '../loader';
 

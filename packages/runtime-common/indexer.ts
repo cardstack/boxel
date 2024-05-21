@@ -51,6 +51,8 @@ import { type DBAdapter } from './db';
 
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import FieldDef from 'https://cardstack.com/base/field-def';
+
 import { RealmPaths } from './index';
 
 export interface BoxelIndexTable {
@@ -152,7 +154,7 @@ export class Indexer {
   ): Promise<SearchResult | undefined> {
     let href = assertURLEndsWithJSON(url).href;
     let result = (await this.query([
-      `SELECT i.* 
+      `SELECT i.*
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
@@ -756,7 +758,7 @@ export class Indexer {
       // this into the searchDoc during index time.
       field = {
         card: (
-          await loader.import<{ default: typeof CardAPI.FieldDef }>(
+          await loader.import<{ default: typeof FieldDef }>(
             'https://cardstack.com/base/string',
           )
         ).default,

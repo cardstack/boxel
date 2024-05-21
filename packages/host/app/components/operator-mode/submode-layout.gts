@@ -19,7 +19,7 @@ import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile
 import ENV from '@cardstack/host/config/environment';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import SearchSheet, {
   SearchSheetMode,

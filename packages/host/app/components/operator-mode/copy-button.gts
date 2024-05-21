@@ -10,7 +10,7 @@ import { ArrowLeft, ArrowRight } from '@cardstack/boxel-ui/icons';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';

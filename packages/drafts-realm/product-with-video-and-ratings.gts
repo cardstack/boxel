@@ -3,8 +3,8 @@ import {
   Component,
   field,
   contains,
-  StringField,
 } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { RatingsSummary as RatingsSummaryField } from './ratings-summary';

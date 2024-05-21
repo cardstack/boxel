@@ -15,7 +15,7 @@ import { type JWTPayload, type RealmSession } from '@cardstack/runtime-common';
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 interface Args {
   named: {

@@ -2,8 +2,9 @@ import {
   contains,
   field,
   Component,
-  FieldDef,
 } from 'https://cardstack.com/base/card-api';
+import FieldDef from 'https://cardstack.com/base/field-def';
+
 import NumberField from 'https://cardstack.com/base/number';
 import GlimmerComponent from '@glimmer/component';
 import { cn } from '@cardstack/boxel-ui/helpers';

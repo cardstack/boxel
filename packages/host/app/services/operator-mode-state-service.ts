@@ -25,7 +25,7 @@ import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import { type Stack } from '../components/operator-mode/interact-submode';
 

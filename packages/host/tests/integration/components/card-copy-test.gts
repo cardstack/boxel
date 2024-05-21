@@ -105,11 +105,14 @@ module('Integration | card-copy', function (hooks) {
       await operatorModeStateService.restore({ stacks });
     };
     let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let cardDef: typeof import('https://cardstack.com/base/card-def');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
     string = await loader.import(`${baseRealm.url}string`);
 
-    let { field, contains, linksTo, CardDef, Component } = cardApi;
+    let { field, contains, linksTo, Component } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
 
     class Pet extends CardDef {

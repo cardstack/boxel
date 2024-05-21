@@ -8,8 +8,13 @@ export const catalogEntryRef: ResolvedCodeRef = {
   name: 'CatalogEntry',
 };
 export const baseCardRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}card-api`,
+  module: `${baseRealm.url}card-def`,
   name: 'CardDef',
+};
+
+export const baseFieldRef: ResolvedCodeRef = {
+  module: `${baseRealm.url}field-def`,
+  name: 'FieldDef',
 };
 
 export const isField = Symbol('cardstack-field');

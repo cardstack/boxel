@@ -12,7 +12,7 @@ import { cn, eq, gt } from '@cardstack/boxel-ui/helpers';
 
 import { Eye as EyeIcon } from '@cardstack/boxel-ui/icons';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import CardCatalogItem from './item';
 import CardCatalogResultsHeader from './results-header';

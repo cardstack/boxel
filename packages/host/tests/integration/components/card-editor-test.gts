@@ -34,6 +34,7 @@ import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardDef: typeof import('https://cardstack.com/base/card-def');
 let string: typeof import('https://cardstack.com/base/string');
 
 let loader: Loader;
@@ -80,11 +81,13 @@ module('Integration | card-editor', function (hooks) {
 
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
     string = await loader.import(`${baseRealm.url}string`);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
 
-    let { field, contains, linksTo, CardDef, Component } = cardApi;
+    let { field, contains, linksTo, Component } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
 
     class Pet extends CardDef {
@@ -227,7 +230,8 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('renders card in edit (default) format', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
+    let { field, contains, Component } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
     class TestCard extends CardDef {
       @field firstName = contains(StringField);
@@ -268,7 +272,8 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('can change card format', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
+    let { field, contains, Component } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
     class TestCard extends CardDef {
       @field firstName = contains(StringField);
@@ -318,7 +323,8 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('edited card data is visible in different formats', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
+    let { field, contains, Component } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
     class TestCard extends CardDef {
       @field firstName = contains(StringField);

@@ -30,7 +30,7 @@ import type { Query, Filter } from '@cardstack/runtime-common/query';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import { getCard } from '../../resources/card-resource';
 import { getSearchResults, Search } from '../../resources/search';

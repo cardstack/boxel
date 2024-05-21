@@ -41,17 +41,23 @@ module('Integration | card-catalog', function (hooks) {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let cardDef: typeof import('https://cardstack.com/base/card-def');
+    let fieldDef: typeof import('https://cardstack.com/base/field-def');
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
     let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
+    fieldDef = await loader.import(`${baseRealm.url}field-def`);
     string = await loader.import(`${baseRealm.url}string`);
     textArea = await loader.import(`${baseRealm.url}text-area`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
     catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
 
-    let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
+    let { field, contains, linksTo } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
     let { default: TextAreaField } = textArea;
     let { CardsGrid } = cardsGrid;

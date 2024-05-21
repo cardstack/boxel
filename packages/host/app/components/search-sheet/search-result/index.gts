@@ -8,7 +8,7 @@ import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 interface Signature {
   Element: HTMLElement;

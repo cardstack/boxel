@@ -26,6 +26,8 @@ import {
 } from '../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardDef: typeof import('https://cardstack.com/base/card-def');
+let fieldDef: typeof import('https://cardstack.com/base/field-def');
 let string: typeof import('https://cardstack.com/base/string');
 let number: typeof import('https://cardstack.com/base/number');
 let biginteger: typeof import('https://cardstack.com/base/big-integer');
@@ -33,7 +35,7 @@ let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
 let boolean: typeof import('https://cardstack.com/base/boolean');
 let primitive: typeof primitiveType;
-let mappings: Map<typeof cardApi.FieldDef, any>;
+let mappings: Map<typeof fieldDef.default, any>;
 
 let loader: Loader;
 
@@ -45,6 +47,8 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
+    fieldDef = await loader.import(`${baseRealm.url}field-def`);
     primitive = cardApi.primitive;
     string = await loader.import(`${baseRealm.url}string`);
     number = await loader.import(`${baseRealm.url}number`);
@@ -64,7 +68,8 @@ module('Unit | ai-function-generation-test', function (hooks) {
   setupServerSentEvents(hooks);
 
   test(`generates a simple compliant schema for basic types`, async function (assert) {
-    let { field, contains, CardDef } = cardApi;
+    let { field, contains } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
     let { default: NumberField } = number;
     let { default: BooleanField } = boolean;
@@ -104,7 +109,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`generates a simple compliant schema for nested types`, async function (assert) {
-    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { field, contains } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class InternalField extends FieldDef {
@@ -138,7 +145,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`should support contains many`, async function (assert) {
-    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { field, contains, containsMany } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class InternalField extends FieldDef {
@@ -172,7 +181,8 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`should support linksTo`, async function (assert) {
-    let { field, contains, linksTo, CardDef } = cardApi;
+    let { field, contains, linksTo } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
     class OtherCard extends CardDef {
       @field innerStringField = contains(StringField);
@@ -225,7 +235,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`skips over fields that can't be recognised`, async function (assert) {
-    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { field, contains } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class NewField extends FieldDef {
@@ -258,7 +270,8 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`handles subclasses`, async function (assert) {
-    let { field, contains, CardDef } = cardApi;
+    let { field, contains } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
 
     class NewField extends StringField {
@@ -289,7 +302,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`handles subclasses within nested fields`, async function (assert) {
-    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { field, contains, containsMany } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class NewField extends StringField {

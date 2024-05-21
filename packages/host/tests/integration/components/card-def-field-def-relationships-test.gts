@@ -25,6 +25,8 @@ import { renderComponent, renderCard } from '../../helpers/render-component';
 module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   let loader: Loader;
   let cardApi: typeof import('https://cardstack.com/base/card-api');
+  let cardDef: typeof import('https://cardstack.com/base/card-def');
+  let fieldDef: typeof import('https://cardstack.com/base/field-def');
   let string: typeof import('https://cardstack.com/base/string');
   let number: typeof import('https://cardstack.com/base/number');
 
@@ -54,6 +56,8 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
+    fieldDef = await loader.import(`${baseRealm.url}field-def`);
     string = await loader.import(`${baseRealm.url}string`);
     number = await loader.import(`${baseRealm.url}number`);
 
@@ -72,7 +76,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('render a primitive field (singular) contained in a FieldDef', async function (assert) {
-    let { field, contains, FieldDef, CardDef } = cardApi;
+    let { field, contains } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class EmergencyContactField extends FieldDef {
@@ -141,7 +147,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('render a compound field (singular) contained in a FieldDef', async function (assert) {
-    let { field, contains, FieldDef, CardDef } = cardApi;
+    let { field, contains } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
     let { default: NumberField } = number;
 
@@ -214,7 +222,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('primitive field (plural) contained in a FieldDef is read-only', async function (assert) {
-    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { field, contains, containsMany } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class Guest extends FieldDef {
@@ -292,7 +302,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('compound field (plural) contained in a FieldDef renders in atom format (read-only)', async function (assert) {
-    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { field, contains, containsMany } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
     let { default: NumberField } = number;
 
@@ -398,7 +410,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('render a CardDef field (singular) linked to from a FieldDef', async function (assert) {
-    let { field, contains, linksTo, CardDef, FieldDef, Component } = cardApi;
+    let { field, contains, linksTo, Component } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
     let { default: NumberField } = number;
 
@@ -520,7 +534,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('CardDef field (plural) linked to from a FieldDef renders in atom format', async function (assert) {
-    let { field, contains, linksToMany, CardDef, FieldDef } = cardApi;
+    let { field, contains, linksToMany } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class Country extends CardDef {

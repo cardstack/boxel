@@ -19,6 +19,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardDefMod from 'https://cardstack.com/base/card-def';
 import type * as StringFieldMod from 'https://cardstack.com/base/string';
 
 import {
@@ -2118,9 +2119,13 @@ module('Integration | realm', function (hooks) {
   });
 
   test<TestContextWithSSE>('realm can serve card source delete request', async function (assert) {
-    let { field, contains, CardDef } = await loader.import<typeof CardAPI>(
+    let { field, contains } = await loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api',
     );
+    let { default: CardDef } = await loader.import<typeof CardDefMod>(
+      'https://cardstack.com/base/card-def',
+    );
+
     let { default: StringField } = await loader.import<typeof StringFieldMod>(
       'https://cardstack.com/base/string',
     );

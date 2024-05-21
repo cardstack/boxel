@@ -38,7 +38,7 @@ import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 import ModalContainer from '../modal-container';

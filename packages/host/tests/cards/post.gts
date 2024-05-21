@@ -4,8 +4,8 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import CardDef from 'https://cardstack.com/base/card-def';
-import FieldDef from 'https://cardstack.com/base/field-def';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 
