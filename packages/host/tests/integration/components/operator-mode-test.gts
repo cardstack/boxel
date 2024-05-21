@@ -1499,6 +1499,63 @@ module('Integration | operator-mode', function (hooks) {
         .exists();
     });
 
+    test('essures applied state displayed as a check mark even eventId in command payload is undefined', async function (assert) {
+      let id = `${testRealmURL}Person/fadhlan`;
+      await setCardInOperatorModeState(id);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person="Fadhlan"]');
+
+      let roomId = await openAiAssistant();
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Change first name to Dave',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patch',
+              id,
+              patch: { attributes: { firstName: 'Dave' } },
+              eventId: undefined,
+            },
+          }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
+        },
+        status: null,
+      });
+
+      await waitFor('[data-test-command-apply="ready"]', { count: 1 });
+
+      await click('[data-test-message-idx="0"] [data-test-command-apply]');
+      assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="applying"]')
+        .exists();
+
+      await waitFor('[data-test-message-idx="0"] [data-test-patch-card-idle]');
+      assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+        .exists();
+      assert.dom('[data-test-person]').hasText('Dave');
+    });
+
     test('it can handle an error in a card attached to a matrix message', async function (assert) {
       await setCardInOperatorModeState();
       await renderComponent(
@@ -3738,7 +3795,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-overlay-card-display-name="Author"] .header-title img')
       .hasAttribute('src', 'https://example-icon.test');
 
-    await click('[data-test-author');
+    await click('[data-test-author]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
     assert

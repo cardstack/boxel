@@ -588,7 +588,10 @@ export class RoomField extends FieldDef {
             (e) =>
               e.type === 'm.reaction' &&
               e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-              e.content['m.relates_to']?.event_id === command.eventId,
+              e.content['m.relates_to']?.event_id ===
+                // If the message is a replacement message, eventId in command payload will be undefined.
+                // Because it will not refer to any other events, so we can use event_id of the message itself.
+                (command.eventId ?? event_id),
           ) as ReactionEvent | undefined;
 
           messageField = new MessageField({
