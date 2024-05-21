@@ -27,6 +27,7 @@ import { Chess as ChessJS } from 'https://cdn.jsdelivr.net/npm/chess.js/+esm';
 import {
   MARKER_TYPE,
   Markers,
+  //@ts-ignore
 } from 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/src/extensions/markers/Markers.js/+esm';
 
 import Modifier from 'ember-modifier';
@@ -456,8 +457,8 @@ class Isolated extends BoxelComponent<typeof Chess> {
 
 export class Chess extends CardDef {
   static displayName = 'Chess';
-  @field pgn = contains(StringCard); //pgn format pls
-  @field analysis = contains(BooleanField); //pgn format pls
+  @field pgn = contains(StringCard);
+  @field analysis = contains(BooleanField);
 
   @field title = contains(StringCard, {
     computeVia: function (this: Chess) {
