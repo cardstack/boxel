@@ -250,27 +250,29 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
         {{/if}}
       </div>
 
-    </div>
+      <div class='info'>
 
-    <div class='info'>
-
-      <div class='game-info'>
-        <h2> Game Info </h2>
-        <div><strong>Turn:</strong> {{this.turn}}</div>
-        <div><strong>State:</strong> {{this.state}}</div>
-        <div><strong>Move:</strong> {{this.moveNumber}}</div>
-      </div>
-      <div class='move-info'>
-        <h2>Game Moves</h2>
-        <div class='game-moves'>
-          {{#each this.moves as |move|}}
-            <div>
-              {{move}}
-            </div>
-          {{/each}}
+        <div class='game-info'>
+          <h2> Info </h2>
+          <div><strong>Turn:</strong> {{this.turn}}</div>
+          <div><strong>State:</strong> {{this.state}}</div>
+          <div><strong>Move:</strong> {{this.moveNumber}}</div>
         </div>
-        <button {{on 'click' (fn this.backToPosition)}}>Back To Position</button>
+        <div class='move-info'>
+          <h2>Moves</h2>
+          <div class='game-moves'>
+            {{#each this.moves as |move|}}
+              <div>
+                {{move}}
+              </div>
+            {{/each}}
+          </div>
+          <div>
+            <button {{on 'click' (fn this.backToPosition)}}>Back To Position</button>
+          </div>
+        </div>
       </div>
+
     </div>
     <style>
       .main {
@@ -278,6 +280,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
         flex-direction: column;
         align-items: center;
         gap: 10px;
+        padding: 30px;
       }
       .actions {
         display: flex;
@@ -295,15 +298,16 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
       }
       .info {
         display: flex;
-        justify-content: space-evenly;
+        gap: 10px;
       }
-      .move-info {
-        display: flex;
-        flex-direction: column;
+      .game-info {
+        flex: 1;
       }
 
-      .game-moves,
-      .snapshot-moves {
+      .move-info {
+        flex: 3;
+      }
+      .game-moves {
         display: flex;
         flex-direction: row;
         flex-wrap: wrap;
@@ -428,7 +432,7 @@ class Isolated extends BoxelComponent<typeof Chess> {
 
   // have to toggle between analysis and play mode
   get mode() {
-    return this.args.model.analysis ? 'Analysis' : 'Play';
+    return this.args.model.analysis ? 'Analysis' : 'Game';
   }
 
   <template>
