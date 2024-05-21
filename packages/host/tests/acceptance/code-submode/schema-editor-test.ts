@@ -6,7 +6,6 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
-import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
@@ -1084,7 +1083,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     });
 
     await waitForCodeEditor();
-    await percySnapshot(assert);
 
     assert.dom('[data-test-syntax-errors]').hasText('File is empty');
   });
